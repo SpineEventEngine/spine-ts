@@ -21,6 +21,7 @@ import {
   Projection,
   React,
   Server,
+  ServerEnvironment,
   Subscribe,
   type RunningServer,
 } from "@spine-event-engine/server";
@@ -319,7 +320,7 @@ export class SkuSalesManager extends ProcessManager<string, typeof SkuSalesManag
 }
 
 /**
- * Lists the fixed datastore-orders registration topology.
+ * Lists the fixed Orders registration topology.
  */
 export const ordersTopology = {
   aggregates: ["OrderAggregate", "SkuAggregate"],
@@ -364,7 +365,7 @@ export async function createOrdersContext(): Promise<BoundedContext> {
 }
 
 /**
- * Configures the datastore-orders server binding.
+ * Configures the Orders server binding.
  */
 export interface OrdersServerOptions {
   // prettier-ignore
@@ -389,6 +390,7 @@ export interface OrdersServerOptions {
 export async function startOrdersServer(options: OrdersServerOptions = {}): Promise<RunningServer> {
   const context = await createOrdersContext();
   try {
+    await ServerEnvironment.instance().createStorageStructures();
     return await Server.atPort(options.port ?? 0, {
       host: options.host ?? "127.0.0.1",
       services: { subscriptionLimit: 1_000 },

@@ -18,8 +18,11 @@ Membership and storage routing are separate; register only explicit configured
 tenants, reject unknown/missing tenant requests, validate persisted memberships
 against routing before listening, and prove restart persistence before reseeding.
 Restart acceptance includes recovery of pending durable delivery work from an
-interrupted launch, without blocking new commands or losing committed follow-up
-Events during normal recovery. Preserve existing acknowledgement, tracked
+interrupted launch after its shard lease becomes eligible for takeover, with
+new Commands progressing alongside recovery and committed follow-up Events
+published during normal recovery. A still-valid lease is respected even after
+its process exits; local synchronous delivery can report a failed acknowledgement
+while the durable Command remains pending. Preserve existing acknowledgement, tracked
 best-effort publication, tenant selection and shutdown guarantees; this does not
 add durable Event republishing or historical Projection repair.
 Use provider-neutral Orders names, retain fixed topology and existing load levels,
@@ -115,17 +118,19 @@ if it still satisfies branch publication rules; do not make a gratuitous bump.
 
 ## Remaining sequence
 
-1. Complete Orders PostgreSQL and Datastore acceptance, durable restart checks
-   and documentation.
-2. Implement Fieldnotes persistent authenticated host, both login adapters,
+1. Implement Fieldnotes persistent authenticated host, both login adapters,
    Next.js interface, browser acceptance and documentation.
+2. Complete example navigation and the feature-by-feature PR description.
 3. Run fresh independent implementation/documentation reviews, corrections and
    final security/release checks; close all participating agents.
 4. Push final changes and deliver the full preserved/revised PR description in
    chat, with Orders and Fieldnotes README links and the revised SVG.
 
-The Message Board restoration, initial always-multitenant Orders behavior and
-Fieldnotes domain are implemented. Recovered publication uses the existing
-tracked follow-up queue, preserving source acknowledgement and shutdown tracking. The Fieldnotes domain diagram is recorded under
+The Message Board restoration, always-multitenant Orders provider launches,
+restart acceptance and documentation, and the Fieldnotes domain are implemented.
+Orders passed independent API, reliability, style and documentation review;
+accepted findings were corrected. Recovered publication uses the existing
+tracked follow-up queue, preserving source acknowledgement and shutdown tracking.
+The Fieldnotes domain diagram is recorded under
 `examples/fieldnotes/docs/event-storming.svg`; keep it aligned with the implemented
 contracts. Detailed execution evidence remains outside the repository.

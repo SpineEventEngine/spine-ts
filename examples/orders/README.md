@@ -1,91 +1,61 @@
 # Orders example
 
-Orders demonstrates tenant isolation across a fixed domain topology, a two
-Bounded Context order review, and order-card Event routing. The local load
-command runs with in-memory storage. Its tenant directory also lives in memory,
-so the command does not demonstrate restart persistence.
+Orders shows tenant isolation in a fixed event-driven domain: two Aggregates,
+ten Projections, and two Process Managers. Every Orders Bounded Context uses
+complete Northwind or Contoso `TenantId` messages. The runnable load scenario
+posts commands and observes matching queries and subscriptions through a gRPC
+server. It reports aggregate and per-tenant outcomes.
 
-## Run the in-memory example
+## Launch options
 
-From the repository root, install and build the workspace, then run one of the
-supported user counts:
+Install and build the workspace from the repository root:
 
 ```bash
 pnpm install --frozen-lockfile
-SPINE_ORDERS_LOAD_USERS=10 pnpm --dir examples/orders run load
 ```
 
-Choose `10`, `100`, or `1000`. The command starts a loopback gRPC server,
-distributes actors across Northwind and Contoso, and prints aggregate and
-per-tenant command, query, and subscription outcomes. It closes the server,
-tenant directory, and storage environment after the run. Each order gets a fresh
-run ID, so repeated runs do not reuse order identities.
+Choose one provider and run the example:
 
-## Tenant setup and assembly
+| Provider   | Command                                                                    | Preparation                                                                                                                                   |
+| ---------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Memory     | `SPINE_ORDERS_LOAD_USERS=10 pnpm --dir examples/orders run load`           | None; data and membership disappear when the process exits.                                                                                   |
+| PostgreSQL | `SPINE_ORDERS_LOAD_USERS=10 pnpm --dir examples/orders run postgres:load`  | Provision three separate databases and set `ORDERS_SHARED_DATABASE_URL`, `ORDERS_NORTHWIND_DATABASE_URL`, and `ORDERS_CONTOSO_DATABASE_URL`.  |
+| Datastore  | `SPINE_ORDERS_LOAD_USERS=10 pnpm --dir examples/orders run datastore:load` | Configure a Datastore project with `ORDERS_DATASTORE_PROJECT_ID` or `DATASTORE_PROJECT_ID`. Set `DATASTORE_EMULATOR_HOST` to use an emulator. |
 
-One bootstrap selects storage and registers only the tenants configured for the
-run. Every Orders Bounded Context uses the resulting environment:
+Each command builds the workspace, configures the tenant directory, starts a
+loopback gRPC server, runs the load, and closes the server before storage after
+a successful drain.
+Supported user levels are `10`, `100`, and `1000`. A run creates fresh order
+identifiers, so rerunning against durable storage does not overwrite earlier
+orders. The result includes command acknowledgements, query visibility,
+subscription delivery, latency percentiles, throughput, failures, and counts
+for each tenant.
 
-```typescript
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { configureOrdersEnvironment, ordersTenants, startOrdersServer } from "./src/index.js";
+PostgreSQL databases, credentials, and permissions must exist before launch.
+`createStorageStructures()` prepares supported tables and indexes inside those
+databases; it does not create databases or users. The Datastore project or
+emulator must likewise exist before launch. The [user guide](USER_GUIDE.md)
+provides setup, restart, and failure handling steps.
 
-const setup = await configureOrdersEnvironment({
-  storageFactory: new InMemoryStorageFactory(),
-  tenants: [ordersTenants.northwind, ordersTenants.contoso],
-});
-try {
-  const server = await startOrdersServer();
-  try {
-    // Send commands, queries, and subscriptions with a complete TenantId.
-  } finally {
-    await server.close();
-  }
-} finally {
-  await setup.close();
-}
+## Cross-context order review
+
+`OrderReviewContexts.create()` assembles separate multitenant Catalog and
+Ordering Bounded Contexts in the same server process. An order reaction reads
+a SKU name from Catalog under the Event tenant. Run the focused behavior test
+from the repository root with:
+
+```bash
+pnpm typecheck:build
+pnpm exec vitest run examples/orders/test/cross-context.test.ts -t "copies the catalog name"
 ```
-
-`ordersTenants.northwind` and `ordersTenants.contoso` are complete `TenantId`
-messages with stable `value` variants. The `PersistentTenantIndex` records
-membership separately from storage routing. A missing or unregistered tenant
-is rejected; a request never registers a tenant. The storage factory still
-selects the provider. The domain handlers do not import provider types.
-
-The main `createOrdersContext()` assembly registers two Aggregates, ten
-Projections, and two Process Managers. `OrderAggregate` handles `CreateOrder`
-and emits `OrderCreated`. The Projections build queryable summaries, while the
-Process Managers track event reactions. The fixed topology remains fourteen
-repositories.
-
-## Catalog and Ordering
-
-`OrderReviewContexts.create()` returns separate multitenant `Catalog` and
-`Ordering` Bounded Contexts for one server. `Catalog` registers `SkuAggregate`
-and `SkuCatalogProjection`. `Ordering` registers `OrderAggregate` and
-`OrderReview`. When an order is created, the Process Manager reads the catalog
-with `SkuCatalogQuery.create().byId(event.skuId).build()` and captures the
-current SKU name in `OrderReview` and `OrderReviewed`. The handler read uses the
-original Event tenant. The catalog projection is eventually consistent; if its
-row is absent when the reaction runs, the captured name is empty.
 
 ## Order-card routing
 
-`OrderCardContext.create()` assembles another multitenant Bounded Context for
-a targeted routing demonstration. `OrderCreated` creates a card at the order
-ID. `SkuRegistered` queries saved cards by SKU ID within the Event tenant and
-updates only cards whose displayed name differs. The test covers multiple
-matching cards, another SKU, repeated names, no matches, and matching IDs in
-Northwind and Contoso.
+`OrderCardContext.create()` assembles a multitenant Bounded Context that routes
+Events to matching cards under the Event tenant. These are programmatic
+demonstrations with focused tests; the load command runs the fixed
+fourteen-repository Orders Bounded Context.
 
-## Storage providers
-
-The bootstrap accepts any compatible `StorageFactory`. An application using
-Datastore can construct `DatastoreStorageFactory` with its Datastore client and
-pass it to `configureOrdersEnvironment`. Provider setup, membership, and
-Bounded Context assembly remain separate steps. The local load script uses
-memory storage; PostgreSQL launch and restart validation are described after
-the runnable PostgreSQL slice is implemented.
-
-For exact API paths, lifecycle notes, and focused verification, see the
-[agent reference](REFERENCE.md).
+The [coding-agent reference](REFERENCE.md) lists assembly, provider, lifecycle, and test
+contracts. Missing or unregistered tenant requests fail without adding
+membership or writing an order.

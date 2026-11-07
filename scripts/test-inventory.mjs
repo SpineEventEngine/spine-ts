@@ -19,6 +19,8 @@
  * through `vitest.infrastructure.config.ts` after checking their own setup.
  */
 export const infrastructureTestFiles = Object.freeze([
+  "examples/orders/test/postgres-live.test.ts",
+  "examples/orders/test/datastore-live.test.ts",
   "packages/auth/test/sessions/persistent-opaque-providers.test.ts",
   "packages/auth/test/sessions/persistent-opaque-preparation.test.ts",
   "packages/storage-datastore/test/datastore-cloud.test.ts",

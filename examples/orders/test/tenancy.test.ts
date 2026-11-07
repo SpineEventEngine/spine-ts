@@ -1,3 +1,17 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
@@ -20,8 +34,12 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { SignalMetadata, ServerEnvironment } from "@spine-event-engine/server";
+import { InMemoryStorageBackend, InMemoryStorageFactory } from "@spine-event-engine/storage";
+import {
+  PersistentTenantIndex,
+  SignalMetadata,
+  ServerEnvironment,
+} from "@spine-event-engine/server";
 import { ServerTests } from "@spine-event-engine/server/testing";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -133,7 +151,9 @@ it("routes matching order IDs through queries and subscriptions within their ori
     const iterator = subscriptions
       .activate(subscription, { signal: controller.signal })
       [Symbol.asyncIterator]();
-    expect((await iterator.next()).value.response?.status?.status.case).toBe("ok");
+    const accepted = await iterator.next();
+    if (accepted.done) throw new Error("Orders subscription closed before acceptance.");
+    expect(accepted.value.response?.status?.status.case).toBe("ok");
     return iterator;
   };
   try {
@@ -178,6 +198,7 @@ it("routes matching order IDs through queries and subscriptions within their ori
       [contosoNext, "sku-contoso"],
     ] as const) {
       const update = await next;
+      if (update.done) throw new Error("Orders subscription closed before an update.");
       expect(update.value.update.case).toBe("entityUpdates");
       if (update.value.update.case === "entityUpdates") {
         expect(
@@ -194,5 +215,112 @@ it("routes matching order IDs through queries and subscriptions within their ori
     session.abort();
     await server.close();
     await setup.close();
+  }
+});
+
+it("reads persisted membership before a restart and rejects a changed routing set", async () => {
+  const { configureOrdersEnvironment } = await import("../dist/src/index.js");
+  const backend = new InMemoryStorageBackend();
+  const first = await configureOrdersEnvironment({
+    storageFactory: new InMemoryStorageFactory(backend),
+    tenants: [northwind, contoso],
+    membership: "seed-if-empty",
+  });
+  await first.close();
+  await ServerTests.resetEnvironment();
+  const second = await configureOrdersEnvironment({
+    storageFactory: new InMemoryStorageFactory(backend),
+    tenants: [northwind, contoso],
+    membership: "existing",
+  });
+  try {
+    expect(
+      (await second.tenantIndex.all())
+        .map((id) => (id.kind.case === "value" ? id.kind.value : "invalid"))
+        .sort(),
+    ).toEqual(["contoso", "northwind"]);
+  } finally {
+    await second.close();
+  }
+  await ServerTests.resetEnvironment();
+  await expect(
+    configureOrdersEnvironment({
+      storageFactory: new InMemoryStorageFactory(backend),
+      tenants: [northwind],
+      membership: "existing",
+    }),
+  ).rejects.toThrow(/routing/i);
+});
+
+it("checks tenant storage structures before opening the Orders listener", async () => {
+  const { configureOrdersEnvironment, startOrdersServer } = await import("../dist/src/index.js");
+  const setup = await configureOrdersEnvironment({
+    storageFactory: new InMemoryStorageFactory(),
+    tenants: [northwind, contoso],
+  });
+  const preparation = vi
+    .spyOn(ServerEnvironment.prototype, "createStorageStructures")
+    .mockRejectedValue(new Error("tenant database unavailable"));
+  let running: Awaited<ReturnType<typeof startOrdersServer>> | undefined;
+  try {
+    await expect(
+      startOrdersServer().then((server) => {
+        running = server;
+        throw new Error("listener started before tenant preparation");
+      }),
+    ).rejects.toThrow("tenant database unavailable");
+    expect(preparation).toHaveBeenCalled();
+  } finally {
+    preparation.mockRestore();
+    await running?.close();
+    await setup.close();
+  }
+});
+
+it("closes the supplied factory if opening the tenant directory fails", async () => {
+  const { configureOrdersEnvironment } = await import("../dist/src/index.js");
+  const factory = new InMemoryStorageFactory();
+  const close = vi.spyOn(factory, "close");
+  const failure = new Error("directory unavailable");
+  const createIndex = vi.spyOn(PersistentTenantIndex, "create").mockRejectedValue(failure);
+  try {
+    await expect(
+      configureOrdersEnvironment({ storageFactory: factory, tenants: [northwind, contoso] }),
+    ).rejects.toBe(failure);
+    expect(close).toHaveBeenCalledOnce();
+  } finally {
+    createIndex.mockRestore();
+  }
+});
+
+it("closes storage when tenant registration fails during setup", async () => {
+  const { configureOrdersEnvironment } = await import("../dist/src/index.js");
+  const factory = new InMemoryStorageFactory();
+  const close = vi.spyOn(factory, "close");
+  const failure = new Error("tenant registration failed");
+  const keep = vi.spyOn(PersistentTenantIndex.prototype, "keep").mockRejectedValue(failure);
+  try {
+    await expect(
+      configureOrdersEnvironment({ storageFactory: factory, tenants: [northwind, contoso] }),
+    ).rejects.toBe(failure);
+    expect(close).toHaveBeenCalledOnce();
+  } finally {
+    keep.mockRestore();
+  }
+});
+
+it("closes storage when environment setup fails", async () => {
+  const { configureOrdersEnvironment } = await import("../dist/src/index.js");
+  const factory = new InMemoryStorageFactory();
+  const close = vi.spyOn(factory, "close");
+  const failure = new Error("environment setup failed");
+  const setup = vi.spyOn(ServerEnvironment.prototype, "completeSetup").mockRejectedValue(failure);
+  try {
+    await expect(
+      configureOrdersEnvironment({ storageFactory: factory, tenants: [northwind, contoso] }),
+    ).rejects.toBe(failure);
+    expect(close).toHaveBeenCalledOnce();
+  } finally {
+    setup.mockRestore();
   }
 });

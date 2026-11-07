@@ -397,6 +397,9 @@ importers:
       '@spine-event-engine/storage-datastore':
         specifier: workspace:*
         version: link:../../packages/storage-datastore
+      '@spine-event-engine/storage-postgres':
+        specifier: workspace:*
+        version: link:../../packages/storage-postgres
     devDependencies:
       '@spine-event-engine/proto-tools':
         specifier: 2.0.0-snapshot.27

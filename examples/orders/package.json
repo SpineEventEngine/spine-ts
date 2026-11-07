@@ -5,6 +5,10 @@
   "type": "module",
   "scripts": {
     "load": "pnpm -C ../.. typecheck:build && node dist/scripts/load.mjs",
+    "postgres:load": "pnpm -C ../.. typecheck:build && node dist/scripts/postgres-load.mjs",
+    "datastore:load": "pnpm -C ../.. typecheck:build && node dist/scripts/datastore-load.mjs",
+    "test:postgres": "pnpm -C ../.. typecheck:build && pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run examples/orders/test/postgres-live.test.ts --testTimeout=15000",
+    "test:datastore": "pnpm -C ../.. typecheck:build && pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run examples/orders/test/datastore-live.test.ts",
     "proto:generate": "spine-proto generate",
     "clean:generated-dist": "node scripts/clean-generated-dist.mjs",
     "prepack": "pnpm clean:generated-dist && tsc -b"
@@ -43,7 +47,8 @@
     "@spine-event-engine/proto": "2.0.0-snapshot.27",
     "@spine-event-engine/server": "workspace:*",
     "@spine-event-engine/storage": "workspace:*",
-    "@spine-event-engine/storage-datastore": "workspace:*"
+    "@spine-event-engine/storage-datastore": "workspace:*",
+    "@spine-event-engine/storage-postgres": "workspace:*"
   },
   "devDependencies": {
     "@spine-event-engine/proto-tools": "2.0.0-snapshot.27"
