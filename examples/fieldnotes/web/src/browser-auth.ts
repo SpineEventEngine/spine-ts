@@ -130,7 +130,8 @@ export class FieldnotesBrowserAuth {
     const grants = params.getAll("grant");
     if (params.size !== 1 || grants.length !== 1 || !grants[0] || !verifier) return false;
     const response = await this.post("/auth/google/exchange", {
-      grant: grants[0], codeVerifier: verifier,
+      grant: grants[0],
+      codeVerifier: verifier,
     });
     return response.ok;
   }
@@ -177,10 +178,15 @@ export class FieldnotesBrowserAuth {
     });
     const csrf = this.csrf();
     if (csrf !== undefined) headers.set("x-spine-csrf", csrf);
-    return this.fetcher(new Request(new URL(path, this.origin), {
-      method: "POST", headers, body: JSON.stringify(body), credentials: "same-origin",
-      cache: "no-store",
-    }));
+    return this.fetcher(
+      new Request(new URL(path, this.origin), {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        credentials: "same-origin",
+        cache: "no-store",
+      }),
+    );
   }
 
   /**
@@ -189,7 +195,9 @@ export class FieldnotesBrowserAuth {
    * @returns Cookie value or undefined before sign-in.
    */
   private csrf(): string | undefined {
-    const values = this.cookie().split(";").map((part) => part.trim());
+    const values = this.cookie()
+      .split(";")
+      .map((part) => part.trim());
     const matches = values.filter((part) => part.startsWith("__Host-spine-csrf="));
     return matches.length === 1 ? matches[0]?.slice("__Host-spine-csrf=".length) : undefined;
   }
@@ -203,8 +211,13 @@ export class FieldnotesBrowserAuth {
   private principal(value: unknown): value is { principal: BrowserPrincipal } {
     if (typeof value !== "object" || value === null || !("principal" in value)) return false;
     const principal: unknown = value.principal;
-    return typeof principal === "object" && principal !== null &&
-      "id" in principal && typeof principal.id === "string" && principal.id.length > 0;
+    return (
+      typeof principal === "object" &&
+      principal !== null &&
+      "id" in principal &&
+      typeof principal.id === "string" &&
+      principal.id.length > 0
+    );
   }
 
   /**
@@ -214,7 +227,11 @@ export class FieldnotesBrowserAuth {
    * @returns Whether it carries an authorization URL.
    */
   private authorization(value: unknown): value is { authorizationUrl: string } {
-    return typeof value === "object" && value !== null &&
-      "authorizationUrl" in value && typeof value.authorizationUrl === "string";
+    return (
+      typeof value === "object" &&
+      value !== null &&
+      "authorizationUrl" in value &&
+      typeof value.authorizationUrl === "string"
+    );
   }
 }

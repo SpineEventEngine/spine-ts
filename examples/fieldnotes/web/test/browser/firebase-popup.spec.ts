@@ -14,7 +14,13 @@
 
 import { randomUUID } from "node:crypto";
 import { deleteApp, initializeApp } from "firebase/app";
-import { connectAuthEmulator, getAuth, GoogleAuthProvider, signInWithCredential, signOut } from "firebase/auth";
+import {
+  connectAuthEmulator,
+  getAuth,
+  GoogleAuthProvider,
+  signInWithCredential,
+  signOut,
+} from "firebase/auth";
 import { expect, test } from "@playwright/test";
 
 test.afterEach(async () => {
@@ -22,20 +28,31 @@ test.afterEach(async () => {
   expect(response.status).toBe(204);
 });
 
-test("Firebase browser SDK popup exchanges an emulator Google identity for the private workspace", async ({ page }, testInfo) => {
+test("Firebase browser SDK popup exchanges an emulator Google identity for the private workspace", async ({
+  page,
+}, testInfo) => {
   const identity = randomUUID();
   const email = `fieldnotes-${identity}@example.test`;
-  const fixtureApp = initializeApp({
-    apiKey: "demo-fieldnotes-key",
-    authDomain: "demo-fieldnotes.firebaseapp.com",
-    projectId: "demo-fieldnotes",
-  }, `fieldnotes-popup-${identity}`);
+  const fixtureApp = initializeApp(
+    {
+      apiKey: "demo-fieldnotes-key",
+      authDomain: "demo-fieldnotes.firebaseapp.com",
+      projectId: "demo-fieldnotes",
+    },
+    `fieldnotes-popup-${identity}`,
+  );
   const fixtureAuth = getAuth(fixtureApp);
   connectAuthEmulator(fixtureAuth, "http://127.0.0.1:9099", { disableWarnings: true });
   try {
-    await signInWithCredential(fixtureAuth, GoogleAuthProvider.credential(JSON.stringify({
-      sub: `local-google-${identity}`, email,
-    })));
+    await signInWithCredential(
+      fixtureAuth,
+      GoogleAuthProvider.credential(
+        JSON.stringify({
+          sub: `local-google-${identity}`,
+          email,
+        }),
+      ),
+    );
   } finally {
     await signOut(fixtureAuth);
     await deleteApp(fixtureApp);

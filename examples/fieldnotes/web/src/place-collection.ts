@@ -115,11 +115,13 @@ export class FieldnotesPlaceCollection {
     this.#overlay = new Map();
     this.#scanning = true;
     const work = this.readAndPublish(current, abort);
-    const completion = work.catch((error: unknown) => {
-      if (current === this.#generation) throw error;
-    }).then(async () => {
-      if (current !== this.#generation && !this.#closed) await this.#latestScan;
-    });
+    const completion = work
+      .catch((error: unknown) => {
+        if (current === this.#generation) throw error;
+      })
+      .then(async () => {
+        if (current !== this.#generation && !this.#closed) await this.#latestScan;
+      });
     this.#latestScan = completion;
     return completion;
   }
@@ -200,8 +202,14 @@ export class FieldnotesPlaceCollection {
     if (this.matches(id, revision, removed)) return Promise.resolve();
     if (signal?.aborted) return Promise.reject(new Error("Place observation cancelled."));
     return new Promise<void>((resolve, reject) => {
-      const onResolve = () => { signal?.removeEventListener("abort", onAbort); resolve(); };
-      const onReject = (error: Error) => { signal?.removeEventListener("abort", onAbort); reject(error); };
+      const onResolve = () => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      };
+      const onReject = (error: Error) => {
+        signal?.removeEventListener("abort", onAbort);
+        reject(error);
+      };
       const waiter: ViewWaiter = { id, revision, removed, onResolve, onReject };
       const onAbort = () => {
         this.#waiters.delete(waiter);

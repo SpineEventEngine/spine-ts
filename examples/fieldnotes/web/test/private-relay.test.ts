@@ -99,7 +99,9 @@ it("relays an exact callback redirect and distinct cookies without following it"
     ["google", "callback"],
   );
   expect(result.status).toBe(303);
-  expect(result.headers.get("location")).toBe("https://localhost:3000/auth/complete#grant=single-use");
+  expect(result.headers.get("location")).toBe(
+    "https://localhost:3000/auth/complete#grant=single-use",
+  );
   expect(result.headers.getSetCookie()).toEqual(["a=1; Secure", "b=2; Secure"]);
   expect(result.headers.get("cache-control")).toBe("no-store");
   expect(origin).toBeUndefined();
@@ -134,9 +136,14 @@ it("rejects unknown paths and caller-selected upstreams before contacting a host
   ).toBe(404);
   const aborted = new AbortController();
   aborted.abort();
-  const cancelled = await proxy.forward(new Request("https://localhost:3000/auth/session", {
-    method: "POST", signal: aborted.signal,
-  }), "auth", ["session"]);
+  const cancelled = await proxy.forward(
+    new Request("https://localhost:3000/auth/session", {
+      method: "POST",
+      signal: aborted.signal,
+    }),
+    "auth",
+    ["session"],
+  );
   expect(cancelled.status).toBe(502);
 });
 
@@ -150,13 +157,30 @@ it("admits only canonical methods and paths without forwarding unexpected query 
   expect(await refusal("https://localhost:3000/auth/session", "auth", [])).toBe(404);
   expect(await refusal("https://localhost:3000/auth/session", "auth", ["..", "session"])).toBe(404);
   expect(await refusal("https://localhost:3000/auth/session", "auth", ["sess%69on"])).toBe(404);
-  expect(await refusal("https://localhost:3000/auth/session", "auth", ["session"], "GET")).toBe(404);
-  expect(await refusal("https://localhost:3000/auth/google/callback", "auth", ["google", "callback"])).toBe(404);
-  expect(await refusal("https://localhost:3000/auth/session?code=private", "auth", ["session"])).toBe(400);
-  expect(await refusal("https://localhost:3000/spine/spine.client.QueryService/Read", "spine",
-    ["spine.client.QueryService", "Read"], "GET")).toBe(404);
-  expect(() => new FieldnotesProxy({ FIELDNOTES_UPSTREAM_ORIGIN: "http://127.0.0.1:4242/hidden",
-    FIELDNOTES_PUBLIC_ORIGIN: "http://localhost:3000" })).toThrow();
+  expect(await refusal("https://localhost:3000/auth/session", "auth", ["session"], "GET")).toBe(
+    404,
+  );
+  expect(
+    await refusal("https://localhost:3000/auth/google/callback", "auth", ["google", "callback"]),
+  ).toBe(404);
+  expect(
+    await refusal("https://localhost:3000/auth/session?code=private", "auth", ["session"]),
+  ).toBe(400);
+  expect(
+    await refusal(
+      "https://localhost:3000/spine/spine.client.QueryService/Read",
+      "spine",
+      ["spine.client.QueryService", "Read"],
+      "GET",
+    ),
+  ).toBe(404);
+  expect(
+    () =>
+      new FieldnotesProxy({
+        FIELDNOTES_UPSTREAM_ORIGIN: "http://127.0.0.1:4242/hidden",
+        FIELDNOTES_PUBLIC_ORIGIN: "http://localhost:3000",
+      }),
+  ).toThrow();
 });
 
 it("refuses callback redirects outside the fixed fragment-only completion page", async () => {
@@ -180,8 +204,11 @@ it("refuses callback redirects outside the fixed fragment-only completion page",
     "https://localhost:3000/auth/complete#access_token=private",
   ]) {
     destination = unsafe;
-    const result = await proxy.forward(new Request("https://localhost:3000/auth/google/callback?state=s&code=c"),
-      "auth", ["google", "callback"]);
+    const result = await proxy.forward(
+      new Request("https://localhost:3000/auth/google/callback?state=s&code=c"),
+      "auth",
+      ["google", "callback"],
+    );
     expect(result.status).toBe(502);
     expect(result.headers.getSetCookie()).toEqual([]);
     expect(result.headers.get("location")).toBeNull();
@@ -201,13 +228,19 @@ it("keeps empty private responses unbuffered and refuses a callback without Loca
     FIELDNOTES_UPSTREAM_ORIGIN: `http://127.0.0.1:${String(address.port)}`,
     FIELDNOTES_PUBLIC_ORIGIN: "https://localhost:3000",
   });
-  const empty = await proxy.forward(new Request("https://localhost:3000/auth/logout", { method: "POST" }),
-    "auth", ["logout"]);
+  const empty = await proxy.forward(
+    new Request("https://localhost:3000/auth/logout", { method: "POST" }),
+    "auth",
+    ["logout"],
+  );
   expect(empty.status).toBe(204);
   expect(empty.body).toBeNull();
   expect(empty.headers.has("x-private-proof")).toBe(false);
-  const missingLocation = await proxy.forward(new Request("https://localhost:3000/auth/google/callback"),
-    "auth", ["google", "callback"]);
+  const missingLocation = await proxy.forward(
+    new Request("https://localhost:3000/auth/google/callback"),
+    "auth",
+    ["google", "callback"],
+  );
   expect(missingLocation.status).toBe(502);
   expect(missingLocation.headers.get("location")).toBeNull();
 });

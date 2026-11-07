@@ -70,10 +70,13 @@ export class FieldnotesProxy {
     const upstream = new URL(environment.FIELDNOTES_UPSTREAM_ORIGIN ?? "");
     const publicOrigin = new URL(environment.FIELDNOTES_PUBLIC_ORIGIN ?? "");
     if (
-      upstream.protocol !== "http:" || upstream.hostname !== "127.0.0.1" ||
+      upstream.protocol !== "http:" ||
+      upstream.hostname !== "127.0.0.1" ||
       upstream.origin !== environment.FIELDNOTES_UPSTREAM_ORIGIN ||
-      publicOrigin.protocol !== "https:" || publicOrigin.origin !== environment.FIELDNOTES_PUBLIC_ORIGIN
-    ) throw new Error("Fieldnotes proxy requires fixed loopback and HTTPS origins.");
+      publicOrigin.protocol !== "https:" ||
+      publicOrigin.origin !== environment.FIELDNOTES_PUBLIC_ORIGIN
+    )
+      throw new Error("Fieldnotes proxy requires fixed loopback and HTTPS origins.");
     this.#upstream = upstream;
     this.#publicOrigin = publicOrigin.origin;
   }
@@ -88,15 +91,18 @@ export class FieldnotesProxy {
    */
   async forward(request: Request, area: ProxyArea, path: readonly string[]): Promise<Response> {
     const target = this.target(area, path);
-    if (target === undefined || !this.allowed(area, target, request.method))
-      return this.empty(404);
+    if (target === undefined || !this.allowed(area, target, request.method)) return this.empty(404);
     const incoming = new URL(request.url);
     if (incoming.search && target !== "/auth/google/callback") return this.empty(400);
     const controller = new AbortController();
-    const onAbort = () => { controller.abort(request.signal.reason); };
+    const onAbort = () => {
+      controller.abort(request.signal.reason);
+    };
     request.signal.addEventListener("abort", onAbort, { once: true });
     if (request.signal.aborted) onAbort();
-    const onFinish = () => { request.signal.removeEventListener("abort", onAbort); };
+    const onFinish = () => {
+      request.signal.removeEventListener("abort", onAbort);
+    };
     try {
       return await this.relay(request, target, incoming.search, controller, onFinish);
     } catch {
@@ -113,8 +119,7 @@ export class FieldnotesProxy {
    * @returns Upstream path, or undefined for an encoded/path traversal attempt.
    */
   private target(area: ProxyArea, path: readonly string[]): string | undefined {
-    if (path.length === 0 || path.some((part) => !/^[A-Za-z.]+$/.test(part)))
-      return undefined;
+    if (path.length === 0 || path.some((part) => !/^[A-Za-z.]+$/.test(part))) return undefined;
     return area === "auth" ? `/auth/${path.join("/")}` : `/${path.join("/")}`;
   }
 
@@ -159,8 +164,11 @@ export class FieldnotesProxy {
       signal: controller.signal,
     } as RequestInit & { duplex: "half" });
     const outward = this.responseHeaders(upstream.headers);
-    if (target === "/auth/google/callback" && upstream.status === 303 &&
-        !this.safeCompletion(outward.get("location"))) {
+    if (
+      target === "/auth/google/callback" &&
+      upstream.status === 303 &&
+      !this.safeCompletion(outward.get("location"))
+    ) {
       onFinish();
       await upstream.body?.cancel();
       return this.empty(502);
@@ -215,8 +223,12 @@ export class FieldnotesProxy {
   private safeCompletion(location: string | null): boolean {
     if (location === null) return false;
     const url = new URL(location);
-    return url.origin === this.#publicOrigin && url.pathname === "/auth/complete" &&
-      url.search === "" && (url.hash.startsWith("#grant=") || url.hash === "#result=failed");
+    return (
+      url.origin === this.#publicOrigin &&
+      url.pathname === "/auth/complete" &&
+      url.search === "" &&
+      (url.hash.startsWith("#grant=") || url.hash === "#result=failed")
+    );
   }
 
   /**
@@ -237,9 +249,14 @@ export class FieldnotesProxy {
       async pull(outward) {
         try {
           const next = await reader.read();
-          if (next.done) { outward.close(); onFinish(); }
-          else outward.enqueue(next.value);
-        } catch (error) { outward.error(error); onFinish(); }
+          if (next.done) {
+            outward.close();
+            onFinish();
+          } else outward.enqueue(next.value);
+        } catch (error) {
+          outward.error(error);
+          onFinish();
+        }
       },
       async cancel(reason) {
         controller.abort(reason);

@@ -159,21 +159,33 @@ export class FieldnotesBrowserLifecycle {
     private readonly onView: (view: IdentityView) => void,
     dependencies: LifecycleDependencies = {},
   ) {
-    this.#auth = dependencies.auth ?? new FieldnotesBrowserAuth(
-      (request) => fetch(request, { signal: this.#abort.signal }),
-      () => document.cookie,
-      {
-        get: (key) => window.sessionStorage.getItem(key) ?? undefined,
-        set: (key, value) => { window.sessionStorage.setItem(key, value); },
-        delete: (key) => { window.sessionStorage.removeItem(key); },
-      },
-      window.location.origin,
-    );
-    this.#firebaseFactory = dependencies.firebase ?? (() => {
-      if (config.mode !== "firebase") throw new Error("Firebase is not selected.");
-      return new FieldnotesFirebaseBrowser(config.firebase);
-    });
-    this.#navigate = dependencies.navigate ?? ((url) => { window.location.assign(url.href); });
+    this.#auth =
+      dependencies.auth ??
+      new FieldnotesBrowserAuth(
+        (request) => fetch(request, { signal: this.#abort.signal }),
+        () => document.cookie,
+        {
+          get: (key) => window.sessionStorage.getItem(key) ?? undefined,
+          set: (key, value) => {
+            window.sessionStorage.setItem(key, value);
+          },
+          delete: (key) => {
+            window.sessionStorage.removeItem(key);
+          },
+        },
+        window.location.origin,
+      );
+    this.#firebaseFactory =
+      dependencies.firebase ??
+      (() => {
+        if (config.mode !== "firebase") throw new Error("Firebase is not selected.");
+        return new FieldnotesFirebaseBrowser(config.firebase);
+      });
+    this.#navigate =
+      dependencies.navigate ??
+      ((url) => {
+        window.location.assign(url.href);
+      });
   }
 
   /**
@@ -190,7 +202,11 @@ export class FieldnotesBrowserLifecycle {
       this.onView({ phase: principal === null ? "signed-out" : "ready", principal, error: null });
     } catch {
       if (current !== this.#generation) return;
-      this.onView({ phase: "signed-out", principal: null, error: "Session check failed. Please retry." });
+      this.onView({
+        phase: "signed-out",
+        principal: null,
+        error: "Session check failed. Please retry.",
+      });
     }
   }
 
@@ -209,26 +225,42 @@ export class FieldnotesBrowserLifecycle {
         if (current === this.#generation) this.#navigate(url);
         return;
       }
-      const sdk = this.#firebase ?? this.#firebaseFactory();
-      this.#firebase = sdk;
-      const token = await sdk.googleToken();
-      if (current !== this.#generation) return;
-      if (!(await this.#auth.exchangeFirebase(token)))
-        throw new Error("Firebase exchange failed.");
-      if (current !== this.#generation) return;
-      const principal = await this.#auth.session();
-      if (principal === null) throw new Error("App session absent.");
-      if (current === this.#generation)
-        this.onView({ phase: "ready", principal, error: null });
+      await this.signInFirebase(current);
     } catch {
       if (current === this.#generation) {
-        try { await this.#firebase?.clear(); } catch { /* Host session remains the authority. */ }
+        try {
+          await this.#firebase?.clear();
+        } catch {
+          /* Host session remains the authority. */
+        }
         if (current === this.#generation)
-          this.onView({ phase: "signed-out", principal: null, error: "Sign-in failed. Please try again." });
+          this.onView({
+            phase: "signed-out",
+            principal: null,
+            error: "Sign-in failed. Please try again.",
+          });
       }
     } finally {
       if (this.#signingInAt === current) this.#signingInAt = null;
     }
+  }
+
+  /**
+   * Performs one Firebase popup exchange for a verified app session.
+   *
+   * @param current Browser lifecycle generation at sign-in start.
+   * @returns Completion after the verified principal is published.
+   */
+  private async signInFirebase(current: number): Promise<void> {
+    const sdk = this.#firebase ?? this.#firebaseFactory();
+    this.#firebase = sdk;
+    const token = await sdk.googleToken();
+    if (current !== this.#generation) return;
+    if (!(await this.#auth.exchangeFirebase(token))) throw new Error("Firebase exchange failed.");
+    if (current !== this.#generation) return;
+    const principal = await this.#auth.session();
+    if (principal === null) throw new Error("App session absent.");
+    if (current === this.#generation) this.onView({ phase: "ready", principal, error: null });
   }
 
   /**
@@ -246,18 +278,31 @@ export class FieldnotesBrowserLifecycle {
     this.onView({ phase: "signed-out", principal: null, error: null });
     try {
       let revoked = false;
-      try { revoked = await this.#auth.logout(); } catch { /* The host did not confirm revocation. */ }
+      try {
+        revoked = await this.#auth.logout();
+      } catch {
+        /* The host did not confirm revocation. */
+      }
       if (!revoked && current === this.#generation) this.logoutFailure();
-      try { await this.#firebase?.clear(); } catch { /* Private state is already hidden. */ }
-    } finally { this.#loggingOut = false; }
+      try {
+        await this.#firebase?.clear();
+      } catch {
+        /* Private state is already hidden. */
+      }
+    } finally {
+      this.#loggingOut = false;
+    }
   }
 
   /**
    * Notifies the browser of unconfirmed revocation without reopening protected state.
    */
   private logoutFailure(): void {
-    this.onView({ phase: "signed-out", principal: null,
-      error: "Logout could not be confirmed. Please retry." });
+    this.onView({
+      phase: "signed-out",
+      principal: null,
+      error: "Logout could not be confirmed. Please retry.",
+    });
   }
 
   /**

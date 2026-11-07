@@ -15,10 +15,30 @@
 import { create } from "@bufbuild/protobuf";
 import type { ClientRequest, PostAndSubscribeResult } from "@spine-event-engine/client-web";
 import { AnyPacker } from "@spine-event-engine/core";
-import { AddPlaceSchema, RenamePlaceSchema, MovePlaceSchema, EditPlaceNoteSchema, DeletePlaceSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/commands_pb.js";
-import { PlaceAddedSchema, PlaceRenamedSchema, PlaceMovedSchema, PlaceNoteEditedSchema, PlaceDeletedSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/events_pb.js";
-import { PlaceUnavailableSchema, PlaceAlreadyExistsSchema, PlaceRevisionConflictSchema, InvalidPlaceCoordinatesSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/rejections_pb.js";
-import { CoordinatesSchema, PlaceIdSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/types_pb.js";
+import {
+  AddPlaceSchema,
+  RenamePlaceSchema,
+  MovePlaceSchema,
+  EditPlaceNoteSchema,
+  DeletePlaceSchema,
+} from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/commands_pb.js";
+import {
+  PlaceAddedSchema,
+  PlaceRenamedSchema,
+  PlaceMovedSchema,
+  PlaceNoteEditedSchema,
+  PlaceDeletedSchema,
+} from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/events_pb.js";
+import {
+  PlaceUnavailableSchema,
+  PlaceAlreadyExistsSchema,
+  PlaceRevisionConflictSchema,
+  InvalidPlaceCoordinatesSchema,
+} from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/rejections_pb.js";
+import {
+  CoordinatesSchema,
+  PlaceIdSchema,
+} from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/types_pb.js";
 import type { Event } from "@spine-event-engine/proto";
 import { FieldnotesPlaceCollection } from "./place-collection";
 
@@ -57,10 +77,15 @@ export type PlaceCommandOutcome =
       /**
        * Refusal or interrupted native operation.
        */
-      readonly kind: "unavailable" | "already-exists" | "invalid-coordinates" | "refused" | "interrupted";
+      readonly kind:
+        "unavailable" | "already-exists" | "invalid-coordinates" | "refused" | "interrupted";
     };
 
-const addRejections = [PlaceUnavailableSchema, PlaceAlreadyExistsSchema, InvalidPlaceCoordinatesSchema];
+const addRejections = [
+  PlaceUnavailableSchema,
+  PlaceAlreadyExistsSchema,
+  InvalidPlaceCoordinatesSchema,
+];
 const editRejections = [PlaceUnavailableSchema, PlaceRevisionConflictSchema];
 const moveRejections = [...editRejections, InvalidPlaceCoordinatesSchema];
 
@@ -89,13 +114,33 @@ export class FieldnotesPlaceCommands {
    * @param signal Optional UI cancellation.
    * @returns Domain and view-confirmed outcome.
    */
-  add(name: string, latitude: number, longitude: number, markdown: string,
-      signal?: AbortSignal): Promise<PlaceCommandOutcome> {
+  add(
+    name: string,
+    latitude: number,
+    longitude: number,
+    markdown: string,
+    signal?: AbortSignal,
+  ): Promise<PlaceCommandOutcome> {
     const id = crypto.randomUUID();
-    return this.submit(this.request.postAndSubscribe(AddPlaceSchema, create(AddPlaceSchema, {
-      id: create(PlaceIdSchema, { value: id }), name,
-      coordinates: create(CoordinatesSchema, { latitude, longitude }), markdown,
-    }), { events: [PlaceAddedSchema], rejections: addRejections, ...(signal === undefined ? {} : { signal }) }), id, false, signal);
+    return this.submit(
+      this.request.postAndSubscribe(
+        AddPlaceSchema,
+        create(AddPlaceSchema, {
+          id: create(PlaceIdSchema, { value: id }),
+          name,
+          coordinates: create(CoordinatesSchema, { latitude, longitude }),
+          markdown,
+        }),
+        {
+          events: [PlaceAddedSchema],
+          rejections: addRejections,
+          ...(signal === undefined ? {} : { signal }),
+        },
+      ),
+      id,
+      false,
+      signal,
+    );
   }
 
   /**
@@ -107,11 +152,30 @@ export class FieldnotesPlaceCommands {
    * @param signal Optional UI cancellation.
    * @returns Domain and view-confirmed outcome.
    */
-  rename(id: string, name: string, revision: number,
-         signal?: AbortSignal): Promise<PlaceCommandOutcome> {
-    return this.submit(this.request.postAndSubscribe(RenamePlaceSchema, create(RenamePlaceSchema, {
-      id: create(PlaceIdSchema, { value: id }), name, expectedRevision: revision,
-    }), { events: [PlaceRenamedSchema], rejections: editRejections, ...(signal === undefined ? {} : { signal }) }), id, false, signal);
+  rename(
+    id: string,
+    name: string,
+    revision: number,
+    signal?: AbortSignal,
+  ): Promise<PlaceCommandOutcome> {
+    return this.submit(
+      this.request.postAndSubscribe(
+        RenamePlaceSchema,
+        create(RenamePlaceSchema, {
+          id: create(PlaceIdSchema, { value: id }),
+          name,
+          expectedRevision: revision,
+        }),
+        {
+          events: [PlaceRenamedSchema],
+          rejections: editRejections,
+          ...(signal === undefined ? {} : { signal }),
+        },
+      ),
+      id,
+      false,
+      signal,
+    );
   }
 
   /**
@@ -124,12 +188,31 @@ export class FieldnotesPlaceCommands {
    * @param signal Optional UI cancellation.
    * @returns Domain and view-confirmed outcome.
    */
-  move(id: string, latitude: number, longitude: number, revision: number,
-       signal?: AbortSignal): Promise<PlaceCommandOutcome> {
-    return this.submit(this.request.postAndSubscribe(MovePlaceSchema, create(MovePlaceSchema, {
-      id: create(PlaceIdSchema, { value: id }),
-      coordinates: create(CoordinatesSchema, { latitude, longitude }), expectedRevision: revision,
-    }), { events: [PlaceMovedSchema], rejections: moveRejections, ...(signal === undefined ? {} : { signal }) }), id, false, signal);
+  move(
+    id: string,
+    latitude: number,
+    longitude: number,
+    revision: number,
+    signal?: AbortSignal,
+  ): Promise<PlaceCommandOutcome> {
+    return this.submit(
+      this.request.postAndSubscribe(
+        MovePlaceSchema,
+        create(MovePlaceSchema, {
+          id: create(PlaceIdSchema, { value: id }),
+          coordinates: create(CoordinatesSchema, { latitude, longitude }),
+          expectedRevision: revision,
+        }),
+        {
+          events: [PlaceMovedSchema],
+          rejections: moveRejections,
+          ...(signal === undefined ? {} : { signal }),
+        },
+      ),
+      id,
+      false,
+      signal,
+    );
   }
 
   /**
@@ -141,12 +224,30 @@ export class FieldnotesPlaceCommands {
    * @param signal Optional UI cancellation.
    * @returns Domain and view-confirmed outcome.
    */
-  note(id: string, markdown: string, revision: number,
-       signal?: AbortSignal): Promise<PlaceCommandOutcome> {
-    return this.submit(this.request.postAndSubscribe(EditPlaceNoteSchema,
-      create(EditPlaceNoteSchema, {
-        id: create(PlaceIdSchema, { value: id }), markdown, expectedRevision: revision,
-      }), { events: [PlaceNoteEditedSchema], rejections: editRejections, ...(signal === undefined ? {} : { signal }) }), id, false, signal);
+  note(
+    id: string,
+    markdown: string,
+    revision: number,
+    signal?: AbortSignal,
+  ): Promise<PlaceCommandOutcome> {
+    return this.submit(
+      this.request.postAndSubscribe(
+        EditPlaceNoteSchema,
+        create(EditPlaceNoteSchema, {
+          id: create(PlaceIdSchema, { value: id }),
+          markdown,
+          expectedRevision: revision,
+        }),
+        {
+          events: [PlaceNoteEditedSchema],
+          rejections: editRejections,
+          ...(signal === undefined ? {} : { signal }),
+        },
+      ),
+      id,
+      false,
+      signal,
+    );
   }
 
   /**
@@ -158,10 +259,23 @@ export class FieldnotesPlaceCommands {
    * @returns Domain and terminal-view-confirmed outcome.
    */
   delete(id: string, revision: number, signal?: AbortSignal): Promise<PlaceCommandOutcome> {
-    return this.submit(this.request.postAndSubscribe(DeletePlaceSchema,
-      create(DeletePlaceSchema, {
-        id: create(PlaceIdSchema, { value: id }), expectedRevision: revision,
-      }), { events: [PlaceDeletedSchema], rejections: editRejections, ...(signal === undefined ? {} : { signal }) }), id, true, signal);
+    return this.submit(
+      this.request.postAndSubscribe(
+        DeletePlaceSchema,
+        create(DeletePlaceSchema, {
+          id: create(PlaceIdSchema, { value: id }),
+          expectedRevision: revision,
+        }),
+        {
+          events: [PlaceDeletedSchema],
+          rejections: editRejections,
+          ...(signal === undefined ? {} : { signal }),
+        },
+      ),
+      id,
+      true,
+      signal,
+    );
   }
 
   /**
@@ -173,8 +287,12 @@ export class FieldnotesPlaceCommands {
    * @param signal Optional UI cancellation.
    * @returns Confirmed success, domain rejection or interrupted observation.
    */
-  private async submit(posting: Promise<PostAndSubscribeResult>, id: string,
-                       removed: boolean, signal?: AbortSignal): Promise<PlaceCommandOutcome> {
+  private async submit(
+    posting: Promise<PostAndSubscribeResult>,
+    id: string,
+    removed: boolean,
+    signal?: AbortSignal,
+  ): Promise<PlaceCommandOutcome> {
     const result = await posting;
     if (result.kind === "refused") return { kind: "refused" };
     try {

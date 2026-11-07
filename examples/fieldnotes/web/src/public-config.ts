@@ -78,13 +78,22 @@ export const FieldnotesPublicConfig = {
     const emulatorUrl = environment.FIELDNOTES_FIREBASE_EMULATOR_URL;
     if (emulatorUrl !== undefined) {
       const url = new URL(emulatorUrl);
-      if (production || url.protocol !== "http:" || url.hostname !== "127.0.0.1" ||
-          url.origin !== emulatorUrl)
+      if (
+        production ||
+        url.protocol !== "http:" ||
+        url.hostname !== "127.0.0.1" ||
+        url.origin !== emulatorUrl
+      )
         throw new Error("Firebase browser emulator requires a development loopback origin.");
     }
     return {
       mode,
-      firebase: { apiKey, authDomain, projectId, ...(emulatorUrl === undefined ? {} : { emulatorUrl }) },
+      firebase: {
+        apiKey,
+        authDomain,
+        projectId,
+        ...(emulatorUrl === undefined ? {} : { emulatorUrl }),
+      },
     };
   },
 
@@ -97,5 +106,5 @@ export const FieldnotesPublicConfig = {
   required(value: string | undefined): string {
     if (!value) throw new Error("Firebase browser configuration is required.");
     return value;
-  }
+  },
 };

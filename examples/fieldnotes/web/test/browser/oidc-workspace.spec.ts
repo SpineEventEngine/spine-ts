@@ -21,8 +21,12 @@ import { expect, test } from "@playwright/test";
  * @returns Recorded interrupted stream count.
  */
 function interruptionCount(value: unknown): number {
-  if (typeof value !== "object" || value === null ||
-      !("interruptedStreams" in value) || typeof value.interruptedStreams !== "number")
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("interruptedStreams" in value) ||
+    typeof value.interruptedStreams !== "number"
+  )
     throw new Error("Fixture interruption count is unavailable.");
   return value.interruptedStreams;
 }
@@ -32,14 +36,17 @@ test.afterEach(async () => {
   expect(response.status).toBe(204);
 });
 
-test("direct Google fixture signs into the private workspace through Next and native host", async ({ page }, testInfo) => {
+test("direct Google fixture signs into the private workspace through Next and native host", async ({
+  page,
+}, testInfo) => {
   const workerErrors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error" && message.text().includes("Worker failed to load"))
       workerErrors.push(message.text());
   });
-  const workerResponse = page.waitForResponse((response) =>
-    new URL(response.url()).pathname === "/maplibre-gl-worker.mjs");
+  const workerResponse = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/maplibre-gl-worker.mjs",
+  );
   await page.route("https://accounts.google.com/o/oauth2/v2/auth**", async (route) => {
     const provider = new URL(route.request().url());
     const registration = new URL("http://127.0.0.1:45110/test/authorize");
@@ -48,8 +55,13 @@ test("direct Google fixture signs into the private workspace through Next and na
     const response = await fetch(registration);
     if (!response.ok) throw new Error("Local signed OIDC fixture refused authorization.");
     const result: unknown = await response.json();
-    if (typeof result !== "object" || result === null || !("callback" in result) ||
-        typeof result.callback !== "string") throw new Error("OIDC fixture callback missing.");
+    if (
+      typeof result !== "object" ||
+      result === null ||
+      !("callback" in result) ||
+      typeof result.callback !== "string"
+    )
+      throw new Error("OIDC fixture callback missing.");
     await route.fulfill({ status: 302, headers: { location: result.callback }, body: "" });
   });
   await page.goto("/");
@@ -58,8 +70,11 @@ test("direct Google fixture signs into the private workspace through Next and na
   await page.getByRole("button", { name: "Continue with Google" }).click();
   await expect(page.getByRole("heading", { name: "Saved places" })).toBeVisible();
   await expect(page.getByText("No places yet.", { exact: false })).toBeVisible();
-  const navigationProtocol = await page.evaluate(() =>
-    (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming).nextHopProtocol);
+  const navigationProtocol = await page.evaluate(
+    () =>
+      (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming)
+        .nextHopProtocol,
+  );
   expect(navigationProtocol).toBe("h2");
   const network = await page.context().newCDPSession(page);
   await network.send("Network.enable");
@@ -67,9 +82,15 @@ test("direct Google fixture signs into the private workspace through Next and na
   network.on("Network.responseReceived", (event: unknown) => {
     if (typeof event !== "object" || event === null || !("response" in event)) return;
     const response = event.response;
-    if (typeof response !== "object" || response === null ||
-        !("url" in response) || typeof response.url !== "string" ||
-        !("protocol" in response) || typeof response.protocol !== "string") return;
+    if (
+      typeof response !== "object" ||
+      response === null ||
+      !("url" in response) ||
+      typeof response.url !== "string" ||
+      !("protocol" in response) ||
+      typeof response.protocol !== "string"
+    )
+      return;
     if (new URL(response.url).pathname.includes("CommandService/Post"))
       commandProtocols.push(response.protocol);
   });
@@ -91,7 +112,9 @@ test("direct Google fixture signs into the private workspace through Next and na
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Riverside" })).toBeVisible();
   expect(commandProtocols).toContain("h2");
-  await expect(page.locator(".desktop-place-panel .place-row", { hasText: "Riverside" })).toHaveCount(1);
+  await expect(
+    page.locator(".desktop-place-panel .place-row", { hasText: "Riverside" }),
+  ).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Select Riverside" })).toHaveCount(1);
   await page.getByRole("button", { name: "Rename" }).click();
   await page.getByLabel("Place name").fill("Riverside walk");
@@ -106,10 +129,14 @@ test("direct Google fixture signs into the private workspace through Next and na
     if (new URL(request.url()).hostname === "attacker.example") externalImages.push(request.url());
   });
   await page.getByRole("button", { name: "Edit note" }).click();
-  await page.getByRole("textbox", { name: "Markdown editor" }).fill("A **private note** ![hidden](https://attacker.example/pixel)");
+  await page
+    .getByRole("textbox", { name: "Markdown editor" })
+    .fill("A **private note** ![hidden](https://attacker.example/pixel)");
   await expect(page.getByText("Image omitted: hidden")).toBeVisible();
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.locator(".desktop-place-panel .safe-markdown strong", { hasText: "private note" })).toBeVisible();
+  await expect(
+    page.locator(".desktop-place-panel .safe-markdown strong", { hasText: "private note" }),
+  ).toBeVisible();
   expect(externalImages).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath("populated-desktop.png"), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -135,20 +162,29 @@ test("direct Google fixture signs into the private workspace through Next and na
   await second.getByRole("button", { name: "Save", exact: true }).click();
   await expect(second.getByRole("heading", { name: "Riverside after another tab" })).toBeVisible();
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.locator('.edit-panel [role="status"]')).toContainText("Place changed since last edit");
-  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toHaveValue("My unsaved revision");
+  await expect(page.locator('.edit-panel [role="status"]')).toContainText(
+    "Place changed since last edit",
+  );
+  await expect(page.getByRole("textbox", { name: "Markdown editor" })).toHaveValue(
+    "My unsaved revision",
+  );
   await page.screenshot({ path: testInfo.outputPath("conflict-draft.png"), fullPage: true });
   await page.getByRole("button", { name: "Reapply draft to current version" }).click();
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.locator(".desktop-place-panel .safe-markdown", { hasText: "My unsaved revision" })).toBeVisible();
-  const beforeClose: unknown = await (await fetch(
-    "http://127.0.0.1:45110/test/cancellation")).json();
+  await expect(
+    page.locator(".desktop-place-panel .safe-markdown", { hasText: "My unsaved revision" }),
+  ).toBeVisible();
+  const beforeClose: unknown = await (
+    await fetch("http://127.0.0.1:45110/test/cancellation")
+  ).json();
   await second.close();
-  await expect.poll(async () => {
-    const response = await fetch("http://127.0.0.1:45110/test/cancellation");
-    const observed: unknown = await response.json();
-    return interruptionCount(observed);
-  }).toBeGreaterThan(interruptionCount(beforeClose));
+  await expect
+    .poll(async () => {
+      const response = await fetch("http://127.0.0.1:45110/test/cancellation");
+      const observed: unknown = await response.json();
+      return interruptionCount(observed);
+    })
+    .toBeGreaterThan(interruptionCount(beforeClose));
   await page.getByRole("button", { name: "Delete place" }).click();
   await expect(page.getByText("cannot be undone", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Delete place" }).last().click();

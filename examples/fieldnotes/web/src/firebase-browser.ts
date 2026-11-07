@@ -14,8 +14,14 @@
 
 import { initializeApp, deleteApp, type FirebaseApp } from "firebase/app";
 import {
-  connectAuthEmulator, getAuth, GoogleAuthProvider, inMemoryPersistence,
-  setPersistence, signInWithPopup, signOut, type Auth,
+  connectAuthEmulator,
+  getAuth,
+  GoogleAuthProvider,
+  inMemoryPersistence,
+  setPersistence,
+  signInWithPopup,
+  signOut,
+  type Auth,
 } from "firebase/auth";
 import type { PublicConfig } from "./public-config";
 
@@ -38,11 +44,14 @@ export class FieldnotesFirebaseBrowser {
    * @param settings Public Firebase project and optional development emulator.
    */
   constructor(settings: FirebasePublic) {
-    this.#app = initializeApp({
-      apiKey: settings.apiKey,
-      authDomain: settings.authDomain,
-      projectId: settings.projectId,
-    }, "fieldnotes-browser");
+    this.#app = initializeApp(
+      {
+        apiKey: settings.apiKey,
+        authDomain: settings.authDomain,
+        projectId: settings.projectId,
+      },
+      "fieldnotes-browser",
+    );
     this.#auth = getAuth(this.#app);
     if (settings.emulatorUrl !== undefined)
       connectAuthEmulator(this.#auth, settings.emulatorUrl, { disableWarnings: true });

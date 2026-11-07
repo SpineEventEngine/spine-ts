@@ -14,7 +14,10 @@
 
 import { create } from "@bufbuild/protobuf";
 import { PlaceViewSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/entities_pb.js";
-import { PlaceIdSchema, CoordinatesSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/types_pb.js";
+import {
+  PlaceIdSchema,
+  CoordinatesSchema,
+} from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/types_pb.js";
 import { UserIdSchema } from "@spine-event-engine/proto";
 import { expect, it, vi } from "vitest";
 import { FieldnotesWorkspaceState, type PlaceConnection } from "../src/workspace-state";
@@ -33,7 +36,8 @@ it("keeps a dirty single-note draft after a domain conflict and exposes saved te
   const note = vi.fn(() => Promise.resolve({ kind: "conflict" as const, currentRevision: 3 }));
   const observed = [] as ReturnType<FieldnotesWorkspaceState["view"]>[];
   const connection: PlaceConnection = {
-    start: () => Promise.resolve(), close: () => Promise.resolve(),
+    start: () => Promise.resolve(),
+    close: () => Promise.resolve(),
     places: () => [initial],
     commands: () => ({ note, add: vi.fn(), rename: vi.fn(), move: vi.fn(), delete: vi.fn() }),
   };
@@ -57,7 +61,8 @@ it("clears a draft only after a committed projected result and blocks duplicate 
   });
   const rename = vi.fn(() => pending);
   const connection: PlaceConnection = {
-    start: () => Promise.resolve(), close: () => Promise.resolve(),
+    start: () => Promise.resolve(),
+    close: () => Promise.resolve(),
     places: () => [initial],
     commands: () => ({ note: vi.fn(), add: vi.fn(), rename, move: vi.fn(), delete: vi.fn() }),
   };
@@ -76,11 +81,14 @@ it("clears a draft only after a committed projected result and blocks duplicate 
 });
 
 it("submits the captured edit revision after a live update until the author deliberately reapplies", async () => {
-  const note = vi.fn().mockResolvedValueOnce({ kind: "conflict", currentRevision: 3 })
+  const note = vi
+    .fn()
+    .mockResolvedValueOnce({ kind: "conflict", currentRevision: 3 })
     .mockResolvedValueOnce({ kind: "committed", id: "same", revision: 4 });
   let current = [initial];
   const connection: PlaceConnection = {
-    start: () => Promise.resolve(), close: () => Promise.resolve(),
+    start: () => Promise.resolve(),
+    close: () => Promise.resolve(),
     places: () => current,
     commands: () => ({ note, add: vi.fn(), rename: vi.fn(), move: vi.fn(), delete: vi.fn() }),
   };
@@ -107,8 +115,16 @@ it("hides private places immediately and ignores a late committed result after c
   const close = vi.fn(() => Promise.resolve());
   const views = [] as ReturnType<FieldnotesWorkspaceState["view"]>[];
   const connection: PlaceConnection = {
-    start: () => Promise.resolve(), close, places: () => [initial],
-    commands: () => ({ note: () => pending, add: vi.fn(), rename: vi.fn(), move: vi.fn(), delete: vi.fn() }),
+    start: () => Promise.resolve(),
+    close,
+    places: () => [initial],
+    commands: () => ({
+      note: () => pending,
+      add: vi.fn(),
+      rename: vi.fn(),
+      move: vi.fn(),
+      delete: vi.fn(),
+    }),
   };
   const state = new FieldnotesWorkspaceState(connection, (view) => views.push(view));
   await state.start();
@@ -129,7 +145,9 @@ it("hides private places immediately and ignores a late committed result after c
 it("preserves an invalid move draft and explains the domain refusal", async () => {
   const move = vi.fn().mockResolvedValue({ kind: "invalid-coordinates" });
   const connection: PlaceConnection = {
-    start: () => Promise.resolve(), close: () => Promise.resolve(), places: () => [initial],
+    start: () => Promise.resolve(),
+    close: () => Promise.resolve(),
+    places: () => [initial],
     commands: () => ({ move, add: vi.fn(), rename: vi.fn(), note: vi.fn(), delete: vi.fn() }),
   };
   const state = new FieldnotesWorkspaceState(connection, () => undefined);
@@ -152,7 +170,9 @@ it("keeps AddPlace and RenamePlace drafts after their distinct domain refusals",
   const add = vi.fn().mockResolvedValue({ kind: "already-exists" });
   const rename = vi.fn().mockResolvedValue({ kind: "unavailable" });
   const connection: PlaceConnection = {
-    start: () => Promise.resolve(), close: () => Promise.resolve(), places: () => [initial],
+    start: () => Promise.resolve(),
+    close: () => Promise.resolve(),
+    places: () => [initial],
     commands: () => ({ add, rename, move: vi.fn(), note: vi.fn(), delete: vi.fn() }),
   };
   const state = new FieldnotesWorkspaceState(connection, () => undefined);
@@ -176,8 +196,16 @@ it("keeps AddPlace and RenamePlace drafts after their distinct domain refusals",
 it("keeps a delete confirmation draft after an interrupted native attempt", async () => {
   const remove = vi.fn(() => Promise.reject(new Error("private transport closed")));
   const connection: PlaceConnection = {
-    start: () => Promise.resolve(), close: () => Promise.resolve(), places: () => [initial],
-    commands: () => ({ delete: remove, add: vi.fn(), rename: vi.fn(), move: vi.fn(), note: vi.fn() }),
+    start: () => Promise.resolve(),
+    close: () => Promise.resolve(),
+    places: () => [initial],
+    commands: () => ({
+      delete: remove,
+      add: vi.fn(),
+      rename: vi.fn(),
+      move: vi.fn(),
+      note: vi.fn(),
+    }),
   };
   const state = new FieldnotesWorkspaceState(connection, () => undefined);
   await state.start();
@@ -192,8 +220,16 @@ it("keeps a delete confirmation draft after an interrupted native attempt", asyn
 it("clears selection only after a confirmed terminal DeletePlace result", async () => {
   const remove = vi.fn().mockResolvedValue({ kind: "committed", id: "same", revision: 3 });
   const connection: PlaceConnection = {
-    start: () => Promise.resolve(), close: () => Promise.resolve(), places: () => [initial],
-    commands: () => ({ delete: remove, add: vi.fn(), rename: vi.fn(), move: vi.fn(), note: vi.fn() }),
+    start: () => Promise.resolve(),
+    close: () => Promise.resolve(),
+    places: () => [initial],
+    commands: () => ({
+      delete: remove,
+      add: vi.fn(),
+      rename: vi.fn(),
+      move: vi.fn(),
+      note: vi.fn(),
+    }),
   };
   const state = new FieldnotesWorkspaceState(connection, () => undefined);
   await state.start();
@@ -214,7 +250,9 @@ it("does not change selection or draft while a projected save is pending", async
   });
   const note = vi.fn(() => pending);
   const connection: PlaceConnection = {
-    start: () => Promise.resolve(), close: () => Promise.resolve(), places: () => [initial],
+    start: () => Promise.resolve(),
+    close: () => Promise.resolve(),
+    places: () => [initial],
     commands: () => ({ note, add: vi.fn(), rename: vi.fn(), move: vi.fn(), delete: vi.fn() }),
   };
   const state = new FieldnotesWorkspaceState(connection, () => undefined);
@@ -240,8 +278,16 @@ it("does not revive a vanished selection or private data after close", async () 
   let current = [initial];
   const views = [] as ReturnType<FieldnotesWorkspaceState["view"]>[];
   const connection: PlaceConnection = {
-    start: () => Promise.resolve(), close: () => Promise.resolve(), places: () => current,
-    commands: () => ({ add: vi.fn(), rename: vi.fn(), move: vi.fn(), note: vi.fn(), delete: vi.fn() }),
+    start: () => Promise.resolve(),
+    close: () => Promise.resolve(),
+    places: () => current,
+    commands: () => ({
+      add: vi.fn(),
+      rename: vi.fn(),
+      move: vi.fn(),
+      note: vi.fn(),
+      delete: vi.fn(),
+    }),
   };
   const state = new FieldnotesWorkspaceState(connection, (view) => views.push(view));
   state.edit("note");
@@ -264,10 +310,17 @@ it("does not revive a vanished selection or private data after close", async () 
 
 it("keeps a draft after an interrupted outcome and ignores late failed work after close", async () => {
   let reject!: (error: Error) => void;
-  const pending = new Promise<never>((_resolve, onReject) => { reject = onReject; });
-  const note = vi.fn().mockResolvedValueOnce({ kind: "interrupted" }).mockImplementationOnce(() => pending);
+  const pending = new Promise<never>((_resolve, onReject) => {
+    reject = onReject;
+  });
+  const note = vi
+    .fn()
+    .mockResolvedValueOnce({ kind: "interrupted" })
+    .mockImplementationOnce(() => pending);
   const connection: PlaceConnection = {
-    start: () => Promise.resolve(), close: () => Promise.resolve(), places: () => [initial],
+    start: () => Promise.resolve(),
+    close: () => Promise.resolve(),
+    places: () => [initial],
     commands: () => ({ note, add: vi.fn(), rename: vi.fn(), move: vi.fn(), delete: vi.fn() }),
   };
   const state = new FieldnotesWorkspaceState(connection, () => undefined);
@@ -289,7 +342,9 @@ it("blocks incomplete Add and Move drafts but accepts explicit zero coordinates"
   const add = vi.fn().mockResolvedValue({ kind: "refused" });
   const move = vi.fn().mockResolvedValue({ kind: "refused" });
   const connection: PlaceConnection = {
-    start: () => Promise.resolve(), close: () => Promise.resolve(), places: () => [initial],
+    start: () => Promise.resolve(),
+    close: () => Promise.resolve(),
+    places: () => [initial],
     commands: () => ({ add, move, rename: vi.fn(), note: vi.fn(), delete: vi.fn() }),
   };
   const state = new FieldnotesWorkspaceState(connection, () => undefined);

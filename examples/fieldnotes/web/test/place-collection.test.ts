@@ -14,8 +14,14 @@
 
 import { create } from "@bufbuild/protobuf";
 import { QUERY_SERVICE_MAX_RESULTS } from "@spine-event-engine/core";
-import { PlaceViewSchema, type PlaceView } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/entities_pb.js";
-import { CoordinatesSchema, PlaceIdSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/types_pb.js";
+import {
+  PlaceViewSchema,
+  type PlaceView,
+} from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/entities_pb.js";
+import {
+  CoordinatesSchema,
+  PlaceIdSchema,
+} from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/types_pb.js";
 import { UserIdSchema } from "@spine-event-engine/proto/generated/spine/core/user_id_pb.js";
 import { expect, it } from "vitest";
 import { FieldnotesPlaceCollection } from "../src/place-collection";
@@ -27,7 +33,9 @@ function place(id: string, revision = 1, removed = false): PlaceView {
     id: create(PlaceIdSchema, { value: id }),
     author: create(UserIdSchema, { value: "author" }),
     name: removed ? "" : id,
-    coordinates: removed ? undefined : create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
+    coordinates: removed
+      ? undefined
+      : create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
     placeKey: removed ? new Uint8Array() : encoder.encode(id),
     revision,
     removed,
@@ -35,15 +43,21 @@ function place(id: string, revision = 1, removed = false): PlaceView {
 }
 
 it("traverses every byte-key page and detaches each continuation cursor", async () => {
-  const first = Array.from({ length: QUERY_SERVICE_MAX_RESULTS }, (_, i) => place(`a-${String(i).padStart(5,"0")}`));
+  const first = Array.from({ length: QUERY_SERVICE_MAX_RESULTS }, (_, i) =>
+    place(`a-${String(i).padStart(5, "0")}`),
+  );
   const second = [place("á-place"), place("東京-place")];
   const pages = [first, second, []];
   const cursors: (Uint8Array | undefined)[] = [];
-  const collection = new FieldnotesPlaceCollection("author", async (cursor) => {
-    await Promise.resolve();
-    cursors.push(cursor);
-    return pages.shift() ?? [];
-  }, () => undefined);
+  const collection = new FieldnotesPlaceCollection(
+    "author",
+    async (cursor) => {
+      await Promise.resolve();
+      cursors.push(cursor);
+      return pages.shift() ?? [];
+    },
+    () => undefined,
+  );
   await collection.scan();
   expect(collection.places()).toHaveLength(QUERY_SERVICE_MAX_RESULTS + 2);
   expect(cursors).toHaveLength(3);
@@ -55,13 +69,19 @@ it("traverses every byte-key page and detaches each continuation cursor", async 
 
 it("keeps a live insertion before the cursor and a terminal deletion across a full scan", async () => {
   let next!: (value: PlaceView[]) => void;
-  const pending = new Promise<PlaceView[]>((resolve) => { next = resolve; });
+  const pending = new Promise<PlaceView[]>((resolve) => {
+    next = resolve;
+  });
   let calls = 0;
-  const collection = new FieldnotesPlaceCollection("author", async () => {
-    await Promise.resolve();
-    calls++;
-    return calls === 1 ? [place("later")] : calls === 2 ? pending : [];
-  }, () => undefined);
+  const collection = new FieldnotesPlaceCollection(
+    "author",
+    async () => {
+      await Promise.resolve();
+      calls++;
+      return calls === 1 ? [place("later")] : calls === 2 ? pending : [];
+    },
+    () => undefined,
+  );
   const scanning = collection.scan();
   await Promise.resolve();
   collection.receive(place("earlier", 2));
@@ -75,22 +95,32 @@ it("keeps a live insertion before the cursor and a terminal deletion across a fu
 
 it("preserves prior visible data when a later page fails and rejects mismatched byte keys", async () => {
   let fail = false;
-  const collection = new FieldnotesPlaceCollection("author", async (cursor) => {
-    await Promise.resolve();
-    if (fail && cursor !== undefined) throw new Error("page failed");
-    return cursor === undefined ? [place("initial")] : [];
-  }, () => undefined);
+  const collection = new FieldnotesPlaceCollection(
+    "author",
+    async (cursor) => {
+      await Promise.resolve();
+      if (fail && cursor !== undefined) throw new Error("page failed");
+      return cursor === undefined ? [place("initial")] : [];
+    },
+    () => undefined,
+  );
   await collection.scan();
   fail = true;
   await expect(collection.scan()).rejects.toThrow("page failed");
   expect(collection.places().map((view) => view.id?.value)).toEqual(["initial"]);
   const invalid = place("bad");
   invalid.placeKey = encoder.encode("other");
-  expect(() => { collection.receive(invalid); }).toThrow("Place key");
+  expect(() => {
+    collection.receive(invalid);
+  }).toThrow("Place key");
 });
 
 it("rejects a stale removal and a foreign principal without exposing either record", () => {
-  const collection = new FieldnotesPlaceCollection("author", () => Promise.resolve([]), () => undefined);
+  const collection = new FieldnotesPlaceCollection(
+    "author",
+    () => Promise.resolve([]),
+    () => undefined,
+  );
   collection.receive(place("kept", 4));
   collection.receive(place("kept", 2));
   expect(collection.places()[0]?.revision).toBe(4);
@@ -98,16 +128,28 @@ it("rejects a stale removal and a foreign principal without exposing either reco
   expect(collection.places().map((view) => view.id?.value)).toEqual(["kept"]);
   const foreign = place("foreign");
   foreign.author = create(UserIdSchema, { value: "someone-else" });
-  expect(() => { collection.receive(foreign); }).toThrow("invalid author");
-  expect(() => { collection.receive(place("")); }).toThrow("invalid author");
-  expect(() => { collection.receive(place("invalid-revision", 0)); }).toThrow("invalid author");
+  expect(() => {
+    collection.receive(foreign);
+  }).toThrow("invalid author");
+  expect(() => {
+    collection.receive(place(""));
+  }).toThrow("invalid author");
+  expect(() => {
+    collection.receive(place("invalid-revision", 0));
+  }).toThrow("invalid author");
   expect(collection.places().map((view) => view.id?.value)).toEqual(["kept"]);
 });
 
 it("waits for the resulting view revision and cancels outstanding waits on close", async () => {
-  const collection = new FieldnotesPlaceCollection("author", () => Promise.resolve([]), () => undefined);
+  const collection = new FieldnotesPlaceCollection(
+    "author",
+    () => Promise.resolve([]),
+    () => undefined,
+  );
   let completed = false;
-  const waiting = collection.waitFor("draft", 3, false).then(() => { completed = true; });
+  const waiting = collection.waitFor("draft", 3, false).then(() => {
+    completed = true;
+  });
   collection.receive(place("draft", 2));
   await Promise.resolve();
   expect(completed).toBe(false);
@@ -132,10 +174,17 @@ it("rejects malformed page boundaries before replacing a complete collection", a
     [[place("z"), place("a")], "did not advance"],
     [[place("removed", 2, true)], "removed state"],
     [[foreign], "invalid author"],
-    [Array.from({ length: QUERY_SERVICE_MAX_RESULTS + 1 }, (_, i) => place(`p-${String(i)}`)), "exceeds capacity"],
+    [
+      Array.from({ length: QUERY_SERVICE_MAX_RESULTS + 1 }, (_, i) => place(`p-${String(i)}`)),
+      "exceeds capacity",
+    ],
   ];
   for (const [page, reason] of cases) {
-    const collection = new FieldnotesPlaceCollection("author", () => Promise.resolve(page), () => undefined);
+    const collection = new FieldnotesPlaceCollection(
+      "author",
+      () => Promise.resolve(page),
+      () => undefined,
+    );
     await expect(collection.scan()).rejects.toThrow(reason);
     expect(collection.places()).toEqual([]);
     collection.close();
@@ -143,8 +192,14 @@ it("rejects malformed page boundaries before replacing a complete collection", a
 });
 
 it("cancels a pending observation without accepting a later matching state", async () => {
-  const collection = new FieldnotesPlaceCollection("author", () => Promise.resolve([]), () => undefined);
-  expect(() => { collection.remove(""); }).toThrow("no typed ID");
+  const collection = new FieldnotesPlaceCollection(
+    "author",
+    () => Promise.resolve([]),
+    () => undefined,
+  );
+  expect(() => {
+    collection.remove("");
+  }).toThrow("no typed ID");
   collection.receive(place("already-removed", 1, true));
   await expect(collection.waitFor("already-removed", 1, true)).resolves.toBeUndefined();
   const abort = new AbortController();
@@ -161,11 +216,17 @@ it("cancels a pending observation without accepting a later matching state", asy
 
 it("retains a newer live revision across an older rescan page but honors authoritative absence", async () => {
   let round = 0;
-  const collection = new FieldnotesPlaceCollection("author", (cursor) => {
-    if (cursor !== undefined) return Promise.resolve([]);
-    round++;
-    return Promise.resolve(round === 1 ? [place("absent", 1), place("kept", 1)] : [place("kept", 2)]);
-  }, () => undefined);
+  const collection = new FieldnotesPlaceCollection(
+    "author",
+    (cursor) => {
+      if (cursor !== undefined) return Promise.resolve([]);
+      round++;
+      return Promise.resolve(
+        round === 1 ? [place("absent", 1), place("kept", 1)] : [place("kept", 2)],
+      );
+    },
+    () => undefined,
+  );
   await collection.scan();
   collection.receive(place("kept", 3));
   await collection.scan();

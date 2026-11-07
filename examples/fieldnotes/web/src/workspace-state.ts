@@ -18,8 +18,10 @@ import type { FieldnotesPlaceCommands, PlaceCommandOutcome } from "./place-comma
 /**
  * Five app-local domain operations used by the place editor.
  */
-export type PlaceCommandsPort = Pick<FieldnotesPlaceCommands,
-  "add" | "rename" | "move" | "note" | "delete">;
+export type PlaceCommandsPort = Pick<
+  FieldnotesPlaceCommands,
+  "add" | "rename" | "move" | "note" | "delete"
+>;
 
 /**
  * Connection capabilities needed by the view-state controller.
@@ -135,9 +137,13 @@ export class FieldnotesWorkspaceState {
   #closed = false;
 
   #state: WorkspaceView = {
-    places: [], selected: null, mode: "view",
+    places: [],
+    selected: null,
+    mode: "view",
     draft: { name: "", latitude: 38.7, longitude: -9.1, markdown: "" },
-    search: "", saving: false, feedback: null,
+    search: "",
+    saving: false,
+    feedback: null,
   };
 
   /**
@@ -200,8 +206,13 @@ export class FieldnotesWorkspaceState {
   add(latitude = 38.7, longitude = -9.1): void {
     this.#selectedId = null;
     this.#editBaseRevision = null;
-    this.emit({ ...this.#state, selected: null, mode: "add", feedback: null,
-      draft: { name: "", latitude, longitude, markdown: "" } });
+    this.emit({
+      ...this.#state,
+      selected: null,
+      mode: "add",
+      feedback: null,
+      draft: { name: "", latitude, longitude, markdown: "" },
+    });
   }
 
   /**
@@ -213,11 +224,17 @@ export class FieldnotesWorkspaceState {
     const place = this.#state.selected;
     if (place === null || this.#state.saving) return;
     this.#editBaseRevision = place.revision;
-    this.emit({ ...this.#state, mode, feedback: null, draft: {
-      name: place.name, markdown: place.markdown,
-      latitude: place.coordinates?.latitude ?? 0,
-      longitude: place.coordinates?.longitude ?? 0,
-    } });
+    this.emit({
+      ...this.#state,
+      mode,
+      feedback: null,
+      draft: {
+        name: place.name,
+        markdown: place.markdown,
+        latitude: place.coordinates?.latitude ?? 0,
+        longitude: place.coordinates?.longitude ?? 0,
+      },
+    });
   }
 
   /**
@@ -266,7 +283,10 @@ export class FieldnotesWorkspaceState {
    */
   async save(): Promise<void> {
     if (this.#closed || this.#state.saving || this.#state.mode === "view") return;
-    if ((this.#state.mode === "add" || this.#state.mode === "move") && this.coordinates() === null) {
+    if (
+      (this.#state.mode === "add" || this.#state.mode === "move") &&
+      this.coordinates() === null
+    ) {
       this.emit({ ...this.#state, feedback: "Choose valid latitude and longitude." });
       return;
     }
@@ -281,8 +301,12 @@ export class FieldnotesWorkspaceState {
         this.refresh();
       } else this.emit({ ...this.#state, saving: false, feedback: this.message(result) });
     } catch {
-      if (this.active()) this.emit({ ...this.#state, saving: false,
-        feedback: "Confirmation was interrupted. Check the place before retrying." });
+      if (this.active())
+        this.emit({
+          ...this.#state,
+          saving: false,
+          feedback: "Confirmation was interrupted. Check the place before retrying.",
+        });
     }
   }
 
@@ -334,9 +358,17 @@ export class FieldnotesWorkspaceState {
    */
   private coordinates(): { latitude: number; longitude: number } | null {
     const { latitude, longitude } = this.#state.draft;
-    if (typeof latitude !== "number" || typeof longitude !== "number" ||
-        !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
-        latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+    if (
+      typeof latitude !== "number" ||
+      typeof longitude !== "number" ||
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180
+    )
+      return null;
     return { latitude, longitude };
   }
 
@@ -347,7 +379,8 @@ export class FieldnotesWorkspaceState {
    * @returns Human-facing result text.
    */
   private message(outcome: Exclude<PlaceCommandOutcome, { kind: "committed" }>): string {
-    if (outcome.kind === "conflict") return "Place changed since last edit. Review the saved version and reapply your draft.";
+    if (outcome.kind === "conflict")
+      return "Place changed since last edit. Review the saved version and reapply your draft.";
     if (outcome.kind === "unavailable") return "This place is unavailable.";
     if (outcome.kind === "already-exists") return "This place already exists.";
     if (outcome.kind === "invalid-coordinates") return "Choose valid latitude and longitude.";

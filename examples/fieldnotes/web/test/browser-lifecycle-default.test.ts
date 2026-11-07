@@ -20,7 +20,10 @@ import { afterEach, expect, it, vi } from "vitest";
 import { FieldnotesBrowserAuth } from "../src/browser-auth";
 import { FieldnotesBrowserLifecycle, type IdentityView } from "../src/browser-lifecycle";
 
-afterEach(() => { vi.unstubAllGlobals(); window.sessionStorage.clear(); });
+afterEach(() => {
+  vi.unstubAllGlobals();
+  window.sessionStorage.clear();
+});
 
 it("uses same-origin browser capabilities for bootstrap and clears a failed Google verifier", async () => {
   const requests: Request[] = [];
@@ -44,8 +47,10 @@ it("uses same-origin browser capabilities for bootstrap and clears a failed Goog
   await lifecycle.signIn();
   expect(views.at(-1)?.error).toMatch(/Sign-in failed/);
   expect(window.sessionStorage.getItem(FieldnotesBrowserAuth.verifierKey)).toBeNull();
-  expect(requests.map((request) => new URL(request.url).pathname))
-    .toEqual(["/auth/session", "/auth/google/start"]);
+  expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+    "/auth/session",
+    "/auth/google/start",
+  ]);
   expect(requests.every((request) => request.credentials === "same-origin")).toBe(true);
   await lifecycle.close();
 });

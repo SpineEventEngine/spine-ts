@@ -17,10 +17,13 @@ import { FieldnotesPublicConfig } from "../src/public-config";
 
 it("selects direct Google without publishing the server client secret", () => {
   expect(
-    FieldnotesPublicConfig.parse({
-      FIELDNOTES_AUTH_MODE: "google",
-      FIELDNOTES_GOOGLE_CLIENT_SECRET: "private",
-    }, true),
+    FieldnotesPublicConfig.parse(
+      {
+        FIELDNOTES_AUTH_MODE: "google",
+        FIELDNOTES_GOOGLE_CLIENT_SECRET: "private",
+      },
+      true,
+    ),
   ).toEqual({ mode: "google" });
 });
 
@@ -42,7 +45,8 @@ it("requires explicit Firebase browser values and rejects emulator in production
     },
   });
   expect(() => FieldnotesPublicConfig.parse(values, true)).toThrow();
-  expect(() => FieldnotesPublicConfig.parse({ ...values, FIELDNOTES_FIREBASE_API_KEY: "" }, false))
-    .toThrow();
+  expect(() =>
+    FieldnotesPublicConfig.parse({ ...values, FIELDNOTES_FIREBASE_API_KEY: "" }, false),
+  ).toThrow();
   expect(() => FieldnotesPublicConfig.parse({ FIELDNOTES_AUTH_MODE: "other" }, false)).toThrow();
 });

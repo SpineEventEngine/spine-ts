@@ -43,7 +43,9 @@ it("keeps the Google verifier only through one navigation and exchanges the one-
       await Promise.resolve();
       requests.push(request);
       if (request.url.endsWith("/auth/google/start"))
-        return Response.json({ authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth?state=s" });
+        return Response.json({
+          authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth?state=s",
+        });
       return Response.json({ authenticated: true, mode: "google" });
     },
     () => "",
@@ -52,11 +54,11 @@ it("keeps the Google verifier only through one navigation and exchanges the one-
   );
   expect((await auth.startGoogle()).origin).toBe("https://accounts.google.com");
   expect(retained.size).toBe(1);
-  const started = await requests[0]?.json() as { codeChallenge: string };
+  const started = (await requests[0]?.json()) as { codeChallenge: string };
   expect(started.codeChallenge).toMatch(/^[A-Za-z0-9_-]{43}$/);
   expect(await auth.completeGoogle("#grant=one-use")).toBe(true);
   expect(retained.size).toBe(0);
-  const exchanged = await requests[1]?.json() as { grant: string; codeVerifier: string };
+  const exchanged = (await requests[1]?.json()) as { grant: string; codeVerifier: string };
   expect(exchanged.grant).toBe("one-use");
   expect(exchanged.codeVerifier).toMatch(/^[A-Za-z0-9_-]{43,128}$/);
   expect(await auth.completeGoogle("#grant=one-use")).toBe(false);
@@ -78,8 +80,12 @@ it("drops a failed callback verifier and reports an unsuccessful logout", async 
 
 it("drops a pending Google verifier on browser cancellation", () => {
   const retained = new Map([[FieldnotesBrowserAuth.verifierKey, "pending-secret"]]);
-  const auth = new FieldnotesBrowserAuth(() => Promise.resolve(new Response()), () => "", retained,
-    "https://localhost:3000");
+  const auth = new FieldnotesBrowserAuth(
+    () => Promise.resolve(new Response()),
+    () => "",
+    retained,
+    "https://localhost:3000",
+  );
   auth.clearPendingGoogle();
   expect(retained.size).toBe(0);
 });
@@ -118,11 +124,19 @@ it("never exchanges duplicate, extra or missing callback grants", async () => {
 
 it("rejects malformed app-session identity and exchanges Firebase only through the app route", async () => {
   const requests: Request[] = [];
-  const auth = new FieldnotesBrowserAuth((request) => {
-    requests.push(request);
-    return Promise.resolve(request.url.endsWith("/auth/session") ?
-      Response.json({ principal: { id: "" } }) : new Response(null, { status: 200 }));
-  }, () => "__Host-spine-csrf=one; __Host-spine-csrf=two", new Map(), "https://localhost:3000");
+  const auth = new FieldnotesBrowserAuth(
+    (request) => {
+      requests.push(request);
+      return Promise.resolve(
+        request.url.endsWith("/auth/session")
+          ? Response.json({ principal: { id: "" } })
+          : new Response(null, { status: 200 }),
+      );
+    },
+    () => "__Host-spine-csrf=one; __Host-spine-csrf=two",
+    new Map(),
+    "https://localhost:3000",
+  );
   await expect(auth.session()).rejects.toThrow("Session response is invalid.");
   await expect(auth.exchangeFirebase("provider-id-token")).resolves.toBe(true);
   expect(new URL(requests[1]?.url ?? "").pathname).toBe("/auth/firebase/exchange");

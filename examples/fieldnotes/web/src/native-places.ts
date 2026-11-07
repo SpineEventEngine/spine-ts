@@ -15,11 +15,18 @@
 import { create } from "@bufbuild/protobuf";
 import { Client, type ClientRequest, type Subscription } from "@spine-event-engine/client-web";
 import { AnyPacker, QUERY_SERVICE_MAX_RESULTS } from "@spine-event-engine/core";
-import { PlaceViewSchema, type PlaceView } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/entities_pb.js";
+import {
+  PlaceViewSchema,
+  type PlaceView,
+} from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/entities_pb.js";
 import { PlaceViewQuery } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/entities_query.js";
 import { PlaceIdSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/types_pb.js";
 import { UserIdSchema } from "@spine-event-engine/proto";
-import { TopicIdSchema, TopicSchema, type EntityStateUpdate } from "@spine-event-engine/proto/client";
+import {
+  TopicIdSchema,
+  TopicSchema,
+  type EntityStateUpdate,
+} from "@spine-event-engine/proto/client";
 import { FieldnotesPlaceCollection } from "./place-collection";
 import { FieldnotesPlaceCommands } from "./place-commands";
 
@@ -58,9 +65,13 @@ export class FieldnotesNativePlaces {
       onRequestMetadata: () => this.csrf(),
     });
     this.#request = this.#client.onBehalfOf(principalId);
-    this.#collection = new FieldnotesPlaceCollection(principalId,
+    this.#collection = new FieldnotesPlaceCollection(
+      principalId,
       (cursor, signal) => this.page(cursor, signal),
-      () => { this.onChange(this.#collection.places()); });
+      () => {
+        this.onChange(this.#collection.places());
+      },
+    );
     this.#commands = new FieldnotesPlaceCommands(this.#request, this.#collection);
   }
 
@@ -70,14 +81,23 @@ export class FieldnotesNativePlaces {
    * @returns Completion after initial collection traversal.
    */
   async start(): Promise<void> {
-    const query = PlaceViewQuery.create().author().is(create(UserIdSchema, {
-      value: this.principalId,
-    })).build();
+    const query = PlaceViewQuery.create()
+      .author()
+      .is(
+        create(UserIdSchema, {
+          value: this.principalId,
+        }),
+      )
+      .build();
     const target = query.build().target;
     if (target === undefined) throw new Error("Author-only topic target is missing.");
-    const subscription = await this.#request.createSubscription(create(TopicSchema, {
-      id: create(TopicIdSchema, { value: `t-${crypto.randomUUID()}` }), target,
-    }), { kind: "entity", authoritativeQuery: () => query });
+    const subscription = await this.#request.createSubscription(
+      create(TopicSchema, {
+        id: create(TopicIdSchema, { value: `t-${crypto.randomUUID()}` }),
+        target,
+      }),
+      { kind: "entity", authoritativeQuery: () => query },
+    );
     this.#subscription = subscription;
     void this.updates(subscription);
     void this.lifecycle(subscription);
@@ -129,8 +149,10 @@ export class FieldnotesNativePlaces {
     const author = create(UserIdSchema, { value: this.principalId });
     let query = PlaceViewQuery.create().author().is(author).removed().is(false);
     if (cursor !== undefined) query = query.placeKey().isGreaterThan(cursor);
-    const response = await this.#request.send(query.orderBy("placeKey")
-      .limit(QUERY_SERVICE_MAX_RESULTS).build(), { signal });
+    const response = await this.#request.send(
+      query.orderBy("placeKey").limit(QUERY_SERVICE_MAX_RESULTS).build(),
+      { signal },
+    );
     return response.message.map((entry) => {
       const state = AnyPacker.tryUnpack(entry.state, PlaceViewSchema);
       if (state === undefined) throw new Error("Place page returned a non-PlaceView state.");
@@ -148,7 +170,10 @@ export class FieldnotesNativePlaces {
     try {
       for await (const delivery of subscription.updates) {
         if (this.#closed) return;
-        if (delivery.kind === "resynchronization") { void this.rescan(); continue; }
+        if (delivery.kind === "resynchronization") {
+          void this.rescan();
+          continue;
+        }
         if (delivery.update.update.case !== "entityUpdates") continue;
         for (const update of delivery.update.update.value.update) this.apply(update);
       }
@@ -212,7 +237,9 @@ export class FieldnotesNativePlaces {
    * @returns Fresh per-request header values.
    */
   private csrf(): HeadersInit {
-    const matches = document.cookie.split(";").map((part) => part.trim())
+    const matches = document.cookie
+      .split(";")
+      .map((part) => part.trim())
       .filter((part) => part.startsWith("__Host-spine-csrf="));
     if (matches.length !== 1) return {};
     return { "x-spine-csrf": matches[0]?.slice("__Host-spine-csrf=".length) ?? "" };

@@ -16,7 +16,9 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "@playwright/test";
 
 const webRoot = fileURLToPath(new URL("../..", import.meta.url));
-const hostFixture = fileURLToPath(new URL("../../../server/test/browser-oidc-host.mjs", import.meta.url));
+const hostFixture = fileURLToPath(
+  new URL("../../../server/test/browser-oidc-host.mjs", import.meta.url),
+);
 const caddyfile = fileURLToPath(new URL("../../../deploy/Caddyfile", import.meta.url));
 const publicOrigin = "https://127.0.0.1:45112";
 const tlsKey = process.env.FIELDNOTES_TEST_TLS_KEY;
@@ -31,8 +33,10 @@ export default defineConfig({
   use: {
     baseURL: publicOrigin,
     ignoreHTTPSErrors: true,
-    launchOptions: process.env.FIELDNOTES_CHROMIUM_EXECUTABLE === undefined ? {} :
-      { executablePath: process.env.FIELDNOTES_CHROMIUM_EXECUTABLE },
+    launchOptions:
+      process.env.FIELDNOTES_CHROMIUM_EXECUTABLE === undefined
+        ? {}
+        : { executablePath: process.env.FIELDNOTES_CHROMIUM_EXECUTABLE },
   },
   projects: [{ name: "chromium", use: { browserName: "chromium" } }],
   webServer: [
@@ -55,12 +59,14 @@ export default defineConfig({
         FIELDNOTES_AUTH_MODE: authMode,
         FIELDNOTES_UPSTREAM_ORIGIN: "http://127.0.0.1:45114",
         FIELDNOTES_PUBLIC_ORIGIN: publicOrigin,
-        ...(authMode === "firebase" ? {
-          FIELDNOTES_FIREBASE_API_KEY: "demo-fieldnotes-key",
-          FIELDNOTES_FIREBASE_AUTH_DOMAIN: "demo-fieldnotes.firebaseapp.com",
-          FIELDNOTES_FIREBASE_PROJECT_ID: "demo-fieldnotes",
-          FIELDNOTES_FIREBASE_EMULATOR_URL: "http://127.0.0.1:9099",
-        } : {}),
+        ...(authMode === "firebase"
+          ? {
+              FIELDNOTES_FIREBASE_API_KEY: "demo-fieldnotes-key",
+              FIELDNOTES_FIREBASE_AUTH_DOMAIN: "demo-fieldnotes.firebaseapp.com",
+              FIELDNOTES_FIREBASE_PROJECT_ID: "demo-fieldnotes",
+              FIELDNOTES_FIREBASE_EMULATOR_URL: "http://127.0.0.1:9099",
+            }
+          : {}),
       },
     },
     {
