@@ -388,12 +388,15 @@ describe("Fieldnotes host private Connect boundary", () => {
     }
   });
 
-  it("keeps every foreign Place ID out of an author's raw add, rename and delete stream", async () => {
+  it.each([
+    { observer: "author-a", foreign: "author-b" },
+    { observer: "author-b", foreign: "author-a" },
+  ])("keeps foreign Place IDs out of $observer's raw stream", async ({ observer, foreign }) => {
     const host = await FieldnotesHost.open(settings(), {
       storageFactory: new InMemoryStorageFactory(),
     });
-    const first = await host.sessions.issue({ id: "author-a" });
-    const second = await host.sessions.issue({ id: "author-b" });
+    const first = await host.sessions.issue({ id: observer });
+    const second = await host.sessions.issue({ id: foreign });
     if (first.kind !== "created" || second.kind !== "created")
       throw new Error("Expected issued sessions.");
     const clientFor = (credential: string) =>
@@ -404,18 +407,19 @@ describe("Fieldnotes host private Connect boundary", () => {
           "x-spine-csrf": host.cookies.csrf(credential),
         }),
       });
-    const clientA = clientFor(first.credential.value);
-    const clientB = clientFor(second.credential.value);
-    const authorA = clientA.onBehalfOf("author-a");
-    const authorB = clientB.onBehalfOf("author-b");
-    const idA = create(PlaceIdSchema, { value: `a-${randomUUID()}` });
-    const idB = create(PlaceIdSchema, { value: `b-${randomUUID()}` });
+    const observerClient = clientFor(first.credential.value);
+    const foreignClient = clientFor(second.credential.value);
+    const observerRequest = observerClient.onBehalfOf(observer);
+    const foreignRequest = foreignClient.onBehalfOf(foreign);
+    const observerId = create(PlaceIdSchema, { value: `observed-${randomUUID()}` });
+    const foreignId = create(PlaceIdSchema, { value: `foreign-${randomUUID()}` });
+    const markerId = create(PlaceIdSchema, { value: `marker-${randomUUID()}` });
     const queryFor = (name: string) =>
       PlaceViewQuery.create()
         .author()
         .is(create(UserIdSchema, { value: name }))
         .build();
-    const subscribe = (name: string, author: typeof authorA) => {
+    const subscribe = (name: string, author: typeof observerRequest) => {
       const query = queryFor(name);
       return author.createSubscription(
         create(TopicSchema, {
@@ -425,90 +429,109 @@ describe("Fieldnotes host private Connect boundary", () => {
         { kind: "entity", authoritativeQuery: () => query },
       );
     };
-    const streamA = await subscribe("author-a", authorA);
-    const streamB = await subscribe("author-b", authorB);
-    const seenA: { id: string | undefined; kind: string }[] = [];
-    const seenB: { id: string | undefined; kind: string }[] = [];
-    const collect = async (stream: typeof streamA, seen: typeof seenA) => {
-      for await (const delivery of stream.updates) {
+    const stream = await subscribe(observer, observerRequest);
+    const foreignStream = await subscribe(foreign, foreignRequest);
+    const seen: { id: string | undefined; kind: string }[] = [];
+    const foreignSeen: { id: string | undefined; kind: string }[] = [];
+    const collect = async (source: typeof stream, target: typeof seen) => {
+      for await (const delivery of source.updates) {
         if (delivery.kind !== "update" || delivery.update.update.case !== "entityUpdates") continue;
         for (const entry of delivery.update.update.value.update) {
           if (entry.kind.case === undefined) throw new Error("Entity update has no kind.");
-          seen.push({
+          target.push({
             id: AnyPacker.tryUnpack(entry.id, PlaceIdSchema)?.value,
             kind: entry.kind.case,
           });
         }
       }
     };
-    const collectingA = collect(streamA, seenA);
-    const collectingB = collect(streamB, seenB);
+    const collecting = collect(stream, seen);
+    const collectingForeign = collect(foreignStream, foreignSeen);
+    let primary: unknown;
+    const failures: unknown[] = [];
     try {
-      await streamA.activate();
-      await streamB.activate();
+      await stream.activate();
+      await foreignStream.activate();
       const coordinates = create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 });
-      await authorA.post(
+      await foreignRequest.post(
         AddPlaceSchema,
-        create(AddPlaceSchema, { id: idA, name: "A", coordinates }),
-      );
-      await authorB.post(
-        AddPlaceSchema,
-        create(AddPlaceSchema, { id: idB, name: "B", coordinates }),
+        create(AddPlaceSchema, { id: foreignId, name: "Foreign", coordinates }),
       );
       await vi.waitFor(() => {
         expect(
-          seenA.filter((entry) => entry.id === idA.value && entry.kind === "state"),
-        ).toHaveLength(1);
-        expect(
-          seenB.filter((entry) => entry.id === idB.value && entry.kind === "state"),
+          foreignSeen.filter((entry) => entry.id === foreignId.value && entry.kind === "state"),
         ).toHaveLength(1);
       });
-      expect(seenA.every((entry) => entry.id === idA.value)).toBe(true);
-      expect(seenB.every((entry) => entry.id === idB.value)).toBe(true);
-      await authorA.post(
-        RenamePlaceSchema,
-        create(RenamePlaceSchema, { id: idA, name: "A2", expectedRevision: 1 }),
-      );
-      await authorB.post(
-        RenamePlaceSchema,
-        create(RenamePlaceSchema, { id: idB, name: "B2", expectedRevision: 1 }),
+      await observerRequest.post(
+        AddPlaceSchema,
+        create(AddPlaceSchema, { id: observerId, name: "Observed", coordinates }),
       );
       await vi.waitFor(() => {
         expect(
-          seenA.filter((entry) => entry.id === idA.value && entry.kind === "state"),
-        ).toHaveLength(2);
-        expect(
-          seenB.filter((entry) => entry.id === idB.value && entry.kind === "state"),
-        ).toHaveLength(2);
+          seen.filter((entry) => entry.id === observerId.value && entry.kind === "state"),
+        ).toHaveLength(1);
       });
-      expect(seenA.every((entry) => entry.id === idA.value)).toBe(true);
-      expect(seenB.every((entry) => entry.id === idB.value)).toBe(true);
-      await authorA.post(
-        DeletePlaceSchema,
-        create(DeletePlaceSchema, { id: idA, expectedRevision: 2 }),
-      );
-      await authorB.post(
-        DeletePlaceSchema,
-        create(DeletePlaceSchema, { id: idB, expectedRevision: 2 }),
+      expect(seen.every((entry) => entry.id === observerId.value)).toBe(true);
+
+      await foreignRequest.post(
+        RenamePlaceSchema,
+        create(RenamePlaceSchema, { id: foreignId, name: "Foreign renamed", expectedRevision: 1 }),
       );
       await vi.waitFor(() => {
         expect(
-          seenA.some((entry) => entry.id === idA.value && entry.kind === "noLongerMatching"),
-        ).toBe(true);
+          foreignSeen.filter((entry) => entry.id === foreignId.value && entry.kind === "state"),
+        ).toHaveLength(2);
+      });
+      await observerRequest.post(
+        RenamePlaceSchema,
+        create(RenamePlaceSchema, {
+          id: observerId,
+          name: "Observed renamed",
+          expectedRevision: 1,
+        }),
+      );
+      await vi.waitFor(() => {
         expect(
-          seenB.some((entry) => entry.id === idB.value && entry.kind === "noLongerMatching"),
+          seen.filter((entry) => entry.id === observerId.value && entry.kind === "state"),
+        ).toHaveLength(2);
+      });
+      expect(seen.every((entry) => entry.id === observerId.value)).toBe(true);
+
+      await foreignRequest.post(
+        DeletePlaceSchema,
+        create(DeletePlaceSchema, { id: foreignId, expectedRevision: 2 }),
+      );
+      await vi.waitFor(() => {
+        expect(
+          foreignSeen.some(
+            (entry) => entry.id === foreignId.value && entry.kind === "noLongerMatching",
+          ),
         ).toBe(true);
       });
-      expect(seenA.every((entry) => entry.id === idA.value)).toBe(true);
-      expect(seenB.every((entry) => entry.id === idB.value)).toBe(true);
+      await observerRequest.post(
+        AddPlaceSchema,
+        create(AddPlaceSchema, { id: markerId, name: "Observer marker", coordinates }),
+      );
+      await vi.waitFor(() => {
+        expect(seen.some((entry) => entry.id === markerId.value && entry.kind === "state")).toBe(
+          true,
+        );
+      });
+      expect(
+        seen.every((entry) => entry.id === observerId.value || entry.id === markerId.value),
+      ).toBe(true);
+    } catch (error) {
+      primary = error;
     } finally {
-      await streamA.cancel();
-      await streamB.cancel();
-      await collectingA;
-      await collectingB;
-      await clientA.close();
-      await clientB.close();
-      await host.close();
+      const cancels = await Promise.allSettled([stream.cancel(), foreignStream.cancel()]);
+      const drains = await Promise.allSettled([collecting, collectingForeign]);
+      const clients = await Promise.allSettled([observerClient.close(), foreignClient.close()]);
+      const closed = await Promise.allSettled([host.close()]);
+      for (const result of [...cancels, ...drains, ...clients, ...closed])
+        if (result.status === "rejected") failures.push(result.reason as unknown);
     }
+    if (primary instanceof Error) throw primary;
+    if (primary !== undefined) throw new Error("Raw stream test failed.", { cause: primary });
+    if (failures.length > 0) throw new AggregateError(failures, "Raw stream cleanup failed.");
   });
 });
