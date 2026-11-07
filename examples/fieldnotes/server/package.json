@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "handlers:generate": "spine-proto handlers",
+    "start": "node dist/src/main.js",
     "prepack": "pnpm handlers:generate && tsc -b"
   },
   "exports": {
