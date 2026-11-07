@@ -120,6 +120,7 @@ function buildPagingStorageFactory(
   stringifiers: StringifierRegistry,
   builder = PostgresStorageFactory.newBuilder(),
 ): Promise<PostgresStorageFactory> {
+  if (url === undefined) throw new Error("FIELDNOTES_DATABASE_URL is required.");
   return builder.setOptions({ url, schema }).setStringifierRegistry(stringifiers).build();
 }
 
