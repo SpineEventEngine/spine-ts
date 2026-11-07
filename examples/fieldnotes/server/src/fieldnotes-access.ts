@@ -14,6 +14,7 @@
 
 import { clone, create, equals } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { BytesValueSchema } from "@bufbuild/protobuf/wkt";
 import type {
   AuthenticatedPrincipal,
   AuthorizationPolicy,
@@ -22,7 +23,7 @@ import type {
   ContextResolver,
   IncomingRequest,
 } from "@spine-event-engine/auth";
-import { Time, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, Time, TypeUrls } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 import type { Target } from "@spine-event-engine/proto/client";
 import { TargetSchema } from "@spine-event-engine/proto/client";
@@ -173,7 +174,35 @@ export class FieldnotesAccess implements AuthorizationPolicy {
       .is(false)
       .build()
       .build().target;
-    return visible !== undefined && equals(TargetSchema, normalized, visible);
+    if (visible !== undefined && equals(TargetSchema, normalized, visible)) return true;
+    return (
+      target.criterion.value.idFilter === undefined && this.cursorTarget(principalId, normalized)
+    );
+  }
+
+  /**
+   * Checks a forward cursor against the generated canonical target.
+   *
+   * @param principalId Verified application principal ID.
+   * @param target Requested target without an ID filter.
+   * @returns Whether the full target is the canonical active forward page.
+   */
+  private cursorTarget(principalId: string, target: Target): boolean {
+    if (target.criterion.case !== "filters" || target.criterion.value.filter.length !== 3)
+      return false;
+    const encoded = target.criterion.value.filter[2]?.filter[0]?.value;
+    const cursor = AnyPacker.tryUnpack(encoded, BytesValueSchema)?.value;
+    if (cursor === undefined || cursor.length === 0) return false;
+    const expected = PlaceViewQuery.create()
+      .author()
+      .is(create(UserIdSchema, { value: principalId }))
+      .removed()
+      .is(false)
+      .placeKey()
+      .isGreaterThan(cursor)
+      .build()
+      .build().target;
+    return expected !== undefined && equals(TargetSchema, target, expected);
   }
 
   /**

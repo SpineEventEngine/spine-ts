@@ -17,12 +17,21 @@ import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
 import { Client } from "@spine-event-engine/client-web";
-import { AnyPacker, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import {
+  AnyPacker,
+  QUERY_SERVICE_MAX_RESULTS,
+  StringifierRegistry,
+  Time,
+  TypeRegistry,
+} from "@spine-event-engine/core";
 import { fieldnotesProtoModule } from "@spine-event-engine/example-fieldnotes-model";
 import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { AddPlaceSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/commands_pb.js";
 import { RenamePlaceSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/commands_pb.js";
-import { PlaceViewSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/entities_pb.js";
+import {
+  PlaceViewSchema,
+  type PlaceView,
+} from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/entities_pb.js";
 import { PlaceViewQuery } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/entities_query.js";
 import {
   CoordinatesSchema,
@@ -37,8 +46,14 @@ import {
   type SubscriptionUpdate,
 } from "@spine-event-engine/proto/client";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { ColumnTypes, RecordColumn } from "@spine-event-engine/storage";
 import { Pool } from "pg";
 import { expect, it, vi } from "vitest";
+import {
+  EntityRecords,
+  standEntityStorageDescriptor,
+} from "../../../../packages/server/src/entity/entity-storage-descriptor.js";
+import { describeEntityMetadata } from "../../../../packages/server/src/entity/entity-metadata.js";
 import { FieldnotesHost } from "../src/fieldnotes-host.js";
 import type { FieldnotesSettings } from "../src/host-settings.js";
 
@@ -92,6 +107,22 @@ async function withFieldnotesTestSchema(
     throw new AggregateError(failures, "Fieldnotes PostgreSQL test and cleanup failed.");
 }
 
+/**
+ * Builds the paging fixture factory with the same PostgreSQL options in both tests.
+ *
+ * @param schema Isolated test schema.
+ * @param stringifiers Fieldnotes type registry.
+ * @param builder PostgreSQL factory builder, injectable for failure testing.
+ * @returns Connected storage factory.
+ */
+function buildPagingStorageFactory(
+  schema: string,
+  stringifiers: StringifierRegistry,
+  builder = PostgresStorageFactory.newBuilder(),
+): Promise<PostgresStorageFactory> {
+  return builder.setOptions({ url, schema }).setStringifierRegistry(stringifiers).build();
+}
+
 it("releases the admin pool when unique schema creation fails", async () => {
   const query = vi.fn(() => Promise.reject(new Error("schema creation failed")));
   const end = vi.fn(() => Promise.resolve());
@@ -119,6 +150,32 @@ it("attempts later releases and pool end after an earlier release fails", async 
   await expect(result).rejects.toMatchObject({ errors: [primary, release] });
   expect(later).toHaveBeenCalledTimes(1);
   expect(query).toHaveBeenCalledTimes(1);
+  expect(end).toHaveBeenCalledTimes(1);
+});
+
+it("releases the admin pool when paging factory construction fails inside its schema scope", async () => {
+  const query = vi.fn(() => Promise.resolve());
+  const end = vi.fn(() => Promise.resolve());
+  const primary = new Error("factory build failed");
+  const builder = PostgresStorageFactory.newBuilder();
+  const build = vi.spyOn(builder, "build").mockRejectedValue(primary);
+  const stringifiers = new StringifierRegistry();
+  stringifiers.setTypeRegistry(TypeRegistry.from(fieldnotesProtoModule));
+  await expect(
+    withFieldnotesTestSchema(
+      { query, end },
+      "fieldnotes_factory_failure",
+      async () => {
+        await buildPagingStorageFactory("fieldnotes_factory_failure", stringifiers, builder);
+      },
+      [],
+    ),
+  ).rejects.toBe(primary);
+  expect(build).toHaveBeenCalledTimes(1);
+  expect(query.mock.calls).toEqual([
+    ['CREATE SCHEMA "fieldnotes_factory_failure"'],
+    ['DROP SCHEMA "fieldnotes_factory_failure" CASCADE'],
+  ]);
   expect(end).toHaveBeenCalledTimes(1);
 });
 
@@ -289,3 +346,203 @@ it("retains one private Place and its opaque app session across a PostgreSQL hos
     [() => second?.close(), () => first?.close(), () => ServerTests.resetEnvironment()],
   );
 });
+
+it("traverses more than two native pages through the private PostgreSQL gateway", async () => {
+  const schema = `fieldnotes_${randomUUID().replaceAll("-", "")}`;
+  const admin = new Pool({ connectionString: url });
+  const settings: FieldnotesSettings = {
+    postgresUrl: url,
+    publicOrigin: "https://localhost:3000",
+    sessionPassword: randomBytes(32).toString("base64url"),
+    csrfSecret: randomBytes(32),
+    readerProofSecret: randomBytes(32),
+    sessionTtlMilliseconds: 3_600_000,
+    authRouteTimeoutMs: 10_000,
+    authRouteMaxBytes: 65_536,
+  };
+  const stringifiers = new StringifierRegistry();
+  stringifiers.setTypeRegistry(TypeRegistry.from(fieldnotesProtoModule));
+  let factory: PostgresStorageFactory | undefined;
+  let host: FieldnotesHost | undefined;
+  await withFieldnotesTestSchema(
+    admin,
+    schema,
+    async () => {
+      factory = await buildPagingStorageFactory(schema, stringifiers);
+      host = await FieldnotesHost.open(settings, { storageFactory: factory });
+      const issued = await host.sessions.issue({ id: "paging-author" });
+      if (issued.kind !== "created") throw new Error("Paging session issuance failed.");
+      const credential = issued.credential.value;
+      const csrf = host.cookies.csrf(credential);
+      const client = Client.forConnect(host.gateway.baseUrl, {
+        onRequestMetadata: () => ({
+          origin: settings.publicOrigin,
+          cookie: `__Host-spine-session=${credential}; __Host-spine-csrf=${csrf}`,
+          "x-spine-csrf": csrf,
+        }),
+      });
+      try {
+        const author = create(UserIdSchema, { value: "paging-author" });
+        const foreign = create(UserIdSchema, { value: "foreign-author" });
+        const storage = openPlaceViewFixtureStorage(factory);
+        try {
+          const read = async (cursor?: Uint8Array): Promise<PlaceView[]> => {
+            let query = PlaceViewQuery.create().author().is(author).removed().is(false);
+            if (cursor !== undefined) query = query.placeKey().isGreaterThan(cursor);
+            const response = await client
+              .onBehalfOf(author.value)
+              .send(query.orderBy("placeKey").limit(QUERY_SERVICE_MAX_RESULTS).build());
+            return response.message.map((entry) => {
+              const state = AnyPacker.tryUnpack(entry.state, PlaceViewSchema);
+              if (state === undefined) throw new Error("Page returned a non-PlaceView state.");
+              return state;
+            });
+          };
+          expect(await read()).toEqual([]);
+          const active = [
+            ...Array.from(
+              { length: QUERY_SERVICE_MAX_RESULTS - 1 },
+              (_, index) => `a-${String(index).padStart(5, "0")}`,
+            ),
+            "á-place",
+            "b-place",
+            ...Array.from(
+              { length: QUERY_SERVICE_MAX_RESULTS - 4 },
+              (_, index) => `m-${String(index).padStart(5, "0")}`,
+            ),
+            "ñ-place",
+            "東京-place",
+            "\uE000-place",
+            "\u{10000}-place",
+            "😀-é",
+            "😀-e\u0301",
+          ];
+          const tombstones = Array.from(
+            { length: QUERY_SERVICE_MAX_RESULTS },
+            (_, index) => `0-${String(index).padStart(5, "0")}`,
+          );
+          const foreignIds = Array.from(
+            { length: 17 },
+            (_, index) => `m-${String(index).padStart(5, "0")}-foreign`,
+          );
+          for (const key of tombstones)
+            await storage.current.write(placeViewFixture(key, author, true));
+          for (let index = 0; index < active.length; index += 1) {
+            const key = active[index];
+            if (key === undefined) throw new Error("Missing Place fixture key.");
+            await storage.current.write(placeViewFixture(key, author, false));
+            if (index === QUERY_SERVICE_MAX_RESULTS - 1) {
+              expect((await read()).length).toBe(QUERY_SERVICE_MAX_RESULTS);
+            }
+            if (index === QUERY_SERVICE_MAX_RESULTS) {
+              const first = await read();
+              expect(first.length).toBe(QUERY_SERVICE_MAX_RESULTS);
+              const next = await read(first.at(-1)?.placeKey);
+              expect(next.length).toBe(1);
+            }
+          }
+          for (const key of foreignIds)
+            await storage.current.write(placeViewFixture(key, foreign, false));
+          const recovery = await client
+            .onBehalfOf(author.value)
+            .send(
+              PlaceViewQuery.create()
+                .author()
+                .is(author)
+                .orderBy("placeKey")
+                .limit(QUERY_SERVICE_MAX_RESULTS)
+                .build(),
+            );
+          expect(recovery.message).toEqual([]);
+          const found: string[] = [];
+          const pages: PlaceView[][] = [];
+          let cursor: Uint8Array | undefined;
+          for (;;) {
+            const page = await read(cursor);
+            if (page.length === 0) break;
+            pages.push(page);
+            const next = page.at(-1)?.placeKey;
+            const previous = cursor;
+            const sameAsPrevious =
+              previous === undefined || next === undefined
+                ? false
+                : next.length === previous.length &&
+                  next.every((value, index) => value === previous[index]);
+            if (next === undefined || next.length === 0 || sameAsPrevious)
+              throw new Error("Place page did not advance its cursor.");
+            for (const state of page) {
+              const id = state.id?.value;
+              if (!id) throw new Error("Place page has no typed ID.");
+              const encoded = new TextEncoder().encode(id);
+              if (
+                state.placeKey.length !== encoded.length ||
+                !state.placeKey.every((value, index) => value === encoded[index])
+              )
+                throw new Error("Place page has an invalid typed ID or continuation key.");
+              found.push(id);
+            }
+            cursor = new Uint8Array(next);
+          }
+          expect(found).toHaveLength(active.length);
+          expect(new Set(found).size).toBe(found.length);
+          expect(new Set(found)).toEqual(new Set(active));
+          expect(pages[1]?.at(-1)?.id?.value).toBe("\uE000-place");
+          expect(pages[2]?.[0]?.id?.value).toBe("\u{10000}-place");
+        } finally {
+          storage.close();
+        }
+      } finally {
+        await client.close();
+      }
+    },
+    [() => host?.close() ?? factory?.close(), () => ServerTests.resetEnvironment()],
+  );
+});
+
+function openPlaceViewFixtureStorage(factory: PostgresStorageFactory) {
+  const columns = describeEntityMetadata(PlaceViewSchema).columns.map(
+    (field) =>
+      new RecordColumn(
+        field.name,
+        ColumnTypes.fromField(field.descriptor),
+        (state: PlaceView) => state[field.localName as keyof PlaceView],
+      ),
+  );
+  const input = standEntityStorageDescriptor(
+    { name: "Fieldnotes", multitenant: false },
+    PlaceViewSchema,
+    columns,
+  );
+  return (
+    factory as unknown as {
+      createEntityStorage(value: typeof input): {
+        current: { write(record: ReturnType<typeof EntityRecords.pack>): Promise<void> };
+        close(): void;
+      };
+    }
+  ).createEntityStorage(input);
+}
+
+function placeViewFixture(
+  key: string,
+  author: ReturnType<typeof create<typeof UserIdSchema>>,
+  removed: boolean,
+) {
+  const id = create(PlaceIdSchema, { value: key });
+  const occurredAt = Time.currentTime();
+  const state = create(PlaceViewSchema, {
+    id,
+    placeKey: new TextEncoder().encode(id.value),
+    author,
+    name: removed ? "" : "Shared name",
+    coordinates: removed
+      ? undefined
+      : create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
+    markdown: "",
+    revision: 1,
+    createdAt: occurredAt,
+    updatedAt: occurredAt,
+    removed,
+  });
+  return EntityRecords.pack(PlaceViewSchema, id, state, 1n, { archived: false, deleted: false });
+}

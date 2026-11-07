@@ -365,6 +365,7 @@ export class PlaceViewProjection extends Projection<PlaceId, typeof PlaceViewSch
         draft,
         create(PlaceViewSchema, {
           id: clone(PlaceIdSchema, this.id),
+          placeKey: new TextEncoder().encode(this.id.value),
           name: event.name,
           coordinates: event.coordinates,
           author: event.author,

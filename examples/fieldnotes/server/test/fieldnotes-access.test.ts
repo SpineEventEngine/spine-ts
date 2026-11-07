@@ -13,7 +13,9 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { IncomingRequest } from "@spine-event-engine/auth";
+import { AnyPacker } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 import { TargetSchema, type Target } from "@spine-event-engine/proto/client";
 import { PlaceIdSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/types_pb.js";
@@ -62,6 +64,122 @@ describe("Fieldnotes gateway access", () => {
           .build().target,
       ),
     ).toBe(true);
+  });
+
+  it("admits only generated active author pages with an optional forward key", async () => {
+    const policy = new FieldnotesAccess();
+    const author = create(UserIdSchema, { value: "author-a" });
+    const foreign = create(UserIdSchema, { value: "author-b" });
+    const key = new TextEncoder().encode("key-1");
+    const admitted = (target: Target | undefined) =>
+      policy.authorize({ id: author.value }, {
+        kind: "query",
+        target,
+        requestedContext: {},
+      } as IncomingRequest);
+    const target = (query: ReturnType<typeof PlaceViewQuery.create>) =>
+      query.build().build().target;
+    expect(
+      await admitted(target(PlaceViewQuery.create().author().is(author).removed().is(false))),
+    ).toBe(true);
+    expect(
+      await admitted(
+        target(
+          PlaceViewQuery.create()
+            .author()
+            .is(author)
+            .removed()
+            .is(false)
+            .placeKey()
+            .isGreaterThan(key),
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      await admitted(
+        target(
+          PlaceViewQuery.create()
+            .author()
+            .is(foreign)
+            .removed()
+            .is(false)
+            .placeKey()
+            .isGreaterThan(key),
+        ),
+      ),
+    ).toBe(false);
+    expect(
+      await admitted(
+        target(
+          PlaceViewQuery.create()
+            .author()
+            .is(author)
+            .removed()
+            .is(false)
+            .placeKey()
+            .isLessThan(key),
+        ),
+      ),
+    ).toBe(false);
+    expect(
+      await admitted(
+        target(
+          PlaceViewQuery.create()
+            .author()
+            .is(author)
+            .removed()
+            .is(false)
+            .placeKey()
+            .isGreaterThan(new Uint8Array()),
+        ),
+      ),
+    ).toBe(false);
+    expect(
+      await admitted(
+        target(
+          PlaceViewQuery.create()
+            .author()
+            .is(author)
+            .removed()
+            .is(false)
+            .name()
+            .is("extra")
+            .placeKey()
+            .isGreaterThan(key),
+        ),
+      ),
+    ).toBe(false);
+    expect(
+      await admitted(
+        target(
+          PlaceViewQuery.create()
+            .either(
+              (query) => {
+                query.author().is(author);
+              },
+              (query) => {
+                query.author().is(foreign);
+              },
+            )
+            .removed()
+            .is(false)
+            .placeKey()
+            .isGreaterThan(key),
+        ),
+      ),
+    ).toBe(false);
+    const stringCursor = target(
+      PlaceViewQuery.create().author().is(author).removed().is(false).placeKey().isGreaterThan(key),
+    );
+    if (stringCursor?.criterion.case !== "filters")
+      throw new Error("Expected canonical byte cursor target.");
+    const operand = stringCursor.criterion.value.filter[2]?.filter[0];
+    if (operand === undefined) throw new Error("Expected byte cursor operand.");
+    operand.value = AnyPacker.pack(
+      StringValueSchema,
+      create(StringValueSchema, { value: "key-1" }),
+    );
+    expect(await admitted(stringCursor)).toBe(false);
   });
   it("admits only the canonical author entity topic", async () => {
     const policy = new FieldnotesAccess();

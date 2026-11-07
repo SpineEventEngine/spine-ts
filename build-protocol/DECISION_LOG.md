@@ -7498,3 +7498,51 @@ pre-write cancellation and drain writes already issued, without restoring state
 or disabling late Session compensation. Refusal must produce a usable safe
 restart-login outcome without exposing credentials or an unavailable error route.
 This adds no public option, record family, index, lock or transaction.
+
+## Fieldnotes complete collection reads (2026-11-07)
+
+The existing native QueryService has a fixed per-request result/candidate
+capacity and no wire continuation token. Unbounded queries can exceed the
+candidate budget. A single author-filtered query therefore cannot establish
+that a private map contains all saved places.
+
+Use generated PostgreSQL keyset queries over immutable `PlaceView.place_key`
+bytes derived with standard UTF-8 encoding of the typed PlaceId. Expose the existing service capacity
+once from browser-safe core and consume it in native services and the example.
+The value and native validation behavior stay unchanged. Continue ordered
+active-place pages until an empty page; no total-place limit, request-count
+limit, or retry policy is added. Each cursor request retains the verified
+author predicate and the normal gateway/native read boundaries.
+
+Retain the browser Client's author-only Entity subscription and reconnect
+behavior. Its one bounded recovery response is a scan trigger, not the complete
+collection. Merge a fresh complete scan with concurrent live updates by domain
+revision; retain terminal deletion IDs and reject stale principal/generation
+results. A completed scan can replace the previous collection after the live
+changes are applied. This provides eventual live reconciliation rather than a
+multi-query snapshot. PostgreSQL ordering and large collections require live
+acceptance; the in-memory provider's different candidate-selection behavior
+does not substitute for that evidence.
+
+Raw string cursors are unsuitable: PostgreSQL collation and the shared
+JavaScript string evaluator can disagree at a page boundary and discard every
+SQL candidate. A C collation still differs from JavaScript UTF-16 ordering for
+some BMP and supplementary characters. PostgreSQL BYTEA and the shared byte
+evaluator already use the same unsigned lexicographic order. Expose that
+existing behavior in the generated-query classifier and native admission.
+This is a small TypeScript query capability extension, not a claim of matching
+JVM byte-range query support. No ID alphabet, hash, truncation, or key-size
+restriction is added.
+
+MySQL variable BLOB ordering may use only a server-configured prefix. For those
+bounded ordered plans, retain the existing candidate-budget probe rather than
+pushing a smaller requested result limit into SQL. The evaluator then returns
+the exact prefix or the existing candidate-budget error. Fixed-width binary
+columns and exhaustive reads retain their current behavior. PostgreSQL and
+Datastore need no provider runtime rewrite for this byte-query capability.
+
+This reuses current filter and subscription messages. A new generic cursor
+protocol, additional Projection, raw application storage reads, or custom
+subscription lifecycle would add unnecessary implementation surface. Local JVM
+query processing likewise uses filters and ResponseFormat without a wire
+cursor. Detailed source analysis is retained outside Git with task evidence.

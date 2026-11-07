@@ -88,6 +88,7 @@ describe("Fieldnotes Place domain", () => {
       });
       await vi.waitFor(async () => {
         expect(await context.stand().read(PlaceViewSchema, id)).toMatchObject({
+          placeKey: new TextEncoder().encode(id.value),
           name: "Belém",
           author: { value: "author-one" },
           revision: 1,
@@ -106,6 +107,14 @@ describe("Fieldnotes Place domain", () => {
     });
     const coordinates = create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 });
     const moved = create(CoordinatesSchema, { latitude: 41.1, longitude: -8.6 });
+    const keyAt = async (revision: number) =>
+      vi.waitFor(async () => {
+        expect(await context.stand().read(PlaceViewSchema, id)).toMatchObject({
+          id,
+          placeKey: new TextEncoder().encode(id.value),
+          revision,
+        });
+      });
     try {
       await context.commandBus().post(
         SignalEnvelopes.command({
@@ -114,6 +123,7 @@ describe("Fieldnotes Place domain", () => {
           message: create(AddPlaceSchema, { id, name: "Initial", coordinates, markdown: "Start" }),
         }),
       );
+      await keyAt(1);
       await context.commandBus().post(
         SignalEnvelopes.command({
           context: metadata.commandContext({ actorContext }),
@@ -125,6 +135,7 @@ describe("Fieldnotes Place domain", () => {
         name: "Renamed",
         revision: 2,
       });
+      await keyAt(2);
       await context.commandBus().post(
         SignalEnvelopes.command({
           context: metadata.commandContext({ actorContext }),
@@ -136,6 +147,7 @@ describe("Fieldnotes Place domain", () => {
         coordinates: moved,
         revision: 3,
       });
+      await keyAt(3);
       await context.commandBus().post(
         SignalEnvelopes.command({
           context: metadata.commandContext({ actorContext }),
@@ -147,6 +159,7 @@ describe("Fieldnotes Place domain", () => {
         markdown: "",
         revision: 4,
       });
+      await keyAt(4);
       await context.commandBus().post(
         SignalEnvelopes.command({
           context: metadata.commandContext({ actorContext }),
@@ -158,6 +171,7 @@ describe("Fieldnotes Place domain", () => {
         removed: true,
         revision: 5,
       });
+      await keyAt(5);
       const deletedState = await context.stand().read(PlaceSchema, id);
       await context.commandBus().post(
         SignalEnvelopes.command({

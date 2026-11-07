@@ -77,6 +77,22 @@ canonical author-scoped PlaceView target: output filtering alone can leave IDs
 in removal controls. Reject broad, foreign-author and alternative subscription
 filters; test foreign creation, modification and deletion without identifier leaks.
 
+The map loads the complete authorized collection through PostgreSQL keyset reads.
+PlaceView has an immutable binary `place_key` containing UTF-8 bytes of its typed ID, allowing
+ordered generated queries without name or coordinate uniqueness. Expose the
+existing QueryService per-request capacity from browser-safe core and reuse it
+in native validation and the example; add no total-place or page-count limit.
+Keep the author-only live subscription. Its bounded reconnect response triggers
+a complete scan and must not replace the collection. Merge page/live state by
+revision, treat deletion controls as terminal, and fence stale results by
+principal and scan generation. This is live reconciliation, not a database
+snapshot. Large-collection acceptance uses real PostgreSQL; the memory test
+provider does not establish equivalent candidate-selection behavior. Expose existing
+unsigned byte comparison through generated queries and native admission so
+PostgreSQL BYTEA ordering agrees with the shared evaluator. MySQL variable-BLOB
+sorts must read enough candidates for exact evaluation or fail with the existing
+candidate-budget error; do not return an inexact limited prefix.
+
 ### Message Board
 
 Remove all PR #22-added functional/technical demonstration enhancements from

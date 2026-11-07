@@ -93,4 +93,7 @@ message PlaceView {
 
   // Hides deleted places while preserving a replay barrier.
   bool removed = 9 [(column) = true];
+
+  // Orders complete private reads by opaque UTF-8 bytes of the immutable PlaceId value.
+  bytes place_key = 10 [(column) = true];
 }
