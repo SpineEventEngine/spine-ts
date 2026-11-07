@@ -206,6 +206,11 @@ Every build captures a detached value;
 the client or Process Manager supplies actor and tenant context when it executes the query.
 `EntityQuery` remains available for callers using the existing schema-and-columns builder.
 
+`QUERY_SERVICE_MAX_RESULTS` is the current native QueryService result and candidate capacity for
+one request. It does not limit an entire collection or promise that every storage provider can
+execute every query of that size. Use generated column comparisons, ordering, and repeated bounded
+queries when an application needs to traverse a larger collection.
+
 ## 🚫 Throw a generated domain rejection
 
 The model generator creates typed rejection factories for top-level messages in

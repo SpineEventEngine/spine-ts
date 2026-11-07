@@ -36,6 +36,7 @@ import {
   type MessageSchema,
   TypeUrls,
   AnyPacker,
+  QUERY_SERVICE_MAX_RESULTS,
 } from "@spine-event-engine/core";
 import { ReaderForwarding } from "@spine-event-engine/core/spi/reader-forwarding";
 import {
@@ -2037,7 +2038,7 @@ describe("SpineServices", () => {
       handlers.read(
         createFormattedIncludeAllQuery(
           create(ResponseFormatSchema, {
-            limit: 1_001,
+            limit: QUERY_SERVICE_MAX_RESULTS + 1,
             orderBy: [
               create(OrderBySchema, {
                 column: "name",
@@ -2065,7 +2066,7 @@ describe("SpineServices", () => {
       "QueryService.Read order_by may contain at most 8 entries.",
     );
     expect(responseErrorMessage(tooLargeLimit)).toBe(
-      "QueryService.Read limit may be at most 1000.",
+      `QueryService.Read limit may be at most ${String(QUERY_SERVICE_MAX_RESULTS)}.`,
     );
   });
 

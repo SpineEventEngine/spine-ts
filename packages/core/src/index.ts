@@ -87,6 +87,7 @@ import {
 } from "@spine-event-engine/proto";
 
 export { Time, type TimeProvider } from "./time/index.js";
+export { QUERY_SERVICE_MAX_RESULTS } from "./query/query-service-limits.js";
 
 /**
  * Generated application Query message type name to its paired Response type.

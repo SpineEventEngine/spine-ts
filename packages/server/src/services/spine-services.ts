@@ -46,7 +46,7 @@ import {
   UInt64ValueSchema,
 } from "@bufbuild/protobuf/wkt";
 import type { MessageSchema } from "@spine-event-engine/core";
-import { TypeUrls, AnyPacker, Validate } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker, Validate, QUERY_SERVICE_MAX_RESULTS } from "@spine-event-engine/core";
 import {
   CommandIdSchema,
   CommandValidationError as CommandValidationErrorCode,
@@ -2081,10 +2081,10 @@ function formatReadError(format: Query["format"], route: StateRoute): ContractEr
   if (format.orderBy.length > QueryLimits.orderCount) {
     return unsupportedFormatError("QueryService.Read order_by may contain at most 8 entries.");
   }
-  if (format.limit > QueryLimits.resultCount) {
+  if (format.limit > QUERY_SERVICE_MAX_RESULTS) {
     return {
       type: "INVALID_QUERY",
-      message: "QueryService.Read limit may be at most 1000.",
+      message: `QueryService.Read limit may be at most ${String(QUERY_SERVICE_MAX_RESULTS)}.`,
     };
   }
   if (format.limit > 0 && format.orderBy.length === 0) {
@@ -2409,7 +2409,6 @@ const QueryLimits = Object.freeze({
   filterCount: 16,
   compositeCount: 8,
   orderCount: 8,
-  resultCount: 1_000,
 });
 
 /**
@@ -3366,7 +3365,7 @@ const ServiceValues = Object.freeze({
   okResponse,
   okStatus,
   packVersionedState,
-  queryResultLimit: QueryLimits.resultCount,
+  queryResultLimit: QUERY_SERVICE_MAX_RESULTS,
   stateRouteIdField,
   subscriptionLimit,
   tenantMismatch,

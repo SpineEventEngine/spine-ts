@@ -114,6 +114,10 @@ Generated field methods that conflict with `build`, `either`, `byId`, `orderBy`,
 numeric suffix resolves a further collision. Nested query exports join message names with `_`.
 The first declared state field supplies the ID type even when its name is not `id`.
 
+`QUERY_SERVICE_MAX_RESULTS` exports the current native QueryService per-request result and
+candidate capacity from the core package root. It is not a total collection limit; provider
+constraints may further restrict a particular query plan.
+
 ## Subscription lifecycle SPI
 
 Framework integrations that coordinate subscription activation import
