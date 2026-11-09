@@ -13,17 +13,19 @@
  */
 
 import { QUERY_SERVICE_MAX_RESULTS } from "@spine-event-engine/core";
+import { clone } from "@bufbuild/protobuf";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import type { PlaceView } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/entities_pb.js";
 
 /**
  * Reads one canonical author-scoped active page from the private gateway.
  *
- * @param cursor Exclusive byte cursor for continuation.
+ * @param cursor Exclusive creation-time cursor for continuation.
  * @param signal Abort signal for this scan.
  * @returns One bounded page of projected Place views.
  */
 export type PlacePageReader = (
-  cursor: Uint8Array | undefined,
+  cursor: Timestamp | undefined,
   signal: AbortSignal,
 ) => Promise<readonly PlaceView[]>;
 
@@ -98,11 +100,13 @@ export class FieldnotesPlaceCollection {
    * @returns Current visible states.
    */
   places(): readonly PlaceView[] {
-    return [...this.#active.values()];
+    return [...this.#active.values()].sort((left, right) =>
+      this.compareCreated(this.creationTime(right), this.creationTime(left)),
+    );
   }
 
   /**
-   * Reads all byte-cursor pages before replacing the previous collection.
+   * Reads all creation-time pages before replacing the previous collection.
    *
    * @returns Completion after the final empty page and live overlay merge.
    */
@@ -269,32 +273,38 @@ export class FieldnotesPlaceCollection {
   }
 
   /**
-   * Reads until the final empty page, validating order and detached byte keys.
+   * Reads until the final empty page, validating descending creation time.
    *
    * @param signal Current scan cancellation.
    * @returns Complete active snapshot.
    */
   private async pages(signal: AbortSignal): Promise<Map<string, PlaceView>> {
     const snapshot = new Map<string, PlaceView>();
-    let cursor: Uint8Array | undefined;
+    let cursor: Timestamp | undefined;
     for (;;) {
       const page = await this.read(cursor, signal);
       signal.throwIfAborted();
       if (page.length > QUERY_SERVICE_MAX_RESULTS) throw new Error("Place page exceeds capacity.");
       if (page.length === 0) return snapshot;
+      let previous = cursor;
       for (const view of page) {
         const id = this.valid(view);
         if (view.removed) throw new Error("Active Place page contains a removed state.");
-        if (cursor !== undefined && this.compare(view.placeKey, cursor) <= 0)
-          throw new Error("Place page key did not advance.");
-        cursor = new Uint8Array(view.placeKey);
+        const whenCreated = this.creationTime(view);
+        if (cursor !== undefined && this.compareCreated(whenCreated, cursor) >= 0)
+          throw new Error("Place page creation time did not pass the cursor.");
+        if (previous !== undefined && this.compareCreated(whenCreated, previous) > 0)
+          throw new Error("Place page is not newest first.");
+        if (snapshot.has(id)) throw new Error("Place page repeats a typed ID.");
+        previous = whenCreated;
         this.put(snapshot, id, view);
       }
+      cursor = previous === undefined ? undefined : clone(TimestampSchema, previous);
     }
   }
 
   /**
-   * Checks identity, author and the immutable UTF-8 continuation key.
+   * Checks identity, author and the immutable creation time.
    *
    * @param view Native projected state.
    * @returns Typed PlaceId string.
@@ -304,10 +314,19 @@ export class FieldnotesPlaceCollection {
     if (!id || view.author?.value !== this.author || view.revision <= 0)
       throw new Error("Place view has invalid author or typed ID.");
     if (view.removed) return id;
-    const encoded = new TextEncoder().encode(id);
-    if (this.compare(view.placeKey, encoded) !== 0)
-      throw new Error("Place key differs from the typed ID bytes.");
+    this.creationTime(view);
     return id;
+  }
+
+  /**
+   * Returns the creation time required by every active Place view.
+   *
+   * @param view Active projected state.
+   * @returns Its complete seconds and nanos timestamp.
+   */
+  private creationTime(view: PlaceView): Timestamp {
+    if (view.whenCreated === undefined) throw new Error("Place view has no creation time.");
+    return view.whenCreated;
   }
 
   /**
@@ -324,17 +343,14 @@ export class FieldnotesPlaceCollection {
   }
 
   /**
-   * Compares complete byte keys without locale or string collation.
+   * Compares complete creation timestamps without a technical tie-breaker.
    *
-   * @param left First encoded key.
-   * @param right Second encoded key.
+   * @param left First creation time.
+   * @param right Second creation time.
    * @returns Negative, zero or positive order.
    */
-  private compare(left: Uint8Array, right: Uint8Array): number {
-    for (let index = 0; index < Math.min(left.length, right.length); index++) {
-      const difference = (left[index] ?? 0) - (right[index] ?? 0);
-      if (difference !== 0) return difference;
-    }
-    return left.length - right.length;
+  private compareCreated(left: Timestamp, right: Timestamp): number {
+    if (left.seconds !== right.seconds) return left.seconds < right.seconds ? -1 : 1;
+    return Math.sign(left.nanos - right.nanos);
   }
 }

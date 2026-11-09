@@ -77,8 +77,8 @@ export function PlaceDetails(props: {
     <p>Choose a saved place from the list, or add a new pin.</p>
     <Button type="button" onClick={props.onAdd}>Add a place</Button>
   </aside>;
-  const updated = place.updatedAt?.seconds === undefined ? null :
-    new Date(Number(place.updatedAt.seconds) * 1000).toLocaleDateString();
+  const updated = place.whenUpdated?.seconds === undefined ? null :
+    new Date(Number(place.whenUpdated.seconds) * 1000).toLocaleDateString();
   return <aside className="detail-panel" aria-label={`${place.name} details`}>
     <p className="eyebrow">Selected place</p><h2>{place.name}</h2>
     <p className="coordinates">{place.coordinates?.latitude.toFixed(5)}, {place.coordinates?.longitude.toFixed(5)}</p>
@@ -114,6 +114,29 @@ export function CoordinateFields(props: {
 }
 
 /**
+ * Renders inputs for the current Place operation without altering the editor form.
+ *
+ * @param props Draft, operation mode, and field callback.
+ * @returns The inputs relevant to the current operation.
+ */
+const PlaceEditorFields = (props: {
+  readonly mode: WorkspaceMode;
+  readonly draft: PlaceDraft;
+  readonly onChange: (value: Partial<PlaceDraft>) => void;
+}): React.JSX.Element => {
+  const { mode, draft, onChange } = props;
+  return <>
+    {(mode === "add" || mode === "rename") && <label>Place name
+      <Input required value={draft.name} onChange={(event) => { onChange({ name: event.target.value }); }} /></label>}
+    {(mode === "add" || mode === "move") && <><p className="hint">Click the map, use its current center, or enter coordinates below.</p>
+      <CoordinateFields draft={draft} onChange={onChange} /></>}
+    {(mode === "add" || mode === "note") && <label className="markdown-label">One Markdown note
+      <MDEditor value={draft.markdown} onChange={(value) => { onChange({ markdown: value ?? "" }); }}
+        previewOptions={safePreviewOptions} height={280} visibleDragbar={false} /></label>}
+  </>;
+};
+
+/**
  * Renders one focused Command form with saved text available on conflict.
  *
  * @param props Dirty draft, committed state and form callbacks.
@@ -132,13 +155,7 @@ export function PlaceEditor(props: {
   return <aside className="detail-panel edit-panel" aria-label={title}>
     <p className="eyebrow">Your atlas</p><h2>{title}</h2>
     <form onSubmit={(event) => { event.preventDefault(); props.onSave(); }}>
-      {(mode === "add" || mode === "rename") && <label>Place name
-        <Input required value={draft.name} onChange={(event) => { props.onChange({ name: event.target.value }); }} /></label>}
-      {(mode === "add" || mode === "move") && <><p className="hint">Click the map, use its current center, or enter coordinates below.</p>
-        <CoordinateFields draft={draft} onChange={props.onChange} /></>}
-      {(mode === "add" || mode === "note") && <label className="markdown-label">One Markdown note
-        <MDEditor value={draft.markdown} onChange={(value) => { props.onChange({ markdown: value ?? "" }); }}
-          previewOptions={safePreviewOptions} height={280} visibleDragbar={false} /></label>}
+      <PlaceEditorFields mode={mode} draft={draft} onChange={props.onChange} />
       {mode === "note" && selected !== null && selected.markdown !== draft.markdown && feedback?.includes("changed since") &&
         <div className="saved-version"><h3>Current saved note</h3><SafeMarkdown markdown={selected.markdown} /></div>}
       {feedback?.includes("changed since") && <Button type="button" variant="outline"

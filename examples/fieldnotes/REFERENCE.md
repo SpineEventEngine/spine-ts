@@ -108,20 +108,20 @@ Privacy tests must inspect the wire updates and controls.
 
 ## Collection cursor
 
-`PlaceView.place_key` is opaque UTF-8 bytes of `PlaceId.value`, derived by the
-Projection with standard `TextEncoder`. Keep the typed ID as entity identity.
-Do not normalize Unicode, restrict the ID alphabet, hash or truncate the key.
-Every accepted revision, including a removal marker, retains these bytes.
+`PlaceView.when_created` is the trusted creation time inherited from the first
+complete domain Event. The Projection preserves it across rename, move, note
+and deletion results. The typed `PlaceId` remains the entity identity.
 
-Generated queries support unsigned byte ranges and ordering. Use
+Generated queries support full-precision Protobuf Timestamp ranges and ordering. Use
 `QUERY_SERVICE_MAX_RESULTS` from the public core package as the existing
 per-request capacity, and traverse author+active queries with an optional
-`placeKey > cursor` predicate until an empty page. Preserve exact canonical
+`whenCreated < cursor` predicate and `orderBy("whenCreated", "desc")` until an
+empty page. Preserve exact canonical
 Target checks and the author-only live subscription.
 
-Use `Uint8Array` content equality, detach retained cursor bytes, and verify a
-returned key against UTF-8 encoding of its typed ID. Derive continuation from
-the raw returned page before merging live updates. An empty bounded reconnect
+Retain both seconds and nanos in the detached cursor from the raw returned
+page before merging live updates. The browser sorts the merged collection by
+the same creation time, newest first. An empty bounded reconnect
 response is a scan trigger, not a complete empty collection. Revision merging,
 terminal removal IDs, and principal/generation fences govern reconciliation.
 
@@ -131,11 +131,9 @@ includes IDs removed during that lifetime as well as active records. An empty
 query is not a stream watermark: it cannot prove that an older buffered state
 will never arrive. Do not reclaim these IDs merely because a scan omits them.
 
-Large-collection proof uses PostgreSQL BYTEA ordering, including accent and
-BMP/supplementary Unicode boundaries. Do not substitute JavaScript string
-comparisons or claim equivalent large-query behavior for every storage provider.
-MySQL variable-BLOB sorts may raise the existing record-evaluation budget error when
-an exact limited prefix cannot be established within that budget.
+The large-collection PostgreSQL proof traverses more than two pages with
+creation times in the same second but distinct nanos. It checks descending
+order and the exclusive Timestamp cursor across page boundaries.
 
 ## Persistence
 

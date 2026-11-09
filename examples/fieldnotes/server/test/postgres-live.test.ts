@@ -13,7 +13,8 @@
  */
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { create } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
 import { Client } from "@spine-event-engine/client-web";
@@ -21,7 +22,6 @@ import {
   AnyPacker,
   QUERY_SERVICE_MAX_RESULTS,
   StringifierRegistry,
-  Time,
   TypeRegistry,
 } from "@spine-event-engine/core";
 import { fieldnotesProtoModule } from "@spine-event-engine/example-fieldnotes-model";
@@ -492,12 +492,12 @@ it("traverses more than two native pages through the private PostgreSQL gateway"
         const foreign = create(UserIdSchema, { value: "foreign-author" });
         const storage = openPlaceViewFixtureStorage(factory);
         try {
-          const read = async (cursor?: Uint8Array): Promise<PlaceView[]> => {
+          const read = async (cursor?: Timestamp): Promise<PlaceView[]> => {
             let query = PlaceViewQuery.create().author().is(author).removed().is(false);
-            if (cursor !== undefined) query = query.placeKey().isGreaterThan(cursor);
+            if (cursor !== undefined) query = query.whenCreated().isLessThan(cursor);
             const response = await client
               .onBehalfOf(author.value)
-              .send(query.orderBy("placeKey").limit(QUERY_SERVICE_MAX_RESULTS).build());
+              .send(query.orderBy("whenCreated", "desc").limit(QUERY_SERVICE_MAX_RESULTS).build());
             return response.message.map((entry) => {
               const state = AnyPacker.tryUnpack(entry.state, PlaceViewSchema);
               if (state === undefined) throw new Error("Page returned a non-PlaceView state.");
@@ -531,19 +531,26 @@ it("traverses more than two native pages through the private PostgreSQL gateway"
             { length: 17 },
             (_, index) => `m-${String(index).padStart(5, "0")}-foreign`,
           );
-          for (const key of tombstones)
-            await storage.current.write(placeViewFixture(key, author, true));
+          for (let index = 0; index < tombstones.length; index += 1) {
+            const key = tombstones[index];
+            if (key === undefined) throw new Error("Missing removed Place fixture key.");
+            await storage.current.write(
+              placeViewFixture(key, author, true, active.length + tombstones.length - index),
+            );
+          }
           for (let index = 0; index < active.length; index += 1) {
             const key = active[index];
             if (key === undefined) throw new Error("Missing Place fixture key.");
-            await storage.current.write(placeViewFixture(key, author, false));
+            await storage.current.write(
+              placeViewFixture(key, author, false, active.length - index),
+            );
             if (index === QUERY_SERVICE_MAX_RESULTS - 1) {
               expect((await read()).length).toBe(QUERY_SERVICE_MAX_RESULTS);
             }
             if (index === QUERY_SERVICE_MAX_RESULTS) {
               const first = await read();
               expect(first.length).toBe(QUERY_SERVICE_MAX_RESULTS);
-              const next = await read(first.at(-1)?.placeKey);
+              const next = await read(first.at(-1)?.whenCreated);
               expect(next.length).toBe(1);
             }
           }
@@ -555,45 +562,42 @@ it("traverses more than two native pages through the private PostgreSQL gateway"
               PlaceViewQuery.create()
                 .author()
                 .is(author)
-                .orderBy("placeKey")
+                .orderBy("whenCreated", "desc")
                 .limit(QUERY_SERVICE_MAX_RESULTS)
                 .build(),
             );
           expect(recovery.message).toEqual([]);
           const found: string[] = [];
           const pages: PlaceView[][] = [];
-          let cursor: Uint8Array | undefined;
+          let cursor: Timestamp | undefined;
           for (;;) {
             const page = await read(cursor);
             if (page.length === 0) break;
             pages.push(page);
-            const next = page.at(-1)?.placeKey;
+            const next = page.at(-1)?.whenCreated;
             const previous = cursor;
             const sameAsPrevious =
               previous === undefined || next === undefined
                 ? false
-                : next.length === previous.length &&
-                  next.every((value, index) => value === previous[index]);
-            if (next === undefined || next.length === 0 || sameAsPrevious)
-              throw new Error("Place page did not advance its cursor.");
+                : next.seconds === previous.seconds && next.nanos === previous.nanos;
+            if (next === undefined || sameAsPrevious)
+              throw new Error("Place page did not descend past its creation-time cursor.");
             for (const state of page) {
               const id = state.id?.value;
               if (!id) throw new Error("Place page has no typed ID.");
-              const encoded = new TextEncoder().encode(id);
-              if (
-                state.placeKey.length !== encoded.length ||
-                !state.placeKey.every((value, index) => value === encoded[index])
-              )
-                throw new Error("Place page has an invalid typed ID or continuation key.");
+              if (state.whenCreated?.seconds !== 1_700_000_000n)
+                throw new Error("Place page has an invalid creation time.");
               found.push(id);
             }
-            cursor = new Uint8Array(next);
+            cursor = clone(TimestampSchema, next);
           }
           expect(found).toHaveLength(active.length);
           expect(new Set(found).size).toBe(found.length);
-          expect(new Set(found)).toEqual(new Set(active));
-          expect(pages[1]?.at(-1)?.id?.value).toBe("\uE000-place");
-          expect(pages[2]?.[0]?.id?.value).toBe("\u{10000}-place");
+          expect(found).toEqual(active);
+          expect(pages).toHaveLength(3);
+          expect(pages[1]?.at(-1)?.whenCreated?.nanos).toBeGreaterThan(
+            pages[2]?.[0]?.whenCreated?.nanos ?? 0,
+          );
         } finally {
           storage.close();
         }
@@ -633,12 +637,12 @@ function placeViewFixture(
   key: string,
   author: ReturnType<typeof create<typeof UserIdSchema>>,
   removed: boolean,
+  ordinal = 1,
 ) {
   const id = create(PlaceIdSchema, { value: key });
-  const occurredAt = Time.currentTime();
+  const whenOccurred = create(TimestampSchema, { seconds: 1_700_000_000n, nanos: ordinal });
   const state = create(PlaceViewSchema, {
     id,
-    placeKey: new TextEncoder().encode(id.value),
     author,
     name: removed ? "" : "Shared name",
     coordinates: removed
@@ -646,8 +650,8 @@ function placeViewFixture(
       : create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
     markdown: "",
     revision: 1,
-    createdAt: occurredAt,
-    updatedAt: occurredAt,
+    whenCreated: whenOccurred,
+    whenUpdated: whenOccurred,
     removed,
   });
   return EntityRecords.pack(PlaceViewSchema, id, state, 1n, { archived: false, deleted: false });

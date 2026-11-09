@@ -13,6 +13,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { PlaceViewSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/entities_pb.js";
 import {
   PlaceIdSchema,
@@ -28,7 +29,7 @@ const initial = create(PlaceViewSchema, {
   name: "Name",
   markdown: "saved note",
   coordinates: create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
-  placeKey: new TextEncoder().encode("same"),
+  whenCreated: create(TimestampSchema, { seconds: 1n }),
   revision: 2,
 });
 

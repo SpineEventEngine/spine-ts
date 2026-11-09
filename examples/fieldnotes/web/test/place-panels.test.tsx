@@ -29,7 +29,7 @@ const place = create(PlaceViewSchema, {
   author: create(UserIdSchema, { value: "author" }),
   name: "Lisbon", markdown: "Saved **words** ![secret](https://attacker.example/pixel)",
   coordinates: create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
-  revision: 4, placeKey: new TextEncoder().encode("place-1"),
+  revision: 4, whenCreated: create(TimestampSchema, { seconds: 1n }),
 });
 
 const view: WorkspaceView = {
@@ -118,7 +118,7 @@ it("preserves empty Add and Move coordinates, while allowing deliberate zero", (
 it("shows an empty saved note and its committed update date without opening an editor", () => {
   const edit = vi.fn();
   const placeWithoutNote = create(PlaceViewSchema, { ...place, markdown: "",
-    updatedAt: create(TimestampSchema, { seconds: 1_700_000_000n }) });
+    whenUpdated: create(TimestampSchema, { seconds: 1_700_000_000n }) });
   render(<PlaceDetails place={placeWithoutNote} onEdit={edit} onAdd={vi.fn()} />);
   expect(screen.getByText(/No note yet/)).toBeTruthy();
   expect(screen.getByText(/Updated/)).toBeTruthy();

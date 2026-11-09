@@ -89,8 +89,9 @@ before checking that revision, so another user cannot obtain private state
 through a conflict response. The interface preserves an unsaved draft when
 an edit fails or conflicts with a newer saved version.
 
-The map reads the complete private collection in successive pages and merges
-those results with live updates. A reconnect starts another complete scan; a
+The map reads the complete private collection newest first by each place's
+immutable creation time, then merges those pages with live updates. A reconnect
+starts another complete scan; a
 single response page does not replace the whole collection.
 
 The [event-storming diagram](docs/event-storming.svg) shows these interactions

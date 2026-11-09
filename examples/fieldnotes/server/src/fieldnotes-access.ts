@@ -14,7 +14,7 @@
 
 import { clone, create, equals } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import { BytesValueSchema } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type {
   AuthenticatedPrincipal,
   AuthorizationPolicy,
@@ -181,25 +181,25 @@ export class FieldnotesAccess implements AuthorizationPolicy {
   }
 
   /**
-   * Checks a forward cursor against the generated canonical target.
+   * Checks a descending creation-time cursor against the generated canonical target.
    *
    * @param principalId Verified application principal ID.
    * @param target Requested target without an ID filter.
-   * @returns Whether the full target is the canonical active forward page.
+   * @returns Whether the full target is the canonical active next page.
    */
   private cursorTarget(principalId: string, target: Target): boolean {
     if (target.criterion.case !== "filters" || target.criterion.value.filter.length !== 3)
       return false;
     const encoded = target.criterion.value.filter[2]?.filter[0]?.value;
-    const cursor = AnyPacker.tryUnpack(encoded, BytesValueSchema)?.value;
-    if (cursor === undefined || cursor.length === 0) return false;
+    const cursor = AnyPacker.tryUnpack(encoded, TimestampSchema);
+    if (cursor === undefined) return false;
     const expected = PlaceViewQuery.create()
       .author()
       .is(create(UserIdSchema, { value: principalId }))
       .removed()
       .is(false)
-      .placeKey()
-      .isGreaterThan(cursor)
+      .whenCreated()
+      .isLessThan(cursor)
       .build()
       .build().target;
     return expected !== undefined && equals(TargetSchema, target, expected);

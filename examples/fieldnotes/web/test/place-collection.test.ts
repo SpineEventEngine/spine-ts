@@ -13,6 +13,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { QUERY_SERVICE_MAX_RESULTS } from "@spine-event-engine/core";
 import {
   PlaceViewSchema,
@@ -26,9 +27,7 @@ import { UserIdSchema } from "@spine-event-engine/proto/generated/spine/core/use
 import { expect, it } from "vitest";
 import { FieldnotesPlaceCollection } from "../src/place-collection";
 
-const encoder = new TextEncoder();
-
-function place(id: string, revision = 1, removed = false): PlaceView {
+function place(id: string, revision = 1, removed = false, seconds = 1n, nanos = 0): PlaceView {
   return create(PlaceViewSchema, {
     id: create(PlaceIdSchema, { value: id }),
     author: create(UserIdSchema, { value: "author" }),
@@ -36,19 +35,40 @@ function place(id: string, revision = 1, removed = false): PlaceView {
     coordinates: removed
       ? undefined
       : create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
-    placeKey: removed ? new Uint8Array() : encoder.encode(id),
+    whenCreated: removed ? undefined : create(TimestampSchema, { seconds, nanos }),
     revision,
     removed,
   });
 }
 
-it("traverses every byte-key page and detaches each continuation cursor", async () => {
-  const first = Array.from({ length: QUERY_SERVICE_MAX_RESULTS }, (_, i) =>
-    place(`a-${String(i).padStart(5, "0")}`),
+it("shows scanned and live places newest first using full creation-time precision", async () => {
+  let firstPage = true;
+  const collection = new FieldnotesPlaceCollection(
+    "author",
+    () => {
+      if (!firstPage) return Promise.resolve([]);
+      firstPage = false;
+      return Promise.resolve([place("older", 1, false, 10n, 1)]);
+    },
+    () => undefined,
   );
-  const second = [place("á-place"), place("東京-place")];
+  await collection.scan();
+  collection.receive(place("newer-nanos", 1, false, 10n, 2));
+  collection.receive(place("newest-seconds", 1, false, 11n, 0));
+  expect(collection.places().map((view) => view.id?.value)).toEqual([
+    "newest-seconds",
+    "newer-nanos",
+    "older",
+  ]);
+});
+
+it("traverses descending creation-time pages and detaches each precise cursor", async () => {
+  const first = Array.from({ length: QUERY_SERVICE_MAX_RESULTS }, (_, i) =>
+    place(`a-${String(i).padStart(5, "0")}`, 1, false, 100n, QUERY_SERVICE_MAX_RESULTS - i),
+  );
+  const second = [place("á-place", 1, false, 99n, 2), place("東京-place", 1, false, 99n, 1)];
   const pages = [first, second, []];
-  const cursors: (Uint8Array | undefined)[] = [];
+  const cursors: (ReturnType<typeof place>["whenCreated"] | undefined)[] = [];
   const collection = new FieldnotesPlaceCollection(
     "author",
     async (cursor) => {
@@ -62,9 +82,9 @@ it("traverses every byte-key page and detaches each continuation cursor", async 
   expect(collection.places()).toHaveLength(QUERY_SERVICE_MAX_RESULTS + 2);
   expect(cursors).toHaveLength(3);
   expect(cursors[0]).toBeUndefined();
-  expect(cursors[1]).toEqual(first.at(-1)?.placeKey);
-  expect(cursors[1]).not.toBe(first.at(-1)?.placeKey);
-  expect(cursors[2]).toEqual(second.at(-1)?.placeKey);
+  expect(cursors[1]).toEqual(first.at(-1)?.whenCreated);
+  expect(cursors[1]).not.toBe(first.at(-1)?.whenCreated);
+  expect(cursors[2]).toEqual(second.at(-1)?.whenCreated);
 });
 
 it("keeps a live insertion before the cursor and a terminal deletion across a full scan", async () => {
@@ -93,7 +113,7 @@ it("keeps a live insertion before the cursor and a terminal deletion across a fu
   expect(collection.places().map((view) => view.id?.value)).toEqual(["earlier"]);
 });
 
-it("preserves prior visible data when a later page fails and rejects mismatched byte keys", async () => {
+it("preserves prior visible data when a later page fails and rejects a missing creation time", async () => {
   let fail = false;
   const collection = new FieldnotesPlaceCollection(
     "author",
@@ -109,10 +129,10 @@ it("preserves prior visible data when a later page fails and rejects mismatched 
   await expect(collection.scan()).rejects.toThrow("page failed");
   expect(collection.places().map((view) => view.id?.value)).toEqual(["initial"]);
   const invalid = place("bad");
-  invalid.placeKey = encoder.encode("other");
+  invalid.whenCreated = undefined;
   expect(() => {
     collection.receive(invalid);
-  }).toThrow("Place key");
+  }).toThrow("creation time");
 });
 
 it("rejects a stale removal and a foreign principal without exposing either record", () => {
@@ -170,8 +190,8 @@ it("rejects malformed page boundaries before replacing a complete collection", a
   const foreign = place("foreign");
   foreign.author = create(UserIdSchema, { value: "other" });
   const cases: [readonly PlaceView[], string][] = [
-    [[place("a"), place("a")], "did not advance"],
-    [[place("z"), place("a")], "did not advance"],
+    [[place("a"), place("a")], "repeats a typed ID"],
+    [[place("z", 1, false, 1n), place("a", 1, false, 2n)], "not newest first"],
     [[place("removed", 2, true)], "removed state"],
     [[foreign], "invalid author"],
     [

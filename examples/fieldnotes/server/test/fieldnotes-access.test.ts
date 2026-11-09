@@ -13,7 +13,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { IncomingRequest } from "@spine-event-engine/auth";
 import { AnyPacker } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
@@ -66,11 +66,11 @@ describe("Fieldnotes gateway access", () => {
     ).toBe(true);
   });
 
-  it("admits only generated active author pages with an optional forward key", async () => {
+  it("admits only generated active author pages with a descending creation-time cursor", async () => {
     const policy = new FieldnotesAccess();
     const author = create(UserIdSchema, { value: "author-a" });
     const foreign = create(UserIdSchema, { value: "author-b" });
-    const key = new TextEncoder().encode("key-1");
+    const cursor = create(TimestampSchema, { seconds: 100n, nanos: 23 });
     const admitted = (target: Target | undefined) =>
       policy.authorize({ id: author.value }, {
         kind: "query",
@@ -90,8 +90,8 @@ describe("Fieldnotes gateway access", () => {
             .is(author)
             .removed()
             .is(false)
-            .placeKey()
-            .isGreaterThan(key),
+            .whenCreated()
+            .isLessThan(cursor),
         ),
       ),
     ).toBe(true);
@@ -103,8 +103,8 @@ describe("Fieldnotes gateway access", () => {
             .is(foreign)
             .removed()
             .is(false)
-            .placeKey()
-            .isGreaterThan(key),
+            .whenCreated()
+            .isLessThan(cursor),
         ),
       ),
     ).toBe(false);
@@ -116,21 +116,15 @@ describe("Fieldnotes gateway access", () => {
             .is(author)
             .removed()
             .is(false)
-            .placeKey()
-            .isLessThan(key),
+            .whenCreated()
+            .isGreaterThan(cursor),
         ),
       ),
     ).toBe(false);
     expect(
       await admitted(
         target(
-          PlaceViewQuery.create()
-            .author()
-            .is(author)
-            .removed()
-            .is(false)
-            .placeKey()
-            .isGreaterThan(new Uint8Array()),
+          PlaceViewQuery.create().author().is(author).removed().is(false).whenCreated().is(cursor),
         ),
       ),
     ).toBe(false);
@@ -144,8 +138,8 @@ describe("Fieldnotes gateway access", () => {
             .is(false)
             .name()
             .is("extra")
-            .placeKey()
-            .isGreaterThan(key),
+            .whenCreated()
+            .isLessThan(cursor),
         ),
       ),
     ).toBe(false);
@@ -163,21 +157,27 @@ describe("Fieldnotes gateway access", () => {
             )
             .removed()
             .is(false)
-            .placeKey()
-            .isGreaterThan(key),
+            .whenCreated()
+            .isLessThan(cursor),
         ),
       ),
     ).toBe(false);
     const stringCursor = target(
-      PlaceViewQuery.create().author().is(author).removed().is(false).placeKey().isGreaterThan(key),
+      PlaceViewQuery.create()
+        .author()
+        .is(author)
+        .removed()
+        .is(false)
+        .whenCreated()
+        .isLessThan(cursor),
     );
     if (stringCursor?.criterion.case !== "filters")
-      throw new Error("Expected canonical byte cursor target.");
+      throw new Error("Expected canonical creation-time cursor target.");
     const operand = stringCursor.criterion.value.filter[2]?.filter[0];
-    if (operand === undefined) throw new Error("Expected byte cursor operand.");
+    if (operand === undefined) throw new Error("Expected creation-time cursor operand.");
     operand.value = AnyPacker.pack(
       StringValueSchema,
-      create(StringValueSchema, { value: "key-1" }),
+      create(StringValueSchema, { value: "not-a-timestamp" }),
     );
     expect(await admitted(stringCursor)).toBe(false);
   });

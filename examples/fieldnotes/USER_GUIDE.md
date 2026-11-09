@@ -660,20 +660,19 @@ An Entity query has a per-request result capacity. Fieldnotes uses the public
 pages until an empty page confirms the end. There is no total-place or
 page-count limit in the application.
 
-Each `PlaceView` includes `place_key`, the UTF-8 bytes of its typed `PlaceId`
-value. PostgreSQL and the shared evaluator compare those bytes in the same
-unsigned lexicographic order. The cursor therefore remains independent of
-locale-specific text ordering, place names, and coordinates. Accented names
-and identical pin positions do not change how the collection is traversed.
+Each `PlaceView` includes `when_created`, its trusted immutable creation time.
+The collection is newest first, independent of display name and pin position.
+The cursor retains the full Protobuf Timestamp, including seconds and nanos.
 
 A page uses the generated query builder. Here `client` is the authenticated
 browser client, `principalId` is the identity returned by session bootstrap,
-and `cursor` is the previous raw page's last key, or `undefined` for page one:
+and `cursor` is the previous raw page's last creation time, or `undefined` for page one:
 
 <!-- docs-snippet-path: examples/fieldnotes/server/src/fieldnotes-host.ts -->
 
 ```ts
 import { create } from "@bufbuild/protobuf";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { Client } from "@spine-event-engine/client-web";
 import { QUERY_SERVICE_MAX_RESULTS } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
@@ -685,22 +684,22 @@ import { PlaceViewQuery } from "@spine-event-engine/example-fieldnotes-model/gen
  *
  * @param client Authenticated browser client.
  * @param principalId Identity returned by session bootstrap.
- * @param cursor Last raw page key, absent for the first page.
+ * @param cursor Last raw page creation time, absent for the first page.
  * @returns One bounded response, not the complete collection.
  */
 async function readPlacePage(
   client: Client,
   principalId: string,
-  cursor?: Uint8Array,
+  cursor?: Timestamp,
 ): Promise<QueryResponse> {
   const author = create(UserIdSchema, { value: principalId });
   let query = PlaceViewQuery.create().author().is(author).removed().is(false);
   if (cursor !== undefined) {
-    query = query.placeKey().isGreaterThan(cursor);
+    query = query.whenCreated().isLessThan(cursor);
   }
   return client
     .onBehalfOf(principalId)
-    .send(query.orderBy("placeKey").limit(QUERY_SERVICE_MAX_RESULTS).build());
+    .send(query.orderBy("whenCreated", "desc").limit(QUERY_SERVICE_MAX_RESULTS).build());
 }
 ```
 
@@ -710,9 +709,8 @@ omit the remaining saved places. The author in this query is checked against
 the session by the gateway, so changing `principalId` cannot select someone
 else's collection.
 
-The browser retains a detached `Uint8Array` cursor from the raw returned page.
-It checks the key against the encoded typed ID and compares byte contents,
-not JavaScript object identity or string order. Every page still has the
+The browser retains a detached Timestamp cursor from the raw returned page and
+checks descending order with both seconds and nanos. Every page still has the
 verified author predicate; a cursor never grants access to another collection.
 
 The author-only live subscription includes removal markers. During an initial

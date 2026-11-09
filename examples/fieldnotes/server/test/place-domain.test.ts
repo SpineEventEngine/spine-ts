@@ -55,8 +55,13 @@ import {
   PlaceUnavailableSchema,
 } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/rejections_pb.js";
 import { createFieldnotesContext } from "../src/index.js";
+import { serverEnvironmentAccess } from "../../../../packages/server/dist/server/server-environment.js";
 
 const metadata = new SignalMetadata();
+
+async function waitForDelivery(): Promise<void> {
+  await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+}
 
 describe("Fieldnotes Place domain", () => {
   beforeEach(async () => ServerEnvironment.instance().completeSetup());
@@ -77,6 +82,7 @@ describe("Fieldnotes Place domain", () => {
           message: create(AddPlaceSchema, { id, name: "Belém", coordinates, markdown: "" }),
         }),
       );
+      await waitForDelivery();
       expect(await context.stand().read(PlaceSchema, id)).toMatchObject({
         id,
         name: "Belém",
@@ -87,8 +93,9 @@ describe("Fieldnotes Place domain", () => {
         removed: false,
       });
       await vi.waitFor(async () => {
-        expect(await context.stand().read(PlaceViewSchema, id)).toMatchObject({
-          placeKey: new TextEncoder().encode(id.value),
+        const view = await context.stand().read(PlaceViewSchema, id);
+        expect(view?.whenCreated).toBeDefined();
+        expect(view).toMatchObject({
           name: "Belém",
           author: { value: "author-one" },
           revision: 1,
@@ -109,9 +116,10 @@ describe("Fieldnotes Place domain", () => {
     const moved = create(CoordinatesSchema, { latitude: 41.1, longitude: -8.6 });
     const keyAt = async (revision: number) =>
       vi.waitFor(async () => {
-        expect(await context.stand().read(PlaceViewSchema, id)).toMatchObject({
+        const view = await context.stand().read(PlaceViewSchema, id);
+        expect(view?.whenCreated).toBeDefined();
+        expect(view).toMatchObject({
           id,
-          placeKey: new TextEncoder().encode(id.value),
           revision,
         });
       });
@@ -124,6 +132,8 @@ describe("Fieldnotes Place domain", () => {
         }),
       );
       await keyAt(1);
+      const whenCreated = (await context.stand().read(PlaceSchema, id))?.whenCreated;
+      expect(whenCreated).toBeDefined();
       await context.commandBus().post(
         SignalEnvelopes.command({
           context: metadata.commandContext({ actorContext }),
@@ -131,9 +141,11 @@ describe("Fieldnotes Place domain", () => {
           message: create(RenamePlaceSchema, { id, name: "Renamed", expectedRevision: 1 }),
         }),
       );
+      await waitForDelivery();
       expect(await context.stand().read(PlaceSchema, id)).toMatchObject({
         name: "Renamed",
         revision: 2,
+        whenCreated,
       });
       await keyAt(2);
       await context.commandBus().post(
@@ -143,9 +155,11 @@ describe("Fieldnotes Place domain", () => {
           message: create(MovePlaceSchema, { id, coordinates: moved, expectedRevision: 2 }),
         }),
       );
+      await waitForDelivery();
       expect(await context.stand().read(PlaceSchema, id)).toMatchObject({
         coordinates: moved,
         revision: 3,
+        whenCreated,
       });
       await keyAt(3);
       await context.commandBus().post(
@@ -155,9 +169,11 @@ describe("Fieldnotes Place domain", () => {
           message: create(EditPlaceNoteSchema, { id, markdown: "", expectedRevision: 3 }),
         }),
       );
+      await waitForDelivery();
       expect(await context.stand().read(PlaceSchema, id)).toMatchObject({
         markdown: "",
         revision: 4,
+        whenCreated,
       });
       await keyAt(4);
       await context.commandBus().post(
@@ -167,9 +183,11 @@ describe("Fieldnotes Place domain", () => {
           message: create(DeletePlaceSchema, { id, expectedRevision: 4 }),
         }),
       );
+      await waitForDelivery();
       expect(await context.stand().read(PlaceSchema, id)).toMatchObject({
         removed: true,
         revision: 5,
+        whenCreated,
       });
       await keyAt(5);
       const deletedState = await context.stand().read(PlaceSchema, id);
@@ -222,6 +240,7 @@ describe("Fieldnotes Place domain", () => {
             message: create(AddPlaceSchema, { id, name: id.value, coordinates }),
           }),
         );
+      await waitForDelivery();
       const before = await context.stand().read(PlaceSchema, first);
       expect(await context.stand().read(PlaceSchema, second)).toMatchObject({
         coordinates,
@@ -236,6 +255,7 @@ describe("Fieldnotes Place domain", () => {
             message: create(AddPlaceSchema, { id: first, name: "Overwritten", coordinates }),
           }),
         );
+      await waitForDelivery();
       expect(await context.stand().read(PlaceSchema, first)).toEqual(before);
     } finally {
       await context.close();
@@ -293,7 +313,7 @@ describe("Fieldnotes Place domain", () => {
 
   it("does not apply an exact repeated command or reuse its ID with altered content", async () => {
     const context = await createFieldnotesContext();
-    const id = create(PlaceIdSchema, { value: "replayed-command" });
+    const id = create(PlaceIdSchema, { value: "duplicate-command" });
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "author" }),
     });
@@ -315,8 +335,10 @@ describe("Fieldnotes Place domain", () => {
         message: create(RenamePlaceSchema, { id, name: "Second", expectedRevision: 1 }),
       });
       await context.commandBus().post(command);
+      await waitForDelivery();
       const accepted = await context.stand().read(PlaceSchema, id);
       await context.commandBus().post(command);
+      await waitForDelivery();
       expect(await context.stand().read(PlaceSchema, id)).toEqual(accepted);
       const altered = clone(CommandSchema, command);
       altered.message = AnyPacker.pack(
@@ -324,6 +346,7 @@ describe("Fieldnotes Place domain", () => {
         create(RenamePlaceSchema, { id, name: "Injected", expectedRevision: 1 }),
       );
       await context.commandBus().post(altered);
+      await waitForDelivery();
       expect(await context.stand().read(PlaceSchema, id)).toEqual(accepted);
     } finally {
       await context.close();
@@ -348,6 +371,7 @@ describe("Fieldnotes Place domain", () => {
           message: create(AddPlaceSchema, { id, name: "Private", coordinates }),
         }),
       );
+      await waitForDelivery();
       const before = await context.stand().read(PlaceSchema, id);
       await context.commandBus().post(
         SignalEnvelopes.command({
@@ -363,6 +387,7 @@ describe("Fieldnotes Place domain", () => {
           message: create(EditPlaceNoteSchema, { id, markdown: "Stale", expectedRevision: 0 }),
         }),
       );
+      await waitForDelivery();
       expect(await context.stand().read(PlaceSchema, id)).toEqual(before);
     } finally {
       await context.close();
@@ -440,9 +465,9 @@ describe("Fieldnotes Place domain", () => {
     }
   });
 
-  it("rejects invalid coordinates before creation and preserves a deleted projection on old Event replay", async () => {
+  it("rejects invalid coordinates before creation and preserves a deleted projection on stale Event delivery", async () => {
     const context = await createFieldnotesContext();
-    const id = create(PlaceIdSchema, { value: "replay-place" });
+    const id = create(PlaceIdSchema, { value: "stale-place" });
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "author" }),
     });
@@ -495,7 +520,7 @@ describe("Fieldnotes Place domain", () => {
             name: "Restored?",
             author: create(UserIdSchema, { value: "author" }),
             revision: 1,
-            occurredAt: metadata.timestamp(),
+            whenOccurred: metadata.timestamp(),
           }),
         }),
       );
@@ -563,21 +588,22 @@ describe("Fieldnotes Place domain", () => {
         revision: 5,
         author: { value: "author" },
       });
-      expect(moved?.createdAt).toEqual(edited?.createdAt);
-      expect(edited?.createdAt).toEqual(deleted?.createdAt);
+      expect(moved?.whenCreated).toEqual(edited?.whenCreated);
+      expect(edited?.whenCreated).toEqual(deleted?.whenCreated);
     } finally {
       await box.close();
     }
     await ServerTests.resetEnvironment();
     await ServerEnvironment.instance().completeSetup();
-    const replay = await createFieldnotesContext();
+    const restarted = await createFieldnotesContext();
     try {
       for (const index of [2, 1, 0, 2, 3]) {
         const event = events[index];
         if (event === undefined) throw new Error("Missing accepted Event.");
-        await replay.eventBus().post(clone(EventSchema, { ...event, id: metadata.eventId() }));
+        await restarted.eventBus().post(clone(EventSchema, { ...event, id: metadata.eventId() }));
       }
-      expect(await replay.stand().read(PlaceViewSchema, id)).toMatchObject({
+      await waitForDelivery();
+      expect(await restarted.stand().read(PlaceViewSchema, id)).toMatchObject({
         name: "Second",
         coordinates: nextPoint,
         markdown: "latest",
@@ -586,13 +612,14 @@ describe("Fieldnotes Place domain", () => {
       });
       const deletion = events[4];
       if (deletion === undefined) throw new Error("Missing deletion Event.");
-      await replay.eventBus().post(clone(EventSchema, { ...deletion, id: metadata.eventId() }));
+      await restarted.eventBus().post(clone(EventSchema, { ...deletion, id: metadata.eventId() }));
       for (const index of [0, 1, 2, 3, 4]) {
         const event = events[index];
         if (event === undefined) throw new Error("Missing accepted Event.");
-        await replay.eventBus().post(clone(EventSchema, { ...event, id: metadata.eventId() }));
+        await restarted.eventBus().post(clone(EventSchema, { ...event, id: metadata.eventId() }));
       }
-      expect(await replay.stand().read(PlaceViewSchema, id)).toMatchObject({
+      await waitForDelivery();
+      expect(await restarted.stand().read(PlaceViewSchema, id)).toMatchObject({
         name: "",
         markdown: "",
         removed: true,
@@ -600,7 +627,7 @@ describe("Fieldnotes Place domain", () => {
         author: { value: "author" },
       });
     } finally {
-      await replay.close();
+      await restarted.close();
     }
     await ServerTests.resetEnvironment();
     await ServerEnvironment.instance().completeSetup();
@@ -611,6 +638,7 @@ describe("Fieldnotes Place domain", () => {
         if (event === undefined) throw new Error("Missing accepted Event.");
         await noteFirst.eventBus().post(clone(EventSchema, { ...event, id: metadata.eventId() }));
       }
+      await waitForDelivery();
       expect(await noteFirst.stand().read(PlaceViewSchema, id)).toMatchObject({
         name: "Second",
         coordinates: nextPoint,
@@ -633,6 +661,7 @@ describe("Fieldnotes Place domain", () => {
           .eventBus()
           .post(clone(EventSchema, { ...event, id: metadata.eventId() }));
       }
+      await waitForDelivery();
       expect(await deletedFirst.stand().read(PlaceViewSchema, id)).toMatchObject({
         name: "",
         markdown: "",
@@ -649,8 +678,8 @@ describe("Fieldnotes Place domain", () => {
     const context = await createFieldnotesContext();
     const id = create(PlaceIdSchema, { value: "immutable-place" });
     const author = create(UserIdSchema, { value: "original-author" });
-    const createdAt = metadata.timestamp();
-    const changedAt = create(TimestampSchema, { seconds: createdAt.seconds + 1n });
+    const whenCreated = metadata.timestamp();
+    const changedAt = create(TimestampSchema, { seconds: whenCreated.seconds + 1n });
     const coordinates = create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 });
     const post = (event: ReturnType<typeof create<typeof PlaceRenamedSchema>>) =>
       context.eventBus().post(
@@ -671,16 +700,17 @@ describe("Fieldnotes Place domain", () => {
         author,
         markdown: "initial",
         revision: 2,
-        occurredAt: createdAt,
-        createdAt,
+        whenOccurred: whenCreated,
+        whenCreated,
       });
       await post(first);
+      await waitForDelivery();
       const accepted = await context.stand().read(PlaceViewSchema, id);
       expect(accepted).toMatchObject({
         name: "First complete result",
         revision: 2,
         author: { value: "original-author" },
-        createdAt,
+        whenCreated,
       });
       await post(
         create(PlaceRenamedSchema, {
@@ -690,29 +720,32 @@ describe("Fieldnotes Place domain", () => {
           author: create(UserIdSchema, { value: "other-author" }),
         }),
       );
+      await waitForDelivery();
       expect(await context.stand().read(PlaceViewSchema, id)).toEqual(accepted);
       await post(
         create(PlaceRenamedSchema, {
           ...first,
           name: "Changed creation",
           revision: 4,
-          createdAt: changedAt,
+          whenCreated: changedAt,
         }),
       );
+      await waitForDelivery();
       expect(await context.stand().read(PlaceViewSchema, id)).toEqual(accepted);
       await post(
         create(PlaceRenamedSchema, {
           ...first,
           name: "Legitimate newer result",
           revision: 5,
-          occurredAt: changedAt,
+          whenOccurred: changedAt,
         }),
       );
+      await waitForDelivery();
       expect(await context.stand().read(PlaceViewSchema, id)).toMatchObject({
         name: "Legitimate newer result",
         revision: 5,
         author: { value: "original-author" },
-        createdAt,
+        whenCreated,
       });
     } finally {
       await context.close();
@@ -722,10 +755,10 @@ describe("Fieldnotes Place domain", () => {
   it("ignores incomplete first active Events so lower complete results can establish the view", async () => {
     const context = await createFieldnotesContext();
     const author = create(UserIdSchema, { value: "author" });
-    const createdAt = metadata.timestamp();
+    const whenCreated = metadata.timestamp();
     const coordinates = create(CoordinatesSchema, { latitude: 10, longitude: 11 });
     try {
-      for (const missing of ["coordinates", "occurredAt"] as const) {
+      for (const missing of ["coordinates", "whenOccurred"] as const) {
         const id = create(PlaceIdSchema, { value: `missing-${missing}` });
         const complete = create(PlaceRenamedSchema, {
           id,
@@ -734,8 +767,8 @@ describe("Fieldnotes Place domain", () => {
           author,
           markdown: "note",
           revision: 4,
-          occurredAt: createdAt,
-          createdAt,
+          whenOccurred: whenCreated,
+          whenCreated,
         });
         const post = (message: typeof complete) =>
           context.eventBus().post(
@@ -755,16 +788,18 @@ describe("Fieldnotes Place domain", () => {
             [missing]: undefined,
           }),
         );
+        await waitForDelivery();
         expect(await context.stand().read(PlaceViewSchema, id)).toBeUndefined();
         await post(complete);
+        await waitForDelivery();
         expect(await context.stand().read(PlaceViewSchema, id)).toMatchObject({
           id,
           name: "Complete result",
           coordinates,
           author,
           revision: 4,
-          createdAt,
-          updatedAt: createdAt,
+          whenCreated,
+          whenUpdated: whenCreated,
           removed: false,
         });
       }

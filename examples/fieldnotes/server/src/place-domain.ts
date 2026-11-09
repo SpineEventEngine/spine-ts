@@ -86,16 +86,16 @@ export class PlaceAggregate extends Aggregate<PlaceId, typeof PlaceSchema> {
     }
     const coordinates = this.requiredCoordinates(command.coordinates, requester);
     const id = clone(PlaceIdSchema, this.id);
-    const occurredAt = Time.currentTime();
+    const whenOccurred = Time.currentTime();
     const revision = this.version.number + 1;
     this.update((draft) => Object.assign(draft, create(PlaceSchema, {
       id, name: command.name, coordinates, author: requester,
       markdown: command.markdown, revision,
-      createdAt: occurredAt, updatedAt: occurredAt, removed: false,
+      whenCreated: whenOccurred, whenUpdated: whenOccurred, removed: false,
     })));
     return create(PlaceAddedSchema, {
       id, name: command.name, coordinates, author: requester,
-      markdown: command.markdown, revision, occurredAt, createdAt: occurredAt,
+      markdown: command.markdown, revision, whenOccurred, whenCreated: whenOccurred,
     });
   }
 
@@ -111,12 +111,12 @@ export class PlaceAggregate extends Aggregate<PlaceId, typeof PlaceSchema> {
   renamePlace(command: RenamePlace, context: CommandContext): PlaceRenamed {
     const requester = this.requireAuthor(context);
     this.requireRevision(command.expectedRevision, requester);
-    const occurredAt = Time.currentTime();
+    const whenOccurred = Time.currentTime();
     const revision = this.version.number + 1;
     const next = this.update((draft) => {
       draft.name = command.name;
       draft.revision = revision;
-      draft.updatedAt = occurredAt;
+      draft.whenUpdated = whenOccurred;
     });
     return create(PlaceRenamedSchema, {
       id: clone(PlaceIdSchema, this.id),
@@ -125,8 +125,8 @@ export class PlaceAggregate extends Aggregate<PlaceId, typeof PlaceSchema> {
       markdown: next.markdown,
       author: requester,
       revision,
-      occurredAt,
-      createdAt: next.createdAt,
+      whenOccurred,
+      whenCreated: next.whenCreated,
     });
   }
 
@@ -143,12 +143,12 @@ export class PlaceAggregate extends Aggregate<PlaceId, typeof PlaceSchema> {
     const requester = this.requireAuthor(context);
     this.requireRevision(command.expectedRevision, requester);
     const coordinates = this.requiredCoordinates(command.coordinates, requester);
-    const occurredAt = Time.currentTime();
+    const whenOccurred = Time.currentTime();
     const revision = this.version.number + 1;
     const next = this.update((draft) => {
       draft.coordinates = coordinates;
       draft.revision = revision;
-      draft.updatedAt = occurredAt;
+      draft.whenUpdated = whenOccurred;
     });
     return create(PlaceMovedSchema, {
       id: clone(PlaceIdSchema, this.id),
@@ -157,8 +157,8 @@ export class PlaceAggregate extends Aggregate<PlaceId, typeof PlaceSchema> {
       markdown: next.markdown,
       author: requester,
       revision,
-      occurredAt,
-      createdAt: next.createdAt,
+      whenOccurred,
+      whenCreated: next.whenCreated,
     });
   }
 
@@ -174,12 +174,12 @@ export class PlaceAggregate extends Aggregate<PlaceId, typeof PlaceSchema> {
   editPlaceNote(command: EditPlaceNote, context: CommandContext): PlaceNoteEdited {
     const requester = this.requireAuthor(context);
     this.requireRevision(command.expectedRevision, requester);
-    const occurredAt = Time.currentTime();
+    const whenOccurred = Time.currentTime();
     const revision = this.version.number + 1;
     const next = this.update((draft) => {
       draft.markdown = command.markdown;
       draft.revision = revision;
-      draft.updatedAt = occurredAt;
+      draft.whenUpdated = whenOccurred;
     });
     return create(PlaceNoteEditedSchema, {
       id: clone(PlaceIdSchema, this.id),
@@ -188,8 +188,8 @@ export class PlaceAggregate extends Aggregate<PlaceId, typeof PlaceSchema> {
       coordinates: next.coordinates,
       author: requester,
       revision,
-      occurredAt,
-      createdAt: next.createdAt,
+      whenOccurred,
+      whenCreated: next.whenCreated,
     });
   }
 
@@ -205,25 +205,25 @@ export class PlaceAggregate extends Aggregate<PlaceId, typeof PlaceSchema> {
   deletePlace(command: DeletePlace, context: CommandContext): PlaceDeleted {
     const requester = this.requireAuthor(context);
     this.requireRevision(command.expectedRevision, requester);
-    const occurredAt = Time.currentTime();
+    const whenOccurred = Time.currentTime();
     const revision = this.version.number + 1;
     const next = this.update((draft) => {
       draft.name = "";
       draft.coordinates = undefined;
       draft.markdown = "";
       draft.revision = revision;
-      draft.updatedAt = occurredAt;
+      draft.whenUpdated = whenOccurred;
       draft.removed = true;
     });
     return create(PlaceDeletedSchema, {
       id: clone(PlaceIdSchema, this.id),
       author: requester,
       revision,
-      occurredAt,
+      whenOccurred,
       name: next.name,
       coordinates: next.coordinates,
       markdown: next.markdown,
-      createdAt: next.createdAt,
+      whenCreated: next.whenCreated,
     });
   }
 
@@ -365,14 +365,13 @@ export class PlaceViewProjection extends Projection<PlaceId, typeof PlaceViewSch
         draft,
         create(PlaceViewSchema, {
           id: clone(PlaceIdSchema, this.id),
-          placeKey: new TextEncoder().encode(this.id.value),
           name: event.name,
           coordinates: event.coordinates,
           author: event.author,
           markdown: event.markdown,
           revision: event.revision,
-          createdAt: event.createdAt,
-          updatedAt: event.occurredAt,
+          whenCreated: event.whenCreated,
+          whenUpdated: event.whenOccurred,
           removed,
         }),
       ),
@@ -392,17 +391,17 @@ export class PlaceViewProjection extends Projection<PlaceId, typeof PlaceViewSch
   ): boolean {
     if (
       event.author === undefined ||
-      event.createdAt === undefined ||
-      event.occurredAt === undefined ||
+      event.whenCreated === undefined ||
+      event.whenOccurred === undefined ||
       (!removed && event.coordinates === undefined)
     )
       return false;
     if (
       this.state.revision > 0 &&
       (this.state.author === undefined ||
-        this.state.createdAt === undefined ||
+        this.state.whenCreated === undefined ||
         !equals(UserIdSchema, this.state.author, event.author) ||
-        !equals(TimestampSchema, this.state.createdAt, event.createdAt))
+        !equals(TimestampSchema, this.state.whenCreated, event.whenCreated))
     )
       return false;
     return true;

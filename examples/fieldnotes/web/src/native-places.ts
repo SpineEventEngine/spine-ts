@@ -13,6 +13,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { Client, type ClientRequest, type Subscription } from "@spine-event-engine/client-web";
 import { AnyPacker, QUERY_SERVICE_MAX_RESULTS } from "@spine-event-engine/core";
 import {
@@ -141,16 +142,16 @@ export class FieldnotesNativePlaces {
   /**
    * Sends one canonical active page with the existing public capacity.
    *
-   * @param cursor Detached byte continuation key.
+   * @param cursor Detached creation-time continuation value.
    * @param signal Current scan cancellation.
    * @returns Decoded native PlaceView page.
    */
-  private async page(cursor: Uint8Array | undefined, signal: AbortSignal): Promise<PlaceView[]> {
+  private async page(cursor: Timestamp | undefined, signal: AbortSignal): Promise<PlaceView[]> {
     const author = create(UserIdSchema, { value: this.principalId });
     let query = PlaceViewQuery.create().author().is(author).removed().is(false);
-    if (cursor !== undefined) query = query.placeKey().isGreaterThan(cursor);
+    if (cursor !== undefined) query = query.whenCreated().isLessThan(cursor);
     const response = await this.#request.send(
-      query.orderBy("placeKey").limit(QUERY_SERVICE_MAX_RESULTS).build(),
+      query.orderBy("whenCreated", "desc").limit(QUERY_SERVICE_MAX_RESULTS).build(),
       { signal },
     );
     return response.message.map((entry) => {

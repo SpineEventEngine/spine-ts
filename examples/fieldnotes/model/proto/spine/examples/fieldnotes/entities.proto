@@ -49,10 +49,10 @@ message Place {
   int32 revision = 6;
 
   // Records the host time at creation.
-  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp when_created = 7;
 
   // Records the host time of the latest accepted change.
-  google.protobuf.Timestamp updated_at = 8;
+  google.protobuf.Timestamp when_updated = 8;
 
   // Prevents a deleted identifier from being reused.
   bool removed = 9;
@@ -86,14 +86,14 @@ message PlaceView {
   int32 revision = 6;
 
   // Records the host time at creation.
-  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp when_created = 7 [(column) = true];
 
   // Records the host time of the latest accepted change.
-  google.protobuf.Timestamp updated_at = 8;
+  google.protobuf.Timestamp when_updated = 8;
 
-  // Hides deleted places while preserving a replay barrier.
+  // Hides deleted places while preserving a stale or duplicate Event revision boundary.
   bool removed = 9 [(column) = true];
 
-  // Orders complete private reads by opaque UTF-8 bytes of the immutable PlaceId value.
-  bytes place_key = 10 [(column) = true];
+  reserved 10;
+  reserved "place_key";
 }

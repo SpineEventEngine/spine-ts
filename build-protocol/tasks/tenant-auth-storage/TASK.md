@@ -125,17 +125,41 @@ remain pending in the wider correction wave.
 This high-risk shared-runtime slice follows the approved delivery architecture
 report retained with the implementation evidence.
 The retained Inbox and Delivery machinery is the implementation seam. Local
-shared Entity and Projection reception now returns after the durable write while
+shared Entity and Projection reception now returns after the recipient Inbox write while
 registering selected local work for later processing and close drainage. Remote
-supervised reception remains write-and-notify. Process Manager and Aggregate
-callbacks await one outgoing bus handoff attempt after persistence; generated
-Commands, committed Events, reactor Events, and declared rejection Events have
-focused red-then-green behavior tests. Publication uses the existing source
+supervised reception remains write-and-notify. Restart durability depends on
+the configured storage provider. Process Manager and Aggregate callbacks await
+one outgoing bus handoff attempt after persistence; handler-produced domain
+Commands and Events, including declared rejection Events, have focused
+red-then-green behavior tests. Aggregate Event reactors now receive retained
+`REACT_UPON_EVENT` Entity Inbox rows, including Event-only Aggregate recipients.
+Publication uses the existing source
 commit-fence escape so child work does not inherit the source shard guard.
 
-Focused context tests, four repository handoff tests, and `tsc -b packages/server`
-passed. A broad routing diagnostic exposed superseded assertions that assume
-post completion implies handler completion, and a broad Inbox diagnostic exposed
-exact-drain completion expectations. Both diagnostics are recorded externally;
-the acceptance-compatible tests and lifecycle/failure checks are still being
-reconciled. No release profile or coverage claim is made yet.
+The full repository routing file passed 372/372, the separate 17-file consumer
+selection passed 554/554, and the focused six-file delivery selection passed
+610/610 under coverage instrumentation. Local close drainage, held handlers,
+duplicate receipts, failure reporting, and the one-shard Process Manager to
+Aggregate to Process Manager output chain have focused passing tests. The
+selected coverage subset does not meet the repository-wide 90% global threshold;
+the final release profile and fresh delivery reviews remain pending after the
+Fieldnotes correction converges. Earlier failing diagnostics were superseded by
+these green runs and remain in external implementation evidence.
+
+## Correction wave: Fieldnotes creation-time collection
+
+The Fieldnotes serialized model uses `when_created`, `when_updated`, and
+`when_occurred` Timestamp fields. `PlaceView.place_key` is removed and its
+number and name are reserved. The Projection keeps the first creation time
+through edits and removal. Active collection queries and the browser view use
+newest-first creation time, including nanos, with an exclusive Timestamp
+cursor. The browser cancels a temporary successful outcome subscription before
+waiting for its projected revision, including an update received during
+cancellation.
+
+Focused Fieldnotes domain and web tests passed 69/69; the live PostgreSQL
+suite passed 6/6, including more than two pages with same-second distinct-nano
+creation times. TypeScript tooling, changed-file lint, Protobuf lint and source
+verification, documentation snippets, TSDoc, cleanup, and diff checks passed.
+The browser run, independent review, delivery review corrections, and final
+release profile remain pending.

@@ -15,6 +15,7 @@
 // @vitest-environment jsdom
 
 import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyPacker } from "@spine-event-engine/core";
 import { PlaceViewSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/entities_pb.js";
 import {
@@ -73,7 +74,7 @@ it("scans the verified author's active places and removes ID-only stream departu
     author: create(UserIdSchema, { value: "author" }),
     name: "Lisbon",
     coordinates: create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
-    placeKey: new TextEncoder().encode("same"),
+    whenCreated: create(TimestampSchema, { seconds: 1n }),
     revision: 1,
   });
   const departure = {
@@ -200,7 +201,7 @@ it("rescans after a gap notice and reports a failed private stream", async () =>
     author: create(UserIdSchema, { value: "author" }),
     name: "Before gap",
     coordinates: create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
-    placeKey: new TextEncoder().encode("same"),
+    whenCreated: create(TimestampSchema, { seconds: 1n }),
     revision: 1,
   });
   const recovered = create(PlaceViewSchema, { ...initial, name: "After gap", revision: 2 });
@@ -267,7 +268,7 @@ it("refuses a state whose typed ID differs from its streamed entity ID", async (
     author: create(UserIdSchema, { value: "author" }),
     name: "Foreign",
     coordinates: create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
-    placeKey: new TextEncoder().encode("foreign"),
+    whenCreated: create(TimestampSchema, { seconds: 1n }),
     revision: 1,
   });
   const update = {

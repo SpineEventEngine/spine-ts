@@ -13,6 +13,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type {
   ClientRequest,
   Subscription,
@@ -132,7 +133,7 @@ it("cancels outcome responses before waiting for the projected rename revision",
       author: create(UserIdSchema, { value: "author" }),
       name: "Revised",
       coordinates: create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
-      placeKey: new TextEncoder().encode("same"),
+      whenCreated: create(TimestampSchema, { seconds: 1n }),
       revision: 2,
     }),
   );
@@ -179,7 +180,7 @@ it("recognizes a projected revision received while outcome cancellation finishes
       author: create(UserIdSchema, { value: "author" }),
       name: "Revised",
       coordinates: create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
-      placeKey: new TextEncoder().encode("same"),
+      whenCreated: create(TimestampSchema, { seconds: 1n }),
       revision: 2,
     }),
   );
@@ -200,7 +201,7 @@ it("returns the accepted Event revision when the visible projection is already n
       author: create(UserIdSchema, { value: "author" }),
       name: "Later name",
       coordinates: create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
-      placeKey: new TextEncoder().encode("same"),
+      whenCreated: create(TimestampSchema, { seconds: 1n }),
       revision: 3,
     }),
   );
