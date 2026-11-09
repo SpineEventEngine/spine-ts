@@ -37,6 +37,7 @@ import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { LocalEntityInbox } from "../../src/context/entity-inbox.js";
+import type { DeliveryInbox } from "../../src/delivery/delivery-ports.js";
 import { commitFenced, withoutDeliveryCommitFence } from "../../src/repository/commit-fence.js";
 import { tenant } from "../tenant-fixture.js";
 import { CreateTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
@@ -193,6 +194,84 @@ describe("LocalEntityInbox", () => {
     await receiving;
   });
 
+  it("schedules a distinct written batch row before an existing receipt settles", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const backing = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const firstWriteStarted = Promise.withResolvers<undefined>();
+    const releaseFirstWrite = Promise.withResolvers<undefined>();
+    const secondWritten = Promise.withResolvers<undefined>();
+    let writes = 0;
+    const port: DeliveryInbox = {
+      sessionKind: backing.inbox.sessionKind,
+      async receive(input, options) {
+        const write = ++writes;
+        if (write === 1) {
+          firstWriteStarted.resolve(undefined);
+          await releaseFirstWrite.promise;
+        }
+        const result = await backing.inbox.receive(input, options);
+        if (write === 2) secondWritten.resolve(undefined);
+        return result;
+      },
+      read: (shard, options) => backing.inbox.read(shard, options),
+      readMessage: (id, options) => backing.inbox.readMessage(id, options),
+      markDelivered: (message, options) => backing.inbox.markDelivered(message, options),
+      removeDuplicate: (message, options) => backing.inbox.removeDuplicate(message, options),
+    };
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      inbox: port,
+    });
+    const onWake = vi.fn();
+    const readiness = new DeliveryReadiness(undefined, delivery, onWake, false);
+    const inbox = new LocalEntityInbox("Tasks", readiness);
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      deliver: () => Promise.resolve(undefined),
+    });
+    const firstInput = processInput(targetTypeUrl, "first");
+    const secondInput = processInput(targetTypeUrl, "second");
+    const first = inbox.receive(delivery, firstInput);
+    await firstWriteStarted.promise;
+    const batch = inbox.receiveAll(delivery, [firstInput, secondInput]);
+    let batchSettled = false;
+    void batch.then(
+      () => {
+        batchSettled = true;
+      },
+      () => {
+        batchSettled = true;
+      },
+    );
+    await secondWritten.promise;
+    await new Promise<undefined>((resolve) => {
+      setImmediate(() => {
+        resolve(undefined);
+      });
+    });
+
+    try {
+      expect(onWake).toHaveBeenCalledWith(ShardIndex.single());
+      expect(batchSettled).toBe(false);
+      expect(await delivery.inbox.read(ShardIndex.single())).toMatchObject([
+        { signalId: "signal-second" },
+      ]);
+    } finally {
+      releaseFirstWrite.resolve(undefined);
+      const [, messages] = await Promise.all([first, batch]);
+      expect(messages.map((message) => message.signalId)).toEqual([
+        "signal-first",
+        "signal-second",
+      ]);
+    }
+  });
+
   it("rejects a saved Entity inbox row after its tenant is removed", async () => {
     const failure = new Error("tenant removed");
     let admitted = true;
@@ -210,7 +289,7 @@ describe("LocalEntityInbox", () => {
     expect(deliverTarget).toHaveBeenCalledOnce();
   });
 
-  it("exact-drains persisted batch rows before propagating a later write failure", async () => {
+  it("schedules persisted batch rows before propagating a later write failure", async () => {
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const inputs = ["persisted", "rejected"].map((targetId) =>
       processInput(targetTypeUrl, targetId),

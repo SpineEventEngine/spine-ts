@@ -145,7 +145,7 @@ export class LocalEntityInbox implements EntityInbox {
     return await InboxHandoff.coordinate({
       handoffs: this.#inFlightHandoffs,
       key: InboxHandoff.key(routedInput, deliveryTenantId),
-      onHandoff: () => this.#receiveAndDrain(routed, routedInput, deliveryTenantId),
+      onHandoff: () => this.#receiveAndSchedule(routed, routedInput, deliveryTenantId),
     });
   }
 
@@ -170,7 +170,7 @@ export class LocalEntityInbox implements EntityInbox {
       return await inFlightHandoff;
     }
 
-    const handoff = this.#receiveAndDrainAll(routed, routedInputs, deliveryTenantId);
+    const handoff = this.#receiveAndScheduleAll(routed, routedInputs, deliveryTenantId);
     this.#inFlightBatchHandoffs.set(key, handoff);
     try {
       return await handoff;
@@ -181,7 +181,15 @@ export class LocalEntityInbox implements EntityInbox {
     }
   }
 
-  async #receiveAndDrain(
+  /**
+   * Persists one routed input and starts eligible delivery without awaiting its handler.
+   *
+   * @param delivery Delivery used for the stored row.
+   * @param input Routed Entity input.
+   * @param deliveryTenantId Tenant selected for the row.
+   * @returns The accepted Inbox receipt.
+   */
+  async #receiveAndSchedule(
     delivery: Delivery,
     input: RoutedEntityInput,
     deliveryTenantId?: TenantId,
@@ -207,7 +215,15 @@ export class LocalEntityInbox implements EntityInbox {
     return written.message;
   }
 
-  async #receiveAndDrainAll(
+  /**
+   * Persists batch inputs and schedules written rows before shared receipts settle.
+   *
+   * @param delivery Delivery used for the stored rows.
+   * @param inputs Routed Entity inputs in caller order.
+   * @param deliveryTenantId Tenant selected for the batch.
+   * @returns Inbox receipts in the same order as the inputs.
+   */
+  async #receiveAndScheduleAll(
     delivery: Delivery,
     inputs: readonly RoutedEntityInput[],
     deliveryTenantId?: TenantId,
@@ -218,7 +234,7 @@ export class LocalEntityInbox implements EntityInbox {
 
     try {
       await this.#writeRows(delivery, rows, deliveryTenantId, failures);
-      await this.#drainRows(delivery, rows, deliveryTenantId, failures);
+      await this.#scheduleRows(delivery, rows, deliveryTenantId, failures);
       if (failures.length > 0) {
         throw failures[0];
       }
@@ -228,10 +244,23 @@ export class LocalEntityInbox implements EntityInbox {
     }
   }
 
+  /**
+   * Prepares the tenant before Inbox persistence.
+   *
+   * @param deliveryTenantId Tenant selected for the incoming work.
+   */
   async #admitDeliveryTenant(deliveryTenantId: TenantId | undefined): Promise<void> {
     await this.#onAdmit(deliveryTenantId);
   }
 
+  /**
+   * Persists newly claimed batch rows until the first write failure.
+   *
+   * @param delivery Delivery used for the stored rows.
+   * @param rows Claimed inputs in caller order.
+   * @param deliveryTenantId Tenant selected for the batch.
+   * @param failures Collects the first write error.
+   */
   async #writeRows(
     delivery: Delivery,
     rows: readonly BatchRow[],
@@ -257,19 +286,24 @@ export class LocalEntityInbox implements EntityInbox {
     }
   }
 
-  async #drainRows(
+  /**
+   * Starts each written row before awaiting receipts shared with another call.
+   *
+   * @param delivery Delivery used for the stored rows.
+   * @param rows Claimed inputs in caller order.
+   * @param deliveryTenantId Tenant selected for these rows.
+   * @param failures Collects handoff and shared-receipt failures.
+   */
+  async #scheduleRows(
     delivery: Delivery,
     rows: readonly BatchRow[],
     deliveryTenantId: TenantId | undefined,
     failures: unknown[],
   ): Promise<void> {
+    const sharedReceipts: Promise<InboxMessage>[] = [];
     for (const row of rows) {
       if (row.owner === undefined) {
-        try {
-          await row.promise;
-        } catch (error) {
-          failures.push(error);
-        }
+        sharedReceipts.push(row.promise);
         continue;
       }
       const written = row.owner.written;
@@ -286,6 +320,8 @@ export class LocalEntityInbox implements EntityInbox {
         failures,
       );
     }
+    const settled = await Promise.allSettled(sharedReceipts);
+    for (const result of settled) if (result.status === "rejected") failures.push(result.reason);
   }
 
   /**
