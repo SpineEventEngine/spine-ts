@@ -31,5 +31,3 @@ examples/release-notes/resources/node-LICENSE
 .eslintcache
 .turbo/
 .DS_Store
-examples/fieldnotes/web/public/maplibre-gl-worker.mjs
-examples/fieldnotes/web/public/maplibre-gl-LICENSE.txt

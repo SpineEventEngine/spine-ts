@@ -2,7 +2,7 @@
 
 The adapted Button, Input and Sheet components in `src/ui` derive from the official shadcn/ui New York v4 registry source, used under the MIT License. The retained registry payloads and source hashes are recorded in `implementation-evidence/examples-revision/shadcn-source` outside this package.
 
-The `predev` and `prebuild` scripts copy the pinned MapLibre GL JS 6.16.0 module worker and its full upstream `LICENSE.txt` from the installed package into `public/`. Both generated copies are excluded from source control and must be present in the deployed Next public assets. The same-origin worker URL is configured in `src/place-map.tsx`.
+MapLibre GL JS 6.16.0 is used under its upstream BSD 3-Clause License. Its full `LICENSE.txt` is retained in `public/maplibre-gl-LICENSE.txt`. The map configures the installed module worker in `src/place-map.tsx`; Next emits the worker as a versioned same-origin asset.
 
 ## MIT License
 

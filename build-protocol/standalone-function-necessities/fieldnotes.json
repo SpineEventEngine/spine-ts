@@ -136,6 +136,15 @@
   },
   {
     "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/place-map.tsx",
+    "kind": "function-declaration",
+    "identity": "useMountedMap()#1",
+    "name": "useMountedMap",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires useMountedMap to keep map initialization, current callbacks, and WebGL cleanup in one mounted effect."
+  },
+  {
+    "rule": "standalone-function",
     "file": "examples/fieldnotes/web/src/place-panels.tsx",
     "kind": "function-declaration",
     "identity": "SavedPlacesList()#1",

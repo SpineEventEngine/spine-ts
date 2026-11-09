@@ -257,12 +257,10 @@ subscriptions/tabs, and teardown through the actual ingress.
 
 ## Map worker assets
 
-The web package's launch and build scripts prepare the installed MapLibre
-module worker under its public assets. The pinned worker is self-contained;
-keep its generated copy tied to that exact package version. Generated copies are ignored; the
-preparation script and upstream license notice are maintained. The map selects
-the fixed same-origin worker URL rather than relying on bundler discovery.
-Use the package scripts when launching the example so this preparation runs.
+The map selects the MapLibre worker from the installed package with a module URL
+before creating a map. Next emits that worker as a versioned same-origin asset
+during development and production builds. The web package keeps MapLibre's
+upstream license notice in `public/maplibre-gl-LICENSE.txt`.
 
 ## Map package types
 

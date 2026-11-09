@@ -44,8 +44,10 @@ test("direct Google fixture signs into the private workspace through Next and na
     if (message.type() === "error" && message.text().includes("Worker failed to load"))
       workerErrors.push(message.text());
   });
-  const workerResponse = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === "/maplibre-gl-worker.mjs",
+  const workerResponse = page.waitForResponse((response) =>
+    /^\/_next\/static\/media\/maplibre-gl-worker\.[^/]+\.mjs$/.test(
+      new URL(response.url()).pathname,
+    ),
   );
   await page.route("https://accounts.google.com/o/oauth2/v2/auth**", async (route) => {
     const provider = new URL(route.request().url());

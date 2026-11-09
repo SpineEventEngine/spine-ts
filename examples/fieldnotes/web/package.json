@@ -4,12 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "node scripts/prepare-map-worker.mjs",
     "dev": "next dev --hostname 127.0.0.1",
-    "prestart": "node scripts/prepare-map-worker.mjs",
     "start": "next start --hostname 127.0.0.1",
     "typecheck": "node scripts/prepare-next-typecheck.mjs && next typegen && tsc --noEmit -p tsconfig.json",
-    "prebuild": "node scripts/prepare-map-worker.mjs",
     "build": "pnpm typecheck && next build",
     "test:browser": "playwright test -c test/browser/playwright.config.ts",
     "test:ingress": "node --test ../deploy/test/ingress.node.test.mjs"
