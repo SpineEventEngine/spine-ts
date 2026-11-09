@@ -70,7 +70,7 @@ sequenceDiagram
     participant View as PlaceViewProjection
     UI->>Gateway: EditPlaceNote(id, expectedRevision, markdown)
     Gateway->>Place: Command with verified actor
-    Place->>Place: Check author, then revision; commit change
+    Place->>Place: Check author, then revision, then commit change
     Place-->>View: PlaceNoteEdited with complete resulting data
     Place-->>UI: Permitted Command outcome
     View-->>UI: Updated PlaceView with new revision
@@ -291,11 +291,11 @@ sequenceDiagram
     Host-->>Browser: Google authorization URL
     Browser->>Google: Sign in and consent
     Google-->>Host: Callback with code and state
-    Host->>Google: Exchange code; verify identity
-    Host->>PG: Consume transaction; store one-use app grant
+    Host->>Google: Exchange code and verify identity
+    Host->>PG: Consume transaction and store one-use app grant
     Host-->>Browser: Fixed completion page with grant in fragment
     Browser->>Host: Exchange grant and retained PKCE verifier
-    Host->>PG: Consume grant; persist app session
+    Host->>PG: Consume grant and persist app session
     Host-->>Browser: Secure app-session and CSRF cookies
 ```
 
