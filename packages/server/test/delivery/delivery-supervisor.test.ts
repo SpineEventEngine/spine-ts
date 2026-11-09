@@ -974,6 +974,40 @@ describe("DeliverySupervisor", () => {
     await supervisor.close();
   });
 
+  it("retains an active shard wake when the pending shard capacity is full", async () => {
+    const first = Promise.withResolvers<undefined>();
+    const firstStarted = Promise.withResolvers<undefined>();
+    const seen: number[] = [];
+    const supervisor = supervisorFor(
+      {
+        run: async ({ shard }) => {
+          const index = requireShard(shard).index;
+          seen.push(index);
+          if (index === 0 && seen.length === 1) {
+            firstStarted.resolve(undefined);
+            await first.promise;
+          }
+          return { status: "COMPLETED", pages: [] };
+        },
+      },
+      { concurrency: 1, pendingLimit: 1 },
+    );
+
+    try {
+      await supervisor.start();
+      supervisor.notify(newShard(0));
+      await firstStarted.promise;
+      supervisor.notify(newShard(1));
+      supervisor.notify(newShard(0));
+      first.resolve(undefined);
+      await supervisor.whenIdle();
+      expect(seen).toEqual([0, 0, 1]);
+    } finally {
+      first.resolve(undefined);
+      await supervisor.close();
+    }
+  });
+
   it("skips an active shard repeat to start unrelated pending work", async () => {
     const first = Promise.withResolvers<undefined>();
     const second = Promise.withResolvers<undefined>();
