@@ -35,6 +35,11 @@ and internal behavior below refer to that version. A future investigation must
 check its selected version again, including installed source and actual native
 HTTP flows. Public documentation alone does not prove execution order.
 
+The disposable experiment originally used version **1.7.15**. The production
+attempt moved to **1.7.16** after an upstream security-patch review. Results from
+the earlier pin were not sufficient acceptance for the later integration; native
+flows and adapter behavior had to be exercised again against the production pin.
+
 The implementation is recoverable from Git history. These commits identify the
 successive stages, not versions approved for restoration:
 
@@ -120,6 +125,28 @@ However, the native library's internal delete path introduced a second-read race
 The implementation addressed it by replacing a callback-local internal adapter
 method. This worked within the tested pinned profile but was not an acceptable
 stable public integration boundary.
+
+### Packaging and declaration workarounds
+
+The optional subpath kept Better Auth out of the base auth package's public
+imports. The package declared an exact optional peer and a development dependency
+for integration tests. This was a real packaging boundary, not evidence that
+all native options were supported.
+
+The native declaration graph also pulled in Bun SQLite types. The attempt used
+the upstream `bun-types` SQLite declaration in the development build without
+loading Bun's conflicting global types. Local structural declarations described
+the selected native options. A `genericOAuth` forwarding function exposed the
+selected configuration shape and reconstructed the native plugin; it did not
+accept arbitrary executable plugins. Application mapping callbacks omitted by
+that reconstruction were therefore unavailable even if upstream documented them.
+
+The API documentation checker temporarily needed a 6 GiB Node heap setting for
+that declaration surface. Removal also removed the optional subpath, peer,
+Bun declaration references, local option wrappers, TypeDoc entry and dedicated
+API-export inventory. The retained API documentation check passed on the normal
+heap afterward. A future attempt must assess the declaration/package cost again,
+not silently restore these workarounds or use `skipLibCheck` to conceal conflicts.
 
 ### Stage 5: broader verification and the unresolved domain design
 
