@@ -6141,7 +6141,6 @@ class ProcessManagerCommandExecution {
   async #postEvents(events: readonly Event[]): Promise<void> {
     await Promise.all(
       events.map((event) => {
-        // spine-log-boundary: server.repository_event_follow_up
         return this.#runtime.publisher.publishReactorEvent(event);
       }),
     );
@@ -6611,7 +6610,6 @@ class ProcessManagerEventExecution {
   async #postEvents(events: readonly Event[]): Promise<void> {
     await Promise.all(
       events.map((event) => {
-        // spine-log-boundary: server.process_manager_event_follow_up
         return this.#runtime.publisher.publishReactorEvent(event);
       }),
     );
