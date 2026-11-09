@@ -8,6 +8,37 @@ It supersedes earlier Message Board demonstration requirements.
 
 ## Implementation specification
 
+### Current review corrections
+
+The standard Next.js MapLibre worker integration resolves the package worker
+through `new URL(..., import.meta.url)`. The manual copy script and lifecycle
+hooks are removed, and the license notice is retained. The actual Fieldnotes
+browser flow passed in development and production. The project Timestamp
+naming rule is now `when_` for every Timestamp field.
+
+The following revised requirements remain proposals for a later implementation
+slice; the current correction does not implement them:
+
+- Ordinary Inbox delivery accepts produced signals durably and schedules their
+  processing immediately, including one-process, one-shard applications.
+  Watchdog scanning handles pending work after missed notifications or restart.
+  Delivery API and implementation identifiers must not use `replay`.
+- Application Identity/Users Bounded Context rules decide first sign-in,
+  admission, linking, and rejection through ordinary Commands and Events.
+  Better Auth User and Account records are application-provided views; they do
+  not require two domain Entity types. Identity protocol and storage bindings
+  need independent extension points.
+- A Command outcome with several possible message types is one subscription
+  throughout the client, wire protocol, server, and transport, with one ID and
+  one lifetime. Per-type client handlers do not create child subscriptions.
+- Fieldnotes orders places by the domain Timestamp `when_created` and removes
+  its technical `place_key` column; existing Timestamp field names are updated
+  with that approved implementation slice.
+
+The supported single-host logout behavior remains unchanged. These corrections
+supersede conflicting statements in the earlier specification; they do not
+authorize implementing the pending proposals in this correction slice.
+
 [PROPOSAL.md](PROPOSAL.md) is the controlling specification for this task. Use it during implementation and review. Earlier chat drafts and experimental proposals are superseded where they differ. The human authorized production implementation on 2026-11-04. Implementation proceeds in feature/tenant-auth-storage from official master c3efab85c11abb95d351557053bace49a3310c54. Preserve the existing approved business-storage lifecycle.
 
 ## Human-Imposed Requirements Ledger
