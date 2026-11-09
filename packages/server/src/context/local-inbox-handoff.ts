@@ -111,7 +111,7 @@ export class DeliveryReadiness {
 
   readonly #deferred = new Map<string, DeliveryReady>();
 
-  #directReplay: ((message: InboxMessage, tenantId?: TenantId) => Promise<void>) | undefined;
+  #directDispatcher: ((message: InboxMessage, tenantId?: TenantId) => Promise<void>) | undefined;
 
   #closeAttempt: Promise<void> | undefined;
 
@@ -144,14 +144,18 @@ export class DeliveryReadiness {
     if (this.#closeAttempt !== undefined) return this.#closeAttempt;
     this.#closed = true;
     this.#deferred.clear();
-    const waiting = [...this.#active];
-    const closing = [...this.#local].map((delivery) => delivery.close());
-    this.#closeAttempt = Promise.allSettled([...waiting, ...closing]).then((results) => {
-      const errors = results.flatMap((result): unknown[] =>
-        result.status === "rejected" ? [result.reason as unknown] : [],
+    this.#closeAttempt = (async () => {
+      const errors: unknown[] = [];
+      while (this.#active.size > 0) {
+        const results = await Promise.allSettled([...this.#active]);
+        for (const result of results) if (result.status === "rejected") errors.push(result.reason);
+      }
+      const closing = await Promise.allSettled(
+        [...this.#local].map((delivery) => delivery.close()),
       );
+      for (const result of closing) if (result.status === "rejected") errors.push(result.reason);
       if (errors.length > 0) throw new AggregateError(errors, "Delivery readiness close failed.");
-    });
+    })();
     return this.#closeAttempt;
   }
 
@@ -174,11 +178,11 @@ export class DeliveryReadiness {
   }
 
   /**
-   * Sets the complete Entity/projection replay callback before admission.
-   * @param onReplay Replays an admitted Inbox message.
+   * Sets the complete Entity/projection delivery callback before admission.
+   * @param onDispatch Delivers an admitted Inbox message.
    */
-  configureDirect(onReplay: (message: InboxMessage, tenantId?: TenantId) => Promise<void>): void {
-    this.#directReplay = onReplay;
+  configureDirect(onDispatch: (message: InboxMessage, tenantId?: TenantId) => Promise<void>): void {
+    this.#directDispatcher = onDispatch;
   }
 
   /**
@@ -200,18 +204,17 @@ export class DeliveryReadiness {
   }
 
   /**
-   * Returns local exact completion or remote supervised notification after reception.
+   * Notifies shared Delivery after persistence or returns a standalone completion claim.
    * @param ready Route made eligible by the write, if a recipient is registered.
    * @returns A completion claim for that write.
    */
   claim(ready?: DeliveryReady): DeliveryHandoff {
+    if (ready === undefined) return settledHandoff;
     if (this.#remoteSupervised && this.#shared !== undefined) {
-      if (ready !== undefined) this.notify(ready);
+      this.notify(ready);
       return settledHandoff;
     }
-    const handoff = this.#directHandoff();
-    if (ready !== undefined) this.#notifyStandalone(ready);
-    return handoff;
+    return this.#directHandoff(ready);
   }
 
   /**
@@ -221,13 +224,21 @@ export class DeliveryReadiness {
    */
   route(delivery: Delivery): Delivery {
     if (this.#shared !== undefined) return this.#shared;
-    if (!this.#local.has(delivery) && this.#directReplay !== undefined)
-      delivery.setReplay((message) => this.#directReplay?.(message, delivery.context.tenantId));
+    if (!this.#local.has(delivery) && this.#directDispatcher !== undefined)
+      delivery.setDispatcher((message) =>
+        this.#directDispatcher?.(message, delivery.context.tenantId),
+      );
     this.#local.add(delivery);
     return delivery;
   }
 
-  #directHandoff(): DeliveryHandoff {
+  /**
+   * Creates a claim that tracks admitted local work through processing.
+   *
+   * @param ready Recipient route to notify after processing starts.
+   * @returns A claim that starts or abandons one local handoff.
+   */
+  #directHandoff(ready?: DeliveryReady): DeliveryHandoff {
     const gate = Promise.withResolvers<undefined>();
     this.#active.add(gate.promise);
     let completion: Promise<void> | undefined;
@@ -243,13 +254,7 @@ export class DeliveryReadiness {
         const shared = Promise.withResolvers<undefined>();
         completion = shared.promise;
         void completion.then(finish, finish);
-        try {
-          void Promise.resolve(onDrain()).then(() => {
-            shared.resolve(undefined);
-          }, shared.reject);
-        } catch (error) {
-          shared.reject(error);
-        }
+        this.#startDirectHandoff(onDrain, ready, shared);
         return completion;
       },
       abandon: () => {
@@ -258,6 +263,31 @@ export class DeliveryReadiness {
         finish();
       },
     });
+  }
+
+  /**
+   * Starts processing and notifies the selected recipient for a local claim.
+   *
+   * @param onDrain Starts the exact row's processing attempt.
+   * @param ready Recipient route to notify when available.
+   * @param shared Completes when processing finishes or fails.
+   */
+  #startDirectHandoff(
+    onDrain: () => Promise<void>,
+    ready: DeliveryReady | undefined,
+    shared: PromiseWithResolvers<undefined>,
+  ): void {
+    try {
+      void Promise.resolve(onDrain()).then(() => {
+        shared.resolve(undefined);
+      }, shared.reject);
+      if (ready !== undefined) {
+        if (this.#shared !== undefined) this.notify(ready);
+        else this.#notifyStandalone(ready);
+      }
+    } catch (error) {
+      shared.reject(error);
+    }
   }
 
   #notifyStandalone(ready: DeliveryReady): void {
@@ -320,18 +350,18 @@ export interface LocalInboxDrainOptions {
   readonly node: string;
 
   /**
-   * Calls target replay after the delivery runtime acquires a message.
+   * Calls target delivery after the delivery runtime acquires a message.
    *
    * @param message Contains the acquired inbox message.
-   * @returns Resolves after the target replay finishes.
+   * @returns Resolves after the target delivery finishes.
    */
-  readonly onReplay: (message: InboxMessage) => Promise<void> | void;
+  readonly onDispatch: (message: InboxMessage) => Promise<void> | void;
 
   /**
-   * Determines whether the replay callback owns a message.
+   * Determines whether the delivery callback owns a message.
    *
    * @param message Contains a pending Inbox message.
-   * @returns `true` when the replay callback owns the message.
+   * @returns `true` when the delivery callback owns the message.
    * @internal
    */
   readonly acceptMessage?: (message: InboxMessage) => boolean;
@@ -346,12 +376,12 @@ export interface LocalInboxDrainOptions {
   readonly onResolved?: (message: InboxMessage) => void;
 
   /**
-   * Explains a replay failure that lacks an Error instance.
+   * Explains a delivery failure that lacks an Error instance.
    */
-  readonly replayFailureMessage: string;
+  readonly deliveryFailureMessage: string;
 
   /**
-   * Explains a delivery skipped before target replay.
+   * Explains a delivery skipped before target delivery.
    */
   readonly skippedMessage: string;
 
@@ -408,7 +438,7 @@ export const InboxHandoff: Readonly<{
   runDrain(options: LocalInboxDrainOptions): Promise<void>;
   drainAttempt(options: LocalInboxDrainOptions): Promise<"ACKNOWLEDGED" | "IDLE" | "RETRY">;
   drainInput(options: LocalInboxDrainOptions): Parameters<Delivery["drainMessage"]>[1];
-  replayFailure(error: unknown, message: string): Error;
+  deliveryFailure(error: unknown, message: string): Error;
   key(input: LocalInboxKeyInput, tenantId?: TenantId): string;
   sameMessageId(
     left: {
@@ -505,7 +535,7 @@ export const InboxHandoff: Readonly<{
     if (direct.outcome?.kind === "acknowledged") return "ACKNOWLEDGED";
     if (direct.outcome?.kind === "deferred") return "RETRY";
     if (direct.outcome?.kind === "failed")
-      throw InboxHandoff.replayFailure(direct.outcome.error, options.replayFailureMessage);
+      throw InboxHandoff.deliveryFailure(direct.outcome.error, options.deliveryFailureMessage);
     if (direct.acknowledged) return "ACKNOWLEDGED";
     const run =
       direct.run ?? (direct.outcome?.kind === "unresolved" ? direct.outcome.run : undefined);
@@ -516,7 +546,7 @@ export const InboxHandoff: Readonly<{
       InboxHandoff.sameDelivery(message, options.received),
     );
     if (failure !== undefined)
-      throw InboxHandoff.replayFailure(failure.error, options.replayFailureMessage);
+      throw InboxHandoff.deliveryFailure(failure.error, options.deliveryFailureMessage);
     if (run.status === "SKIPPED") throw new Error(options.skippedMessage);
     return run.accepted === 0 && run.delivered === 0 && run.failed === 0 ? "IDLE" : "RETRY";
   },
@@ -524,7 +554,7 @@ export const InboxHandoff: Readonly<{
   drainInput(options: LocalInboxDrainOptions): Parameters<Delivery["drainMessage"]>[1] {
     return {
       node: options.node,
-      onMessage: options.onReplay,
+      onMessage: options.onDispatch,
       ...(options.acceptMessage === undefined ? {} : { acceptMessage: options.acceptMessage }),
       ...(options.onResolved === undefined
         ? {}
@@ -532,7 +562,7 @@ export const InboxHandoff: Readonly<{
     };
   },
 
-  replayFailure(error: unknown, message: string): Error {
+  deliveryFailure(error: unknown, message: string): Error {
     return error instanceof Error ? error : new Error(message, { cause: error });
   },
 

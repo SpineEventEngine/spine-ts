@@ -168,7 +168,7 @@ phase without implying that every Entity model has been prepared.
 awaits both model preparation and the first subscription reconciliation by
 default. Each option can be set to `false` independently. A deferred phase runs
 before the first valid Command, Event, query, subscription operation, or Inbox
-replay for the receiving context; lazy multitenant preparation selects only that
+delivery for the receiving context; lazy multitenant preparation selects only that
 input's currently registered tenant. A failed lazy attempt rejects its current
 input and can be retried by a later input. Monitoring requires the shared
 subscription registry, so `startSubscriptionMonitoring: true` prepares that
@@ -234,7 +234,7 @@ authorize users. The environment defaults to the explicit `SINGLE_TENANT` marker
 
 Multitenant receiving contexts check current index membership before Command,
 Event, query, direct repository/history, and subscription work. Inbox persistence
-and later replay check separately, so removing a tenant prevents saved work from
+and later delivery check separately, so removing a tenant prevents saved work from
 restoring it. Input does not call `keep()` implicitly. A confirmed missing member
 raises `TenantUnknownError` with the complete tenant ID and context name; native
 services return `NotFound` with a structured `spine.base.Error` detail whose type
@@ -262,8 +262,8 @@ Direct `repository.routeCommand()` and `repository.routeEvent()` calls return
 Promises and must be awaited. Commands select exactly one ID; Events and state
 updates may select any number of distinct IDs. After validation and stable
 deduplication, routes above 1,000 recipients emit one warning and retain every
-recipient. Inbox replay uses stored target IDs without rerouting. The legacy-named
-local `catchUpReadSide()` helper is unrelated to retry: it resets and replays
+recipient. Inbox delivery uses stored target IDs without rerouting. The legacy-named
+local `catchUpReadSide()` helper is unrelated to retry: it resets and dispatches stored Events through
 the whole local read side, and is not Projection catch-up.
 
 ## Message-valued Entity IDs
@@ -295,7 +295,7 @@ const id: MessageId = create(CommandIdSchema, { uuid: "shipment-7" });
 ```
 
 Admission validates a message ID against the schema declared by the state
-field, including generated validation rules, before it is stored or replayed.
+field, including generated validation rules, before it is stored or delivered.
 When default routing finds a message but the Entity ID type is primitive, a
 custom route returns the intended primitive ID.
 
@@ -609,9 +609,9 @@ repeated declarations fail closed. It is not an alternative routing mechanism.
 Configure logging through `ServerEnvironment` when assembling the server. The
 server installs that logger into its runtime components, where warnings and
 failures carry operation context. Durable facts belong in events or storage.
-Ordinary Aggregate, Process Manager, and Projection Inbox replay sends persisted
-accepted work through the normal handler path, so those handler effects must be
-replay-safe. An accepted Agent interaction is recorded by its receipt and is
+Ordinary Aggregate, Process Manager, and Projection Inbox delivery sends persisted
+accepted work through the normal handler path. Handler effects must tolerate
+redelivery after an uncertain acknowledgement. An accepted Agent interaction is recorded by its receipt and is
 never re-executed after interruption.
 
 ## Context assembly and entities
@@ -1131,8 +1131,8 @@ export const scopedOnCreate =
 ```
 
 `Stand` registers entity state for point/list reads, updates current state, and
-offers in-process subscriptions. The legacy-named local reset/replay helper
-`catchUpReadSide(options?)` clears every registered Projection state and replays
+offers in-process subscriptions. The local read-side reset helper
+`catchUpReadSide(options?)` clears every registered Projection state and dispatches
 the whole stored event history through matching Projection subscribers; it does
 not append events. Single-tenant contexts reject a tenant option; multitenant
 contexts require one. It cannot target a Projection repository, entity IDs, or
@@ -1482,10 +1482,20 @@ delivery, global update ordering, nor cluster-complete notification delivery.
 local durable-row abstraction. Inbox and shard storage require a single-tenant
 Delivery storage context shared by all tenants; the packed signal supplies
 the dispatch tenant. Read limits are 1–1000; work leases are
-1000–2147483647 ms. Framework replay supports command handling, projection
-updates, and process-manager reactions. Callbacks are at-least-once/replay-safe:
+1000–2147483647 ms. Framework delivery supports command handling, projection
+updates, process-manager reactions, and Aggregate Event reactions. Callbacks must tolerate redelivery:
 lost renewal can prevent stale finalization but cannot undo a callback already
 run. The package exposes no general raw worker callback API.
+
+Repository-backed Command and Event routing awaits recipient Inbox writes and
+notifies Delivery immediately. A successful post through this routing means
+recipient Inbox writes completed; it does not wait for handler execution or row
+acknowledgement. Restart durability depends on the configured storage provider.
+Custom dispatchers define their own completion contract. After an Entity commit, the
+source delivery awaits one outgoing bus handoff attempt through recipient Inbox
+acceptance. A failed publication is reported and contained without re-executing
+a successful source Command. Entity storage, recipient Inbox writes, and source
+acknowledgement remain separate operations.
 
 Inbox reads return `InboxMessage` with a full-precision Protobuf `Timestamp` in
 `whenReceived`. `InboxMessageInput` requires a precise `Timestamp` for new
@@ -1542,7 +1552,8 @@ internally and persist their envelope in the target Entity Inbox before any
 handler runs. Projection input uses the same environment Delivery and shared
 Inbox, with its separate recipient identity.
 
-Local posting waits for the result of that signal's delivery attempt. For an
+Local repository-backed posting waits for recipient Inbox writes and scheduling,
+while handler execution and row acknowledgement continue through Delivery. For an
 Agent, successful acceptance and Inbox acknowledgement let posting finish while
 the live handler continues. If Agent execution capacity is unavailable, the input
 stays pending and the local call reports the existing command-posting error.
@@ -1588,9 +1599,9 @@ scan delivers nothing; it does not restart after each productive page.
 Delivery compares pending rows with delivered rows in the current page
 and a process-local cache of the 1,000 most recent deliveries, then removes
 duplicates. The 30-second Inbox deduplication window controls how long delivered
-rows remain available as duplicate evidence; it is not a replay-retention
+rows remain available as duplicate evidence; it is not a delivery-retention
 period. Persisted accepted rows follow their delivery lifecycle and may be
-replayed according to that lifecycle after the deduplication window has elapsed.
+redelivered according to that lifecycle after the deduplication window has elapsed.
 
 Direct delivery uses the configured Inbox storage clock for both retained-row
 duplicate checks and early cleanup filtering. Remote delivery uses local client
@@ -1611,8 +1622,8 @@ reception monitor. A custom reception action that completes normally completes
 delivery and the enclosing stage acknowledges the row. An action that rejects
 propagates its error and leaves the row `TO_DELIVER`. `markDelivered()` does not
 mean domain processing succeeded.
-Managed repository replay sends actual handler failures to the monitor while
-storage and replay infrastructure errors propagate. A direct `onMessage` callback
+Managed repository delivery sends actual handler failures to the monitor while
+storage and delivery infrastructure errors propagate. A direct `onMessage` callback
 is treated as the endpoint. Handler effects and acknowledgement are separate,
 so a crash between them may redeliver.
 The framework adds no persisted attempts, quarantine, dead-letter, receipt, or

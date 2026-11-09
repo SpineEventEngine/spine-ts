@@ -65,7 +65,7 @@ describe("shared Delivery tenant identity", () => {
     const written = await delivery.inbox.receive(row);
     const seen: string[] = [];
     let registered = false;
-    delivery.setReplay(
+    delivery.setDispatcher(
       (message) => {
         seen.push(message.id.value);
       },

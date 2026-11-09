@@ -141,13 +141,12 @@ are closed. The application does not reset a database during recovery.
 
 PostgreSQL can resume pending durable Inbox delivery after an interrupted
 launch once the previous process's shard lease expires. A new process cannot
-take over an unexpired lease; a Command posted during that interval may return
-an error Ack even though its Inbox row remains pending. The handler commits
-before the best-effort committed-Event callback is
-queued. Publication can start before source Inbox acknowledgement finishes;
-delivery does not wait for that callback while holding the source shard.
-Shutdown waits for registered follow-ups. This is one in-process initial
-publication attempt, not a durable Event republishing service. An earlier
+take over an unexpired lease; a Command posted during that interval can receive
+a successful acceptance Ack after its Inbox write while execution remains pending.
+After the handler commits, source delivery awaits one committed-Event bus handoff
+attempt through recipient Inbox acceptance before source acknowledgement.
+Shutdown waits for admitted local work. A publication failure is reported and
+contained; there is no durable Event republishing service. An earlier
 interrupted operation may have committed state without all historical
 Projection output. Draining old Inbox rows does not imply that historical
 output was repaired.

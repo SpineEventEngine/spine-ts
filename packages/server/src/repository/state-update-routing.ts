@@ -32,7 +32,7 @@ import {
  * Calculates target Entity IDs for one accepted Entity state update.
  *
  * The route must be deterministic and side-effect-free. It runs once during
- * admission; durable replay uses the stored target instead.
+ * admission; durable Inbox delivery uses the stored target instead.
  *
  * @typeParam Id Entity ID type used by the receiving Projection repository.
  * @typeParam Schema Generated Entity state message schema.
@@ -167,7 +167,7 @@ export class StateUpdateRouting<
    *
    * Copied or malformed tokens fail during declaration. Every token member must
    * be registered by the repository, or construction fails. The selected route
-   * runs once for an accepted admission; durable replay uses stored targets and
+   * runs once for an accepted admission; durable Inbox delivery uses stored targets and
    * does not run routing again.
    *
    * @param schemaOrToken Generated Entity-state schema or nominal message-interface token.

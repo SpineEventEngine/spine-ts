@@ -677,7 +677,7 @@ export class Stand {
   /**
    * Clears all stored states and durable version metadata for one known state schema.
    *
-   * The legacy-named local `BoundedContext.catchUpReadSide()` reset/replay
+   * The legacy-named local `BoundedContext.catchUpReadSide()` reset/dispatch
    * helper uses this to reset one Projection state type for the selected tenant
    * slice.
    *

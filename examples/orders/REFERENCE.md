@@ -130,12 +130,12 @@ the existing visibility deadline and abort behavior.
 
 The shared runtime can recover pending durable Inbox rows after an interrupted
 PostgreSQL launch once the killed process's shard lease expires. A new process
-cannot take over an unexpired lease; a Command posted during that interval may
-receive an error Ack while its Inbox row remains pending. After eligible pickup,
-handler completion registers a committed-Event follow-up in the tracked
-tenant/shard queue, and shutdown waits for that follow-up. Publication may start
-before source Inbox acknowledgement completes. It is one best-effort in-process
-attempt. Neither the Orders example nor this runtime adds durable Event
+cannot take over an unexpired lease; a Command posted during that interval can
+receive a successful acceptance Ack after its Inbox write while execution remains
+pending. After eligible pickup and handler commit, the source delivery awaits one
+committed-Event bus handoff attempt through recipient Inbox acceptance before
+source acknowledgement. Shutdown waits for admitted local work. Publication
+failure is reported and contained. Neither the Orders example nor this runtime adds durable Event
 republishing or repairs historical Projection output from an earlier interruption.
 
 ## Verification

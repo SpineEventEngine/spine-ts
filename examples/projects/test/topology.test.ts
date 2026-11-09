@@ -69,7 +69,9 @@ describe("project-management load example", () => {
           message: create(CreateTaskSchema, { id: taskId, projectId: "weighted-project" }),
         }),
       );
-      await expect(context.stand().read(TaskSchema, taskId)).resolves.toBeDefined();
+      await vi.waitFor(async () => {
+        expect(await context.stand().read(TaskSchema, taskId)).toBeDefined();
+      });
       await vi.waitFor(async () => {
         expect(await context.stand().read(TaskListSchema, "weighted-project")).toMatchObject({
           id: "weighted-project",
@@ -86,9 +88,12 @@ describe("project-management load example", () => {
       await vi.waitFor(() => {
         expect(weightCalls).toBe(2);
       });
-      await expect(
-        context.stand().readVersioned(TaskAssignmentSchema, taskId),
-      ).resolves.toMatchObject({ state: { updates: 6 }, version: { number: 2 } });
+      await vi.waitFor(async () => {
+        expect(await context.stand().readVersioned(TaskAssignmentSchema, taskId)).toMatchObject({
+          state: { updates: 6 },
+          version: { number: 2 },
+        });
+      });
     } finally {
       await context.close();
     }
@@ -111,7 +116,9 @@ describe("project-management load example", () => {
             message: create(CreateTaskSchema, { id: taskId, projectId: "default-project" }),
           }),
         );
-        await expect(context.stand().read(TaskSchema, taskId)).resolves.toBeDefined();
+        await vi.waitFor(async () => {
+          expect(await context.stand().read(TaskSchema, taskId)).toBeDefined();
+        });
       }
 
       await vi.waitFor(async () => {

@@ -194,8 +194,13 @@ export class CommandBus {
   /**
    * Posts a command for asynchronous dispatch.
    *
+   * Repository-backed Entity recipients complete dispatch after their Inbox
+   * receipt is stored and eligible delivery is scheduled. Handler processing
+   * may continue after this promise resolves. Other registered dispatchers
+   * determine completion through their own dispatch promises.
+   *
    * @param command the command envelope to post.
-   * @returns A promise that settles after queued command dispatch completes and may reject.
+   * @returns Completion or failure of the registered dispatcher handoff.
    */
   post(command: Command): Promise<void> {
     const accepted = clone(CommandSchema, command);

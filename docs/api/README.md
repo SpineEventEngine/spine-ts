@@ -13,7 +13,7 @@ points fit together and records cross-package API limits.
 generated message-interface token. Exact schema wins; otherwise the first
 registered matching token wins; otherwise the replacement/default applies.
 Routes run when a message is accepted; retries use the targets saved with it.
-The legacy-named local `catchUpReadSide()` reset/replay helper reruns current
+The local `catchUpReadSide()` read-side reset helper reruns current
 Projection subscriptions; it is not Projection catch-up. The [To-Do
 guide](../../examples/todo/USER_GUIDE.md) contains executable source-linked
 registration.
@@ -104,7 +104,7 @@ routing declarations. Each accepts an exact generated schema or a generated
 interface token. Matching selects exact schema, then the first registered
 matching token, then the replacement/default route. Route functions are
 deterministic and side-effect-free when accepting a message, while durable
-replay uses stored typed targets rather than calculating them again.
+delivery uses stored typed targets rather than calculating them again.
 
 TypeScript consumes `ts_type` and ignores Java-only option fields. Frozen Proto
 options remain preserved wire definitions; `ts_type` does not create transport
@@ -291,21 +291,20 @@ dispatcher adapters that execute aggregate command assignees in framework
 transactions and execute projection subscribers. Aggregate command execution
 requires `command.id` so produced events can carry a contract-valid command
 origin; missing IDs reject before
-mutation or storage. Aggregate command completion resolves after traceability
-event-journal append and latest persisted state write. Later produced-signal
-publication is contained by the internal publisher and does not extend the
-`BoundedContext` API. Generated entity-class assembly creates default repositories
+mutation or storage. Aggregate execution commits traceability and current state
+before attempting one outgoing Event bus handoff. The bus handoff awaits
+recipient Inbox writes; a publication failure is contained and reported without
+rerunning a successful Command. Generated entity-class assembly creates default repositories
 through `add(EntityClass).build()` after importing the generated bootstrap. This
 implementation does not invoke query handlers, run durable delivery catch-up, expose a
 broad server lifecycle, or integrate transports. The supported durable inbox
-handoffs are framework process-manager command replay, live
-process-manager event replay, and live projection subscriber replay. The
-local runtime writes the inbox row, drains the local shard immediately, requires
-tenant-safe replay in multitenant contexts, and resolves only after that
-received row is marked delivered. Process-manager event rows use
+handoffs are Process Manager Commands and Events, and Projection subscriber
+updates. Routing resolves after recipient Inbox writes and immediately notifies
+normal Delivery; recipient processing and acknowledgement continue separately.
+Process-manager event rows use
 `REACT_UPON_EVENT`, projection subscriber rows use `UPDATE_SUBSCRIBER`, both
-store the original `Event` envelope, and both replay only the routed row target
-before the independent persistence steps and `Stand` update. Before handler code runs, replay
+store the original `Event` envelope, and both deliver only to the stored row target
+before the independent persistence steps and `Stand` update. Before handler code runs, delivery
 validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
 target type URL, and routed target ID.
 Pending and delivered `InboxMessage` rows are stored directly. Shard ownership
@@ -335,8 +334,8 @@ it starts another scan only if it delivered messages during the completed scan.
 It stops after a scan with no deliveries, rather than returning to the beginning
 after every productive page. The 30-second Inbox
 deduplication window controls how long delivered rows remain available as
-duplicate evidence. It is not a replay-retention period; ordinary accepted rows
-follow their Inbox lifecycle and may be replayed after the duplicate window has
+duplicate evidence. It is not a delivery-retention period; ordinary accepted rows
+follow their Inbox lifecycle and may be redelivered after the duplicate window has
 elapsed. An accepted Agent interaction has a stored receipt and never resumes
 handler or model execution after interruption. The receipt survives process
 termination with persistent storage; memory storage retains it only within that
@@ -350,9 +349,9 @@ process-manager event routing reads the first event message field, state is
 loaded/created and stored through `Stand`, and returned domain commands/events
 are wrapped only after the prepared Entity write sequence succeeds.
 `BoundedContext.catchUpReadSide(options?)` is a legacy-named, process-local
-whole-read-side reset/replay maintenance helper. It is not the framework's
+whole-read-side reset and dispatch maintenance helper. It is not the framework's
 Projection catch-up boundary. It clears registered projection rows through
-`Stand.clear()`, reads only already-stored events, and replays each event only
+`Stand.clear()`, reads only already-stored events, and dispatches each Event only
 to registered projection subscribers whose dispatcher declares that event
 message schema/type URL. It never re-appends events. Single-tenant contexts
 reject `tenantId`; multitenant contexts require the exact non-blank `tenantId`.
@@ -444,14 +443,13 @@ event store before queueing them for event-bus delivery without appending them
 again. Process-manager repositories
 also participate in those adapters: command assignees are invoked from the
 command bus through a durable process-manager inbox handoff. The local
-runtime drains that inbox immediately, requires tenant-safe replay in
-multitenant contexts, and resolves only after the received inbox row is marked
-delivered. Live projection subscribers use the same local handoff shape with
+runtime notifies Delivery immediately after a successful Inbox write and resolves
+after recipient Inbox acceptance. Live projection subscribers use the same local handoff shape with
 `UPDATE_SUBSCRIBER` rows, original event IDs as dedup signal IDs, and exact-row
-target replay through the Inbox delivery lifecycle. Live
+stored-target dispatch through the Inbox delivery lifecycle. Live
 process-manager event reactors and event-commanding handlers use the same
 durable inbox handoff with `REACT_UPON_EVENT` rows, original `Event`
-envelopes, and exact-row target replay. Before handler code runs, replay
+envelopes, and stored-row target dispatch. Before handler code runs, delivery
 validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
 target type URL, and routed target ID.
 State is stored in tenant-scoped `Stand` records with Spine `Version`
@@ -705,7 +703,7 @@ reads direct pending rows in bounded, stable order. It neither exposes pages or
 retained summaries nor creates guard records, per-message claims, attempt
 history, a retry policy, or a scheduler. Direct inbox writes require
 `InboxMessage.id.shard` to match `InboxMessage.shard`; delivered rows are the
-deduplication fact. Framework replay handles `HANDLE_COMMAND`,
+deduplication fact. Framework delivery handles `HANDLE_COMMAND`,
 `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; `CATCH_UP` remains pending and
 `IMPORT_EVENT` fails closed as storage corruption.
 
@@ -744,7 +742,7 @@ lost acknowledgement can redeliver after a handler runs, and downstream effects
 must be idempotent. The delivery model has no persisted attempt history,
 exhaustion, claims, quarantine, receipts, markers, backoff, dead-letter storage,
 or scheduler state beyond the configured in-process recovery timer.
-The package does not expose a raw worker callback API; framework replay
+The package does not expose a raw worker callback API; framework delivery
 uses the framework's validated endpoints. Delivery operations check that the
 worker still holds the shard, rather than renewing it on a timer around callbacks.
 `InboxReadOptions.limit` remains the page-size control for a single ordered

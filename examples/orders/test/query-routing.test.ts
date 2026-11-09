@@ -143,6 +143,13 @@ describe("Orders query routing example", () => {
           ),
         }),
       );
+      await vi.waitFor(async () => {
+        expect(
+          await context.stand().readAllVersioned(OrderCardSchema, {
+            tenantId: ordersTenants.contoso,
+          }),
+        ).toHaveLength(1);
+      });
       await context.commandBus().post(
         create(CommandSchema, {
           id: metadata.commandId(),

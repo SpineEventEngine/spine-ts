@@ -20,10 +20,28 @@ import { commandBusAccess, CommandBus } from "../bus/command-bus.js";
 import { eventBusAccess, EventBus } from "../bus/event-bus.js";
 import { emitServerError } from "../server/server-log.js";
 
+/**
+ * Categories of produced-signal publication attempts.
+ */
 type PublicationKind = "command" | "event" | "rejection-event" | "system-event" | "stored-event";
+
+/**
+ * Lifecycle phases for admitted publication work.
+ */
 type PublisherState = "open" | "closing" | "closed";
+
+/**
+ * Observes produced signals in test fixtures without changing publication.
+ */
 interface ProducedSignalObserver {
+  /**
+   * Receives a produced Command.
+   */
   readonly onCommand?: (command: Readonly<Command>) => void;
+
+  /**
+   * Receives a produced Event.
+   */
   readonly onEvent?: (event: Readonly<Event>) => void;
 }
 
@@ -94,10 +112,10 @@ export class SignalPublisher {
   }
 
   /**
-   * Publishes a produced Command for detached handling.
+   * Publishes a produced Command through one tracked bus handoff attempt.
    *
    * @param command The produced Command envelope.
-   * @returns A promise that settles after the Command is handled or its failure is contained.
+   * @returns Completion after recipient Inbox acceptance or contained handoff failure.
    */
   publishCommand(command: Command): Promise<void> {
     return this.#publish("command", command, () =>
@@ -106,10 +124,10 @@ export class SignalPublisher {
   }
 
   /**
-   * Publishes a produced Event for detached handling.
+   * Publishes a produced Event through one tracked bus handoff attempt.
    *
    * @param event The produced Event envelope.
-   * @returns A promise that settles after the Event is handled or its failure is contained.
+   * @returns Completion after recipient Inbox acceptance or contained handoff failure.
    */
   publishEvent(event: Event): Promise<void> {
     return this.#publish("event", event, () => eventBusAccess.postFollowUp(this.#eventBus, event));
@@ -120,7 +138,7 @@ export class SignalPublisher {
    *
    * @internal
    * @param event The rejection Event envelope.
-   * @returns A promise that settles after detached rejection handling is contained.
+   * @returns Completion after recipient Inbox acceptance or contained handoff failure.
    */
   publishRejectionEvent(event: Event): Promise<void> {
     return this.#publish("rejection-event", event, () =>
@@ -131,7 +149,7 @@ export class SignalPublisher {
   /**
    * Dispatches a committed Entity Event once after persistence.
    * @param event The committed Event envelope.
-   * @returns Completion after dispatch or contained failure.
+   * @returns Completion after recipient Inbox acceptance or contained handoff failure.
    */
   publishCommittedEvent(event: Event): Promise<void> {
     const snapshot = clone(EventSchema, event);
@@ -143,7 +161,7 @@ export class SignalPublisher {
   /**
    * Dispatches a committed reactor or Process Manager Event once as follow-up work.
    * @param event The committed Event envelope.
-   * @returns Completion after dispatch or contained failure.
+   * @returns Completion after recipient Inbox acceptance or contained handoff failure.
    */
   publishReactorEvent(event: Event): Promise<void> {
     const snapshot = clone(EventSchema, event);

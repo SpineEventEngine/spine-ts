@@ -232,7 +232,7 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
   /**
    * Writes histories and delivery Events before the current Entity record.
    *
-   * A failed save may leave a completed prefix. One transient retry replays
+   * A failed save may leave a completed prefix. One transient retry repeats
    * captured records with the same versions and Event IDs.
    *
    * @typeParam I Entity identifier type.
@@ -767,7 +767,7 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
    * Determines whether a Datastore abort occurred through provider error causes.
    *
    * @param error Supplies the operation failure.
-   * @returns Whether one captured-input replay is safe.
+   * @returns Whether one retry of the captured input is safe.
    */
   private retryable(error: unknown): boolean {
     let current = error;

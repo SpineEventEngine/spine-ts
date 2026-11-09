@@ -19,12 +19,13 @@ tenants, reject unknown/missing tenant requests, validate persisted memberships
 against routing before listening, and prove restart persistence before reseeding.
 Restart acceptance includes recovery of pending durable delivery work from an
 interrupted launch after its shard lease becomes eligible for takeover, with
-new Commands progressing alongside recovery and committed follow-up Events
-published during normal recovery. A still-valid lease is respected even after
-its process exits; local synchronous delivery can report a failed acknowledgement
-while the durable Command remains pending. Preserve existing acknowledgement, tracked
-best-effort publication, tenant selection and shutdown guarantees; this does not
-add durable Event republishing or historical Projection repair.
+new Commands being accepted alongside recovery. A still-valid lease is respected
+even after its process exits: a new Command can be accepted into its durable
+Inbox while handler execution waits for lease takeover. After a recovered
+Command commits, its handler awaits one outgoing Event bus handoff attempt before
+source acknowledgement. Preserve existing acknowledgement, one-attempt
+publication, tenant selection and shutdown guarantees; this does not add durable
+Event republishing or historical Projection repair.
 Use provider-neutral Orders names, retain fixed topology and existing load levels,
 and add no browser UI or authentication to Orders. Fresh generated run identifiers
 prevent repeated loads from overwriting prior runs. No database-reset behavior.

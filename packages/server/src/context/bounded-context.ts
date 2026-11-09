@@ -305,13 +305,6 @@ interface RepositoryRegistration {
  */
 interface RegisteredEntityInbox extends EntityInbox {
   /**
-   * Waits for callbacks already accepted by exact local handoffs.
-   *
-   * @returns Completion after all accepted callbacks settle.
-   */
-  whenFollowUpsIdle(): Promise<void>;
-
-  /**
    * Registers an Aggregate or Process Manager target for local delivery.
    *
    * @param target Target delivery metadata.
@@ -361,11 +354,11 @@ export interface ContextDeliveryDescriptor {
   /**
    * Dispatches a durable inbox message through its registered target.
    *
-   * @param message Contains the delivery message to replay.
+   * @param message Contains the stored Inbox message to deliver.
    * @param tenantId Identifies the delivery tenant when the context is multitenant.
-   * @returns A promise that resolves after the message is replayed.
+   * @returns Completion after the recipient processes the message.
    */
-  replay(message: DeliveryEndpointMessage, tenantId?: TenantId): Promise<void>;
+  deliver(message: DeliveryEndpointMessage, tenantId?: TenantId): Promise<void>;
 }
 
 /**
@@ -426,7 +419,7 @@ export interface EventEndpoint {
 }
 
 /**
- * Tenant-scoped options for the legacy-named local read-side reset/replay helper.
+ * Tenant-scoped options for the local read-side reset helper.
  *
  * Single-tenant contexts reject `tenantId`. Multitenant contexts require a
  * complete generated `tenantId` and preserve its typed identity.
@@ -441,9 +434,9 @@ export interface ReadCatchUpOptions {
 }
 
 /**
- * Summary from one legacy-named local read-side reset/replay run.
+ * Summary from one local read-side reset run.
  *
- * The replay boundary covers only already-stored events routed to registered
+ * The catch-up boundary covers only already-stored events routed to registered
  * projection subscribers after `Stand.clear()` removes the target projection
  * rows for the selected tenant slice.
  */
@@ -453,23 +446,23 @@ export interface ReadCatchUpResult {
   /**
    * Number of already-stored events dispatched to at least one projection subscriber.
    */
-  readonly replayedEventCount: number;
+  readonly processedEventCount: number;
 
   /**
-   * Number of cleared projection-state rows before replay.
+   * Number of cleared projection-state rows before catch-up dispatch.
    */
   readonly clearedEntityCount: number;
 
   /**
-   * Unique projection state type URLs cleared once before replay.
+   * Unique projection state type URLs cleared once before catch-up dispatch.
    */
   readonly clearedStateTypes: readonly string[];
 }
 
 /**
- * Stable reason code attached to failures while validating or dispatching a stored read-side replay event.
+ * Stable reason code attached to failures while processing a stored read-side catch-up Event.
  */
-type CatchUpReplayCode = "READ_SIDE_CATCH_UP_REPLAY_FAILED";
+type CatchUpDispatchCode = "READ_SIDE_CATCH_UP_DISPATCH_FAILED";
 
 /**
  * Error thrown when a bounded context name cannot be accepted.
@@ -577,7 +570,7 @@ const contextClosePhases = new WeakMap<
   {
     readonly begin: () => void;
     readonly drain: () => Promise<void>;
-    readonly trackReplay: (onReplay: () => Promise<void>) => Promise<void>;
+    readonly trackDelivery: (onDelivery: () => Promise<void>) => Promise<void>;
   }
 >();
 const contextIntegrations = new WeakMap<
@@ -646,13 +639,13 @@ interface BoundedContextAccess {
   ): Promise<void>;
 
   /**
-   * Registers an entered shared replay through its complete callback.
+   * Registers an entered Inbox delivery through its complete callback.
    *
    * @param context Selected Bounded Context.
-   * @param onReplay Complete replay callback.
+   * @param onDelivery Complete delivery callback.
    * @returns Completion of the captured callback.
    */
-  trackReplay(context: BoundedContext, onReplay: () => Promise<void>): Promise<void>;
+  trackDelivery(context: BoundedContext, onDelivery: () => Promise<void>): Promise<void>;
 
   /**
    * Resolves an original or Bounded Context-issued copy-safe repository view.
@@ -1018,7 +1011,7 @@ export class BoundedContext {
 
   readonly #agentReservations = new Set<Promise<void>>();
 
-  readonly #activeReplays = new Set<Promise<void>>();
+  readonly #activeDeliveries = new Set<Promise<void>>();
 
   readonly #activePreparations = new Set<Promise<void>>();
 
@@ -1107,7 +1100,7 @@ export class BoundedContext {
       this.#admitTenant(command.context?.actorContext?.tenantId),
     );
     eventBusAccess.setAdmission(this.#eventBus, (event) =>
-      this.#admitTenant(ContextParts.readReplayTenant(event)),
+      this.#admitTenant(ContextParts.readCatchUpTenant(event)),
     );
     standAccess.setAdmission(this.#stand, (tenantId) => this.#admitTenant(tenantId));
     standAccess.setPublicAdmission(this.#stand, () => {
@@ -1411,8 +1404,8 @@ export class BoundedContext {
     );
     deliveryReadiness.configureDirect((message, tenantId) =>
       message.label === "UPDATE_SUBSCRIBER"
-        ? projectionInbox.replay(message, tenantId)
-        : entityInbox.replay(message, tenantId),
+        ? projectionInbox.deliver(message, tenantId)
+        : entityInbox.deliver(message, tenantId),
     );
     return { deliveryReadiness, tenantIndex, entityInbox, projectionInbox };
   }
@@ -1465,7 +1458,7 @@ export class BoundedContext {
         this.#beginClose();
       },
       drain: () => this.#drainWork(),
-      trackReplay: (onReplay) => this.#trackReplay(onReplay),
+      trackDelivery: (onDelivery) => this.#trackDelivery(onDelivery),
     });
     contextDeliveryDescriptors.set(
       this,
@@ -1763,7 +1756,7 @@ export class BoundedContext {
   }
 
   /**
-   * Clears and locally replays every registered Projection from already-stored events.
+   * Clears registered Projection state and processes already-stored Events locally.
    *
    * Despite its legacy name, this method is not Projection catch-up. It is a
    * process-local maintenance helper and provides no Projection targeting,
@@ -1773,7 +1766,7 @@ export class BoundedContext {
    * Supported boundary:
    * - projection subscribers only;
    * - already-stored events only;
-   * - clear then replay, with no event re-append;
+   * - clear then dispatch stored Events, with no event re-append;
    * - single-tenant contexts reject `tenantId`;
    * - multitenant contexts require the exact non-blank `tenantId`;
    * - process-local sequential execution on the same EventBus runtime queue as
@@ -1785,7 +1778,7 @@ export class BoundedContext {
    * - durable live-traffic catch-up orchestration across processes.
    *
    * @param options Selects the tenant slice to rebuild.
-   * @returns Resolves to replay and clear counts for the selected slice.
+   * @returns Dispatch and clear counts for the selected slice.
    */
   async catchUpReadSide(options: ReadCatchUpOptions = {}): Promise<ReadCatchUpResult> {
     return eventBusAccess.runExclusive(this.#eventBus, () => this.#catchUpReadSideOnce(options));
@@ -1793,7 +1786,7 @@ export class BoundedContext {
 
   /**
    * Clears registered Projection state for the selected tenant slice, reads stored events,
-   * validates each event’s tenant, and dispatches replay sequentially.
+   * validates each Event’s tenant, and dispatches stored Events sequentially.
    */
   async #catchUpReadSideOnce(options: ReadCatchUpOptions): Promise<ReadCatchUpResult> {
     const storageContext = ContextParts.catchUpStorageContext(this.#snapshot.spec, options);
@@ -1802,7 +1795,7 @@ export class BoundedContext {
     const clearTargets = ContextParts.projectionStateClearTargets(projections);
     const clearedStateTypes: string[] = [];
     let clearedEntityCount = 0;
-    let replayedEventCount = 0;
+    let processedEventCount = 0;
 
     for (const target of clearTargets) {
       clearedEntityCount += await this.#stand.clear(target.schema, tenantOptions);
@@ -1813,19 +1806,19 @@ export class BoundedContext {
 
     for (const event of events) {
       try {
-        ContextParts.validateReplayTenant(storageContext, event);
-        replayedEventCount += await ContextParts.dispatchStoredProjectionEvent(
+        ContextParts.validateCatchUpTenant(storageContext, event);
+        processedEventCount += await ContextParts.dispatchStoredProjectionEvent(
           projections,
           event,
           true,
         );
       } catch (error) {
-        throw ContextParts.catchUpReplayError(event, error);
+        throw ContextParts.catchUpDispatchError(event, error);
       }
     }
 
     return Object.freeze({
-      replayedEventCount,
+      processedEventCount,
       clearedEntityCount,
       clearedStateTypes: Object.freeze(clearedStateTypes),
     });
@@ -1916,7 +1909,7 @@ export class BoundedContext {
   }
 
   /**
-   * Settles entered replay, local follow-ups, and reserved Agent turns.
+   * Settles entered deliveries, outgoing handoffs, and reserved Agent turns.
    * @param errors Collects independent close failures.
    */
   async #drainAdmittedContextWork(errors: unknown[]): Promise<void> {
@@ -1925,10 +1918,9 @@ export class BoundedContext {
       errors,
     );
     await this.#closePart(
-      () => Promise.allSettled([...this.#activeReplays]).then(() => undefined),
+      () => Promise.allSettled([...this.#activeDeliveries]).then(() => undefined),
       errors,
     );
-    await this.#closePart(() => this.#entityInbox.whenFollowUpsIdle(), errors);
     await this.#closePart(
       () => Promise.allSettled([...this.#agentReservations]).then(() => undefined),
       errors,
@@ -1968,18 +1960,18 @@ export class BoundedContext {
   }
 
   /**
-   * Registers an entered shared replay through handler processing and follow-up registration.
-   * @param onReplay Replays the message and registers any returned follow-up.
-   * @returns Completion after the replay callback returns.
+   * Registers an entered Inbox delivery through recipient processing and outgoing handoff.
+   * @param onDelivery Delivers the stored message.
+   * @returns Completion after the delivery callback returns.
    */
-  #trackReplay(onReplay: () => Promise<void>): Promise<void> {
-    const replay = Promise.resolve().then(onReplay);
-    this.#activeReplays.add(replay);
-    void replay.then(
-      () => this.#activeReplays.delete(replay),
-      () => this.#activeReplays.delete(replay),
+  #trackDelivery(onDelivery: () => Promise<void>): Promise<void> {
+    const delivery = Promise.resolve().then(onDelivery);
+    this.#activeDeliveries.add(delivery);
+    void delivery.then(
+      () => this.#activeDeliveries.delete(delivery),
+      () => this.#activeDeliveries.delete(delivery),
     );
-    return replay;
+    return delivery;
   }
 
   /**
@@ -2044,7 +2036,7 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     const phase = contextClosePhases.get(context);
     if (prepare === undefined || phase === undefined)
       return Promise.reject(new TypeError("Service input requires a built context."));
-    return phase.trackReplay(async () => {
+    return phase.trackDelivery(async () => {
       await onMembership();
       await prepare(tenantId);
       await onReady?.();
@@ -2067,17 +2059,17 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     const phase = contextClosePhases.get(context);
     if (phase === undefined)
       return Promise.reject(new TypeError("Service registry requires a built context."));
-    return phase.trackReplay(onOperation);
+    return phase.trackDelivery(onOperation);
   },
 
   /**
-   * Registers replay work with the context close lifecycle so shutdown waits for it.
+   * Registers entered delivery work with the context close lifecycle.
    */
-  trackReplay(context: BoundedContext, onReplay: () => Promise<void>): Promise<void> {
+  trackDelivery(context: BoundedContext, onDelivery: () => Promise<void>): Promise<void> {
     const phase = contextClosePhases.get(context);
     if (phase === undefined)
-      return Promise.reject(new TypeError("Replay requires a built context."));
-    return phase.trackReplay(onReplay);
+      return Promise.reject(new TypeError("Delivery requires a built context."));
+    return phase.trackDelivery(onDelivery);
   },
 
   /**
@@ -2106,7 +2098,7 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
   },
 
   /**
-   * Waits for accepted runtime work and replay operations to finish.
+   * Waits for accepted runtime work and entered delivery operations to finish.
    */
   drainWork(context: BoundedContext): Promise<void> {
     const phase = contextClosePhases.get(context);
@@ -3364,7 +3356,7 @@ interface PreparedRepository {
 const registeredRepositories = new WeakMap<RepositoryView, RepositoryOwner>();
 
 /**
- * Pairs a registered Projection dispatcher with its Entity state schema for replay dispatch.
+ * Pairs a registered Projection dispatcher with its Entity state schema for catch-up dispatch.
  */
 interface ProjectionDispatch {
   readonly repository: RepositoryView;
@@ -3375,7 +3367,7 @@ interface ProjectionDispatch {
 }
 
 /**
- * Identifies a Projection state schema and type URL whose rows must be cleared before replay.
+ * Identifies a Projection state schema and type URL whose rows are cleared before catch-up.
  */
 interface ProjectionStateClearTarget {
   readonly schema: DescriptorMessageSchema;
@@ -3383,32 +3375,32 @@ interface ProjectionStateClearTarget {
 }
 
 /**
- * Carries the stored event identity and underlying failure used to report a replay error.
+ * Carries the stored Event identity and bounded failure details for catch-up.
  */
-interface CatchUpReplayDetail {
+interface CatchUpDispatchDetail {
   readonly name: string;
   readonly message: string;
 }
 
 /**
- * Reports failure while redispatching a stored event during read-side replay.
+ * Reports failure while dispatching a stored Event during read-side catch-up.
  */
-class CatchUpReplayError extends Error {
-  readonly code: CatchUpReplayCode = "READ_SIDE_CATCH_UP_REPLAY_FAILED";
+class CatchUpDispatchError extends Error {
+  readonly code: CatchUpDispatchCode = "READ_SIDE_CATCH_UP_DISPATCH_FAILED";
 
   readonly eventId: string;
 
-  readonly detail: CatchUpReplayDetail;
+  readonly detail: CatchUpDispatchDetail;
 
   /**
-   * Creates a replay error tied to the stored event that failed.
+   * Creates a catch-up error tied to the stored Event that failed.
    *
    * @param eventId Identifies the stored event.
    * @param detail Contains the bounded cause name and message.
    */
-  constructor(eventId: string, detail: CatchUpReplayDetail) {
+  constructor(eventId: string, detail: CatchUpDispatchDetail) {
     super(`Read-side catch-up failed for stored event "${eventId}".`);
-    this.name = "ReadCatchUpReplayError";
+    this.name = "ReadSideCatchUpDispatchError";
     this.eventId = eventId;
     this.detail = detail;
     Object.setPrototypeOf(this, new.target.prototype);
@@ -3416,7 +3408,7 @@ class CatchUpReplayError extends Error {
 }
 
 /**
- * Assembles private bounded-context lifecycle and replay details.
+ * Assembles private bounded-context lifecycle and catch-up details.
  */
 const ContextParts = Object.freeze({
   /**
@@ -3915,7 +3907,7 @@ const ContextParts = Object.freeze({
    * @param event Imported event to validate.
    */
   validateImportedTenant(context: BoundedContext, event: Event): void {
-    const tenantId = ContextParts.readReplayTenant(event);
+    const tenantId = ContextParts.readCatchUpTenant(event);
     if (!context.isMultitenant) {
       if (tenantId !== undefined) {
         throw new Error(`Single-tenant context "${context.name.value}" does not accept tenantId.`);
@@ -4397,10 +4389,10 @@ const ContextParts = Object.freeze({
   ): ContextDeliveryDescriptor {
     return Object.freeze<ContextDeliveryDescriptor>({
       endpoints: () => Object.freeze([...entityInbox.endpoints(), ...projections.endpoints()]),
-      replay: (message, tenantId) =>
+      deliver: (message, tenantId) =>
         message.label === "UPDATE_SUBSCRIBER"
-          ? projections.replay(message, tenantId)
-          : entityInbox.replay(message, tenantId),
+          ? projections.deliver(message, tenantId)
+          : entityInbox.deliver(message, tenantId),
     });
   },
 
@@ -4728,14 +4720,14 @@ const ContextParts = Object.freeze({
    * @param context Catch-up storage context.
    * @param event Stored event to validate.
    */
-  validateReplayTenant(context: StorageContext, event: Event): void {
+  validateCatchUpTenant(context: StorageContext, event: Event): void {
     if (!context.multitenant) {
       return;
     }
 
     const expectedTenantId = context.tenantId;
 
-    const envelopeTenantId = ContextParts.readReplayTenant(event);
+    const envelopeTenantId = ContextParts.readCatchUpTenant(event);
     if (envelopeTenantId === undefined) {
       throw new Error("Read-side catch-up requires stored event envelope tenant.");
     }
@@ -4750,7 +4742,7 @@ const ContextParts = Object.freeze({
    * @param event Event whose origin is inspected.
    * @returns Cloned tenant ID when present.
    */
-  readReplayTenant(event: Event): TenantId | undefined {
+  readCatchUpTenant(event: Event): TenantId | undefined {
     switch (event.context?.origin.case) {
       case "importContext":
         return ContextParts.tenantIdValue(event.context.origin.value.tenantId);
@@ -4807,16 +4799,16 @@ const ContextParts = Object.freeze({
   },
 
   /**
-   * Creates a replay error with the event ID and bounded cause details.
+   * Creates a catch-up error with the Event ID and bounded cause details.
    *
    * @param event Event that failed.
-   * @param cause Thrown replay cause.
-   * @returns Replay error.
+   * @param cause Thrown catch-up cause.
+   * @returns Catch-up error.
    */
-  catchUpReplayError(event: Event, cause: unknown): Error {
-    return new CatchUpReplayError(
+  catchUpDispatchError(event: Event, cause: unknown): Error {
+    return new CatchUpDispatchError(
       event.id?.value ?? "(missing)",
-      ContextParts.catchUpReplayDetail(cause),
+      ContextParts.catchUpDispatchDetail(cause),
     );
   },
 
@@ -4837,7 +4829,7 @@ const ContextParts = Object.freeze({
    * @param error Thrown value.
    * @returns Immutable bounded details.
    */
-  catchUpReplayDetail(error: unknown): CatchUpReplayDetail {
+  catchUpDispatchDetail(error: unknown): CatchUpDispatchDetail {
     if (error instanceof Error) {
       return Object.freeze({
         name: ContextParts.boundedErrorString(error.name, errorDetailLimit) || "Error",

@@ -19,7 +19,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
  */
 export interface ReceptionObservation {
   /**
-   * Whether the callback entered framework-managed replay.
+   * Whether the callback entered framework-managed delivery.
    */
   managed: boolean;
 
@@ -37,7 +37,7 @@ export interface ReceptionObservation {
 const attempts = new AsyncLocalStorage<ReceptionObservation>();
 
 /**
- * Distinguishes managed handler and output failures from replay infrastructure failures.
+ * Distinguishes managed handler and output failures from delivery infrastructure failures.
  */
 export const receptionObservation = {
   /**
@@ -62,7 +62,7 @@ export const receptionObservation = {
   },
 
   /**
-   * Marks the current callback as framework-managed replay.
+   * Marks the current callback as framework-managed delivery.
    */
   markManaged(): void {
     const attempt = attempts.getStore();

@@ -46,12 +46,12 @@ describe("Wave 13 external receptor origin", () => {
       .build();
     try {
       await context.eventBus().post(event(true));
-      expect(Wave13OriginProjection.domesticContexts).toEqual([]);
-      expect(Wave13OriginProjection.externalContexts).toHaveLength(1);
     } finally {
       await context.close();
       registry.clear();
     }
+    expect(Wave13OriginProjection.domesticContexts).toEqual([]);
+    expect(Wave13OriginProjection.externalContexts).toHaveLength(1);
   });
   it("RED-04 excludes domestic events from an external receptor", async () => {
     const registry = createWave13OriginRegistry();
@@ -61,12 +61,12 @@ describe("Wave 13 external receptor origin", () => {
       .build();
     try {
       await context.eventBus().post(event(false));
-      expect(Wave13OriginProjection.domesticContexts).toHaveLength(1);
-      expect(Wave13OriginProjection.externalContexts).toEqual([]);
     } finally {
       await context.close();
       registry.clear();
     }
+    expect(Wave13OriginProjection.domesticContexts).toHaveLength(1);
+    expect(Wave13OriginProjection.externalContexts).toEqual([]);
   });
   it("RED-17 rejects external command receivers while retaining external event command methods", async () => {
     expectWave13ContractToCompile(publicOriginContract);

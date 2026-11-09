@@ -46,6 +46,7 @@ import {
   type SpineMetadata,
 } from "@spine-event-engine/server/spi/handler-registry";
 import { spineMetadataTestAccess } from "../../dist/handler/spine-metadata-inventory.js";
+import { serverEnvironmentAccess } from "../../dist/server/server-environment.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -501,6 +502,7 @@ describe("Wave 13 IntegrationBroker", () => {
       await consumerIndex.keep(tenantB);
       await p.eventBus().post(event(ReviewTaskAssignedSchema, "a", "tenant-a"));
       await p.eventBus().post(event(ReviewTaskAssignedSchema, "b", "tenant-b"));
+      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
       expect(ReviewTaskAssignedOriginProjection.externalContexts.map(tenantValue)).toEqual([
         "tenant-a",
         "tenant-b",

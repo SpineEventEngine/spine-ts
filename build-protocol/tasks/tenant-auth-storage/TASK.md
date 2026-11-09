@@ -119,3 +119,23 @@ corrections: stale cleanup-function declarations and the current completion-plan
 direction. Both were corrected; cleanup enforcement, formatting and diff checks
 passed afterward. The final release profile, coverage, and integration status
 remain pending in the wider correction wave.
+
+## Correction wave: immediate Inbox delivery
+
+This high-risk shared-runtime slice follows the approved delivery architecture
+report retained with the implementation evidence.
+The retained Inbox and Delivery machinery is the implementation seam. Local
+shared Entity and Projection reception now returns after the durable write while
+registering selected local work for later processing and close drainage. Remote
+supervised reception remains write-and-notify. Process Manager and Aggregate
+callbacks await one outgoing bus handoff attempt after persistence; generated
+Commands, committed Events, reactor Events, and declared rejection Events have
+focused red-then-green behavior tests. Publication uses the existing source
+commit-fence escape so child work does not inherit the source shard guard.
+
+Focused context tests, four repository handoff tests, and `tsc -b packages/server`
+passed. A broad routing diagnostic exposed superseded assertions that assume
+post completion implies handler completion, and a broad Inbox diagnostic exposed
+exact-drain completion expectations. Both diagnostics are recorded externally;
+the acceptance-compatible tests and lifecycle/failure checks are still being
+reconciled. No release profile or coverage claim is made yet.

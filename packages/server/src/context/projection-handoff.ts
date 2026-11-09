@@ -32,7 +32,7 @@ import {
 const projectionLabels = ["UPDATE_SUBSCRIBER"] as const;
 
 /**
- * Persists and replays delivery rows for projection subscribers.
+ * Persists and delivers delivery rows for projection subscribers.
  */
 export class LocalProjectionInbox implements ProjectionInbox {
   readonly #contextName: string;
@@ -57,7 +57,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
    * Creates a local projection inbox.
    * @param contextName Names the bounded context that owns this inbox.
    * @param readiness Coordinates delivery readiness after persistence.
-   * @param onAdmit Checks current tenant membership before persistence or replay.
+   * @param onAdmit Checks current tenant membership before persistence or delivery.
    */
   constructor(
     contextName: string,
@@ -71,7 +71,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
   }
 
   /**
-   * Registers a target that replays projection messages.
+   * Registers a target that delivers projection messages.
    * @param target Handles messages for one projection type.
    */
   register(target: ProjectionInboxTarget): void {
@@ -98,20 +98,20 @@ export class LocalProjectionInbox implements ProjectionInbox {
 
   /**
    * Dispatches a durable inbox row through its projection target.
-   * @param message Contains the persisted inbox row to replay.
+   * @param message Contains the persisted Inbox row to deliver.
    * @param deliveryTenantId Identifies the tenant that owns the row when present.
-   * @returns A promise that resolves after the inbox row is replayed.
+   * @returns A promise that resolves after the inbox row is delivered.
    */
-  replay(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void> {
-    return this.#replay(message, deliveryTenantId);
+  deliver(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void> {
+    return this.#deliver(message, deliveryTenantId);
   }
 
   /**
-   * Persists and drains one projection inbox message.
-   * @param delivery Stores and drains the inbox row.
+   * Persists one projection Inbox message and schedules eligible delivery.
+   * @param delivery Stores the Inbox row and schedules eligible delivery.
    * @param input Describes the message to persist.
    * @param deliveryTenantId Identifies the tenant that owns the message when present.
-   * @returns Resolves to the persisted inbox row.
+   * @returns Resolves after the Inbox row is persisted and eligible delivery is scheduled.
    */
   async receive(
     delivery: Delivery,
@@ -134,12 +134,13 @@ export class LocalProjectionInbox implements ProjectionInbox {
     await this.#onAdmit(deliveryTenantId);
     const written = await this.#writeInboxRow(delivery, input);
     this.#trackMessage(written.message);
-    try {
-      await this.#drainWritten(delivery, written.message, deliveryTenantId);
-      return written.message;
-    } finally {
-      this.#untrackMessage(written.message);
-    }
+    const processing = this.#drainWritten(delivery, written.message, deliveryTenantId);
+    void processing
+      .finally(() => {
+        this.#untrackMessage(written.message);
+      })
+      .catch(() => undefined);
+    return written.message;
   }
 
   #writeInboxRow(delivery: Delivery, input: ProjectionInput): Promise<InboxWriteResult> {
@@ -183,7 +184,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
       delivery,
       received: message,
       node: this.#contextName,
-      onReplay: (next) => this.#replay(next, deliveryTenantId),
+      onDispatch: (next) => this.#deliver(next, deliveryTenantId),
       acceptMessage: (next) =>
         deliveryTenantKey(next) === deliveryTenantKey(message) &&
         (InboxHandoff.sameMessageId(next.id, message.id) ||
@@ -191,7 +192,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
       onResolved: (next) => {
         this.#recordAcknowledgement(next);
       },
-      replayFailureMessage: "Projection inbox replay failed.",
+      deliveryFailureMessage: "Projection inbox delivery failed.",
       skippedMessage: "Projection inbox delivery was skipped before the target row was delivered.",
       unfinishedMessage:
         "Projection inbox delivery did not reach the target row before the local drain finished.",
@@ -222,7 +223,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
     return this.#nextVersion;
   }
 
-  async #replay(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void> {
+  async #deliver(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void> {
     receptionObservation.markManaged();
     LocalProjectionInbox.#assert(message);
     await this.#onAdmit(deliveryTenantId);
@@ -235,7 +236,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
       );
     }
 
-    await target.replay(message, deliveryTenantId);
+    await target.deliver(message, deliveryTenantId);
   }
 
   static #assert(message: InboxMessage): asserts message is ProjectionMessage {
@@ -244,11 +245,11 @@ export class LocalProjectionInbox implements ProjectionInbox {
     }
     if (message.status !== "TO_DELIVER") {
       throw new Error(
-        `BoundedContext delivery cannot replay projection inbox message with status "${message.status}".`,
+        `BoundedContext delivery cannot deliver projection inbox message with status "${message.status}".`,
       );
     }
   }
 }
 
 type ProjectionInput = Parameters<ProjectionInbox["receive"]>[1];
-type ProjectionMessage = Parameters<ProjectionInboxTarget["replay"]>[0];
+type ProjectionMessage = Parameters<ProjectionInboxTarget["deliver"]>[0];

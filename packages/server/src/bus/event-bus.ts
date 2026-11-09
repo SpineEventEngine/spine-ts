@@ -352,8 +352,13 @@ export class EventBus {
   /**
    * Posts an event for asynchronous dispatch.
    *
+   * Repository-backed Entity recipients complete dispatch after their Inbox
+   * receipt is stored and eligible delivery is scheduled. Handler processing
+   * may continue after this promise resolves. Other registered dispatchers
+   * determine completion through their own dispatch promises.
+   *
    * @param event the event envelope to post.
-   * @returns A promise that settles after admission and dispatch complete and may reject.
+   * @returns Completion or failure of admission and registered dispatcher handoff.
    */
   post(event: Event): Promise<void> {
     const accepted = clone(EventSchema, event);

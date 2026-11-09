@@ -667,8 +667,8 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
         : { strategy: deliveryStrategyAccess.snapshot(this.#deliveryStrategy) }),
       ...(ports ?? {}),
     });
-    delivery.setReplay(
-      (message) => this.#replayMessage(message),
+    delivery.setDispatcher(
+      (message) => this.#deliverMessage(message),
       (message) => this.#acceptsMessage(message),
     );
     this.#delivery = delivery;
@@ -695,7 +695,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     const supervisor = new DeliverySupervisor({
       source,
       delivery,
-      onMessage: (message) => this.#replayMessage(message),
+      onMessage: (message) => this.#deliverMessage(message),
     });
     deliverySupervisorAccess.installAdmission(supervisor, (message) =>
       this.#acceptsMessage(message),
@@ -750,16 +750,16 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   }
 
   /**
-   * Replays a persisted Delivery inbox message through the matching context recipient and signals
+   * Delivers a persisted Inbox message through the matching context recipient and signals
    * completion or failure.
    */
-  async #replayMessage(message: InboxMessage): Promise<void> {
+  async #deliverMessage(message: InboxMessage): Promise<void> {
     const context = EnvironmentContextRegistrations.forEnvironment(this).recipient(
       message.inboxId.targetTypeUrl,
     );
     if (context === undefined) throw new Error("No open Bounded Context serves the Inbox target.");
-    await boundedContextAccess.trackReplay(context, () =>
-      boundedContextAccess.delivery(context).replay(message, deliveryTenant(message)),
+    await boundedContextAccess.trackDelivery(context, () =>
+      boundedContextAccess.delivery(context).deliver(message, deliveryTenant(message)),
     );
   }
 }

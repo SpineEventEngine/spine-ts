@@ -22,7 +22,7 @@ import type { AgentHistoryScope } from "./agent-history.js";
 import { AgentLiveBudget } from "./agent-live-budget.js";
 
 /**
- * Sequences live Agent reads without durable snapshots or replay.
+ * Sequences live Agent reads without durable snapshots or recorded-operation restart.
  */
 export class AgentLiveReadRuntime {
   #pending = 0;

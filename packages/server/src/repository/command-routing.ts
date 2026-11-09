@@ -39,7 +39,7 @@ import {
  *   the framework supplies the default generated `CommandContext` value.
  * @param repository Invocation-scoped read-only access to the receiving repository.
  * The route must be deterministic and side-effect-free. The framework invokes
- * it once for each accepted admission, and durable replay uses the stored
+ * it once for each accepted admission, and durable Inbox delivery uses the stored
  * target instead of invoking it again.
  *
  * @returns Target Entity ID.
@@ -166,7 +166,7 @@ export class CommandRouting<Id, EntityType extends RepositoryEntityType = Reposi
    *
    * Copied or malformed tokens fail during declaration. Every token member must
    * be registered by the repository, or construction fails. The selected route
-   * runs once for an accepted admission; durable replay uses stored targets and
+   * runs once for an accepted admission; durable Inbox delivery uses stored targets and
    * does not run routing again.
    *
    * @param schemaOrToken Generated Command schema or nominal message-interface token.

@@ -802,7 +802,7 @@ export class AgentLiveAiRuntime implements AgentAi {
   }
 
   /**
-   * Completes measured response bytes without replay state.
+   * Completes measured response bytes without recorded state.
    *
    * @param attempts Physical attempt state for this invocation.
    * @param audit Retained history audit for this invocation.

@@ -111,6 +111,15 @@ A failed handler leaves previous persisted state unchanged and
 suppresses produced output. An external HTTP request or other side effect may
 already have happened.
 
+Repository-backed Command and Event posting resolves after recipient Inbox
+writes. Delivery starts immediately and handles the stored row separately, so
+successful posting does not mean the handler has completed. Restart durability
+depends on the configured storage provider; custom dispatchers define their own
+completion contract. A committed Entity awaits one outgoing handoff attempt for
+handler-produced domain Commands and Events. A failed attempt is reported without
+rerunning successful source handling. Internal diagnostic publication remains
+best effort.
+
 Handler return declarations can use native unions for one of several results,
 or fixed tuples for several ordered results. For example,
 `CreateAccessGrant | ExtendAccessGrant` selects one Command, while

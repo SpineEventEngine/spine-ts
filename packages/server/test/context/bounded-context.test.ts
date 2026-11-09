@@ -192,7 +192,7 @@ interface InternalDeliveryEndpoint {
 
 interface InternalDeliveryDescriptor {
   endpoints(): readonly InternalDeliveryEndpoint[];
-  replay(message: InboxMessage, tenantId?: string): Promise<void>;
+  deliver(message: InboxMessage, tenantId?: string): Promise<void>;
 }
 
 type ProjectState = Message<"ProjectState"> & {
@@ -206,7 +206,7 @@ const { ProjectOverviewStateSchema, ProjectStateSchema } =
 
 class TaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
 class DuplicateTaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
-class ReplayTaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {
+class DeliveryTaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   assignTask(command: AssignReviewTask): ReviewStarted {
     this.update((draft) =>
       Object.assign(
@@ -350,14 +350,14 @@ class ConfiguredTaskAssignment extends GeneratedTaskProcessManager {
   }
 }
 
-class ReplayTaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {
+class DeliveryTaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   assignTask(command: ScheduleReviewTask): ReviewStarted {
     this.update((draft) =>
       Object.assign(
         draft,
         create(ProcessManagerStateSchema, {
           id: command.id,
-          queue: `${command.name} command replayed`,
+          queue: `${command.name} command delivered`,
         }),
       ),
     );
@@ -370,7 +370,7 @@ class ReplayTaskProcessManager extends ProcessManager<string, typeof ProcessMana
         draft,
         create(ProcessManagerStateSchema, {
           id: event.id,
-          queue: `${event.name} event replayed`,
+          queue: `${event.name} event delivered`,
         }),
       ),
     );
@@ -500,6 +500,7 @@ describe("BoundedContext assembly", () => {
       await context
         .commandBus()
         .post(createAggregateCommand("generated-service-2", "generated-service"));
+      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
       expect(seen).toEqual([0, 1]);
       await expect(
         context.stand().read(ProcessManagerStateSchema, "generated-service"),
@@ -1010,15 +1011,15 @@ describe("BoundedContext assembly", () => {
       ),
       {
         receiverKind: "entity",
-        receiverType: ReplayTaskAggregate,
-        ...aggregateReplayRegistry(ReplayTaskAggregate),
+        receiverType: DeliveryTaskAggregate,
+        ...aggregateDeliveryRegistry(DeliveryTaskAggregate),
       },
     ]);
     const build = () =>
       BoundedContext.singleTenant("OrdinaryHandoffClose")
 
         .addCommandDispatcher(new StandaloneCommander())
-        .add(ReplayTaskAggregate)
+        .add(DeliveryTaskAggregate)
         .build();
     const first = await build();
     const durable = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
@@ -1230,18 +1231,18 @@ describe("BoundedContext assembly", () => {
     }
   });
 
-  it("replays nonzero-shard Aggregate and Process Manager descriptor rows", async () => {
+  it("delivers nonzero-shard Aggregate and Process Manager descriptor rows", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const strategy = UniformAcrossAllShards.forNumber(3);
     await configureDelivery(storageFactory, strategy);
     createGeneratedRegistryFixture([
-      aggregateReplayRegistry(ReplayTaskAggregate),
-      replayProcessManagerRegistry(ReplayTaskProcessManager),
+      aggregateDeliveryRegistry(DeliveryTaskAggregate),
+      deliveryProcessManagerRegistry(DeliveryTaskProcessManager),
     ]);
-    const context = await BoundedContext.singleTenant("DescriptorReplay")
+    const context = await BoundedContext.singleTenant("DescriptorDelivery")
 
-      .add(ReplayTaskAggregate)
-      .add(ReplayTaskProcessManager)
+      .add(DeliveryTaskAggregate)
+      .add(DeliveryTaskProcessManager)
       .build();
     try {
       const descriptor = internalDeliveryDescriptor(context);
@@ -1285,9 +1286,9 @@ describe("BoundedContext assembly", () => {
         shard: strategy.shardFor(Identifiers.pack("string", eventId), processManagerType),
       });
 
-      await descriptor.replay(aggregateRow);
-      await descriptor.replay(processManagerCommandRow);
-      await descriptor.replay(processManagerEventRow);
+      await descriptor.deliver(aggregateRow);
+      await descriptor.deliver(processManagerCommandRow);
+      await descriptor.deliver(processManagerEventRow);
 
       await expect(context.stand().read(ProjectStateSchema, aggregateId)).resolves.toMatchObject({
         id: aggregateId,
@@ -1297,12 +1298,12 @@ describe("BoundedContext assembly", () => {
         context.stand().read(ProcessManagerStateSchema, commandId),
       ).resolves.toMatchObject({
         id: commandId,
-        queue: "Task Ready command replayed",
+        queue: "Task Ready command delivered",
       });
       await expect(context.stand().read(ProcessManagerStateSchema, eventId)).resolves.toMatchObject(
         {
           id: eventId,
-          queue: "Task event replayed",
+          queue: "Task event delivered",
         },
       );
     } finally {
@@ -1315,13 +1316,13 @@ describe("BoundedContext assembly", () => {
     const strategy = UniformAcrossAllShards.forNumber(3);
     await configureDelivery(storageFactory, strategy);
     createGeneratedRegistryFixture([
-      aggregateReplayRegistry(ReplayTaskAggregate),
-      replayProcessManagerRegistry(ReplayTaskProcessManager),
+      aggregateDeliveryRegistry(DeliveryTaskAggregate),
+      deliveryProcessManagerRegistry(DeliveryTaskProcessManager),
     ]);
     const context = await BoundedContext.singleTenant("ForgedDescriptorShard")
 
-      .add(ReplayTaskAggregate)
-      .add(ReplayTaskProcessManager)
+      .add(DeliveryTaskAggregate)
+      .add(DeliveryTaskProcessManager)
       .build();
 
     try {
@@ -1357,11 +1358,11 @@ describe("BoundedContext assembly", () => {
         shard: new ShardIndex(0, 3),
       });
 
-      await expect(descriptor.replay(aggregateRow)).rejects.toThrow(
-        "Entity Inbox replay stored shard does not match the routed target.",
+      await expect(descriptor.deliver(aggregateRow)).rejects.toThrow(
+        "Entity Inbox delivery stored shard does not match the routed target.",
       );
-      await expect(descriptor.replay(processManagerRow)).rejects.toThrow(
-        "Entity Inbox replay stored shard does not match the routed target.",
+      await expect(descriptor.deliver(processManagerRow)).rejects.toThrow(
+        "Entity Inbox delivery stored shard does not match the routed target.",
       );
       await expect(context.stand().read(ProjectStateSchema, aggregateId)).resolves.toBeUndefined();
       await expect(
@@ -1377,14 +1378,14 @@ describe("BoundedContext assembly", () => {
     const strategy = UniformAcrossAllShards.forNumber(3);
     await configureDelivery(storageFactory, strategy);
     const contextName = "FreshMultiShardDescriptor";
-    createGeneratedRegistryFixture([replayProcessManagerRegistry(ReplayTaskProcessManager)]);
+    createGeneratedRegistryFixture([deliveryProcessManagerRegistry(DeliveryTaskProcessManager)]);
     let first: BoundedContext | undefined;
     let recovered: BoundedContext | undefined;
 
     try {
       first = await BoundedContext.singleTenant(contextName)
 
-        .add(ReplayTaskProcessManager)
+        .add(DeliveryTaskProcessManager)
         .build();
       const firstDescriptor = internalDeliveryDescriptor(first);
       const targetTypeUrl = TypeUrls.derive(ProcessManagerStateSchema);
@@ -1422,7 +1423,7 @@ describe("BoundedContext assembly", () => {
 
       recovered = await BoundedContext.singleTenant(contextName)
 
-        .add(ReplayTaskProcessManager)
+        .add(DeliveryTaskProcessManager)
         .build();
       const recoveryContext = requireRecoveryContext(recovered);
       const descriptor = internalDeliveryDescriptor(recoveryContext);
@@ -1491,9 +1492,10 @@ describe("BoundedContext assembly", () => {
         first
           .commandBus()
           .post(createAggregateCommand("dynamic-command", "dynamic-task", "tenant-first-row")),
-      ).rejects.toBe(inboxReadFailure);
-      storageFactory.allowInboxQueries();
+      ).resolves.toBeUndefined();
       const durable = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+      await expect(durable.whenIdle()).rejects.toBe(inboxReadFailure);
+      storageFactory.allowInboxQueries();
       const pending = await durable.inbox.read(ShardIndex.single(), {
         statuses: ["TO_DELIVER"],
       });
@@ -1920,6 +1922,7 @@ describe("BoundedContext assembly", () => {
         }),
       ),
     ).resolves.toBeUndefined();
+    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
 
     await expect(context.stand().read(ProcessManagerStateSchema, "generated-pm")).resolves.toEqual(
       create(ProcessManagerStateSchema, {
@@ -3099,7 +3102,7 @@ describe("BoundedContext assembly", () => {
   it("waits for an in-flight preparation before automatic fatal facility cleanup", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    createGeneratedRegistryFixture([aggregateReplayRegistry(ReplayTaskAggregate)]);
+    createGeneratedRegistryFixture([aggregateDeliveryRegistry(DeliveryTaskAggregate)]);
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
     const order: string[] = [];
@@ -3129,7 +3132,7 @@ describe("BoundedContext assembly", () => {
     });
     try {
       const loading = BoundedContext.singleTenant("LoadingDuringFatal")
-        .add(ReplayTaskAggregate)
+        .add(DeliveryTaskAggregate)
         .build();
       await entered.promise;
       const failure = new Error("required model preparation failed");
@@ -3181,9 +3184,9 @@ describe("BoundedContext assembly", () => {
     const onUnhandled = (error: unknown) => observed.push(error);
     process.on("unhandledRejection", onUnhandled);
     try {
-      createGeneratedRegistryFixture([aggregateReplayRegistry(ReplayTaskAggregate)]);
+      createGeneratedRegistryFixture([aggregateDeliveryRegistry(DeliveryTaskAggregate)]);
       const loading = BoundedContext.singleTenant("HeldDuringCompletedClose")
-        .add(ReplayTaskAggregate)
+        .add(DeliveryTaskAggregate)
         .build();
       await entered.promise;
       const failure = new Error("required eager family failed");
@@ -3309,7 +3312,7 @@ describe("BoundedContext assembly", () => {
     }
   });
 
-  it("keeps shared storage open for an admitted sibling replay during fatal cleanup", async () => {
+  it("keeps shared storage open for an admitted sibling delivery during fatal cleanup", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
     const sibling = await BoundedContext.singleTenant("AdmittedFatalSibling")
@@ -3317,7 +3320,7 @@ describe("BoundedContext assembly", () => {
       .build();
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
-    const replay = boundedContextAccess.trackReplay(sibling, async () => {
+    const delivery = boundedContextAccess.trackDelivery(sibling, async () => {
       entered.resolve(undefined);
       await release.promise;
       await factory.checkConnection();
@@ -3346,7 +3349,7 @@ describe("BoundedContext assembly", () => {
       expect(closed).not.toHaveBeenCalled();
     } finally {
       release.resolve(undefined);
-      await replay;
+      await delivery;
       await closing.catch(() => undefined);
       closeSpy.mockRestore();
     }
@@ -3933,13 +3936,15 @@ describe("BoundedContext assembly", () => {
     ).rejects.toThrow("Stand is closed.");
   });
 
-  it("keeps state reserved and resources open until an entered shared replay settles", async () => {
+  it("keeps state reserved and resources open until an entered shared delivery settles", async () => {
     await configureStorage(new InMemoryStorageFactory());
     const repository = new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema });
-    const context = await BoundedContext.singleTenant("EnteredReplayClose").add(repository).build();
+    const context = await BoundedContext.singleTenant("EnteredDeliveryClose")
+      .add(repository)
+      .build();
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
-    const replay = boundedContextAccess.trackReplay(context, async () => {
+    const delivery = boundedContextAccess.trackDelivery(context, async () => {
       entered.resolve(undefined);
       await release.promise;
     });
@@ -3959,17 +3964,17 @@ describe("BoundedContext assembly", () => {
       ).rejects.toThrow("already registered");
     } finally {
       release.resolve(undefined);
-      await Promise.all([replay, closing]);
+      await Promise.all([delivery, closing]);
     }
   });
 
   it("leaves a newly notified shared row pending while one recipient closes", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    createGeneratedRegistryFixture([aggregateReplayRegistry(ReplayTaskAggregate)]);
+    createGeneratedRegistryFixture([aggregateDeliveryRegistry(DeliveryTaskAggregate)]);
     const closingContext = await BoundedContext.singleTenant("ClosingRecipient")
 
-      .add(ReplayTaskAggregate)
+      .add(DeliveryTaskAggregate)
       .build();
     const sibling = await BoundedContext.singleTenant("HealthySibling")
       .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
@@ -4013,10 +4018,10 @@ describe("BoundedContext assembly", () => {
   it("keeps a persisted ordinary Inbox row pending when lazy preparation fails", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    createGeneratedRegistryFixture([aggregateReplayRegistry(ReplayTaskAggregate)]);
-    const context = await BoundedContext.singleTenant("LazyInboxReplay")
+    createGeneratedRegistryFixture([aggregateDeliveryRegistry(DeliveryTaskAggregate)]);
+    const context = await BoundedContext.singleTenant("LazyInboxDelivery")
 
-      .add(ReplayTaskAggregate)
+      .add(DeliveryTaskAggregate)
       .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
     const durable = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
     const row = await persistDescriptorRow({
@@ -4032,12 +4037,12 @@ describe("BoundedContext assembly", () => {
       ),
       shard: ShardIndex.single(),
     });
-    const failure = new Error("temporary replay preparation failure");
+    const failure = new Error("temporary delivery preparation failure");
     preparationProbe(factory).prepareEntity.mockRejectedValueOnce(failure);
     try {
       await expect(
-        boundedContextAccess.trackReplay(context, () =>
-          boundedContextAccess.delivery(context).replay(row, undefined),
+        boundedContextAccess.trackDelivery(context, () =>
+          boundedContextAccess.delivery(context).deliver(row, undefined),
         ),
       ).rejects.toBe(failure);
       expect(
@@ -4045,6 +4050,45 @@ describe("BoundedContext assembly", () => {
           (message) => message.id.value === row.id.value,
         ),
       ).toBe(true);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("delivers a retained Inbox row when its recipient finishes startup", async () => {
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    createGeneratedRegistryFixture([aggregateDeliveryRegistry(DeliveryTaskAggregate)]);
+    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const command = createAggregateCommand("retained-before-start", "retained-target");
+    const written = await delivery.inbox.receive({
+      inboxId: {
+        targetTypeUrl: TypeUrls.derive(ProjectStateSchema),
+        targetId: Identifiers.pack("string", "retained-target"),
+      },
+      signalId: command.id?.uuid ?? "retained-before-start",
+      label: "HANDLE_COMMAND",
+      signal: AnyPacker.pack(CommandSchema, command),
+      shard: ShardIndex.single(),
+      status: "TO_DELIVER",
+      whenReceived: timestampFromDate(new Date("2026-08-04T12:00:00.000Z")),
+      version: 1n,
+    });
+    expect(written.outcome).toBe("WRITTEN");
+
+    const context = await BoundedContext.singleTenant("RetainedStartup")
+      .add(DeliveryTaskAggregate)
+      .build();
+    try {
+      await delivery.whenIdle();
+      await expect(context.stand().read(ProjectStateSchema, "retained-target")).resolves.toEqual(
+        create(ProjectStateSchema, { id: "retained-target", name: "Task Ready" }),
+      );
+      const pending = await delivery.inbox.read(ShardIndex.single(), {
+        statuses: ["TO_DELIVER"],
+        limit: 100,
+      });
+      expect(pending.some((row) => row.id.value === written.message.id.value)).toBe(false);
     } finally {
       await context.close();
     }
@@ -4731,7 +4775,7 @@ function processManagerRegistry(entityType: typeof FreshRecoveryProcessManager) 
   };
 }
 
-function aggregateReplayRegistry(entityType: typeof ReplayTaskAggregate) {
+function aggregateDeliveryRegistry(entityType: typeof DeliveryTaskAggregate) {
   return {
     entityType,
     stateSchema: ProjectStateSchema,
@@ -4747,7 +4791,7 @@ function aggregateReplayRegistry(entityType: typeof ReplayTaskAggregate) {
   };
 }
 
-function replayProcessManagerRegistry(entityType: typeof ReplayTaskProcessManager) {
+function deliveryProcessManagerRegistry(entityType: typeof DeliveryTaskProcessManager) {
   return {
     entityType,
     stateSchema: ProcessManagerStateSchema,

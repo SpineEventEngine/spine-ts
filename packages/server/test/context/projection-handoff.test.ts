@@ -39,7 +39,7 @@ describe("LocalProjectionInbox", () => {
     const onAdmit = vi.fn(() => admitted.promise);
     const targetTypeUrl = "type.example.dev/Tasks.Projection";
     const inbox = new LocalProjectionInbox("Tasks", undefined, onAdmit);
-    inbox.register({ targetTypeUrl, replay: () => Promise.resolve() });
+    inbox.register({ targetTypeUrl, deliver: () => Promise.resolve() });
 
     const receiving = inbox.receive(
       delivery,
@@ -60,12 +60,12 @@ describe("LocalProjectionInbox", () => {
   it("rejects a saved Projection inbox row after its tenant is removed", async () => {
     const failure = new Error("tenant removed");
     let admitted = true;
-    const replay = vi.fn(() => Promise.resolve());
+    const deliverTarget = vi.fn(() => Promise.resolve());
     const targetTypeUrl = "type.example.dev/Tasks.Projection";
     const inbox = new LocalProjectionInbox("Tasks", undefined, () =>
       admitted ? Promise.resolve() : Promise.reject(failure),
     );
-    inbox.register({ targetTypeUrl, replay });
+    inbox.register({ targetTypeUrl, deliver: deliverTarget });
     const saved: InboxMessage = {
       ...projectionInput(targetTypeUrl, "saved"),
       id: { value: "row-saved", shard: ShardIndex.single() },
@@ -73,10 +73,10 @@ describe("LocalProjectionInbox", () => {
       version: 1n,
     };
 
-    await inbox.replay(saved, tenant("tenant-a"));
+    await inbox.deliver(saved, tenant("tenant-a"));
     admitted = false;
-    await expect(inbox.replay(saved, tenant("tenant-a"))).rejects.toBe(failure);
-    expect(replay).toHaveBeenCalledOnce();
+    await expect(inbox.deliver(saved, tenant("tenant-a"))).rejects.toBe(failure);
+    expect(deliverTarget).toHaveBeenCalledOnce();
   });
 
   it("remote supervised Projection reception notifies without local dispatch", async () => {
@@ -87,9 +87,9 @@ describe("LocalProjectionInbox", () => {
     const wake = vi.fn();
     const readiness = new DeliveryReadiness(undefined, delivery, wake, true);
     const inbox = new LocalProjectionInbox("ExternalProjects", readiness);
-    const replay = vi.fn(() => Promise.resolve());
+    const deliverTarget = vi.fn(() => Promise.resolve());
     const targetTypeUrl = TypeUrls.derive(ProjectOverviewStateSchema);
-    inbox.register({ targetTypeUrl, replay });
+    inbox.register({ targetTypeUrl, deliver: deliverTarget });
     const project = create(ProjectCreatedSchema, { id: "project-remote", name: "Remote" });
     const event = SignalEnvelopes.event({
       context: create(EventContextSchema),
@@ -107,10 +107,61 @@ describe("LocalProjectionInbox", () => {
 
     expect(message.status).toBe("TO_DELIVER");
     expect(wake).toHaveBeenCalledExactlyOnceWith(ShardIndex.single());
-    expect(replay).not.toHaveBeenCalled();
+    expect(deliverTarget).not.toHaveBeenCalled();
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toHaveLength(1);
+  });
+
+  it("accepts a local shared Event after its Projection Inbox write and wakes delivery", async () => {
+    const delivery = new Delivery({
+      context: { name: "Projects", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const onWake = vi.fn();
+    const readiness = new DeliveryReadiness(undefined, delivery, onWake, false);
+    const inbox = new LocalProjectionInbox("Projects", readiness);
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const deliverTarget = vi.fn(async () => {
+      entered.resolve(undefined);
+      await release.promise;
+    });
+    const targetTypeUrl = TypeUrls.derive(ProjectOverviewStateSchema);
+    inbox.register({ targetTypeUrl, deliver: deliverTarget });
+    readiness.configureDirect((message) => inbox.deliver(message));
+    const event = SignalEnvelopes.event({
+      context: create(EventContextSchema),
+      schema: ProjectCreatedSchema,
+      message: create(ProjectCreatedSchema, { id: "accepted", name: "Accepted" }),
+    });
+
+    try {
+      const accepted = await inbox.receive(delivery, {
+        inboxId: { targetId: Identifiers.pack("string", "accepted"), targetTypeUrl },
+        signalId: event.id?.value ?? "",
+        signal: AnyPacker.pack(EventSchema, event),
+        label: "UPDATE_SUBSCRIBER",
+        status: "TO_DELIVER",
+        shard: ShardIndex.single(),
+      });
+      await entered.promise;
+
+      expect(accepted.status).toBe("TO_DELIVER");
+      expect(onWake).toHaveBeenCalledExactlyOnceWith(ShardIndex.single());
+      expect(deliverTarget).toHaveBeenCalledOnce();
+      const closing = readiness.close();
+      let closed = false;
+      void closing.then(() => {
+        closed = true;
+      });
+      await Promise.resolve();
+      expect(closed).toBe(false);
+      release.resolve(undefined);
+      await closing;
+    } finally {
+      release.resolve(undefined);
+    }
   });
 
   it("matches receive readiness without rebuilding the global endpoint snapshot", async () => {
@@ -123,7 +174,7 @@ describe("LocalProjectionInbox", () => {
     const inbox = new LocalProjectionInbox("Tasks", (scope) => ready.push(scope));
     inbox.register({
       targetTypeUrl,
-      replay: () => Promise.resolve(),
+      deliver: () => Promise.resolve(),
     });
     const endpoints = vi.spyOn(inbox, "endpoints");
 
@@ -151,13 +202,13 @@ describe("LocalProjectionInbox", () => {
     ]);
   });
 
-  it("preserves exact-drain failure when the readiness observer also throws", async () => {
+  it("accepts a row when its readiness observer throws before recipient processing fails", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
     const targetTypeUrl = "type.example.dev/Tasks.Projection";
-    const drainFailure = new Error("projection replay failed");
+    const drainFailure = new Error("projection delivery failed");
     let notifications = 0;
     const inbox = new LocalProjectionInbox("Tasks", () => {
       notifications += 1;
@@ -165,39 +216,35 @@ describe("LocalProjectionInbox", () => {
     });
     inbox.register({
       targetTypeUrl,
-      replay() {
+      deliver() {
         return Promise.reject(drainFailure);
       },
     });
 
-    const result = await inbox
-      .receive(delivery, {
-        inboxId: { targetId: Identifiers.pack("string", "projection-ready"), targetTypeUrl },
-        signalId: "event-ready",
-        signal: eventSignal(),
-        label: "UPDATE_SUBSCRIBER",
-        status: "TO_DELIVER",
-        shard: ShardIndex.single(),
-      })
-      .then(
-        () => undefined,
-        (error: unknown) => error,
-      );
+    const accepted = await inbox.receive(delivery, {
+      inboxId: { targetId: Identifiers.pack("string", "projection-ready"), targetTypeUrl },
+      signalId: "event-ready",
+      signal: eventSignal(),
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+    });
 
-    expect(result).toBe(drainFailure);
+    expect(accepted.signalId).toBe("event-ready");
     expect(notifications).toBe(1);
+    await expect(delivery.whenIdle()).rejects.toBe(drainFailure);
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
     ).resolves.toEqual([]);
   });
-  it("narrows replay targets to pending subscriber updates", () => {
-    type ReplayMessage = Parameters<ProjectionInboxTarget["replay"]>[0];
+  it("narrows delivery targets to pending subscriber updates", () => {
+    type DeliveryMessage = Parameters<ProjectionInboxTarget["deliver"]>[0];
 
-    expectTypeOf<ReplayMessage["label"]>().toEqualTypeOf<"UPDATE_SUBSCRIBER">();
-    expectTypeOf<ReplayMessage["status"]>().toEqualTypeOf<"TO_DELIVER">();
+    expectTypeOf<DeliveryMessage["label"]>().toEqualTypeOf<"UPDATE_SUBSCRIBER">();
+    expectTypeOf<DeliveryMessage["status"]>().toEqualTypeOf<"TO_DELIVER">();
   });
 
-  it("replays and cleans eligible durable subscriber rows through a delivery loop endpoint", async () => {
+  it("delivers and cleans eligible durable subscriber rows through a delivery loop endpoint", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -208,7 +255,7 @@ describe("LocalProjectionInbox", () => {
 
     inbox.register({
       targetTypeUrl,
-      replay(message) {
+      deliver(message) {
         seen.push(message);
         return Promise.resolve();
       },
@@ -228,7 +275,7 @@ describe("LocalProjectionInbox", () => {
     const run = await new DeliveryLoop({
       delivery,
       shard: ShardIndex.single(),
-      onMessage: (message) => inbox.replay(message),
+      onMessage: (message) => inbox.deliver(message),
     }).run();
 
     expect(seen).toHaveLength(1);
@@ -248,7 +295,7 @@ describe("LocalProjectionInbox", () => {
     ).resolves.toEqual([]);
   });
 
-  it("delivers an UPDATE_SUBSCRIBER event row and marks it delivered", async () => {
+  it("delivers an UPDATE_SUBSCRIBER event row and clears pending work", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -260,7 +307,7 @@ describe("LocalProjectionInbox", () => {
 
     inbox.register({
       targetTypeUrl,
-      replay(message) {
+      deliver(message) {
         seen.push(message);
         return Promise.resolve();
       },
@@ -275,6 +322,8 @@ describe("LocalProjectionInbox", () => {
       shard: ShardIndex.single(),
     });
 
+    await delivery.whenIdle();
+
     expect(seen).toHaveLength(1);
     expect(delivered).toMatchObject({
       signalId: "event-1",
@@ -282,18 +331,18 @@ describe("LocalProjectionInbox", () => {
       status: "TO_DELIVER",
     });
     await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toMatchObject([{ signalId: "event-1", status: "DELIVERED" }]);
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toEqual([]);
   });
 
-  it("rejects non-pending replay snapshots before projection handlers run", async () => {
+  it("rejects non-pending delivery snapshots before projection handlers run", async () => {
     const inbox = new LocalProjectionInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.Projection";
     const seen: InboxMessage[] = [];
 
     inbox.register({
       targetTypeUrl,
-      replay(message) {
+      deliver(message) {
         seen.push(message);
         return Promise.resolve();
       },
@@ -301,7 +350,7 @@ describe("LocalProjectionInbox", () => {
 
     for (const status of ["DELIVERED", "SCHEDULED", "TO_CATCH_UP"] as const) {
       await expect(
-        inbox.replay({
+        inbox.deliver({
           id: {
             value: `message-${status}`,
             shard: ShardIndex.single(),
@@ -319,14 +368,14 @@ describe("LocalProjectionInbox", () => {
           version: 1n,
         }),
       ).rejects.toThrow(
-        `BoundedContext delivery cannot replay projection inbox message with status "${status}".`,
+        `BoundedContext delivery cannot deliver projection inbox message with status "${status}".`,
       );
     }
 
     expect(seen).toEqual([]);
   });
 
-  it("waits for a concurrent duplicate while the original projection replay is in flight", async () => {
+  it("accepts a concurrent duplicate while the original Projection handler is active", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -335,13 +384,13 @@ describe("LocalProjectionInbox", () => {
     const targetTypeUrl = "type.example.dev/Tasks.Projection";
     const shard = ShardIndex.single();
     const seen: InboxMessage[] = [];
-    let startReplay!: () => void;
-    let releaseReplay!: () => void;
-    const replayStarted = new Promise<void>((resolve) => {
-      startReplay = resolve;
+    let startDelivery!: () => void;
+    let releaseDelivery!: () => void;
+    const deliveryStarted = new Promise<void>((resolve) => {
+      startDelivery = resolve;
     });
-    const replayReleased = new Promise<void>((resolve) => {
-      releaseReplay = resolve;
+    const deliveryReleased = new Promise<void>((resolve) => {
+      releaseDelivery = resolve;
     });
     const input = {
       inboxId: { targetId: Identifiers.pack("string", "projection-duplicate"), targetTypeUrl },
@@ -354,30 +403,25 @@ describe("LocalProjectionInbox", () => {
 
     inbox.register({
       targetTypeUrl,
-      async replay(message) {
+      async deliver(message) {
         seen.push(message);
-        startReplay();
-        await replayReleased;
+        startDelivery();
+        await deliveryReleased;
       },
     });
 
-    const first = inbox.receive(delivery, input);
-    await replayStarted;
-    const duplicate = inbox.receive(delivery, input);
-
-    await pause(150);
-    releaseReplay();
-
-    const [firstMessage, duplicateMessage] = await Promise.all([first, duplicate]);
-
-    expect(duplicateMessage.id).toEqual(firstMessage.id);
+    const firstMessage = await inbox.receive(delivery, input);
+    await deliveryStarted;
+    const duplicateMessage = await inbox.receive(delivery, input);
+    expect(duplicateMessage.id).not.toEqual(firstMessage.id);
     expect(seen).toHaveLength(1);
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
-      { signalId: "event-duplicate", status: "DELIVERED" },
-    ]);
+    releaseDelivery();
+    await delivery.whenIdle();
+    expect(seen).toHaveLength(1);
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
   });
 
-  it("contains a fresh-delivery duplicate replay failure", async () => {
+  it("accepts a duplicate during another worker's failed Projection delivery", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const firstDelivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -390,14 +434,14 @@ describe("LocalProjectionInbox", () => {
     const inbox = new LocalProjectionInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.Projection";
     const shard = ShardIndex.single();
-    const failure = new Error("projection replay failed");
-    let startReplay!: () => void;
-    let releaseReplay!: () => void;
-    const replayStarted = new Promise<void>((resolve) => {
-      startReplay = resolve;
+    const failure = new Error("projection delivery failed");
+    let startDelivery!: () => void;
+    let releaseDelivery!: () => void;
+    const deliveryStarted = new Promise<void>((resolve) => {
+      startDelivery = resolve;
     });
-    const replayReleased = new Promise<void>((resolve) => {
-      releaseReplay = resolve;
+    const deliveryReleased = new Promise<void>((resolve) => {
+      releaseDelivery = resolve;
     });
     const input = {
       inboxId: {
@@ -413,34 +457,28 @@ describe("LocalProjectionInbox", () => {
 
     inbox.register({
       targetTypeUrl,
-      async replay() {
-        startReplay();
-        await replayReleased;
+      async deliver() {
+        startDelivery();
+        await deliveryReleased;
         throw failure;
       },
     });
 
-    const first = inbox.receive(firstDelivery, input);
-    const firstResult = first.then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-    await replayStarted;
+    const firstMessage = await inbox.receive(firstDelivery, input);
+    await deliveryStarted;
 
-    const duplicate = inbox.receive(duplicateDelivery, input);
-    const duplicateResult = duplicate.then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    const duplicateMessage = await inbox.receive(duplicateDelivery, input);
+    expect(duplicateMessage.id).not.toEqual(firstMessage.id);
+    releaseDelivery();
 
-    await pause(150);
-    releaseReplay();
-
-    await expect(firstResult).resolves.toBe(failure);
-    await expect(duplicateResult).resolves.toBe(failure);
+    await expect(firstDelivery.whenIdle()).rejects.toBe(failure);
+    await duplicateDelivery.whenIdle();
     await expect(
       firstDelivery.inbox.read(shard, { statuses: ["TO_DELIVER"] }),
-    ).resolves.toMatchObject([{ signalId: "event-failing-duplicate", status: "TO_DELIVER" }]);
+    ).resolves.toMatchObject([
+      { signalId: "event-failing-duplicate", status: "TO_DELIVER" },
+      { signalId: "event-failing-duplicate", status: "TO_DELIVER" },
+    ]);
     await expect(firstDelivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
@@ -455,8 +493,8 @@ describe("LocalProjectionInbox", () => {
 
     inbox.register({
       targetTypeUrl,
-      replay() {
-        return Promise.reject(new Error("unexpected replay"));
+      deliver() {
+        return Promise.reject(new Error("unexpected delivery"));
       },
     });
 
@@ -472,7 +510,7 @@ describe("LocalProjectionInbox", () => {
           shard: ShardIndex.single(),
         }),
       ),
-    ).rejects.toThrow('no handler for inbox label "HANDLE_COMMAND"');
+    ).resolves.toMatchObject({ signalId: "event-2" });
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([{ signalId: "event-2", status: "TO_DELIVER" }]);
@@ -489,7 +527,7 @@ describe("LocalProjectionInbox", () => {
     const inbox = new LocalProjectionInbox("Tasks", (scope) => ready.push(scope));
     inbox.register({
       targetTypeUrl,
-      replay: () => Promise.reject(new Error("scheduled rows should not replay")),
+      deliver: () => Promise.reject(new Error("scheduled rows should not delivery")),
     });
 
     await expect(
@@ -504,9 +542,7 @@ describe("LocalProjectionInbox", () => {
           shard: ShardIndex.single(),
         }),
       ),
-    ).rejects.toThrow(
-      "Projection inbox delivery did not reach the target row before the local drain finished.",
-    );
+    ).resolves.toMatchObject({ signalId: "event-scheduled", status: "SCHEDULED" });
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["SCHEDULED"] }),
     ).resolves.toMatchObject([
@@ -537,7 +573,7 @@ describe("LocalProjectionInbox", () => {
         status: "TO_DELIVER",
         shard: ShardIndex.single(),
       }),
-    ).rejects.toThrow("no projection subscriber target");
+    ).resolves.toMatchObject({ signalId: "event-missing" });
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([{ signalId: "event-missing", status: "TO_DELIVER" }]);
@@ -552,11 +588,11 @@ describe("LocalProjectionInbox", () => {
     const ready: unknown[] = [];
     const targetTypeUrl = "type.example.dev/Tasks.Projection";
     const shard = new ShardIndex(0, 2);
-    const replayFailure = new Error("non-configured shard should preserve drain failure");
+    const deliveryFailure = new Error("non-configured shard should preserve drain failure");
     const inbox = new LocalProjectionInbox("Tasks", (scope) => ready.push(scope));
     inbox.register({
       targetTypeUrl,
-      replay: () => Promise.reject(replayFailure),
+      deliver: () => Promise.reject(deliveryFailure),
     });
 
     await expect(
@@ -571,7 +607,7 @@ describe("LocalProjectionInbox", () => {
         status: "TO_DELIVER",
         shard,
       }),
-    ).rejects.toBe(replayFailure);
+    ).resolves.toMatchObject({ signalId: "event-shard-mismatch" });
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
       { signalId: "event-shard-mismatch", status: "TO_DELIVER" },
     ]);
@@ -591,7 +627,7 @@ describe("LocalProjectionInbox", () => {
 
     inbox.register({
       targetTypeUrl,
-      replay(message) {
+      deliver(message) {
         seen.push(message);
         return Promise.resolve();
       },
@@ -632,6 +668,8 @@ describe("LocalProjectionInbox", () => {
       shard,
     });
 
+    await delivery.whenIdle();
+
     expect(seen).toHaveLength(1);
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
       { signalId: "signal-0" },
@@ -642,9 +680,7 @@ describe("LocalProjectionInbox", () => {
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
     });
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
-      { signalId: "event-1", status: "DELIVERED" },
-    ]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 });
 
@@ -671,10 +707,4 @@ type ProjectionReceiveInput = Parameters<ProjectionInbox["receive"]>[1];
 function asRuntimeInvalidProjectionInput(input: unknown): ProjectionReceiveInput {
   // Intentionally bypasses the narrow projection input type for runtime fail-closed coverage.
   return input as ProjectionReceiveInput;
-}
-
-function pause(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
 }
