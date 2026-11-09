@@ -64,7 +64,10 @@ function delivery(message: ReturnType<typeof AnyPacker.pack>): SubscriptionDeliv
   };
 }
 
-function subscription(update: SubscriptionDelivery, onCancel: () => void): Subscription {
+function subscription(
+  update: SubscriptionDelivery,
+  onCancel: () => void | Promise<void>,
+): Subscription {
   return {
     updates: {
       async *[Symbol.asyncIterator]() {
@@ -79,14 +82,11 @@ function subscription(update: SubscriptionDelivery, onCancel: () => void): Subsc
       },
     },
     activate: () => Promise.resolve(),
-    cancel: () => {
-      onCancel();
-      return Promise.resolve();
-    },
+    cancel: async () => onCancel(),
   };
 }
 
-it("waits for the projected revision after a matching accepted rename Event", async () => {
+it("cancels outcome responses before waiting for the projected rename revision", async () => {
   const collection = new FieldnotesPlaceCollection(
     "author",
     () => Promise.resolve([]),
@@ -94,6 +94,7 @@ it("waits for the projected revision after a matching accepted rename Event", as
   );
   const id = create(PlaceIdSchema, { value: "same" });
   let cancelled = false;
+  const cancelStarted = Promise.withResolvers<boolean>();
   const event = delivery(
     AnyPacker.pack(
       PlaceRenamedSchema,
@@ -112,6 +113,7 @@ it("waits for the projected revision after a matching accepted rename Event", as
         acknowledgement: { kind: "ok" },
         subscription: subscription(event, () => {
           cancelled = true;
+          cancelStarted.resolve(true);
         }),
       }),
   };
@@ -121,8 +123,8 @@ it("waits for the projected revision after a matching accepted rename Event", as
     settled = true;
     return value;
   });
-  await Promise.resolve();
-  await Promise.resolve();
+  await cancelStarted.promise;
+  expect(cancelled).toBe(true);
   expect(settled).toBe(false);
   collection.receive(
     create(PlaceViewSchema, {
@@ -135,7 +137,54 @@ it("waits for the projected revision after a matching accepted rename Event", as
     }),
   );
   await expect(result).resolves.toEqual({ kind: "committed", id: "same", revision: 2 });
-  expect(cancelled).toBe(true);
+});
+
+it("recognizes a projected revision received while outcome cancellation finishes", async () => {
+  const collection = new FieldnotesPlaceCollection(
+    "author",
+    () => Promise.resolve([]),
+    () => undefined,
+  );
+  const id = create(PlaceIdSchema, { value: "same" });
+  const cancelStarted = Promise.withResolvers<boolean>();
+  const releaseCancel = Promise.withResolvers<boolean>();
+  const event = delivery(
+    AnyPacker.pack(
+      PlaceRenamedSchema,
+      create(PlaceRenamedSchema, {
+        id,
+        name: "Revised",
+        author: create(UserIdSchema, { value: "author" }),
+        revision: 2,
+      }),
+    ),
+  );
+  const request: Pick<ClientRequest, "postAndSubscribe"> = {
+    postAndSubscribe: () =>
+      Promise.resolve({
+        kind: "accepted",
+        acknowledgement: { kind: "ok" },
+        subscription: subscription(event, async () => {
+          cancelStarted.resolve(true);
+          await releaseCancel.promise;
+        }),
+      }),
+  };
+  const commands = new FieldnotesPlaceCommands(request, collection);
+  const result = commands.rename("same", "Revised", 1);
+  await cancelStarted.promise;
+  collection.receive(
+    create(PlaceViewSchema, {
+      id,
+      author: create(UserIdSchema, { value: "author" }),
+      name: "Revised",
+      coordinates: create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
+      placeKey: new TextEncoder().encode("same"),
+      revision: 2,
+    }),
+  );
+  releaseCancel.resolve(true);
+  await expect(result).resolves.toEqual({ kind: "committed", id: "same", revision: 2 });
 });
 
 it("returns the accepted Event revision when the visible projection is already newer", async () => {

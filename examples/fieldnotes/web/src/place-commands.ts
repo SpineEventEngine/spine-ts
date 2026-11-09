@@ -295,6 +295,7 @@ export class FieldnotesPlaceCommands {
   ): Promise<PlaceCommandOutcome> {
     const result = await posting;
     if (result.kind === "refused") return { kind: "refused" };
+    let acceptedRevision: number | undefined;
     try {
       for await (const delivery of result.subscription.updates) {
         if (delivery.kind !== "update" || delivery.update.update.case !== "eventUpdates") continue;
@@ -303,15 +304,22 @@ export class FieldnotesPlaceCommands {
           if (refusal !== undefined) return refusal;
           const revision = this.revision(event, id);
           if (revision === undefined) continue;
-          await this.collection.waitFor(id, revision, removed, signal);
-          return { kind: "committed", id, revision };
+          acceptedRevision = revision;
+          break;
         }
+        if (acceptedRevision !== undefined) break;
       }
-      return { kind: "interrupted" };
     } catch {
       return { kind: "interrupted" };
     } finally {
       await result.subscription.cancel().catch(() => undefined);
+    }
+    if (acceptedRevision === undefined) return { kind: "interrupted" };
+    try {
+      await this.collection.waitFor(id, acceptedRevision, removed, signal);
+      return { kind: "committed", id, revision: acceptedRevision };
+    } catch {
+      return { kind: "interrupted" };
     }
   }
 
