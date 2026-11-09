@@ -558,6 +558,7 @@ export class Delivery {
     });
     const completed = this.#startDirect(message.shard);
     this.#observeSelectedRun(message.shard, key, completed, settle);
+    this.#observeBackground(completed, message.shard);
     return selected.promise;
   }
 
@@ -653,16 +654,24 @@ export class Delivery {
   #observeBackground(completed: Promise<DeliveryRun>, shard: ShardIndex): void {
     if (this.#backgroundObserved.has(completed)) return;
     this.#backgroundObserved.add(completed);
-    void completed.catch(async (error: unknown) => {
-      // Give exact-row observers of this rejection a chance to settle first.
-      await Promise.resolve();
+    const report = (error: unknown): void => {
       if (this.#closing || this.#logger === undefined || this.#callerObserved.has(completed))
         return;
       emitServerError(this.#logger, "Background Delivery failed.", {
         shardId: shard.key(),
         errorName: error instanceof Error ? error.name : "UnknownError",
       });
-    });
+    };
+    void completed.then(
+      (run) => {
+        if (run.failed > 0 || run.status === "FAILED") report(run.failures[0]?.error);
+      },
+      async (error: unknown) => {
+        // Give exact-row observers of this rejection a chance to settle first.
+        await Promise.resolve();
+        report(error);
+      },
+    );
   }
 
   /**

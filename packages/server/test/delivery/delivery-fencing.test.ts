@@ -29,6 +29,53 @@ import { ShardIndex } from "../../src/index.js";
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Delivery fencing", () => {
+  it("reports a detached run that resolves with a failed message", async () => {
+    const row = createMessage("failed-message", "signal", 1n);
+    const acknowledged = new Set<string>();
+    const logs: string[] = [];
+    const logger = { withMetadata: () => ({ error: (message: string) => logs.push(message) }) };
+    const delivery = agentDelivery(
+      [row],
+      (message) => acknowledged.add(message.id.value),
+      undefined,
+      acknowledged,
+      logger as unknown as ILogLayer,
+    );
+    delivery.setReplay(() => {
+      throw new Error("recipient failed");
+    });
+    delivery.wake(row.shard);
+    await delivery.whenIdle();
+    expect(logs).toEqual(["Background Delivery failed."]);
+    await delivery.close();
+  });
+
+  it("reports a failed selected row after its durable handoff was detached", async () => {
+    const row = createMessage("selected-failure", "signal", 1n);
+    const acknowledged = new Set<string>();
+    const logs: string[] = [];
+    const logger = { withMetadata: () => ({ error: (message: string) => logs.push(message) }) };
+    const delivery = agentDelivery(
+      [row],
+      (message) => acknowledged.add(message.id.value),
+      undefined,
+      acknowledged,
+      logger as unknown as ILogLayer,
+    );
+    const handoff = delivery.drainMessage(row, {
+      onMessage: () => {
+        throw new Error("selected recipient failed");
+      },
+    });
+    await expect(handoff).resolves.toMatchObject({
+      acknowledged: true,
+      outcome: { kind: "acknowledged" },
+    });
+    await delivery.whenIdle();
+    expect(logs).toEqual(["Background Delivery failed."]);
+    await delivery.close();
+  });
+
   it("reports one safe detached failure for a burst of wakes during shard pickup", async () => {
     const row = createMessage("burst-failure", "signal", 1n);
     const pickup = Promise.withResolvers<ReturnType<typeof session>>();
