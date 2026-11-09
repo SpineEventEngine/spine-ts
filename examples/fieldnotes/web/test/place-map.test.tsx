@@ -177,3 +177,36 @@ it("disposes a map whose asynchronous load finishes after the workspace closes",
     expect(map.mapRemoved).toHaveBeenCalledOnce();
   });
 });
+
+it("ignores a map startup failure after unmount and starts a later map", async () => {
+  map.fail = true;
+  map.mapCreated.mockClear();
+  const closed = render(
+    <PlaceMap
+      places={[place]}
+      selectedId={null}
+      onSelect={vi.fn()}
+      onPick={vi.fn()}
+      onCenter={vi.fn()}
+    />,
+  );
+  closed.unmount();
+  await waitFor(() => {
+    expect(map.mapCreated).toHaveBeenCalledOnce();
+  });
+  map.fail = false;
+  const reopened = render(
+    <PlaceMap
+      places={[place]}
+      selectedId={null}
+      onSelect={vi.fn()}
+      onPick={vi.fn()}
+      onCenter={vi.fn()}
+    />,
+  );
+  await waitFor(() => {
+    expect(reopened.container.querySelector('.map-pin[aria-label="Select Lisbon"]')).not.toBeNull();
+  });
+  expect(reopened.container.querySelector(".map-fallback")).toBeNull();
+  reopened.unmount();
+});
