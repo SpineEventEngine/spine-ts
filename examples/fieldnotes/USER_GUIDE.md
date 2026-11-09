@@ -184,11 +184,12 @@ async function beginNoteEdit(
 ```
 
 The returned admitted result contains an active subscription. The application
-consumes that subscription, handles a selected rejection without clearing the
-draft, and waits for the matching projected revision after an accepted
-`PlaceNoteEdited`. It cancels the outcome subscription when the operation
-finishes. `FieldnotesPlaceCommands` implements that sequence; the private
-collection supplies the resulting-view wait.
+consumes a terminal outcome Event and handles a selected rejection without
+clearing the draft. After an accepted `PlaceNoteEdited`, it cancels the temporary
+outcome subscription before waiting for the matching projected revision through
+the existing private map stream. The collection also recognizes a matching
+revision that arrived during cancellation. `FieldnotesPlaceCommands` implements
+that sequence; the private collection supplies the resulting-view wait.
 
 Rename, move, and note editing are separate operations. A failed move therefore
 does not leave the user guessing whether a note in a combined save was accepted.

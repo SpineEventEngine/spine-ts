@@ -188,6 +188,99 @@ it("recognizes a projected revision received while outcome cancellation finishes
   await expect(result).resolves.toEqual({ kind: "committed", id: "same", revision: 2 });
 });
 
+it("recognizes terminal removal received while outcome cancellation finishes", async () => {
+  const collection = new FieldnotesPlaceCollection(
+    "author",
+    () => Promise.resolve([]),
+    () => undefined,
+  );
+  const id = create(PlaceIdSchema, { value: "same" });
+  const cancelStarted = Promise.withResolvers<boolean>();
+  const releaseCancel = Promise.withResolvers<boolean>();
+  const event = delivery(
+    AnyPacker.pack(
+      PlaceDeletedSchema,
+      create(PlaceDeletedSchema, {
+        id,
+        author: create(UserIdSchema, { value: "author" }),
+        revision: 2,
+      }),
+    ),
+  );
+  const request: Pick<ClientRequest, "postAndSubscribe"> = {
+    postAndSubscribe: () =>
+      Promise.resolve({
+        kind: "accepted",
+        acknowledgement: { kind: "ok" },
+        subscription: subscription(event, async () => {
+          cancelStarted.resolve(true);
+          await releaseCancel.promise;
+        }),
+      }),
+  };
+  const commands = new FieldnotesPlaceCommands(request, collection);
+  const result = commands.delete("same", 1);
+  await cancelStarted.promise;
+  collection.receive(
+    create(PlaceViewSchema, {
+      id,
+      author: create(UserIdSchema, { value: "author" }),
+      whenCreated: create(TimestampSchema, { seconds: 1n }),
+      revision: 2,
+      removed: true,
+    }),
+  );
+  releaseCancel.resolve(true);
+  await expect(result).resolves.toEqual({ kind: "committed", id: "same", revision: 2 });
+  expect(collection.places()).toEqual([]);
+});
+
+it("uses an already projected success when outcome cancellation rejects", async () => {
+  const collection = new FieldnotesPlaceCollection(
+    "author",
+    () => Promise.resolve([]),
+    () => undefined,
+  );
+  const id = create(PlaceIdSchema, { value: "same" });
+  collection.receive(
+    create(PlaceViewSchema, {
+      id,
+      author: create(UserIdSchema, { value: "author" }),
+      name: "Revised",
+      coordinates: create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
+      whenCreated: create(TimestampSchema, { seconds: 1n }),
+      revision: 2,
+    }),
+  );
+  const event = delivery(
+    AnyPacker.pack(
+      PlaceRenamedSchema,
+      create(PlaceRenamedSchema, {
+        id,
+        name: "Revised",
+        author: create(UserIdSchema, { value: "author" }),
+        revision: 2,
+      }),
+    ),
+  );
+  const cancel = vi.fn(() => Promise.reject(new Error("temporary outcome stream closed")));
+  const request: Pick<ClientRequest, "postAndSubscribe"> = {
+    postAndSubscribe: () =>
+      Promise.resolve({
+        kind: "accepted",
+        acknowledgement: { kind: "ok" },
+        subscription: subscription(event, cancel),
+      }),
+  };
+  const commands = new FieldnotesPlaceCommands(request, collection);
+  await expect(commands.rename("same", "Revised", 1)).resolves.toEqual({
+    kind: "committed",
+    id: "same",
+    revision: 2,
+  });
+  expect(cancel).toHaveBeenCalledOnce();
+});
+
 it("returns the accepted Event revision when the visible projection is already newer", async () => {
   const collection = new FieldnotesPlaceCollection(
     "author",

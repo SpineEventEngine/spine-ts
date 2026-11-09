@@ -28,41 +28,41 @@ state messages or generic framework payloads in fixtures.
 
 ## Source map
 
-| Path                                    | Responsibility                                                                     |
-| --------------------------------------- | ---------------------------------------------------------------------------------- |
-| `model/proto/`                          | Authored domain Protobuf contracts                                                 |
-| `model/generated/`                      | Ignored generated schemas and query APIs                                           |
-| `server/src/place-domain.ts`            | Aggregate transitions and complete-result Projection                               |
-| `server/src/fieldnotes-host.ts`         | Sequential storage, native server and browser gateway lifecycle                    |
-| `server/src/host-settings.ts`           | Explicit deployment inputs and secret validation                                   |
-| `server/src/fieldnotes-access.ts`       | Gateway request policy and trusted actor resolution                                |
-| `server/src/fieldnotes-read-filters.ts` | Principal-based state and outcome filtering                                        |
-| `server/src/reader-proof.ts`            | jose implementation of existing reader-proof SPI                                   |
-| `server/src/auth-routes.ts`             | Exact auth HTTP admission, session bootstrap, exchanges and logout                 |
-| `server/src/direct-oidc.ts`             | Persistent direct-Google flow and application-session issuance                     |
-| `server/src/firebase-auth.ts`           | Official Admin lifecycle and verified Google identity checks                       |
-| `server/src/main.ts`                    | Configured Node host entry point                                                   |
-| `server/src/fieldnotes-process.ts`      | One process shutdown path                                                          |
-| `server/test/`                          | Domain, host, privacy, and infrastructure tests                                    |
-| `web/src/private-relay.ts`              | Fixed route allowlist, streaming, cancellation, cookie and redirect forwarding     |
-| `web/src/public-config.ts`              | Selected public browser settings without host secrets                              |
-| `web/src/browser-auth.ts`               | Browser PKCE, app-session bootstrap and credential-bound authentication requests   |
-| `web/src/browser-lifecycle.ts`          | Identity lifecycle and suppression of work from a previous sign-in                 |
-| `web/src/firebase-browser.ts`           | Official Firebase popup login with in-memory provider state                        |
-| `web/src/place-collection.ts`           | Complete byte-key traversal, live revision merge and terminal removal tracking     |
-| `web/src/native-places.ts`              | Authenticated Connect client, canonical author topic and query page adapter        |
-| `web/src/place-commands.ts`             | Distinct Commands, selected outcomes, resulting-view wait and subscription cleanup |
-| `web/src/workspace-state.ts`            | Committed selection, independent drafts and explicit save/conflict states          |
-| `web/src/place-workspace.tsx`           | Signed-in screen and lifecycle of the private client and workspace state           |
-| `web/src/place-panels.tsx`              | Saved-place list, detail panel and distinct editing forms                          |
-| `web/src/mobile-panels.tsx`             | Responsive shadcn/Radix Sheet navigation for places and details                    |
-| `web/src/place-map.tsx`                 | MapLibre resources, selectable markers and coordinate selection                    |
-| `web/src/safe-markdown.tsx`             | Maintained UIW editor and saved-note rendering                                     |
-| `web/src/safe-markdown-policy.tsx`      | Shared sanitized preview and non-loading external-image behavior                   |
-| `web/src/ui/`                           | Reused shadcn components and their local styling utility                           |
-| `web/src/app/auth/[...path]/route.ts`   | Node-runtime authentication proxy route handlers                                   |
-| `web/src/app/spine/[...path]/route.ts`  | Node-runtime application RPC proxy route handlers                                  |
-| `docs/event-storming.svg`               | Domain interactions and separate technical auth band                               |
+| Path                                    | Responsibility                                                                       |
+| --------------------------------------- | ------------------------------------------------------------------------------------ |
+| `model/proto/`                          | Authored domain Protobuf contracts                                                   |
+| `model/generated/`                      | Ignored generated schemas and query APIs                                             |
+| `server/src/place-domain.ts`            | Aggregate transitions and complete-result Projection                                 |
+| `server/src/fieldnotes-host.ts`         | Sequential storage, native server and browser gateway lifecycle                      |
+| `server/src/host-settings.ts`           | Explicit deployment inputs and secret validation                                     |
+| `server/src/fieldnotes-access.ts`       | Gateway request policy and trusted actor resolution                                  |
+| `server/src/fieldnotes-read-filters.ts` | Principal-based state and outcome filtering                                          |
+| `server/src/reader-proof.ts`            | jose implementation of existing reader-proof SPI                                     |
+| `server/src/auth-routes.ts`             | Exact auth HTTP admission, session bootstrap, exchanges and logout                   |
+| `server/src/direct-oidc.ts`             | Persistent direct-Google flow and application-session issuance                       |
+| `server/src/firebase-auth.ts`           | Official Admin lifecycle and verified Google identity checks                         |
+| `server/src/main.ts`                    | Configured Node host entry point                                                     |
+| `server/src/fieldnotes-process.ts`      | One process shutdown path                                                            |
+| `server/test/`                          | Domain, host, privacy, and infrastructure tests                                      |
+| `web/src/private-relay.ts`              | Fixed route allowlist, streaming, cancellation, cookie and redirect forwarding       |
+| `web/src/public-config.ts`              | Selected public browser settings without host secrets                                |
+| `web/src/browser-auth.ts`               | Browser PKCE, app-session bootstrap and credential-bound authentication requests     |
+| `web/src/browser-lifecycle.ts`          | Identity lifecycle and suppression of work from a previous sign-in                   |
+| `web/src/firebase-browser.ts`           | Official Firebase popup login with in-memory provider state                          |
+| `web/src/place-collection.ts`           | Complete creation-time Timestamp traversal, live revision merge and removal tracking |
+| `web/src/native-places.ts`              | Authenticated Connect client, canonical author topic and query page adapter          |
+| `web/src/place-commands.ts`             | Distinct Commands, selected outcomes, resulting-view wait and subscription cleanup   |
+| `web/src/workspace-state.ts`            | Committed selection, independent drafts and explicit save/conflict states            |
+| `web/src/place-workspace.tsx`           | Signed-in screen and lifecycle of the private client and workspace state             |
+| `web/src/place-panels.tsx`              | Saved-place list, detail panel and distinct editing forms                            |
+| `web/src/mobile-panels.tsx`             | Responsive shadcn/Radix Sheet navigation for places and details                      |
+| `web/src/place-map.tsx`                 | MapLibre resources, selectable markers and coordinate selection                      |
+| `web/src/safe-markdown.tsx`             | Maintained UIW editor and saved-note rendering                                       |
+| `web/src/safe-markdown-policy.tsx`      | Shared sanitized preview and non-loading external-image behavior                     |
+| `web/src/ui/`                           | Reused shadcn components and their local styling utility                             |
+| `web/src/app/auth/[...path]/route.ts`   | Node-runtime authentication proxy route handlers                                     |
+| `web/src/app/spine/[...path]/route.ts`  | Node-runtime application RPC proxy route handlers                                    |
+| `docs/event-storming.svg`               | Domain interactions and separate technical auth band                                 |
 
 ## Domain invariants
 
