@@ -489,9 +489,7 @@ describe("package metadata", () => {
     );
     expect(rootPackage.scripts["verify:publish"]).toBe("pnpm verify:release && pnpm audit:release");
     expect(release).not.toContain("pnpm verify:generated");
-    expect(rootPackage.scripts["docs:api:check"]).toBe(
-      "node --max-old-space-size=6144 scripts/check-api-docs.mjs",
-    );
+    expect(rootPackage.scripts["docs:api:check"]).toBe("node scripts/check-api-docs.mjs");
     expect(rootPackage.scripts["docs:audience:check"]).toBe("node scripts/check-doc-audience.mjs");
     expect(rootPackage.scripts["docs:snippets:check"]).toBe(
       "pnpm typecheck:build && pnpm docs:snippets:check:generated",
