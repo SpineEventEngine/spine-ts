@@ -1758,8 +1758,7 @@ export class BoundedContext {
   /**
    * Clears registered Projection state and processes already-stored Events locally.
    *
-   * Despite its legacy name, this method is not Projection catch-up. It is a
-   * process-local maintenance helper and provides no Projection targeting,
+   * This process-local maintenance helper provides no Projection targeting,
    * historical starting point, durable operation identity, progress,
    * historical/live coordination, restart, resumption, or multi-node work.
    *

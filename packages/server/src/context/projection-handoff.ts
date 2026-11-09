@@ -122,11 +122,19 @@ export class LocalProjectionInbox implements ProjectionInbox {
     return await InboxHandoff.coordinate({
       handoffs: this.#inFlightHandoffs,
       key: InboxHandoff.key(input, deliveryTenantId),
-      onHandoff: () => this.#receiveAndDrain(routed, input, deliveryTenantId),
+      onHandoff: () => this.#receiveAndSchedule(routed, input, deliveryTenantId),
     });
   }
 
-  async #receiveAndDrain(
+  /**
+   * Persists one Projection row and schedules eligible delivery separately.
+   *
+   * @param delivery Delivery used for the stored row.
+   * @param input Projection Inbox input.
+   * @param deliveryTenantId Tenant selected for the row.
+   * @returns The accepted Inbox receipt.
+   */
+  async #receiveAndSchedule(
     delivery: Delivery,
     input: ProjectionInput,
     deliveryTenantId?: TenantId,

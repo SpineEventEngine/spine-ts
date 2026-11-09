@@ -12772,7 +12772,7 @@ const InboxHandoff = {
    * @param repository Repository supplying the Command route and Entity type.
    * @param runtime Inbox, storage, tenant mode, and delivery strategy.
    * @param command Command envelope to retain and deliver.
-   * @returns Completion of Inbox receipt and its selected delivery operation.
+   * @returns Completion after Inbox receipt and eligible delivery scheduling.
    * @param acceptedRoute Recipient route saved when the signal was accepted.
    */
   async handoffEntityCommand(
@@ -12811,7 +12811,7 @@ const InboxHandoff = {
    * @param runtime Projection Inbox, storage, and tenant mode.
    * @param event Event envelope to retain and deliver.
    * @param entityId Routed Projection identifier.
-   * @returns Completion of Inbox receipt and delivery.
+   * @returns Completion after Inbox receipt and eligible delivery scheduling.
    */
   async handoffProjectionEvent(
     repository: RepositoryView,
@@ -12848,8 +12848,8 @@ const InboxHandoff = {
    * @param repository Repository supplying the Entity type and ID descriptor.
    * @param runtime Entity Inbox, storage, tenant mode, and delivery strategy.
    * @param event Event envelope to retain and deliver.
-   * @param entityId Routed Process Manager identifier.
-   * @returns Completion of Inbox receipt and its selected delivery operation.
+   * @param entityId Routed Entity identifier.
+   * @returns Completion after Inbox receipt and eligible delivery scheduling.
    */
   async handoffEntityEvent(
     repository: RepositoryView,
@@ -12875,8 +12875,8 @@ const InboxHandoff = {
    * @param repository Repository supplying the Entity type and ID descriptor.
    * @param runtime Entity Inbox, storage, tenant mode, and delivery strategy.
    * @param event Event envelope shared by the target deliveries.
-   * @param entityIds Routed Process Manager identifiers.
-   * @returns Completion of batch receipt and its selected delivery operation.
+   * @param entityIds Routed Entity identifiers.
+   * @returns Completion after batch Inbox receipts and eligible delivery scheduling.
    */
   async handoffEntityEvents(
     repository: RepositoryView,
@@ -12904,7 +12904,7 @@ const InboxHandoff = {
    * @param repository Repository supplying the target type and ID descriptor.
    * @param signalId Identifier of the original Event.
    * @param event Event envelope to pack without repeating validation.
-   * @param entityId Routed Process Manager identifier.
+   * @param entityId Routed Entity identifier.
    * @param keepUntil Duplicate-retention deadline for this receipt.
    * @returns Input for Entity Inbox receipt.
    */

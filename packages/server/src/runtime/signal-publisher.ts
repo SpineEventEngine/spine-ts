@@ -47,6 +47,9 @@ interface ProducedSignalObserver {
 
 /**
  * Publishes produced signals and contains their detached dispatch failures for one context.
+ * Completion follows each registered dispatcher's Promise. Repository-backed
+ * Entity recipients finish after Inbox receipt; custom dispatchers retain
+ * their own completion contract.
  *
  * @internal
  */
@@ -115,7 +118,7 @@ export class SignalPublisher {
    * Publishes a produced Command through one tracked bus handoff attempt.
    *
    * @param command The produced Command envelope.
-   * @returns Completion after recipient Inbox acceptance or contained handoff failure.
+   * @returns Completion after registered dispatchers settle or a handoff failure is contained.
    */
   publishCommand(command: Command): Promise<void> {
     return this.#publish("command", command, () =>
@@ -127,7 +130,7 @@ export class SignalPublisher {
    * Publishes a produced Event through one tracked bus handoff attempt.
    *
    * @param event The produced Event envelope.
-   * @returns Completion after recipient Inbox acceptance or contained handoff failure.
+   * @returns Completion after registered dispatchers settle or a handoff failure is contained.
    */
   publishEvent(event: Event): Promise<void> {
     return this.#publish("event", event, () => eventBusAccess.postFollowUp(this.#eventBus, event));
@@ -138,7 +141,7 @@ export class SignalPublisher {
    *
    * @internal
    * @param event The rejection Event envelope.
-   * @returns Completion after recipient Inbox acceptance or contained handoff failure.
+   * @returns Completion after registered dispatchers settle or a handoff failure is contained.
    */
   publishRejectionEvent(event: Event): Promise<void> {
     return this.#publish("rejection-event", event, () =>
@@ -149,7 +152,7 @@ export class SignalPublisher {
   /**
    * Dispatches a committed Entity Event once after persistence.
    * @param event The committed Event envelope.
-   * @returns Completion after recipient Inbox acceptance or contained handoff failure.
+   * @returns Completion after registered dispatchers settle or a handoff failure is contained.
    */
   publishCommittedEvent(event: Event): Promise<void> {
     const snapshot = clone(EventSchema, event);
@@ -161,7 +164,7 @@ export class SignalPublisher {
   /**
    * Dispatches a committed reactor or Process Manager Event once as follow-up work.
    * @param event The committed Event envelope.
-   * @returns Completion after recipient Inbox acceptance or contained handoff failure.
+   * @returns Completion after registered dispatchers settle or a handoff failure is contained.
    */
   publishReactorEvent(event: Event): Promise<void> {
     const snapshot = clone(EventSchema, event);
@@ -173,7 +176,7 @@ export class SignalPublisher {
   /**
    * Dispatches a produced System Event once, persisting it when configured.
    * @param event The produced System Event envelope.
-   * @returns Completion after dispatch or contained failure.
+   * @returns Completion after registered dispatchers settle or a handoff failure is contained.
    */
   publishSystemEvent(event: Event): Promise<void> {
     const snapshot = clone(EventSchema, event);

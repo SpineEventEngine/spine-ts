@@ -262,8 +262,8 @@ Direct `repository.routeCommand()` and `repository.routeEvent()` calls return
 Promises and must be awaited. Commands select exactly one ID; Events and state
 updates may select any number of distinct IDs. After validation and stable
 deduplication, routes above 1,000 recipients emit one warning and retain every
-recipient. Inbox delivery uses stored target IDs without rerouting. The legacy-named
-local `catchUpReadSide()` helper is unrelated to retry: it resets and dispatches stored Events through
+recipient. Inbox delivery uses stored target IDs without rerouting. The local
+`catchUpReadSide()` helper is unrelated to retry: it resets and dispatches stored Events through
 the whole local read side, and is not Projection catch-up.
 
 ## Message-valued Entity IDs

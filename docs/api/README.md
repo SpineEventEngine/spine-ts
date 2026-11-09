@@ -297,11 +297,11 @@ recipient Inbox writes; a publication failure is contained and reported without
 rerunning a successful Command. Generated entity-class assembly creates default repositories
 through `add(EntityClass).build()` after importing the generated bootstrap. This
 implementation does not invoke query handlers, run durable delivery catch-up, expose a
-broad server lifecycle, or integrate transports. The supported durable inbox
-handoffs are Process Manager Commands and Events, and Projection subscriber
+broad server lifecycle, or integrate transports. The supported repository Inbox
+handoffs are Process Manager Commands and Events, Aggregate Event reactions, and Projection subscriber
 updates. Routing resolves after recipient Inbox writes and immediately notifies
 normal Delivery; recipient processing and acknowledgement continue separately.
-Process-manager event rows use
+Aggregate and Process Manager Event rows use
 `REACT_UPON_EVENT`, projection subscriber rows use `UPDATE_SUBSCRIBER`, both
 store the original `Event` envelope, and both deliver only to the stored row target
 before the independent persistence steps and `Stand` update. Before handler code runs, delivery
@@ -348,7 +348,7 @@ command/event buses: default command routing reads the first command field,
 process-manager event routing reads the first event message field, state is
 loaded/created and stored through `Stand`, and returned domain commands/events
 are wrapped only after the prepared Entity write sequence succeeds.
-`BoundedContext.catchUpReadSide(options?)` is a legacy-named, process-local
+`BoundedContext.catchUpReadSide(options?)` is a process-local
 whole-read-side reset and dispatch maintenance helper. It is not the framework's
 Projection catch-up boundary. It clears registered projection rows through
 `Stand.clear()`, reads only already-stored events, and dispatches each Event only
