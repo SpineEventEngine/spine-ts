@@ -185,6 +185,15 @@ Proto snippets in README files, tutorials, and PR descriptions. Reviewers must
 check meaning as well as formatting; generated comments do not substitute for
 documentation in the authored Proto source.
 
+Every `google.protobuf.Timestamp` field must have a name beginning with
+`when_`. Name the occurrence it records, for example `when_created`,
+`when_updated`, or `when_expires`. Generated TypeScript uses `whenCreated`,
+`whenUpdated`, or `whenExpires`. The same rule applies to framework code,
+examples, fixtures, and documentation snippets. Correct existing violations
+within the approved change scope. Report conflicts with frozen external
+contracts before changing them; neither a silent exemption nor an unapproved
+external-contract rewrite is acceptable.
+
 Authored example Proto follows these rules. Its
 package is `spine.examples.<domain>` and its type URL prefix is
 `type.spine.examples.<domain>`, where `<domain>` is exactly `messageboard`, `projects`,

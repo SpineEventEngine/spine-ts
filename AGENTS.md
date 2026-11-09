@@ -23,6 +23,16 @@ a Command, treats a Command as an Event, or substitutes one identifier type for
 another is invalid because it hides contract mistakes and teaches the wrong
 API.
 
+## Timestamp Field Names
+
+Every Protobuf field of type `google.protobuf.Timestamp` must start with
+`when_`, for example `when_created` or `when_updated`. Use the corresponding
+generated names, such as `whenCreated`, in TypeScript. Apply this rule to
+framework code, examples, test fixtures, and documentation snippets. Existing
+violations require correction within the approved change scope. If a frozen
+external contract conflicts with this rule, report the conflict before changing
+that contract; do not silently exempt it or rewrite it.
+
 ## Artificial Limits
 
 Do not introduce artificial limits anywhere in the code unless the human has
