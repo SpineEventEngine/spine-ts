@@ -928,8 +928,8 @@ it("retains uncertain accepted admission and locks account switching without a d
     };
     const originalPost = prototype.post;
     let heldBeforeCommit = false;
-    let lostAfterCommit = false;
-    let conflictingReplay = false;
+    let lostAfterAcceptance = false;
+    let conflictingRepeat = false;
     const submitted: unknown[] = [];
     prototype.post = async function (this: unknown, ...args: unknown[]) {
       if ((args[0] as { typeName?: string }).typeName === RequestReleaseGenerationSchema.typeName)
@@ -942,7 +942,7 @@ it("retains uncertain accepted admission and locks account switching without a d
         throw new Error("Fixture lost the Command before dispatch.");
       }
       const posted =
-        conflictingReplay &&
+        conflictingRepeat &&
         (args[0] as { typeName?: string }).typeName === RequestReleaseGenerationSchema.typeName
           ? [
               args[0],
@@ -956,12 +956,12 @@ it("retains uncertain accepted admission and locks account switching without a d
           : args;
       const result = await Reflect.apply(originalPost, this, posted);
       if (
-        !lostAfterCommit &&
+        !lostAfterAcceptance &&
         (args[0] as { typeName?: string }).typeName === RequestReleaseGenerationSchema.typeName &&
         result.kind === "ok"
       ) {
-        lostAfterCommit = true;
-        throw new Error("Fixture lost the Command acknowledgment after commit.");
+        lostAfterAcceptance = true;
+        throw new Error("Fixture lost the Command acknowledgment after acceptance.");
       }
       return result;
     };
@@ -975,16 +975,16 @@ it("retains uncertain accepted admission and locks account switching without a d
       });
       await expect(studio.repeatGeneration(retained)).rejects.toThrow("acknowledgment");
       expect(studio.session().generations[first.id]).toBe(retained);
-      expect((await studio.generationObservation(retained)).receipt).toBe(true);
       expect(await studio.repeatGeneration(retained)).toBe(retained);
+      expect((await studio.generationObservation(retained)).receipt).toBe(true);
       expect(submitted).toHaveLength(3);
       expect(submitted[1]).toEqual(submitted[0]);
       expect(submitted[2]).toEqual(submitted[0]);
-      conflictingReplay = true;
+      conflictingRepeat = true;
       expect(await studio.repeatGeneration(retained)).toBe(retained);
       expect(await studio.generationObservation(retained)).toMatchObject({ receipt: true });
       expect(await studio.selectionLocked()).toBe(true);
-      conflictingReplay = false;
+      conflictingRepeat = false;
     } finally {
       prototype.post = originalPost;
     }

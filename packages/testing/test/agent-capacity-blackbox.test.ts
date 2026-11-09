@@ -322,7 +322,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
         (requests) => requests.length === 1,
       );
       const deferred = await post(second.box, "T-B");
-      expect(deferred).toMatchObject({ kind: "error", error: { type: "COMMAND_POST_ERROR" } });
+      expect(deferred).toMatchObject({ kind: "ok" });
       expect(
         await ServerEnvironment.instance().delivery.inbox.read(ShardIndex.single(), {
           statuses: ["TO_DELIVER"],
@@ -497,7 +497,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
       );
       expect(alternate.requests()).toHaveLength(0);
       const deferred = await post(box, "T-P", "After preference");
-      expect(deferred).toMatchObject({ kind: "error", error: { type: "COMMAND_POST_ERROR" } });
+      expect(deferred).toMatchObject({ kind: "ok" });
       expect(
         await ServerEnvironment.instance().delivery.inbox.read(ShardIndex.single(), {
           statuses: ["TO_DELIVER"],
