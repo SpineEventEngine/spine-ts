@@ -114,5 +114,8 @@ The correction removes the optional auth source and tests, its Proto record and
 generated export, two dedicated server tests, package export and dependencies,
 and active public claims. Direct OIDC, opaque sessions, signed sessions, and
 their provider tests remain. Proto generation, TypeScript build, retained auth
-and server tests passed locally. The removal review, final release profile,
-coverage, and integration status are pending in the wider correction wave.
+and server tests passed locally. Independent removal review accepted two record
+corrections: stale cleanup-function declarations and the current completion-plan
+direction. Both were corrected; cleanup enforcement, formatting and diff checks
+passed afterward. The final release profile, coverage, and integration status
+remain pending in the wider correction wave.
