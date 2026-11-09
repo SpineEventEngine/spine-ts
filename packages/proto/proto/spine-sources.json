@@ -439,10 +439,6 @@
       "sha256": "dcd178e057a13d4d044ac9fb1ba487b5a27203b0686191d5955ee928852822d7"
     },
     {
-      "localPath": "packages/proto/proto/spine/auth/better_auth_record.proto",
-      "sha256": "ca9ce291c81eec063885c407aec7ff5760af72d0cd4628dd997a6f3c34a9ab0c"
-    },
-    {
       "localPath": "packages/proto/proto/spine/auth/oidc_flow.proto",
       "sha256": "30f35a0b3cc4f3e84b91af49b632ad71067e54ac34b618cfdaca0c6ab509c07a"
     },

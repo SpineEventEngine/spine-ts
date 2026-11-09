@@ -7195,8 +7195,7 @@ The accepted [implementation specification](tasks/tenant-auth-storage/PROPOSAL.m
 selects explicit tenant and authentication persistence. Single-tenant execution
 uses `SINGLE_TENANT` without a tenant index. Multi-tenant applications supply
 an index; `PersistentTenantIndex` is the standard implementation. Authentication
-stores are provided by the existing auth package, with optional Better Auth
-integration through its dedicated subpath.
+stores are provided by the existing auth package.
 
 New persistent stores have private constructors and async factories. Their
 optional `createMissingStructures` setting defaults to `true`: creation and
@@ -7210,16 +7209,10 @@ custom factories reject it rather than silently ignoring it. This avoids a
 factory-global setting that could change another consumer's behavior. Explicit
 preparation continues through the existing storage preparation mechanism.
 
-The implementation uses maintained authentication libraries and the supported
-Better Auth profile established by the disposable integration experiment.
-Application-supplied identity/session sources remain replaceable. Cleanup is
-explicitly invoked by the application. The task introduces no migration,
-audit-log subsystem, or Gateway replication.
-
-Production Better Auth integration targets exact version `1.7.16` after the
-upstream security patch review. The disposable experiment used `1.7.15`; its
-results do not transfer automatically. Replay adapter, session/revocation,
-cookie and native OIDC acceptance against the production pin before acceptance.
+The implementation uses maintained authentication libraries. Application-supplied
+identity and session sources remain replaceable. Cleanup is explicitly invoked
+by the application. The task introduces no migration, audit-log subsystem, or
+Gateway replication.
 
 ## Declared record indexes (2026-11-04)
 
@@ -7316,33 +7309,6 @@ configured tolerance. This derives from the existing clock domain and does not
 change clock, lifetime or tolerance settings, retired-key behavior, or introduce
 a retention default. The M6 temporal tests and reliability review cover this edge.
 
-## Better Auth declaration and plugin configuration boundary (2026-11-04)
-
-The proposed optional integration preserves native option names using local
-structural declarations. A same-name genericOAuth export forwards to the actual
-native factory while exposing only its supported id/options view. Integration
-validates and copies configuration before asynchronous initialization, then builds
-the installed native plugin from those validated options. Caller-provided plugin
-implementations are not executed. No plugin registry, brand or second engine is
-introduced. This narrow forwarding function preserves the library API despite
-the general preference for class/object helpers.
-
-Strict disposable source and consumer checks with Better Auth1.7.16 establish
-the declaration approach. The development build uses only the genuine upstream
-bun-types1.3.14/sqlite.d.ts declaration with Node types; full Bun globals conflict
-with the repository Node declarations. No ambient stub, skipLibCheck relaxation,
-public Bun reference or consumer Bun dependency is introduced. Actual workspace
-and packed-package verification remain required, as do native runtime validation
-and cancellation tests. The affected proposal amendment requires independent
-review before implementation in M9–M11.
-
-The Better Auth declaration amendment passed independent no-memory API,
-reliability and documentation review. Corrections distinguish the supplied options
-reference from the later detached copy, reject invalid client authentication
-combinations before listening, and name the pinned native fields ignored during
-reconstruction. This accepts the design; M9–M11 workspace, packed-consumer and
-runtime verification remain required.
-
 ## Browser admission names before credential extraction (2026-11-04)
 
 A reader's executable read method cannot tell the host which names to check
@@ -7356,17 +7322,6 @@ duplicate checks, and uses only the active reader or route for simultaneous
 credential rejection. Standard and optional native integrations derive names
 from their actual effective configuration. External implementations declare
 their trusted configuration; metadata cannot certify arbitrary executable code.
-
-The pinned Better Auth public cookie helpers resolve native names, including the
-database OAuth state role. No private import, host policy override or auth-to-server
-dependency is introduced. Source inspection/probe establishes the seam; actual
-HTTP/native production tests remain required. This material public amendment
-requires independent review before its M7 implementation.
-
-Independent no-memory API, reliability and documentation review accepted this
-admission amendment after clarifying the startup snapshot order and request-local
-mutable URL value. The required startup-mutation and actual HTTP tests remain
-implementation acceptance; source-level native name resolution is not that proof.
 
 ## Native authentication lifetime outside trusted reader facts (2026-11-04)
 
@@ -7390,114 +7345,6 @@ native lifetime amendment after tightening the standard-strategy example to deny
 admission without its required invalidation signal and clarifying the port's
 one-time admission decision. Actual native/Coordinator output, cleanup and expiry
 behavior remain M8 runtime acceptance; no implementation success is inferred.
-
-## Explicit host policy for generated Better Auth routes (2026-11-04)
-
-The integration examples return ready-to-mount routes but did not supply the
-body-size and deadline values already required by BrowserAuthRoute. Add required
-outer routePolicy with maxRequestBytes and timeoutMs, both supplied by the
-application. One copied pair populates every generated admitted route. Native
-Better Auth options retain their names and purpose; no default or numerical
-bound is added, and no per-path policy mechanism is introduced.
-
-Capture and validate the pair before initialization awaits, return immutable
-structural route declarations, and retain the host's independent validation.
-The auth package does not depend on server. Native provider cancellation remains
-separately required in M11; a host deadline is not that proof. This bounded
-public amendment requires independent review before M10 implementation.
-
-Independent no-memory API, reliability and documentation review accepted this
-route-policy amendment. M10 must prove construction-time validation and immutable
-snapshots, direct host compatibility, configured body boundaries and deadlines.
-M11 still requires actual provider cancellation and late-result evidence. No
-runtime implementation result is inferred from the design review.
-
-## Better Auth callback network isolation and startup (2026-11-05)
-
-Accepted bounded design after independent no-memory API, reliability and
-documentation review and a revised disposable native proof. Production M11
-implementation and acceptance remain pending. Exact Better Auth 1.7.16 and jose 6.2.15 experiments showed that
-cancelling a shared JWKS fetch fails a concurrent callback. Give each callback
-and configured provider a separate jose resolver through the original native
-provider's public ID-token configuration. Use supported native token/profile
-hooks with the same operation lifetime, and retain native cryptographic and
-state verification. Do not share mutable key caches between callbacks.
-
-Read trusted discovery metadata during factory construction, provide native
-endpoint overrides from that snapshot, and check agreement with the initialized
-native issuer, audience and algorithms before installing the resolver. Every
-configured provider must initialize before publication; partial initialization
-and native request-time discovery retry are excluded. Missing ID tokens reject.
-No public input or storage contract changes.
-
-Earlier research incorrectly assigned the request-time retry timeout to startup.
-Native genericOAuth.init supplies no explicit discovery timeout at 1.7.16. The
-factory has no startup cancellation signal or bounded startup guarantee; route
-policy limits apply to admitted routes. This limitation is explicit in the
-proposal and M11. No new timeout, cache policy, private import, global fetch
-replacement or second OIDC engine is introduced. Actual provider callback,
-concurrency, body-stream, late-commit and confidential-client tests remain M11
-acceptance requirements.
-
-The revised native probe demonstrates separate callback JWKS requests, isolated
-cancellation in either order, body-stream cancellation, discovery metadata
-binding and complete initialization, with native verification retained. It uses
-a disposable native memory adapter and public-client configuration; it does not
-establish the Spine production adapter, confidential-client methods, directory
-behavior, late session-write compensation or production logging. These remain
-M11 gates. Per-callback key fetching increases provider traffic; application
-rate policy remains explicit. No new cache or concurrency policy is added.
-
-## API documentation build memory (2026-11-05)
-
-The optional Better Auth implementation expands the TypeScript program loaded
-by TypeDoc. TypeDoc 0.28.19 loads every referenced project in the solution
-configuration; removing an entry point does not remove that project's dependency
-graph. The complete API check exhausted Node's default 4 GiB heap. A measured
-run with 6 GiB completed conversion, validation and export assertions.
-
-Allocate 6 GiB of Node old-space memory to the API-check command. Keep every
-entry point, strict type check and export assertion. Scope this setting to the
-documentation build; it changes no application resource policy or runtime limit.
-The normal command and final release profile must exercise this setting.
-
-## Selected Better Auth related reads (2026-11-05)
-
-Native getSession uses a Session-to-User join. Better Auth core 1.7.16's fallback
-logs a failed related read directly to console before rethrowing, bypassing its
-logger settings. A real directory-outage test reproduced this behavior.
-
-The proposed bounded remedy enables `advanced.database.joins` privately and
-returns the selected related records through the existing adapter. M10 needs
-Session-to-User and User-to-Account; M11 additionally needs Account-to-User for
-prelinked OIDC. Explicit null/empty related properties prevent fallback. All
-other effective shapes reject before I/O. Reuse indexed storage, complete User
-sources and native limits, without a public option, generic join engine, new
-record family or cross-record transaction. Failures remain failures and emit
-no log record; shutdown and cancellation cover the complete admitted read.
-
-Independent API, reliability and documentation review accepted the bounded
-amendment after adding canonical exact request/result matrices, clarifying
-external-User password admission and preserving the native two-match OIDC
-Account check. The public options remain unchanged. Runtime implementation and
-acceptance are recorded per milestone; existing M9 evidence does not establish these reads.
-
-## Native OIDC atomic consumption (2026-11-05)
-
-An actual native Better Auth 1.7.16 callback race with the Spine adapter allowed
-two token exchanges. The native deletion helper silently skips its raw delete
-when its preliminary read finds no record, and the parser ignores the return.
-Raw conditional-deletion tests therefore do not establish callback exclusivity.
-
-A callback-local public before hook replaces only OAuth-state deletion with
-public adapter `consumeOne` and requires a non-null result. Native cookie
-validation remains before consumption and token exchange remains after it.
-The hook returns a fresh request context; it does not mutate the shared adapter
-or return stale state from reads. Cancellation checks around state CAS preserve
-pre-write cancellation and drain writes already issued, without restoring state
-or disabling late Session compensation. Refusal must produce a usable safe
-restart-login outcome without exposing credentials or an unavailable error route.
-This adds no public option, record family, index, lock or transaction.
 
 ## Fieldnotes complete collection reads (2026-11-07)
 

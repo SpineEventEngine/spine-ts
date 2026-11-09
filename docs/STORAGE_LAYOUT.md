@@ -5164,21 +5164,18 @@ structures can then cause ordinary storage operations to fail.
 The following record types supplement the business-storage inventory above.
 Their physical table or kind names follow the selected provider and storage group.
 
-| Selected implementation        | Record families                                                                                                                  | When they are needed                                                                                                                                                                                                              |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PersistentTenantIndex`        | `spine.server.tenant.Tenant`                                                                                                     | Explicit stored multitenant registration. Single-tenant mode and an external index need no such records.                                                                                                                          |
-| `PersistentOpaqueSessionStore` | `spine.auth.OpaqueSessionRecord`                                                                                                 | Authoritative opaque sessions that use record storage. Omitting the store from `OpaqueSessions.create()` selects process-local memory.                                                                                            |
-| `PersistentOidcFlowStore`      | `spine.auth.OidcLoginTransaction`, `spine.auth.OidcLoginGrant`                                                                   | Shared component OIDC transactions and one-use application grants. Omitting the flow store selects process-local memory.                                                                                                          |
-| `PersistentTokenRevocations`   | `spine.auth.TokenRevocation`                                                                                                     | Shared signed-token revocation. Signed tokens themselves remain client credentials; without a revocation source, logout is expiry-only.                                                                                           |
-| `PersistentBetterAuthStore`    | Selected `spine.auth.BetterAuthUserRecord`, `BetterAuthAccountRecord`, `BetterAuthSessionRecord`, `BetterAuthVerificationRecord` | The optional Better Auth profile prepares only its explicit model list. An external User source replaces stored Users; password login needs credential Accounts, and native OIDC needs prelinked Accounts and Verification state. |
+| Selected implementation        | Record families                                                | When they are needed                                                                                                                    |
+| ------------------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `PersistentTenantIndex`        | `spine.server.tenant.Tenant`                                   | Explicit stored multitenant registration. Single-tenant mode and an external index need no such records.                                |
+| `PersistentOpaqueSessionStore` | `spine.auth.OpaqueSessionRecord`                               | Authoritative opaque sessions that use record storage. Omitting the store from `OpaqueSessions.create()` selects process-local memory.  |
+| `PersistentOidcFlowStore`      | `spine.auth.OidcLoginTransaction`, `spine.auth.OidcLoginGrant` | Shared component OIDC transactions and one-use application grants. Omitting the flow store selects process-local memory.                |
+| `PersistentTokenRevocations`   | `spine.auth.TokenRevocation`                                   | Shared signed-token revocation. Signed tokens themselves remain client credentials; without a revocation source, logout is expiry-only. |
 
 The tenant implementation is exported by `@spine-event-engine/server`.
-Component auth stores are exported by `@spine-event-engine/auth`; the optional
-Better Auth store is exported by `@spine-event-engine/auth/better-auth`.
+Component auth stores are exported by `@spine-event-engine/auth`.
 An existing session service can supply `SessionResolver` without selecting any
 of these auth stores. User directories, passwords, permissions and provider-token
-storage are not implied by component sessions. The selected Better Auth Account
-profile can retain a provisioned password hash, but does not store provider tokens.
+storage are not implied by component sessions.
 
 These stores can be constructed directly in a standalone Gateway. They need no
 Bounded Context or `ServerEnvironment` to trigger preparation. The application
@@ -5195,11 +5192,6 @@ the one-use application grant. Callback and grant consumption are atomic. With
 the default memory store, the process holding the state must complete those
 steps. Durable flow state alone does not make the issued application session
 durable; configure its session strategy separately.
-
-The optional Better Auth flow instead uses native Verification and Session
-records. Its selected integration admits administrator-prelinked identities.
-The provider's verification keys and active sockets remain process-local;
-shared records do not implement distributed Gateway coordination or cancellation.
 
 The application supplies trusted Actor/Tenant resolution and authorization
 policies. Those collaborators can consult an existing directory or permissions

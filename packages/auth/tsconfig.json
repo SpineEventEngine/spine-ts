@@ -8,7 +8,7 @@
     "lib": ["ES2024", "DOM", "decorators"],
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "node_modules/bun-types/sqlite.d.ts"],
+  "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"],
   "references": [
     { "path": "../core" },

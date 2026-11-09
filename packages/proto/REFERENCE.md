@@ -59,15 +59,6 @@ documented declarations are separated by blank lines, and a multi-paragraph
 `//` comment ends with a blank `//` line before its declaration. Frozen copied
 JVM sources retain their upstream formatting and syntax.
 
-The curated auth subpath also exports `BetterAuthUserRecord`,
-`BetterAuthAccountRecord`, `BetterAuthSessionRecord`, and
-`BetterAuthVerificationRecord`, with their generated schemas. These four
-domain-specific records are selected by the optional Better Auth persistence
-store. User and Account definitions are provisioned; Session and Verification
-records are native runtime transitions. Account persistence includes the
-optional password hash and excludes unused provider tokens, token deadlines,
-and scope.
-
 ## Model modules
 
 An application model uses `spine-proto.json` with `mode: "model"`, its package

@@ -17,7 +17,6 @@
  */
 export * from "../../generated/spine/auth/authenticated_subscription_pb.js";
 export * from "../../generated/spine/auth/authenticated_principal_pb.js";
-export * from "../../generated/spine/auth/better_auth_record_pb.js";
 export * from "../../generated/spine/auth/authentication_service_pb.js";
 export * from "../../generated/spine/auth/opaque_session_pb.js";
 export * from "../../generated/spine/auth/oidc_flow_pb.js";

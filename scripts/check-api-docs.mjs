@@ -270,22 +270,6 @@ const expectedAuthExports = [
   "IncomingRequests",
   "TransportFacts",
 ];
-const expectedBetterAuthExports = [
-  "PersistentBetterAuthStore",
-  "BetterAuthModel",
-  "BetterAuthUser",
-  "BetterAuthUsers",
-  "BetterAuthStoreOptions",
-  "BetterAuthIntegration",
-  "BetterAuthIntegrationOptions",
-  "BetterAuthRoutePolicy",
-  "SupportedBetterAuthOptions",
-  "BetterAuthCredentialReader",
-  "BetterAuthRoute",
-  "BetterAuthVerifiedLogin",
-  "genericOAuth",
-  "GenericOAuthOptions",
-];
 const expectedCoreExports = [
   "AppQueryResponses",
   "AppQueryResponseFor",
@@ -1483,7 +1467,6 @@ const transportProtoPath = join(
 );
 const protoToolsIndexPath = join("packages", "proto-tools", "src", "index.ts");
 const authIndexPath = join("packages", "auth", "src", "index.ts");
-const betterAuthIndexPath = join("packages", "auth", "src", "better-auth", "index.ts");
 const clientIndexPath = join("packages", "client-node", "src", "index.ts");
 const clientCodegenIndexPath = join("packages", "client-node", "src", "codegen", "index.ts");
 const clientWebIndexPath = join("packages", "client-web", "src", "index.ts");
@@ -1553,7 +1536,6 @@ const documentedNames = new Set();
 const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
 const browserServerModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src/browser");
 const authModuleNames = collectDirectModuleNames(apiDocs, "packages/auth/src");
-const betterAuthModuleNames = collectDirectModuleNames(apiDocs, "packages/auth/src/better-auth");
 const clientModuleNames = collectDirectModuleNames(apiDocs, "packages/client-node/src");
 const clientCodegenModuleNames = collectDirectModuleNames(
   apiDocs,
@@ -1891,7 +1873,6 @@ const forbiddenStorageTypeDocNames = [
 const declaredServerExports = collectNamedExports(serverIndexPath);
 const declaredBrowserServerExports = collectNamedExports(browserServerIndexPath);
 const declaredAuthExports = collectNamedExports(authIndexPath);
-const declaredBetterAuthExports = collectNamedExports(betterAuthIndexPath);
 const declaredProtoToolsExports = collectNamedExports(protoToolsIndexPath);
 const declaredClientExports = collectNamedExports(clientIndexPath);
 const declaredClientCodegenExports = collectNamedExports(clientCodegenIndexPath);
@@ -1955,12 +1936,6 @@ const missingDeclaredAuthExports = expectedAuthExports.filter(
 );
 const unexpectedAuthExports = declaredAuthExports.filter(
   (name) => !expectedAuthExports.includes(name),
-);
-const missingBetterAuthExports = expectedBetterAuthExports.filter(
-  (name) => !betterAuthModuleNames.has(name) || !declaredBetterAuthExports.includes(name),
-);
-const unexpectedBetterAuthExports = declaredBetterAuthExports.filter(
-  (name) => !expectedBetterAuthExports.includes(name),
 );
 const missingDeclaredProtoToolsExports = expectedProtoToolsExports.filter(
   (name) => !declaredProtoToolsExports.includes(name),
@@ -2181,14 +2156,6 @@ if (missingDeclaredAuthExports.length > 0 || unexpectedAuthExports.length > 0) {
   console.error(
     "@spine-event-engine/auth root export inventory mismatch: " +
       [...missingDeclaredAuthExports, ...unexpectedAuthExports].join(", "),
-  );
-  process.exit(1);
-}
-
-if (missingBetterAuthExports.length > 0 || unexpectedBetterAuthExports.length > 0) {
-  console.error(
-    "@spine-event-engine/auth/better-auth export inventory mismatch: " +
-      [...missingBetterAuthExports, ...unexpectedBetterAuthExports].join(", "),
   );
   process.exit(1);
 }

@@ -11,7 +11,6 @@
     "noEmit": true
   },
   "include": [
-    "packages/auth/node_modules/bun-types/sqlite.d.ts",
     "packages/*/src/**/*.ts",
     "packages/*/src/**/*.tsx",
     "packages/*/test/**/*.ts",

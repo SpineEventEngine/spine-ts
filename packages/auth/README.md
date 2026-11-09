@@ -154,10 +154,8 @@ for direct native authentication and managed forwarding configuration.
 ## Browser and OIDC extensions
 
 `OidcFlow` is a component flow: the application provides its start, callback,
-exchange, identity mapping, and session issuance routes. The optional
-`BetterAuthIntegration` below exposes exact native authentication routes.
-Neither component supplies browser pages, users, permissions, TLS, or a
-production session database. An application can compose `OidcFlow` with
+exchange, identity mapping, and session issuance routes. It does not supply
+browser pages, users, permissions, TLS, or a production session database. An application can compose `OidcFlow` with
 Google, GitHub, or another verified provider.
 Keep provider access, refresh, and ID tokens server-side.
 
@@ -178,88 +176,6 @@ For browser-facing hosting, install the server browser entry point and use
 `@spine-event-engine/server/browser`. That boundary requires exact origins,
 finite request limits, authorization and trusted-context collaborators, and
 durable authenticated bindings when applicable.
-
-## Selected Better Auth persistence
-
-Install the exact optional `better-auth` peer when using
-`@spine-event-engine/auth/better-auth`. The selected store persists native
-Session and Verification records, and optionally provisioned User and Account
-records, through Spine storage. Its factory prepares only selected structures
-by default; an explicit `createMissingStructures: false` skips physical checks
-and DDL at creation and later operations. For durable persistence, the application
-supplies an existing database and a provider-valid storage group. This example
-uses process-local memory; use a durable storage provider to preserve records
-across restarts. The following configuration-only example initializes and
-closes the integration; it does not start a browser listener.
-
-```ts
-import {
-  BetterAuthIntegration,
-  PersistentBetterAuthStore,
-} from "@spine-event-engine/auth/better-auth";
-import { Time } from "@spine-event-engine/core/time";
-import { InMemoryStorageFactory, StorageGroup } from "@spine-event-engine/storage";
-
-const factory = new InMemoryStorageFactory();
-try {
-  const store = await PersistentBetterAuthStore.create({
-    storageFactory: factory,
-    group: new StorageGroup("orders_better_auth"),
-    models: ["user", "account", "session", "verification"],
-  });
-  try {
-    const secret = process.env.BETTER_AUTH_SECRET;
-    if (secret === undefined) throw new Error("BETTER_AUTH_SECRET is required.");
-    const auth = await BetterAuthIntegration.create({
-      store,
-      routePolicy: { maxRequestBytes: 8_192, timeoutMs: 5_000 },
-      options: {
-        baseURL: "https://app.example.test",
-        basePath: "/auth",
-        secret,
-        trustedOrigins: ["https://app.example.test"],
-        emailAndPassword: { enabled: true, disableSignUp: true },
-        account: { accountLinking: { enabled: false } },
-        session: { cookieCache: { enabled: false } },
-      },
-      onPrincipal: async (user) => ({ id: user.id }),
-    });
-    try {
-      await store.purgeExpired(Time.currentTime());
-    } finally {
-      await auth.close();
-    }
-  } finally {
-    await store.close();
-  }
-} finally {
-  await factory.close();
-}
-```
-
-Provision complete Users and prelinked Accounts before accepting password
-or selected OIDC traffic. OIDC provider discovery and native initialization
-finish before `create()` returns; a pending provider has no factory timeout or
-caller cancellation, and the route deadline begins only after route admission.
-When an ID token has no email and userinfo is available, the OIDC callback reads
-userinfo. Better Auth compares its provider subject with the verified ID-token
-subject before accepting the profile, then resolves the prelinked Account to an
-application User ID. Without available userinfo, that callback cannot supply a profile.
-Each admitted callback uses a separate JWKS resolver, which may increase key
-requests to the provider. The integration exposes exact browser routes,
-verified session reads, and credential metadata. For a listener, pass `auth.routes` as
-`BrowserServerOptions.authRoutes`, `auth.sessions` as `sessions`, and
-`auth.credentials` as `credentials`, alongside the host's origin, clock,
-authorization, and context collaborators. The host applies the selected route
-bounds. See [browser hosting](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/REFERENCE.md#browser-hosting) for the
-maintained host contract and required options.
-See the [auth reference](REFERENCE.md#selected-better-auth-records) for the
-provisioning and query profile.
-
-An external verifier must validate application proof before returning a stable
-User ID. For OIDC, start authorization before redirecting the browser, retain
-the state cookie for the callback, and configure account linking and cleanup
-explicitly.
 
 ## Limits and next steps
 

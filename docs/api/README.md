@@ -24,7 +24,6 @@ registration.
 - Connecting a client: [Node](../../packages/client-node/README.md) or
   [browser](../../packages/client-web/README.md)
 - Choosing storage: [`@spine-event-engine/storage`](../../packages/storage/README.md)
-- Selecting Better Auth records: [`@spine-event-engine/auth/better-auth`](../../packages/auth/README.md#selected-better-auth-persistence)
 - Package-level limits: each package's `REFERENCE.md`
 
 Use one detailed source for each subject rather than treating this page as a

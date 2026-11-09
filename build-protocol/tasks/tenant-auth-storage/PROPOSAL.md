@@ -4,7 +4,7 @@ This is the implementation specification for this task. It supersedes earlier pr
 
 The final preparation rule is: **new persistent-store factories create missing supported structures and check compatibility by default, before returning**. Set `createMissingStructures: false` to skip both. **Existing business-storage eager/lazy behavior is unchanged.** There is no remaining scope question about either rule.
 
-This proposal makes persistence an explicit application choice and uses maintained libraries for standard authentication mechanisms. It offers two authentication paths: Spine strategies assembled from focused libraries, and an optional Better Auth integration. The application selects one session engine for a given login flow.
+This proposal makes persistence an explicit application choice and uses maintained libraries for standard authentication mechanisms. It uses Spine strategies assembled from focused libraries. The application selects one session engine for a given login flow.
 
 APIs in accepted milestones are implemented contracts; later milestone APIs remain proposed until their implementation and review are complete. Existing library calls are identified separately. Application configuration values in examples come from deployment configuration; example durations are not new framework defaults.
 
@@ -27,14 +27,13 @@ Authentication answers who made a request. Authorization decides what that ident
 
 ## 2. Which libraries do what
 
-| Library               | Responsibility                                                                                               | Persistent storage                                                                                                               |
-| --------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| jose                  | Sign and verify application JWTs; verify provider ID-token signatures and claims using the configured clock. | No session database inside jose. Spine checks its selected revocation source for application tokens.                             |
-| openid-client         | OpenID Connect discovery, authorization URLs and PKCE challenge generation.                                  | Spine persists the pending transaction before returning its authorization URL.                                                   |
-| oauth4webapi          | Construct, authenticate and send the standard authorization-code token request.                              | It returns a response; the provider adapter validates it and requires JOSE verification before returning an identity.            |
-| iron-session          | `sealData()` / `unsealData()` protect the reference carried by an opaque credential.                         | Spine stores authoritative session records. We do not use stateless cookie sessions as the authority.                            |
-| `cookie`              | Parse Cookie headers and serialize Set-Cookie values.                                                        | None. Strict admission and CSRF protection remain separate.                                                                      |
-| Better Auth, optional | Complete login/session engine for an explicitly supported profile.                                           | Its adapter translates supported models and operations to Spine storage, or the application retains its existing native backend. |
+| Library       | Responsibility                                                                                               | Persistent storage                                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| jose          | Sign and verify application JWTs; verify provider ID-token signatures and claims using the configured clock. | No session database inside jose. Spine checks its selected revocation source for application tokens.                  |
+| openid-client | OpenID Connect discovery, authorization URLs and PKCE challenge generation.                                  | Spine persists the pending transaction before returning its authorization URL.                                        |
+| oauth4webapi  | Construct, authenticate and send the standard authorization-code token request.                              | It returns a response; the provider adapter validates it and requires JOSE verification before returning an identity. |
+| iron-session  | `sealData()` / `unsealData()` protect the reference carried by an opaque credential.                         | Spine stores authoritative session records. We do not use stateless cookie sessions as the authority.                 |
+| `cookie`      | Parse Cookie headers and serialize Set-Cookie values.                                                        | None. Strict admission and CSRF protection remain separate.                                                           |
 
 An opaque session credential is a value the browser does not interpret. A cookie and a Bearer header are transport mechanisms, not storage mechanisms. OIDC is the external login protocol; PKCE is its challenge/verifier proof, and CSRF means cross-site request forgery.
 
@@ -127,7 +126,6 @@ Choose a storage-group name accepted by the selected provider. These examples us
 | `PersistentOpaqueSessionStore`, `OpaqueSessionStore`           | `@spine-event-engine/auth`                    |
 | `PersistentOidcFlowStore`, `OidcFlowStore`                     | `@spine-event-engine/auth`                    |
 | `PersistentTokenRevocations`                                   | `@spine-event-engine/auth`                    |
-| Better Auth integration types described below                  | `@spine-event-engine/auth/better-auth`        |
 | `BrowserCredentialReader` and browser hosting                  | Existing `@spine-event-engine/server/browser` |
 
 New persistent classes have private constructors, asynchronous `create()` factories and asynchronous `close()`. There is no `ready()`. The auth package depends on common storage, not a server environment or one database provider.
@@ -583,920 +581,7 @@ An application already using another session service supplies its `SessionResolv
 
 No second Spine login session is created. Tenant authorization remains application policy. External session deletion/invalidation needs an explicit notification integration if active local streams must stop immediately; request-time verification alone does not stop an existing stream.
 
-## 7. Optional Better Auth integration
-
-### What the completed experiment establishes
-
-Better Auth can run its actual session engine through Spine `StorageFactory` and `RecordStorage`. The new experiment uses a custom adapter built with Better Auth's documented createAdapterFactory; it does not send authentication reads/writes to Better Auth's native PostgreSQL or MySQL adapters.
-
-This makes Better Auth a useful optional integration. It does not establish a universal adapter for every Better Auth plugin. The initial supported configurations are existing identities with native sessions, preprovisioned password accounts, and prelinked OIDC accounts. Public signup and new account linking need a separate uniqueness/provisioning design.
-
-```mermaid
-flowchart TD
-    Browser[Browser: native Better Auth cookies] --> Routes[Gateway: admitted Better Auth HTTP routes]
-    Routes --> Engine[Better Auth: selected login and session features]
-    Browser --> RPC[Gateway: Spine RPC]
-    RPC --> Resolver[Better Auth session resolver]
-    Resolver --> Engine
-    Engine --> Adapter[Spine Better Auth adapter]
-    Adapter --> Directory[Optional existing user directory]
-    Adapter --> Factory[Spine StorageFactory / RecordStorage]
-    Factory --> Records[(Selected auth records in PostgreSQL / MySQL / Datastore)]
-    Resolver --> Principal[Map stable user ID to Spine principal]
-    Principal --> Policy[Authorization and tenant membership]
-    Policy --> Application[Application process / Bounded Contexts]
-```
-
-Better Auth creates the session token, signs its native cookie, checks passwords or its selected OIDC response, and decides when renewal is due. The Spine adapter handles persistent records, atomic mutations and explicit cleanup. The Gateway handles admission, forwarding and local stream lifetime. Application collaborators supply identity-to-principal and principal-to-tenant mappings.
-
-This path does not use iron-session, `OpaqueSessions`, `PersistentOpaqueSessionStore`, or the component OIDC transaction/grant tables. Better Auth's generic OIDC flow performs the native protocol flow; it does not call the proposed openid-client wrapper. A separate component flow may coexist for other clients, with explicitly separate session policy and routes.
-
-### API and configuration boundary
-
-Add `PersistentBetterAuthStore` and `BetterAuthIntegration` in the existing auth package, through an optional `@spine-event-engine/auth/better-auth` export. This is an auth-package subpath, not a new package or a server subpath. Better Auth is an optional peer dependency; importing the component path must not load it.
-
-`PersistentBetterAuthStore.create()` follows the same private-constructor, optional-preparation and close rules as other stores. `models` explicitly selects persisted record families; an external `users` collaborator replaces the logical User model without creating a Users table.
-
-For preprovisioned password login on the Gateway:
-
-```typescript
-import {
-  PersistentBetterAuthStore,
-  BetterAuthIntegration,
-} from "@spine-event-engine/auth/better-auth";
-
-const betterAuthStore = await PersistentBetterAuthStore.create({
-  storageFactory: authStorage,
-  group: new StorageGroup("orders_better_auth"),
-  models: ["user", "account", "session"],
-  // Creates/checks only these selected record families before returning.
-});
-
-const auth = await BetterAuthIntegration.create({
-  store: betterAuthStore,
-  routePolicy: {
-    maxRequestBytes: config.authMaxRequestBytes,
-    timeoutMs: config.authTimeoutMs,
-  },
-  onPrincipal: async (user, signal) => companyPrincipals.find(user.id, signal),
-  options: {
-    baseURL: config.gatewayPublicUrl,
-    basePath: "/auth",
-    secret: config.betterAuthSecret,
-    trustedOrigins: [config.browserOrigin],
-    emailAndPassword: {
-      enabled: true,
-      disableSignUp: true,
-    },
-    account: {
-      accountLinking: { enabled: false },
-    },
-    session: {
-      expiresIn: config.sessionLifetimeSeconds,
-      updateAge: config.sessionRenewalAgeSeconds,
-      cookieCache: { enabled: false },
-    },
-    advanced: {
-      useSecureCookies: true,
-      database: { validateSchema: false },
-    },
-  },
-});
-
-const gateway = await BrowserServer.run({
-  ...transportOptions,
-  backend: { baseUrl: config.applicationBackendUrl },
-  origins: [config.browserOrigin],
-  sessions: auth.sessions,
-  credentials: auth.credentials,
-  authRoutes: auth.routes,
-  authorize: policy.authorize.bind(policy),
-  contexts: contextResolver,
-  bindings: subscriptionBindings,
-});
-```
-
-The outer factories and their returned `sessions`, `credentials`, and `routes` are proposed Spine APIs. Fields inside `options` retain Better Auth names. The integration supplies `database` and its strict logout/identity bridge plugins. It validates the selected native options and model requirements before accepting traffic. It does not expose an unrestricted handler that lets clients reach unsupported routes.
-
-Before this addition, the factory examples left the generated routes' required body limits and deadlines without a configuration source. After it, the application supplies one required `routePolicy` beside native `options`. `maxRequestBytes` limits the request body; `timeoutMs` is the complete route operation deadline in milliseconds. The same pair applies to every generated route, including enabled login, renewal, strict logout and selected OIDC callbacks. The integration supplies no defaults, and these values are separate from session lifetime and native rate limiting.
-
-```typescript
-/**
- * Application-selected browser host bounds for generated Better Auth routes.
- */
-export interface BetterAuthRoutePolicy {
-  /**
-   * Maximum request body bytes for each generated route, within the existing
-   * browser host's accepted range.
-   */
-  readonly maxRequestBytes: number;
-
-  /**
-   * Complete route operation deadline in milliseconds, within the existing
-   * browser host's accepted range.
-   */
-  readonly timeoutMs: number;
-}
-```
-
-`BetterAuthIntegration.create()` requires `routePolicy: BetterAuthRoutePolicy`. Before its first initialization await, it captures, validates and copies both fields together with the admitted native configuration. Missing, invalid and unsupported policy fields reject construction, including for JavaScript callers. Both numbers must satisfy the existing `BrowserAuthRoute` validation; this adds no numerical bound. The returned route array, route objects, origins and admission arrays are immutable snapshots. The factory copies input objects rather than freezing them, and later caller mutation cannot change effective configuration.
-
-The policy controls body admission and the host deadline. The integration continues to select exact paths, methods, origins and callback exceptions from the supported native profile. The auth subpath declares its policy and route shapes locally, with no server dependency. The host still validates and snapshots complete routes at startup. A host deadline alone does not prove cancellation of native provider work; M11's network cancellation and late-result tests remain required.
-
-`SupportedBetterAuthOptions` describes the supported native fields through local structural declarations. This keeps strict Node applications from inheriting Better Auth 1.7.16's Bun declaration dependency. The optional subpath also exports `genericOAuth`: it calls the actual Better Auth factory with native option names and exposes the returned identifier and configuration.
-
-Before this amendment, application examples imported `genericOAuth` directly from Better Auth and the public types referenced its large declaration graph. After it, the maintained import is `@spine-event-engine/auth/better-auth`; the native configuration call remains the same. The demonstrated strict Node example needs no Bun types or relaxed compiler setting.
-
-The supported public shape is:
-
-```typescript
-/**
- * Native options accepted by the bounded integration.
- */
-export interface SupportedBetterAuthOptions {
-  /**
-   * Externally visible authentication service URL.
-   */
-  readonly baseURL: string;
-
-  /**
-   * Native authentication route prefix.
-   */
-  readonly basePath?: string;
-
-  /**
-   * Native signing secret supplied by the application.
-   */
-  readonly secret?: string;
-
-  /**
-   * Native versioned secrets; each entry has a numeric version and secret value.
-   */
-  readonly secrets?: { version: number; value: string }[];
-
-  /**
-   * Browser origins admitted by authentication routes.
-   */
-  readonly trustedOrigins: string[];
-
-  /**
-   * Native session lifetime and renewal policy.
-   */
-  readonly session?: {
-    /**
-     * Session lifetime in seconds.
-     */
-    expiresIn?: number;
-
-    /**
-     * Seconds before a session becomes eligible for renewal.
-     */
-    updateAge?: number;
-
-    /**
-     * Whether native session renewal is disabled.
-     */
-    disableSessionRefresh?: boolean;
-
-    /**
-     * Age in seconds used for native fresh-session checks.
-     */
-    freshAge?: number;
-
-    /**
-     * Keeps authoritative session reads enabled by disabling cookie caching.
-     */
-    cookieCache?: { enabled: false };
-  };
-
-  /**
-   * Preprovisioned password login; public signup remains disabled.
-   */
-  readonly emailAndPassword?: {
-    /**
-     * Enables the selected native feature.
-     */
-    enabled: true;
-
-    /**
-     * Rejects creation of new users through login routes.
-     */
-    disableSignUp: true;
-
-    /**
-     * Native minimum accepted password length.
-     */
-    minPasswordLength?: number;
-
-    /**
-     * Native maximum accepted password length.
-     */
-    maxPasswordLength?: number;
-
-    /**
-     * Optional native password hashing and verification callbacks.
-     */
-    password?: {
-      /**
-       * Hashes a supplied password using application-selected native policy.
-       */
-      hash?: (password: string) => Promise<string>;
-
-      /**
-       * Checks the supplied password against its stored hash.
-       */
-      verify?: (data: { hash: string; password: string }) => Promise<boolean>;
-    };
-  };
-
-  /**
-   * Prelinked account policy without automatic mutation or linking.
-   */
-  readonly account?: {
-    /**
-     * Prevents sign-in from updating preprovisioned account data.
-     */
-    updateAccountOnSignIn?: false;
-
-    /**
-     * Disables automatic linking of identities.
-     */
-    accountLinking?: { enabled: false };
-  };
-
-  /**
-   * Disables automatic cleanup of persisted verification records.
-   */
-  readonly verification?: { disableCleanup: true };
-
-  /**
-   * Native cookie configuration and disabled native schema validation.
-   */
-  readonly advanced?: {
-    /**
-     * Prefix used when forming native cookie names.
-     */
-    cookiePrefix?: string;
-
-    /**
-     * Overrides named native cookie roles with a name and attributes.
-     */
-    cookies?: Record<string, { name?: string; attributes?: CookieAttributes }>;
-
-    /**
-     * Default attributes for native cookies, subject to browser policy checks.
-     */
-    defaultCookieAttributes?: CookieAttributes;
-
-    /**
-     * Requires secure cookie handling.
-     */
-    useSecureCookies?: true;
-
-    /**
-     * Leaves structure preparation to the Spine store factory.
-     */
-    database?: { validateSchema: false };
-  };
-
-  /**
-   * Optional native process-local request-rate policy.
-   */
-  readonly rateLimit?: {
-    /**
-     * Enables the selected native feature.
-     */
-    enabled?: boolean;
-
-    /**
-     * Rate-counting window in seconds.
-     */
-    window?: number;
-
-    /**
-     * Maximum requests admitted during that window.
-     */
-    max?: number;
-
-    /**
-     * Native path-specific rules or request-dependent rule callbacks.
-     */
-    customRules?: Record<
-      string,
-      | RateLimitRule
-      | false
-      | ((
-          request: Request,
-          currentRule: RateLimitRule,
-        ) => RateLimitRule | false | Promise<RateLimitRule | false>)
-    >;
-
-    /**
-     * Selects native process-local rate-limit memory.
-     */
-    storage?: "memory";
-  };
-
-  /**
-   * Supported native configurations; arbitrary executable plugins are not accepted.
-   */
-  readonly plugins?: readonly ReturnType<typeof genericOAuth>[];
-}
-
-/**
- * Calls the native generic OAuth factory with the supported configuration.
- *
- * @param options Native provider settings validated before integration startup.
- * @returns The native plugin viewed through its supported identifier and options.
- */
-export declare function genericOAuth(options: GenericOAuthOptions): {
-  /**
-   * Native generic OAuth plugin identifier.
-   */
-  readonly id: "generic-oauth";
-
-  /**
-   * Supplied native configuration; the integration later validates and copies it.
-   */
-  readonly options: GenericOAuthOptions;
-};
-
-/**
- * Native provider configuration admitted by the integration.
- */
-interface GenericOAuthOptions {
-  /**
-   * Registered discovery-based OIDC providers.
-   */
-  config: {
-    /**
-     * Stable native identifier for this configured provider.
-     */
-    providerId: string;
-
-    /**
-     * Trusted provider discovery URL.
-     */
-    discoveryUrl: string;
-
-    /**
-     * Client identifier registered at the provider.
-     */
-    clientId: string;
-
-    /**
-     * Secret for the selected confidential-client method, when required.
-     */
-    clientSecret?: string;
-
-    /**
-     * Explicit native public or client-secret authentication method.
-     */
-    tokenEndpointAuth?: { method: "none" | "client_secret_basic" | "client_secret_post" };
-
-    /**
-     * Native legacy client-secret method; conflicting selections reject.
-     */
-    authentication?: "basic" | "post";
-
-    /**
-     * Requested provider scopes.
-     */
-    scopes?: string[];
-
-    /**
-     * Registered provider callback URI when explicitly configured.
-     */
-    redirectURI?: string;
-
-    /**
-     * Requires proof-key binding for the authorization-code exchange.
-     */
-    pkce: true;
-
-    /**
-     * Requires native signed ID-token verification.
-     */
-    requireIdTokenVerification: true;
-
-    /**
-     * Rejects creation of new users through login routes.
-     */
-    disableSignUp: true;
-
-    /**
-     * Prevents provider login from overwriting the existing user profile.
-     */
-    overrideUserInfo: false;
-
-    /**
-     * Native verified-email policy for the prelinked user.
-     */
-    requireEmailVerification?: boolean;
-  }[];
-}
-
-/**
- * Native cookie attributes admitted by the integration.
- */
-interface CookieAttributes {
-  /**
-   * Cookie domain, subject to host-cookie restrictions.
-   */
-  domain?: string;
-
-  /**
-   * Absolute native cookie expiry.
-   */
-  expires?: Date;
-
-  /**
-   * Controls script access subject to required authentication-cookie policy.
-   */
-  httpOnly?: boolean;
-
-  /**
-   * Cookie lifetime in seconds.
-   */
-  maxAge?: number;
-
-  /**
-   * Cookie path.
-   */
-  path?: string;
-
-  /**
-   * Requires secure transport where policy mandates it.
-   */
-  secure?: boolean;
-
-  /**
-   * Native SameSite value, subject to the supported browser policy.
-   */
-  sameSite?: "Strict" | "Lax" | "None" | "strict" | "lax" | "none";
-
-  /**
-   * Native partitioned-cookie attribute.
-   */
-  partitioned?: boolean;
-
-  /**
-   * Native host or secure cookie prefix.
-   */
-  prefix?: "host" | "secure";
-}
-
-/**
- * Native rate-limit rule.
- */
-interface RateLimitRule {
-  /**
-   * Rate-counting window in seconds.
-   */
-  window: number;
-
-  /**
-   * Maximum requests admitted during that window.
-   */
-  max: number;
-}
-```
-
-TypeDoc must describe these construction constraints. The return view is structural; it does not prove executable provenance. The integration validates and copies the supported `options.config` before its first asynchronous initialization step, then constructs the native plugin it installs. It never executes caller-provided plugin implementations. For the pinned native factory result, `version`, `init`, `hooks` and `$ERROR_CODES` are known implementation fields and are ignored; only `id` and `options` supply the admitted configuration. Unknown top-level plugin fields and unsupported configuration fields reject. Later mutation of the supplied configuration cannot change admitted providers.
-
-This preserves native configuration and the actual library engine without a plugin registry or a new plugin class. A direct upstream factory result can receive the same runtime validation, but its broader inferred type and upstream declaration dependencies are not a promised strict TypeScript shortcut. Maintained examples use the forwarding import. Native callback property names such as `password.hash`, `password.verify` and `customRules` remain unchanged.
-
-Accept only the pinned generic OAuth plugin's tested redirect-based OIDC configuration. Reject disabled PKCE or ID-token verification, implicit signup/linking, unsupported hooks, extra models/fields, remapping, duplicate provider IDs, or a required model absent from `models`. Reject arbitrary plugins, secondary storage, caller-supplied database adapters, schema validators, unsafe cookies and origin/CSRF bypasses. JavaScript callers receive the same validation before listening. Reject `client_secret_basic` or `client_secret_post` without a nonempty `clientSecret`, and reject conflicting legacy `authentication` and `tokenEndpointAuth` selections. Preserve the public-client `none` configuration. Test each admitted method and these invalid combinations before accepting the profile. The listed public/client-secret authentication methods require actual provider tests; listing a method does not establish that it has passed.
-
-For framework development, the disposable strict build passes with the genuine `bun-types@1.3.14/sqlite.d.ts` declaration and Node types. Loading the full Bun global declarations fails against the repository's Node types. Use only that upstream SQLite declaration as a development input; add no local ambient stub, global Bun overrides, emitted Bun reference or consumer dependency. Final workspace builds, packed declarations and runtime profile tests remain acceptance gates.
-
-The initial `users` collaborator supports `findById(id, signal)` and, when the selected profile requires email lookup, `findByEmail(email, signal)`. Both return a complete native User or absence. Email normalization and uniqueness follow the configured identity source. Supplying both persisted User and external `users` is a configuration error. These types and `BetterAuthIntegration.create()` receive generated API documentation in the auth subpath.
-
-`onPrincipal` returns a Spine principal or rejects an unmapped identity. This mapping does not grant tenant membership. Errors from the directory or storage fail admission. The integration must not turn those errors into anonymous success.
-
-| Application choice             | Configuration and handling                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Generated HTTP route policy    | Required outer `routePolicy.maxRequestBytes` and `routePolicy.timeoutMs` supply body admission and the complete host deadline for every generated route. Values come from application configuration, with no defaults. Native engine configuration remains under `options`.                                                                                                                                                                              |
-| Public URL and route prefix    | Better Auth `baseURL` / `basePath`; callback paths use the externally visible URL. Trust proxy metadata only through the host's configured proxy policy.                                                                                                                                                                                                                                                                                                 |
-| Permitted browser origins      | Better Auth `trustedOrigins` plus Gateway RPC origins. Use the same intended browser origins; callback navigation uses a dedicated state-validated route.                                                                                                                                                                                                                                                                                                |
-| Session duration and renewal   | Native `session.expiresIn`, `updateAge`, `disableSessionRefresh` and `freshAge`, in seconds. No new Spine lifetime defaults.                                                                                                                                                                                                                                                                                                                             |
-| Native secret rotation         | Pinned Better Auth API/source guidance: use its versioned `secrets` list, active entry first. The lab did not exercise Better Auth secret rotation. At this pin, native session-cookie verification uses the active secret: retaining old entries must not be advertised as seamless cookie rollover. Changing the active secret can require re-login. Production acceptance must test that exact behavior; iron-session tests do not cover this engine. |
-| Cookie policy                  | Native `advanced.useSecureCookies`, `cookiePrefix`, `cookies` and default cookie attributes where supported. The integration rejects insecure or ambiguous combinations for its browser profile and uses the configured names when reading/clearing.                                                                                                                                                                                                     |
-| Password checking              | Native `emailAndPassword`, including supported password-hash/verify callbacks. Signup remains disabled; reset/verification-email workflows are separate unverified features.                                                                                                                                                                                                                                                                             |
-| OIDC provider                  | Native `genericOAuth` configuration shown below. Permit only registered providers and approved callback URLs.                                                                                                                                                                                                                                                                                                                                            |
-| Hooks                          | The initial integration accepts the explicit `onPrincipal` and verified-login collaborators. General native hooks are outside the initial allowlist. The integration supplies the internal token/profile and JWKS transport adaptation described in H; caller-supplied provider hooks remain rejected.                                                                                                                                                   |
-| Rate limiting                  | Native rate-limit policy may use memory for this single-Gateway task. Its thresholds come from application configuration. Database/secondary-storage rate limiting requires an explicitly supported shared store before replica deployment.                                                                                                                                                                                                              |
-| RPC session reads              | Call native `getSession` with `disableRefresh: true` and `disableCookieCache: true`; do not renew a cookie through an RPC path that cannot forward its auth response.                                                                                                                                                                                                                                                                                    |
-| Explicit renewal               | Admit a native session endpoint, forward its full response and every Set-Cookie header. Better Auth decides renewal using the configured policy.                                                                                                                                                                                                                                                                                                         |
-| Storage and expiry maintenance | Integration supplies `database`; disable cookie caching, secondary storage and automatic verification cleanup. Explicit Spine cleanup handles expiry.                                                                                                                                                                                                                                                                                                    |
-
-The integration sets and enforces `advanced.database.validateSchema: false`, `session.cookieCache.enabled: false`, and, when applicable, `verification.disableCleanup: true`. Repeated explicit values in examples make the behavior visible; incompatible overrides are errors. The Spine store factory performs the default creation/check work before the native engine starts. Better Auth schema validation stays disabled to avoid a second preparation mechanism and to preserve the explicit `false` guarantee. No Better Auth migration or schema validator may bypass the store's preparation setting.
-
-The adapter supplies the related records needed by the selected native flows.
-Its private native configuration enables `advanced.database.joins`; this is not
-a new application option. The reads still use the existing record handles and
-indexes, without a SQL adapter or a cross-record transaction.
-
-| Native flow                             | Related records read by the adapter                                                                                                            |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Session resolution and explicit renewal | One Session by token, followed by its complete User by ID.                                                                                     |
-| Password login                          | One User by email, followed by its indexed Account list.                                                                                       |
-| Prelinked OIDC login                    | A bounded Account match lookup by provider and subject, with native limit 2, followed by each matched User by ID. This is an M11 prerequisite. |
-
-A missing related User is returned as explicit absence; an empty Account list
-is returned as an empty list. A directory or storage failure rejects the read
-and cannot become an anonymous result. The adapter supplies these results
-directly so the native fallback cannot log the underlying exception. Other
-joins, projections and relation shapes remain unsupported. Password lookup
-retains the native Account page size of 100 at this pin; this adds no quota to
-administrator provisioning.
-
-These are separate indexed reads. A session's expiry and operation lifetime
-are checked after User lookup; normal reads retain expired records for explicit
-cleanup. Store shutdown drains the complete admitted read. The existing CAS,
-renewal, logout and cancellation rules remain necessary between these reads.
-No generic join or transactional snapshot is promised.
-
-The exact native requests and result keys are specified in the committed
-[M10 related-read matrix](M10.md#selected-native-related-reads) and
-[M11 Account/User contract](M11.md#prelinked-account-and-user-lookup).
-Password login requires selected Account storage and either stored Users or an
-external User source with both `findById` and `findByEmail`. The factory rejects
-an incomplete source configuration before exposing routes. External verified
-login without native password checking does not require Account storage or
-email lookup.
-
-`secondaryStorage` is not a substitute for this adapter: it is a separate Better Auth interface, not a full User/Account/Session/Verification database. No native database fallback is configured.
-
-### F. Preprovisioned email/password accounts
-
-A company has an administrator-controlled account process and wants Better Auth's password login. Users and credential accounts are provisioned before the public listener starts. A credential account contains a password hash compatible with the selected Better Auth password implementation, never plaintext.
-
-For the default password implementation, the maintained provisioning example
-imports `hashPassword` from the public `@better-auth/utils/password` subpath and
-declares `@better-auth/utils@0.5.1` directly. Better Auth 1.7.16 delegates its native
-password hashing to this same helper. This import compiles in a strict Node
-application without the Bun declarations pulled in by its broader crypto barrel.
-When configuring a custom `emailAndPassword.password` implementation, provision
-hashes with that implementation instead.
-
-```typescript
-import { hashPassword } from "@better-auth/utils/password";
-
-const passwordHash = await hashPassword(administratorSuppliedPassword);
-```
-
-```mermaid
-sequenceDiagram
-    participant B as Browser
-    participant G as Gateway auth routes
-    participant A as Better Auth
-    participant D as Spine auth records
-    participant P as Application policy
-    B->>G: POST /auth/sign-in/email
-    G->>A: Validated native login request
-    A->>D: Read User and credential Account
-    A->>A: Verify password
-    A->>D: Create Session atomically if absent
-    A-->>B: Native signed session cookie
-    B->>G: Spine RPC with native cookie
-    G->>A: getSession, refresh disabled
-    A->>D: Read Session and User
-    A-->>G: Valid session and user
-    G->>P: Principal / tenant / action checks
-    P-->>G: Admit or deny
-```
-
-Browser example using the native HTTP interface:
-
-```typescript
-const response = await fetch(`${gatewayUrl}/auth/sign-in/email`, {
-  method: "POST",
-  credentials: "include",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ email, password }),
-});
-if (!response.ok) showLoginFailure();
-// The browser accepts the native Set-Cookie response.
-// Subsequent admitted Spine RPCs send that cookie with credentials: "include".
-```
-
-The public route applies origin, body-size and rate-limit policy before login. Wrong credentials produce no session. The subsequent RPC independently checks session validity and business permissions; the login response is not authorization to every tenant.
-
-Before: the component path needs an external password-verification collaborator. After choosing this optional path: Better Auth performs native password checking and session issuance, using the Spine adapter for its selected records.
-
-Provisioning is deliberately restricted. Ordinary `RecordStorage.write()` is an upsert, and the common storage contract has no arbitrary cross-record transaction or unique-email constraint. The experiment preloaded valid records to exercise real sign-in. Its fixture `seed()` is not a production provisioning API. The production slice must document controlled, serialized provisioning with immutable identity keys and uniqueness validation before admitting these accounts. Concurrent public signup, email changes, account linking and deletion remain unavailable until a complete failure/recovery contract is implemented and tested.
-
-### G. Existing user directory, Better Auth native sessions
-
-A company already authenticates users elsewhere and must not copy its user directory into new framework tables. Persist only sessions:
-
-```typescript
-const betterAuthStore = await PersistentBetterAuthStore.create({
-  storageFactory: authStorage,
-  group: new StorageGroup("orders_better_auth"),
-  models: ["session"],
-  users: companyBetterAuthUsers,
-});
-
-const auth = await BetterAuthIntegration.create({
-  store: betterAuthStore,
-  routePolicy: {
-    maxRequestBytes: config.authMaxRequestBytes,
-    timeoutMs: config.authTimeoutMs,
-  },
-  options: nativeSessionOptions,
-  onPrincipal: async (user, signal) => companyPrincipals.find(user.id, signal),
-  login: {
-    async verify(request, signal) {
-      const verified = await companyLogin.verify(request, signal);
-      return verified?.stableUserId;
-    },
-  },
-});
-```
-
-`login.verify` is a proposed trusted server-side collaborator. The integration exposes an admitted `/auth/sign-in/external` route, invokes this collaborator, reads the complete directory user, then uses a Better Auth plugin endpoint to create a native session and emit its native cookies. A request body containing a user ID is not proof of login.
-
-`companyBetterAuthUsers` provides exact lookup by stable ID and, only when the selected flow needs it, normalized email. It returns a complete logical Better Auth User: stable `id`, `name`, `email`, `emailVerified`, `createdAt`, `updatedAt`, and optional image. An ID-only Spine principal cannot stand in for that model. Mutations are rejected; an absent user invalidates the session and a directory outage fails admission.
-
-```mermaid
-sequenceDiagram
-    participant B as Browser
-    participant G as Gateway identity bridge
-    participant I as Existing login and user directory
-    participant A as Better Auth
-    participant S as Spine Session records
-    B->>G: Existing-system login proof
-    G->>I: Verify proof; resolve complete user
-    I-->>G: Stable verified user
-    G->>A: Trusted native session creation
-    A->>S: Insert Session
-    A-->>B: Native session cookie
-    B->>G: RPC
-    G->>A: Read-only session resolution
-    A->>S: Read Session
-    A->>I: Resolve current User
-    A-->>G: User and session, if both valid
-```
-
-The Gateway can restart without losing the session. A new instance configured with the same storage placement and native secret can resolve it. Directory changes take effect on subsequent authoritative resolutions; stopping already active streams after a directory change needs an explicit directory notification integration.
-
-This scenario uses Better Auth as the native session engine after external verification. It is different from Better Auth performing OIDC itself, described next.
-
-### H. Better Auth performs OIDC login
-
-A company has an OIDC provider and prelinked provider identities. Better Auth's genericOAuth plugin can perform discovery, PKCE, code exchange and ID-token validation. The experiment executed this actual path, including a signed ID token, not a substitute openid-client flow.
-
-The directory supplies User. Spine stores prelinked Account, Session and one-time Verification records:
-
-```typescript
-import { genericOAuth } from "@spine-event-engine/auth/better-auth";
-
-const betterAuthStore = await PersistentBetterAuthStore.create({
-  storageFactory: authStorage,
-  group: new StorageGroup("orders_better_auth"),
-  models: ["account", "session", "verification"],
-  users: companyBetterAuthUsers,
-});
-
-const auth = await BetterAuthIntegration.create({
-  store: betterAuthStore,
-  routePolicy: {
-    maxRequestBytes: config.authMaxRequestBytes,
-    timeoutMs: config.authTimeoutMs,
-  },
-  onPrincipal: async (user, signal) => companyPrincipals.find(user.id, signal),
-  options: {
-    ...nativeSessionOptions,
-    account: {
-      updateAccountOnSignIn: false,
-      accountLinking: { enabled: false },
-    },
-    verification: { disableCleanup: true },
-    plugins: [
-      genericOAuth({
-        config: [
-          {
-            providerId: "company",
-            discoveryUrl: config.oidcDiscoveryUrl,
-            clientId: config.oidcClientId,
-            clientSecret: config.oidcClientSecret,
-            tokenEndpointAuth: { method: "client_secret_basic" },
-            scopes: ["openid", "email", "profile"],
-            pkce: true,
-            requireIdTokenVerification: true,
-            disableSignUp: true,
-            overrideUserInfo: false,
-          },
-        ],
-      }),
-    ],
-  },
-});
-```
-
-Install the optional peer `better-auth@1.7.16` to execute this subpath. The forwarding import keeps the native factory/configuration while allowing strict Node declaration checking without Bun types in the application. Direct upstream imports require that version's upstream declaration environment.
-
-`nativeSessionOptions` contains the same explicitly configured URL, origins, secrets, cookie/session policy and enforced settings as the password example. Register `${gatewayPublicUrl}/auth/callback/company` with the provider. The lab used a public test client (`tokenEndpointAuth: { method: "none" }`); confidential production-client authentication must be configured for the actual provider and covered by its integration test.
-
-Before login, the Account maps the configured provider's immutable subject to an existing User ID. Email similarity is not enough to create this link. Unknown/unlinked accounts are rejected. Set `disableSignUp`, not merely `disableImplicitSignUp`, because the latter can still permit explicit signup requests. A read-only directory must already satisfy the selected provider's verified-email policy; an attempted User mutation fails rather than being silently ignored.
-
-```mermaid
-sequenceDiagram
-    participant B as Browser
-    participant G as Gateway / Better Auth
-    participant D as Spine Account / Verification / Session
-    participant P as OIDC provider
-    participant U as Existing User directory
-    B->>G: POST /auth/sign-in/social, provider company
-    G->>D: Store one-time login verification state
-    G-->>B: Provider URL and native flow cookie
-    B->>P: Navigate and authenticate
-    P-->>G: /auth/callback/company?code=...&state=...
-    G->>D: Read state; validate native cookie; CAS-delete once
-    G->>P: Exchange code with PKCE; obtain verification keys
-    G->>G: Validate signed ID token and expected claims
-    G->>D: Find prelinked Account
-    G->>U: Read linked User
-    G->>D: Create native Session
-    G-->>B: Native cookie and allowed application redirect
-    B->>G: Spine RPC with native cookie
-    G->>D: Read authoritative Session
-    G->>U: Read User; map principal; authorize
-```
-
-Browser start example:
-
-```typescript
-const response = await fetch(`${gatewayUrl}/auth/sign-in/social`, {
-  method: "POST",
-  credentials: "include",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    provider: "company",
-    callbackURL: applicationUrl,
-  }),
-});
-if (!response.ok) throw new Error("Login could not start");
-const result = await response.json();
-window.location.assign(result.url);
-```
-
-The integration permits only configured providers, redirect destinations and the tested redirect-based flow. The callback preserves query parameters and the native state cookie. No component application-grant exchange follows: Better Auth directly creates its session and redirects the browser.
-
-Replay, wrong state, wrong token audience, token validation failure, missing account or directory failure creates no session. An interrupted login restarts; consumed state is not restored after an external HTTP failure.
-
-The selected verification profile uses one immutable record per purpose-qualified
-identifier. General Better Auth verification supports broader histories; plugins
-requiring multiple values for one identifier are outside this profile.
-
-The integration installs a request-local public native callback hook that
-replaces only OAuth-state deletion with an awaited public adapter `consumeOne`
-and rejects an absent result. Native signed-cookie validation precedes this
-call, and token exchange follows only successful atomic consumption. The adapter
-does not synthesize deleted state in reads. The losing callback receives a safe
-restart-login response. Cancellation observed before issuing the state CAS
-preserves the record; an in-flight CAS is drained and a consumed record is never
-restored. Recheck the public context hook and native ordering for every supported
-Better Auth upgrade.
-
-The native deletion helper can skip its delete when a preliminary read finds no
-record. Requiring an atomic consumption result closes that race while retaining
-the native parser. These checks apply to OAuth state; strict logout and late
-Session compensation still perform their required deletion after cancellation.
-
-Native callback failures use the existing callback response boundary to provide
-safe restart-login responses instead of an unavailable default error route.
-Atomic-state refusal returns 401 and state-storage unavailability returns 503.
-The same boundary handles pre-consumption failures that use the native default
-error redirect, preserving successful session cookies and application redirects.
-The application does not configure a new error-routing policy.
-
-Native discovery and the integration's trusted metadata read complete during
-`BetterAuthIntegration.create()`, before routes are exposed. Creation requires
-every configured provider to initialize with matching issuer, client and
-signing-algorithm settings; partial initialization and request-time discovery
-retry are unsupported. The factory currently has no caller AbortSignal or
-bounded startup guarantee. A pending discovery response leaves creation
-pending and cannot produce a callback success. `routePolicy.timeoutMs` applies
-to admitted routes, not startup.
-
-During admitted callbacks, the integration supplies internal public native
-token/profile hooks and a jose JWKS resolver for each callback through the
-original generated provider's public ID-token configuration. Trusted endpoint
-and JWKS metadata comes from the configured discovery URL at construction;
-callers cannot supply custom hooks or replace verification. Keep native state,
-PKCE, nonce and ID-token verification mandatory. Token, JWKS, userinfo and User
-directory work receives the operation lifetime. Cancelling one callback must
-not cancel another callback's network work. A host timeout alone is
-insufficient: late session writes require compensation and no cancelled
-success may escape. Do not share mutable JWKS resolvers or caches across
-callbacks in this initial profile.
-
-The integration fetches and captures trusted discovery metadata, uses the
-corresponding native endpoint overrides, and compares native issuer,
-audience and algorithms during initialization, before installing the dispatcher
-that creates a resolver for each callback.
-Native discovery runs separately during initialization; its private resolver
-metadata is not extracted. This initial profile performs no caching of JWKS
-across callbacks, so callbacks may each fetch keys. A JSON Web Key Set (JWKS)
-contains the provider's public signing keys. Separate callback resolvers can
-increase traffic to that provider endpoint; applications can use their configured
-native login rate policy described above to manage login traffic. This adds no
-cache, timeout or concurrency limit. The factory may remain pending
-on startup network work; it supplies neither a new timeout nor cancellable
-initialization. Component OIDC timeout and response-size controls do not apply here.
-
-Before this clarification, discovery and callback network work were grouped
-together even though the factory exposes no startup signal. After it, startup
-must finish for every provider before the application receives routes, and each
-admitted callback has independent network cancellation. The production tests
-must prove this through the real native engine, including rejection of missing
-ID tokens and compensation after a late session write.
-
-### I. Better Auth renewal, logout and cleanup
-
-RPC resolution is read-only. If the browser wants rolling sessions, it calls the admitted native session endpoint and receives all cookie updates. With `disableSessionRefresh: true`, a login has a fixed configured deadline instead.
-
-Better Auth renewal updates the existing session's deadline using the same token. It is not the component opaque-generation rotation described earlier. The adapter conditionally updates the existing record; it never uses upsert for renewal. Logout-before-renewal cannot recreate a row, and logout-after-renewal deletes that same session.
-
-The integration replaces the exposed native `/auth/sign-out` behavior with strict logout:
-
-```mermaid
-sequenceDiagram
-    participant B as Browser
-    participant G as Strict logout route
-    participant D as Spine Session records
-    participant M as Local active streams
-    B->>G: POST /auth/sign-out with native cookie
-    G->>G: Validate origin and native cookie signature
-    G->>D: Revoke identified session; await durable result
-    D-->>G: Success / already absent
-    G->>M: Signal invalidation
-    G-->>B: Clear native cookies and return success
-```
-
-The tested Better Auth stock route can clear cookies and return success after a database deletion error. The integration must prevent that alternative route from bypassing the strict result. On storage failure, return an error; clearing a browser cookie alone is not durable logout. A valid signed cookie may identify an expired record for deliberate revocation without requiring an active-session lookup.
-
-Expired session rows are hidden from ordinary authentication reads and retained until explicit cleanup. The adapter also guards Better Auth's opportunistic expiry deletion after a slow User lookup crosses the expiry instant. Automatic verification cleanup is disabled. Successful one-time consumption and explicit logout still remove their intended records.
-
-```typescript
-await betterAuthStore.purgeExpired(cutoff, maintenanceSignal);
-```
-
-This is invoked by application maintenance, not an internal timer. Keys/secrets remain application configuration; changing them is not a substitute for deleting a compromised session.
-
-### J. An application already uses Better Auth with its native database
-
-The application may retain that deployment. Supply a `SessionResolver` and `BrowserCredentialReader` around its existing Better Auth instance and mount its admitted routes. Do not create duplicate Spine Users or Sessions merely to connect the Gateway.
-
-The user-to-principal mapping and Gateway authorization are the same. The external integration must explicitly provide the required logout, cache, cleanup and active-stream behavior; those guarantees do not appear automatically when wrapping any existing auth handler. The standard Spine storage integration offers the constrained guarantees above. An external integration can retain a different documented policy.
-
-### What is supported initially
-
-| Configuration                   | Persisted through Spine        | Existing/external source                            | Initial restriction                                     |
-| ------------------------------- | ------------------------------ | --------------------------------------------------- | ------------------------------------------------------- |
-| External verified login         | Session                        | Complete User directory and login verifier          | Trusted bridge; no public user mutation                 |
-| Native password login           | User, Account, Session         | Controlled provisioning and application permissions | Existing accounts; no public signup/reset/linking       |
-| Native OIDC login               | Account, Session, Verification | Prelinked User directory and OIDC provider          | Known accounts; tested redirect flow; read-only profile |
-| Existing Better Auth deployment | Nothing additional required    | Existing Better Auth backend                        | External adapter states its guarantees                  |
-
-Combining native password and OIDC login requires compatible identity records and preprovisioned links; it does not authorize automatic email-based linking. New social providers, SAML, organization management, passkeys, MFA, magic links, password reset, bearer/JWT plugins and custom database models require separate capability/testing slices. These are library features that need additional storage and lifecycle contracts, not automatic capabilities of the first adapter.
-
-## 8. Experiment evidence and its limits
-
-The pinned experiment uses Better Auth 1.7.15, iron-session 9.0.1, jose 6.2.15, openid-client 6.8.9 and cookie 2.0.1. It runs outside the repository checkout; neither `master` nor production source/manifests were changed.
-
-Production implementation targets Better Auth 1.7.16, whose security fixes supersede the experimental pin. Replay the adapter, native-session, cookie, logout and OIDC acceptance cases against that exact version; the 1.7.15 results below do not establish 1.7.16 behavior. The bounded integration contract is unchanged.
-
-The Better Auth experiment now uses generated User, Account, Session and Verification Protobuf messages, real Timestamp fields, actual Spine factories and actual RecordStorage reads/queries/CAS mutations. SQL drivers used for test setup create disposable databases; they do not replace the auth adapter. Datastore uses its emulator.
-
-The important remaining provider gap is explicit: existing SQL handles prepare lazily. The lab replaces their private preparation callback to model the proposed per-handle policy. PostgreSQL additionally probes schema existence while binding; a narrowly matched driver shim suppresses that metadata query. Data queries, codecs and atomic mutations still use the real provider. This proves the integration with the proposed preparation behavior; it does not claim that today's public provider API already supports it.
-
-The adapter advertises no cross-record transactions. Canonical immutable keys and per-record compare-and-set protect the supported create/update/consume operations. Unsupported models, fields and operators fail explicitly. Bounded lab data establishes semantics, not production-scale query performance; indexed pagination and maintenance remain production acceptance gates.
-
-The disposable adapter tested both explicit preparation and skipped preparation. Its historical default was `false`; this final specification changes the production default to `true`. The experiment is not evidence that the proposed public default has already been implemented.
-
-The focused adapter suite passed **14/14 tests, with no skips**. Source-filtered coverage is **95.51% lines, 95.45% functions and 71.90% branches**; branch coverage is not a claim that every unsupported library combination was exercised.
-
-| Executed experiment                                                                      | Storage / boundary                                                    | Result                                                             |
-| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Native password sign-in, wrong password, session read, logout, new login                 | Actual PostgreSQL, MySQL and Datastore factories; independent engines | Passed                                                             |
-| Session surviving a new Node process                                                     | PostgreSQL                                                            | Passed                                                             |
-| Read-only external User plus native Session                                              | PostgreSQL                                                            | Passed; no User family opened                                      |
-| Real UnaryGateway admission before/after logout                                          | PostgreSQL                                                            | Passed; full BrowserServer integration remains proposed            |
-| Both renewal/logout orderings and strict logout storage failure                          | PostgreSQL                                                            | Passed                                                             |
-| User lookup crosses session expiry; row retained until cleanup                           | PostgreSQL                                                            | Passed                                                             |
-| Real genericOAuth discovery/PKCE/signed ID token; wrong state, replay and wrong audience | PostgreSQL and local OIDC provider                                    | Passed                                                             |
-| Two independent engines consume one verification identifier                              | PostgreSQL                                                            | Exactly one winner                                                 |
-| Two actual concurrent OIDC callbacks; missing-cookie attempt                             | PostgreSQL                                                            | One exchange/session winner; invalid attempt preserves valid state |
-| Unsupported operations, immutable token, incomplete User, predicate-preserving bulk CAS  | Memory contract tests                                                 | Passed                                                             |
-| Explicit skip-preparation path on missing/existing structures and baseline lazy creation | PostgreSQL; missing-structure check also MySQL                        | Passed with explicit lab shims; MySQL has no full SQL trace        |
-
-The combined replay of prior component/host experiments and this adapter suite passed **37/37 tests, with no skips**. These results are adapter feasibility evidence. They do not establish a complete browser integration or production load behavior. A successful emulator test does not establish cloud index deployment, IAM policy or distributed Gateway operation.
-
-## 9. Browser hosting and process topology
+## 7. Browser hosting and process topology
 
 The browser host gains a replaceable `BrowserCredentialReader`. It receives a duplicate-preserving header view, method and URL, but cannot consume the RPC body. The host captures this immutable view before converting the incoming request to WHATWG `Headers` or `Request`:
 
@@ -1557,9 +642,9 @@ export interface BrowserCredentialReader {
 }
 ```
 
-`undefined` means absent, `rejected` means malformed/ambiguous input without fallback, and an exception means unavailable rather than anonymous admission. Supplying both `credentials` and legacy `cookies` is a configuration error. The revised standard cookie helper implements the interface. External/Better Auth readers retain their engine's native credential format.
+`undefined` means absent, `rejected` means malformed/ambiguous input without fallback, and an exception means unavailable rather than anonymous admission. Supplying both `credentials` and legacy `cookies` is a configuration error. The revised standard cookie helper implements the interface. External readers retain their engine's native credential format.
 
-Header names are normalized to lowercase; individual values and their multiplicity are preserved. The host rejects repeated Authorization, Origin and configured CSRF header fields before invoking any reader or auth route. Cookie fields are inspected without losing field boundaries or duplicate cookie names: ambiguous repeated authentication/CSRF cookies are rejected, while protocol-permitted split Cookie fields may be combined only after that inspection. The same admission rules apply to standard, external and Better Auth readers; normalized `Headers` alone is not sufficient evidence that the original request was unambiguous. For example, two Authorization fields are rejected even if a platform would combine them into one string.
+Header names are normalized to lowercase; individual values and their multiplicity are preserved. The host rejects repeated Authorization, Origin and configured CSRF header fields before invoking any reader or auth route. Cookie fields are inspected without losing field boundaries or duplicate cookie names: ambiguous repeated authentication/CSRF cookies are rejected, while protocol-permitted split Cookie fields may be combined only after that inspection. The same admission rules apply to standard and external readers; normalized `Headers` alone is not sufficient evidence that the original request was unambiguous. For example, two Authorization fields are rejected even if a platform would combine them into one string.
 
 Before this change, the host cannot discover a custom reader's cookie or CSRF names without calling it. After this change, every reader and every `BrowserAuthRoute` supplies the required `admission: BrowserCredentialAdmission` value. The same declaration describes both boundaries, including an auth route that calls a different engine from the RPC reader. The types are exported from `@spine-event-engine/server/browser`. Required empty arrays explicitly mean that a category is unused; missing metadata is a startup error, including for JavaScript callers.
 
@@ -1663,18 +748,6 @@ const gateway = await BrowserServer.run({
 
 The missing-Origin exception applies only to this explicitly configured callback. It does not bypass duplicate, method, body, deadline or protocol-state checks. Omitting `credentials` selects bearer-only RPC admission while retaining the callback's declared checks.
 
-### Better Auth admission names
-
-Each generated route carries the validated, copied `routePolicy` values supplied at integration construction. Pass `auth.routes` directly to the host; no extra route construction is needed to supply body limits or deadlines. The host continues to validate and snapshot these complete declarations.
-
-The existing assembly remains `credentials: auth.credentials` and `authRoutes: auth.routes`. `BetterAuthIntegration.create()` derives their immutable declarations from the same validated, copied native options used by the engine. Applications do not duplicate Better Auth cookie names in Gateway settings.
-
-At the pinned library version, use the public `better-auth/cookies` exports internally: `getCookies(effectiveOptions).sessionToken.name` supplies the primary name, and `createCookieGetter(effectiveOptions)("state").name` supplies the database-backed OAuth callback state name. Include the resolved `dontRememberToken.name` where the selected native endpoints consume that flag. The native library resolves custom role names, cookie prefixes and secure prefixes; do not reconstruct names by hand. The database flow uses the role `state`; `oauth_state` is a different cookie-backed flow. Reject collisions between selected credential and state roles before listening.
-
-The accepted Better Auth profile uses its native origin/CSRF policy, so it does not invent the standard helper's `x-spine-csrf` header. Declare only CSRF headers actually used by an admitted configuration. Every selected route must enumerate its consumed credential and protocol-state cookies. Verify the declarations against real incoming and outgoing cookies, including custom names and secure prefixes, during M10–M11.
-
-Cookie caching remains disabled. Native cleanup may read cache-shaped cookies to clear them, but those values must never authenticate a request or bypass authoritative session reads. Dynamically chunked credential or protocol-state cookie families are outside this fixed-name profile; supporting one would require a reviewed extension. The source-level name-resolution probe establishes the public library seam, not production browser acceptance.
-
 ### Combined process and two-process deployments
 
 In one process, configure `ServerEnvironment`, build Bounded Contexts, create the native server and compose `BrowserServer.open(await server.start(), gatewayOptions)`. Build the same auth components alongside it. Factories may be shared; groups and resource shutdown remain explicit.
@@ -1685,13 +758,13 @@ Two processes on one machine behave like a separate Gateway: they do not share m
 
 Instances serving the same application share storage placement, credential keys/secrets, scopes, public URL and cookie/flow configuration. Atomic session mutation and one-time consumption prevent inconsistent storage decisions. Shared records do not distribute cancellation notifications or coordinate subscription activation. Actual Gateway replication remains separate work.
 
-## 10. Active streams, cleanup and shutdown
+## 8. Active streams, cleanup and shutdown
 
 A stream can outlive its admission request. Revoking storage prevents later validation; it does not by itself stop output already being forwarded.
 
 Extend `SessionResolver.resolve(credential, lifetime?)` with an optional operation signal and `ResolvedSession` with `invalidated?: AbortSignal`. No lifetime means one validation and no retained monitor. Supplying a lifetime registers only until rejection/error, operation end, session expiry, invalidation or strategy close.
 
-The subscription Gateway must pass its operation signal, link it to cancellation/expiry/shutdown, and abort/release it in `finally` on normal completion and every failure path. Register before the authoritative validity read and recheck cancellation before forwarding. Component opaque monitors use stable session ID; signed-token monitors use scoped token ID; Better Auth uses its authenticated session identity. Logout routes and admission share the same integration instance.
+The subscription Gateway must pass its operation signal, link it to cancellation/expiry/shutdown, and abort/release it in `finally` on normal completion and every failure path. Register before the authoritative validity read and recheck cancellation before forwarding. Component opaque monitors use stable session ID; signed-token monitors use scoped token ID. Logout routes and admission share the same integration instance.
 
 Successful durable logout signals local monitors before returning. Stop forwarding immediately/best effort through the existing backend abort path. Bytes already sent cannot be recalled and already-admitted commands may finish. Failure to revoke is reported even if local streams were stopped. Cross-process stream cancellation requires future notification work.
 
@@ -1701,7 +774,7 @@ With a lifetime signal, every successful standard-strategy resolution returns an
 
 Use the strategy's existing configured clock and returned session deadline. Schedule that expiry only; release its timer and listeners on every earlier exit. Platform timer-range handling must not shorten the session. A rotated opaque credential does not extend a stream's captured deadline. Signed-token clock tolerance still governs token verification and revocation retention, while the returned `expiresAt` governs the operation's expiry. Do not start a monitored operation whose returned deadline has passed, and do not lengthen it to the revocation retention deadline. One-shot verification without a lifetime retains its existing acceptance rules and creates no monitor or timer.
 
-Strategy close aborts monitors before draining short admitted work, so active streams do not keep close waiting for their own invalidation. Operation completion releases its monitor without logging out other operations. Custom external resolvers may omit invalidation, but then provide no local revocation guarantee. For the native guarantees below, an external integration must provide a signal covering its expiry and invalidation. The Gateway retains its own explicit expiry checks for external resolvers. Better Auth follows the same monitored-lifetime contract using its authenticated native session identity.
+Strategy close aborts monitors before draining short admitted work, so active streams do not keep close waiting for their own invalidation. Operation completion releases its monitor without logging out other operations. Custom external resolvers may omit invalidation, but then provide no local revocation guarantee. For the native guarantees below, an external integration must provide a signal covering its expiry and invalidation. The Gateway retains its own explicit expiry checks for external resolvers.
 
 ### Direct native admission
 
@@ -1850,7 +923,6 @@ All proposed persistent adapters expose explicit application-invoked expiry main
 await sessionStore.purgeExpired(cutoff, maintenanceSignal);
 await loginStore.purgeExpired(cutoff, maintenanceSignal);
 await revoked.purgeExpired(cutoff, maintenanceSignal);
-// Optional Better Auth store follows the same explicit maintenance contract.
 ```
 
 `cutoff` is a trusted current or earlier Protobuf Timestamp; older cutoffs retain expired data longer. No background cleanup timer or automatic provider TTL is enabled. Validity does not depend on physical cleanup. Logout and one-time consumption remain intentional data mutations.
@@ -1885,29 +957,25 @@ not forcibly stop remote work, and no new drain deadline is added. Repeated clos
 calls keep the same completion or failure. A combined process coordinates this
 with environment shutdown.
 
-## 11. Complete record inventory
+## 9. Complete record inventory
 
 Each family is optional at application level and required only when its persistent implementation is selected. Calling the selected persistent-store factory prepares its families by default. Explicit `false` disables preparation.
 
-| Family                      | Required by                              | Key/data                                                              | Process using it                         |
-| --------------------------- | ---------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------- |
-| Tenant registration         | PersistentTenantIndex                    | Complete TenantId, first registration time                            | Application / provisioning process       |
-| Component opaque session    | PersistentOpaqueSessionStore             | Stable ID, generation, principal, expiry                              | Gateway/auth or direct native admission  |
-| Component login transaction | PersistentOidcFlowStore                  | Flow-scoped lookup digest, proof and provider binding, expiry         | Gateway/auth                             |
-| Component login grant       | PersistentOidcFlowStore                  | Flow-scoped lookup digest, mapped principal and browser proof, expiry | Gateway/auth                             |
-| Signed-token revocation     | PersistentTokenRevocations               | Scoped token ID and retention deadline                                | Token-validating process                 |
-| Better Auth session         | Optional Better Auth storage integration | Native session identity/token, user reference, timestamps             | Gateway/auth                             |
-| Better Auth User            | Selected stored-identity profile         | Native identity/profile fields and timestamps                         | Gateway/auth and controlled provisioning |
-| Better Auth Account         | Password or prelinked-provider profile   | User/provider relationship and selected credential fields             | Gateway/auth and controlled provisioning |
-| Better Auth Verification    | Selected native OIDC flow                | One-time identifier/value and timestamps                              | Gateway/auth                             |
+| Family                      | Required by                  | Key/data                                                              | Process using it                        |
+| --------------------------- | ---------------------------- | --------------------------------------------------------------------- | --------------------------------------- |
+| Tenant registration         | PersistentTenantIndex        | Complete TenantId, first registration time                            | Application / provisioning process      |
+| Component opaque session    | PersistentOpaqueSessionStore | Stable ID, generation, principal, expiry                              | Gateway/auth or direct native admission |
+| Component login transaction | PersistentOidcFlowStore      | Flow-scoped lookup digest, proof and provider binding, expiry         | Gateway/auth                            |
+| Component login grant       | PersistentOidcFlowStore      | Flow-scoped lookup digest, mapped principal and browser proof, expiry | Gateway/auth                            |
+| Signed-token revocation     | PersistentTokenRevocations   | Scoped token ID and retention deadline                                | Token-validating process                |
 
-Each record specification declares its indexes and atomic constraints. Do not create every family merely because the auth package was imported. Memory variants hold the corresponding state in process without persistent tables. Independent engine choices do not require duplicate component and Better Auth session tables.
+Each record specification declares its indexes and atomic constraints. Do not create every family merely because the auth package was imported. Memory variants hold the corresponding state in process without persistent tables.
 
-Users/passwords, role and permission directories, user-to-tenant membership, identity links, provider tokens, extra login factors and audit are not automatically introduced by the component path. Better Auth's selected features may require some of those records; their inclusion must be explicit in its profile. Keys and application secrets remain in application secret configuration.
+Users/passwords, role and permission directories, user-to-tenant membership, identity links, provider tokens, extra login factors and audit are not automatically introduced by the component path. Keys and application secrets remain in application secret configuration.
 
-## 12. Production acceptance
+## 10. Production acceptance
 
-The experiment informs the architecture; production implementation still needs the normal build/review gates. Independent no-memory API, reliability and reader reviews covered the preceding experiment and proposal revision. Their accepted findings were addressed: the actual callback race was reproduced and fixed, the options type was constrained and typechecked, getter narrowing was explained, and untested secret rotation was labeled. Targeted API and reliability re-reviews accepted the substantive corrections. Required acceptance includes:
+The retained tenant and authentication paths require the normal build and review gates. Required acceptance includes:
 
 - No tenant index or catalog access in single-tenant assembly; explicit index for multi-tenant paths.
 - Omitted or explicit `true` preparation creates/checks selected structures before the async factory resolves; incompatibility and preparation failures reject construction. Explicit `false` performs no schema checks/DDL during construction or later data use.
@@ -1916,26 +984,23 @@ The experiment informs the architecture; production implementation still needs t
 - Existing Bounded Context eager/lazy preparation, monitoring flags, and environment/runtime creation/check APIs retain their behavior.
 - Domain-correct Proto records, complete tenant identities and bounded/indexed traversal on each provider.
 - Correct library option mapping; exact deadlines, key rotation and failure behavior; no configurable bypass of mandatory validation.
-- Duplicate-sensitive header admission occurs before normalization for standard, external and Better Auth paths. Cover repeated Authorization, Origin, Cookie and CSRF fields, including ambiguous cookie names and protocol-permitted split Cookie fields.
+- Duplicate-sensitive header admission occurs before normalization for standard and external paths. Cover repeated Authorization, Origin, Cookie and CSRF fields, including ambiguous cookie names and protocol-permitted split Cookie fields.
 - Opaque rotation/logout races, one winner for conditional rotation, replacement-seal/row deadline equality, no resurrection after deletion.
 - One-time login consumption across independent processes and correct cancellation/late-commit handling.
 - Existing/new ES256 token compatibility and complete time/claim boundary tests.
 - Monitor registration before admission read and release on every exit; local cancellation without falsely claiming distributed cancellation.
 - Manual cleanup preserving concurrently renewed records, plus bounded pagination/cancellation.
-- Supported Better Auth profile operations, unsupported-option rejection, native cookies, strict logout, expiry retention, identity-source failures and no hidden storage fallback.
 - PostgreSQL, MySQL/MariaDB and Datastore adapter tests, plus memory. An emulator does not prove cloud IAM/index deployment.
 - Package exports, dependency boundaries, TypeDoc, reference docs and executable configuration examples match actual APIs.
-- Check packed auth root/component imports without Better Auth. Check optional-subpath declarations with and without the peer in isolated strict Node consumers without Bun types; execute the optional runtime only with exact Better Auth 1.7.16 installed. Compile the maintained password and OIDC forwarding-import examples with `skipLibCheck: false`. The framework build may include only the genuine upstream SQLite declaration as a development input; it must not leak to consumers.
 
-## 13. Implementation sequence
+## 11. Implementation sequence
 
 Use this document as the specification for implementation and review. Older false-default or business-lifecycle-change proposals are superseded.
 
 1. Add the per-handle preparation behavior and `PersistentTenantIndex`. Verify the default create/check path, explicit skip path, and unchanged business-storage lifecycle.
 2. Implement the component auth stores and library integrations, including record contracts, atomic transitions and explicit cleanup.
 3. Integrate browser credential admission, auth routes, shutdown and local stream invalidation.
-4. Implement the bounded optional Better Auth path, its controlled provisioning contract, callback CAS gate and selected provider network/lifecycle behavior.
-5. Complete provider tests, public exports, TypeDoc, maintained examples and repository verification/review gates.
+4. Complete provider tests, public exports, TypeDoc, maintained examples and repository verification/review gates.
 
 Experimental private provider shims are evidence, not production implementation. Replace them with supported provider mechanisms. Do not copy the lab's whole-table scans into the production adapters.
 
