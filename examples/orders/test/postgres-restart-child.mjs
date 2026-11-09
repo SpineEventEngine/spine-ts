@@ -74,6 +74,8 @@ try {
         }),
       );
     }
+    await context.close();
+    context = await createOrdersContext();
   }
   const northwind = (await context.stand().read(OrderSchema, id, { tenantId: tenants[0] }))?.skuId;
   const contoso = (await context.stand().read(OrderSchema, id, { tenantId: tenants[1] }))?.skuId;

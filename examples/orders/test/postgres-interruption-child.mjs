@@ -93,10 +93,11 @@ async function stage(id, setup) {
   const transport = createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: session });
   const envelope = command(id, "recovered-sku");
   const posted = createClient(CommandService, transport).post(envelope);
-  await Promise.race([
+  await Promise.all([
     handlerEntered,
-    posted.then(() => {
-      throw new Error("Command completed before handler entry.");
+    posted.then((ack) => {
+      if (ack.status?.status.case !== "ok")
+        throw new Error(`Staged Orders command was not accepted: ${JSON.stringify(ack.status)}`);
     }),
   ]);
   const rows = await setup.environment.delivery.inbox.read(ShardIndex.single(), {
@@ -181,20 +182,14 @@ async function recoverWithGate(id, newId, newEnvelope, setup, handlerEntered, ne
         await handlerEntered;
         process.send?.({ kind: "recovered-entered" });
         const posted = createClient(CommandService, transport).post(newEnvelope);
-        const newRow = await Promise.race([
-          newReceipt,
-          posted.then(() => {
-            throw new Error("New Command completed before Inbox receipt.");
-          }),
-        ]);
+        const [newRow, ack] = await Promise.all([newReceipt, posted]);
         if (newRow.status !== "TO_DELIVER")
           throw new Error("New Orders Command was not pending while recovery was gated.");
+        if (ack.status?.status.case !== "ok")
+          throw new Error(`New Orders command was not accepted: ${JSON.stringify(ack.status)}`);
         process.send?.({ kind: "new-received" });
         await new Promise((resolve) => process.once("message", resolve));
         release();
-        const ack = await posted;
-        if (ack.status?.status.case !== "ok")
-          throw new Error(`New Orders command did not progress: ${JSON.stringify(ack.status)}`);
       } finally {
         release();
         session.abort();
