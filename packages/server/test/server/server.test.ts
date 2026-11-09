@@ -56,10 +56,9 @@ import {
   SubscriptionUpdateSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   InMemoryStorageFactory,
-  StorageGroup,
   type RecordSpec,
   type RecordStorage,
   type StorageContext,
