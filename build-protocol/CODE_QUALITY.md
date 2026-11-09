@@ -214,6 +214,15 @@ smallest useful start before architecture, source-backed behavior, tests,
 limits, and deployment or image operations. Keep the `README.md` approachable
 and move exhaustive contracts to its sibling `REFERENCE.md`.
 
+### Mermaid Diagram Syntax
+
+Use `mermaid` Markdown fences in documentation, examples, PR descriptions,
+and chat explanations. In sequence-diagram message and note text, a literal
+semicolon must be encoded as `#59;`; a bare `;` separates statements. Rephrasing
+with a comma or separate sentence is also valid. Parse-check each new or
+changed diagram before presenting it, including every diagram in a revised
+document. Do not infer syntax validity from how the source looks.
+
 ## Review Standards
 
 Every task records a disposition for these concerns, but invokes only the

@@ -70,6 +70,15 @@ alongside Buf formatting. Check documentation during implementation and again
 during independent review; it is not a deferred cleanup step. See
 `build-protocol/CODE_QUALITY.md` for generated and frozen-source exclusions.
 
+## Mermaid Diagrams
+
+Use `mermaid` Markdown fences for diagrams. In sequence-diagram message and
+note text, encode a literal semicolon as `#59;`, or rephrase with a comma or
+separate sentence. A bare `;` is a statement separator, not ordinary label
+punctuation. Apply this rule to repository documentation, examples, PR text,
+and Spine TS explanations in chat. Parse-check every new or changed diagram
+before presenting it; visual plausibility alone does not establish valid syntax.
+
 ## Pull Request Descriptions
 
 Write pull request descriptions for human framework users. Explain the concrete
