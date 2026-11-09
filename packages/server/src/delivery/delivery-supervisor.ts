@@ -528,6 +528,7 @@ export class DeliverySupervisor {
         signal: this.#controller.signal,
       });
       failed ||= result.status === "FAILED";
+      if (failed) this.#reportTerminalRunFailure();
     } catch (error) {
       this.#reportTerminalRunFailure();
       throw error;
