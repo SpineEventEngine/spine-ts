@@ -62,7 +62,11 @@ describe("Delivery direct worker", () => {
         return candidate;
       },
     });
-    const run = delivery.drain(shard, { onMessage: (candidate) => seen.push(candidate.signalId) });
+    const run = delivery.drain(shard, {
+      onMessage: (candidate) => {
+        seen.push(candidate.signalId);
+      },
+    });
     await entered.promise;
     rows.push(row);
     delivery.wake(shard);
