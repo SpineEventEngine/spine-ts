@@ -12,18 +12,22 @@
  * the License.
  */
 
-import type { RecordColumnType } from "./column-type.js";
+import { FixedByteWidthValidation, type RecordColumnType } from "./column-type.js";
 
 /**
  * Converts one typed record-column value to its provider representation.
  *
  * @param value The typed Protobuf value.
  * @returns The provider representation.
+ * @typeParam R Stored Protobuf record type.
+ * @typeParam V Declared column value type.
  */
 export type ColumnTypeMapping<V, R> = (value: V) => R;
 
 /**
  * Supplies provider conversion rules for generated Protobuf column types.
+ *
+ * @typeParam R Stored Protobuf record type.
  */
 export interface ColumnMapping<R> {
   // prettier-ignore
@@ -32,6 +36,7 @@ export interface ColumnMapping<R> {
    * Returns the conversion rule for a declared column type.
    * @param type The generated Protobuf column type.
    * @returns The provider conversion rule.
+   * @typeParam V Declared column value type.
    */
   of<V>(type: RecordColumnType<V>): ColumnTypeMapping<V, R>;
 
@@ -57,12 +62,15 @@ export const ColumnMappings = {
    * @param type The declared column type.
    * @param value The stored or queried value.
    * @returns The provider value.
+   * @typeParam R Stored Protobuf record type.
+   * @typeParam V Declared column value type.
    */
   value<V, R>(
     mapping: ColumnMapping<R>,
     type: RecordColumnType<V>,
     value: V | null | undefined,
   ): R {
+    if (value !== null && value !== undefined) FixedByteWidthValidation.require(type, value);
     return value === null || value === undefined
       ? mapping.ofNull()(null)
       : mapping.of(type)(value);

@@ -166,7 +166,7 @@ export const EntityCommitSnapshots: Readonly<{
 /**
  * A provider handle for one bounded Entity scope.
  *
- * An ordinary `commit()` may retain a completed prefix when a later record fails. Replaying
+ * An ordinary `commit()` may retain a completed prefix when a later record fails. Retrying
  * the same captured input reuses versions and Event IDs. An Event's presence
  * alone does not establish that current state was saved.
  * `commitAgent()` conditionally commits the complete live Agent transition atomically.

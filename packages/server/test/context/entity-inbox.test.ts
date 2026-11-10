@@ -33,9 +33,12 @@ import { Delivery } from "../../src/delivery/delivery.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
 import type { DeliveryStrategy } from "../../src/delivery/delivery-builder.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
+import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { LocalEntityInbox } from "../../src/context/entity-inbox.js";
+import type { DeliveryInbox } from "../../src/delivery/delivery-ports.js";
+import { commitFenced, withoutDeliveryCommitFence } from "../../src/repository/commit-fence.js";
 import { tenant } from "../tenant-fixture.js";
 import { CreateTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
 import {
@@ -68,12 +71,12 @@ describe("LocalEntityInbox", () => {
       });
       const entityInbox = new LocalEntityInbox("BatchReceipt");
       const targetTypeUrl = TaskSchema.typeName;
-      const replayed: string[] = [];
+      const delivered: string[] = [];
       entityInbox.register({
         targetTypeUrl,
         labels: ["HANDLE_COMMAND"],
-        replay(message) {
-          replayed.push(message.signalId);
+        deliver(message) {
+          delivered.push(message.signalId);
           return Promise.resolve(undefined);
         },
       });
@@ -116,7 +119,8 @@ describe("LocalEntityInbox", () => {
           ),
         ).size,
       ).toBe(3);
-      expect(replayed).toEqual(inputs.map(({ signalId }) => signalId));
+      await delivery.whenIdle();
+      expect(delivered).toEqual(inputs.map(({ signalId }) => signalId));
       await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
     } finally {
       Time.setProvider(previous);
@@ -129,7 +133,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay: () => Promise.resolve(undefined),
+      deliver: () => Promise.resolve(undefined),
     });
 
     expect(inbox.endpoints()).toContainEqual(
@@ -149,7 +153,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay: () => Promise.resolve(undefined),
+      deliver: () => Promise.resolve(undefined),
     });
 
     const receiving = inbox.receiveAll(
@@ -180,7 +184,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay: () => Promise.resolve(undefined),
+      deliver: () => Promise.resolve(undefined),
     });
     const receiving = inbox.receiveAll(delivery, [processInput(targetTypeUrl, "first")]);
     await Promise.resolve();
@@ -190,24 +194,102 @@ describe("LocalEntityInbox", () => {
     await receiving;
   });
 
+  it("schedules a distinct written batch row before an existing receipt settles", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const backing = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const firstWriteStarted = Promise.withResolvers<undefined>();
+    const releaseFirstWrite = Promise.withResolvers<undefined>();
+    const secondWritten = Promise.withResolvers<undefined>();
+    let writes = 0;
+    const port: DeliveryInbox = {
+      sessionKind: backing.inbox.sessionKind,
+      async receive(input, options) {
+        const write = ++writes;
+        if (write === 1) {
+          firstWriteStarted.resolve(undefined);
+          await releaseFirstWrite.promise;
+        }
+        const result = await backing.inbox.receive(input, options);
+        if (write === 2) secondWritten.resolve(undefined);
+        return result;
+      },
+      read: (shard, options) => backing.inbox.read(shard, options),
+      readMessage: (id, options) => backing.inbox.readMessage(id, options),
+      markDelivered: (message, options) => backing.inbox.markDelivered(message, options),
+      removeDuplicate: (message, options) => backing.inbox.removeDuplicate(message, options),
+    };
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      inbox: port,
+    });
+    const onWake = vi.fn();
+    const readiness = new DeliveryReadiness(undefined, delivery, onWake, false);
+    const inbox = new LocalEntityInbox("Tasks", readiness);
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      deliver: () => Promise.resolve(undefined),
+    });
+    const firstInput = processInput(targetTypeUrl, "first");
+    const secondInput = processInput(targetTypeUrl, "second");
+    const first = inbox.receive(delivery, firstInput);
+    await firstWriteStarted.promise;
+    const batch = inbox.receiveAll(delivery, [firstInput, secondInput]);
+    let batchSettled = false;
+    void batch.then(
+      () => {
+        batchSettled = true;
+      },
+      () => {
+        batchSettled = true;
+      },
+    );
+    await secondWritten.promise;
+    await new Promise<undefined>((resolve) => {
+      setImmediate(() => {
+        resolve(undefined);
+      });
+    });
+
+    try {
+      expect(onWake).toHaveBeenCalledWith(ShardIndex.single());
+      expect(batchSettled).toBe(false);
+      expect(await delivery.inbox.read(ShardIndex.single())).toMatchObject([
+        { signalId: "signal-second" },
+      ]);
+    } finally {
+      releaseFirstWrite.resolve(undefined);
+      const [, messages] = await Promise.all([first, batch]);
+      expect(messages.map((message) => message.signalId)).toEqual([
+        "signal-first",
+        "signal-second",
+      ]);
+    }
+  });
+
   it("rejects a saved Entity inbox row after its tenant is removed", async () => {
     const failure = new Error("tenant removed");
     let admitted = true;
-    const replay = vi.fn(() => Promise.resolve(undefined));
+    const deliverTarget = vi.fn(() => Promise.resolve(undefined));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const inbox = new LocalEntityInbox("Tasks", undefined, () =>
       admitted ? Promise.resolve() : Promise.reject(failure),
     );
-    inbox.register({ targetTypeUrl, labels: ["HANDLE_COMMAND"], replay });
+    inbox.register({ targetTypeUrl, labels: ["HANDLE_COMMAND"], deliver: deliverTarget });
     const saved = writtenResult(processInput(targetTypeUrl, "saved"), 1n).message;
 
-    await inbox.replay(saved, tenant("tenant-a"));
+    await inbox.deliver(saved, tenant("tenant-a"));
     admitted = false;
-    await expect(inbox.replay(saved, tenant("tenant-a"))).rejects.toBe(failure);
-    expect(replay).toHaveBeenCalledOnce();
+    await expect(inbox.deliver(saved, tenant("tenant-a"))).rejects.toBe(failure);
+    expect(deliverTarget).toHaveBeenCalledOnce();
   });
 
-  it("exact-drains persisted batch rows before propagating a later write failure", async () => {
+  it("schedules persisted batch rows before propagating a later write failure", async () => {
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const inputs = ["persisted", "rejected"].map((targetId) =>
       processInput(targetTypeUrl, targetId),
@@ -241,12 +323,13 @@ describe("LocalEntityInbox", () => {
         readMessage,
       },
       drainMessage,
+      close: () => Promise.resolve(),
     } as unknown as Delivery;
     const inbox = new LocalEntityInbox("Tasks");
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay: () => Promise.resolve(undefined),
+      deliver: () => Promise.resolve(undefined),
     });
 
     await expect(inbox.receiveAll(delivery, inputs)).rejects.toBe(writeFailure);
@@ -257,7 +340,7 @@ describe("LocalEntityInbox", () => {
     expect(readMessage).not.toHaveBeenCalled();
   });
 
-  it("does not infer exact acknowledgement from aggregate delivery counts", async () => {
+  it("accepts a persisted row before aggregate delivery counts settle", async () => {
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const input = processInput(targetTypeUrl, "missing-target");
     const persisted = writtenResult(input, 1n).message;
@@ -280,21 +363,24 @@ describe("LocalEntityInbox", () => {
         readMessage: () => Promise.resolve(undefined),
       },
       drainMessage,
+      close: () => Promise.resolve(),
     } as unknown as Delivery;
-    const inbox = new LocalEntityInbox("Tasks");
+    const readiness = new DeliveryReadiness();
+    const inbox = new LocalEntityInbox("Tasks", readiness);
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay: () => Promise.resolve(undefined),
+      deliver: () => Promise.resolve(undefined),
     });
 
-    await expect(inbox.receive(delivery, input)).rejects.toThrow(
-      "Entity Inbox delivery did not reach the target row before the local drain finished.",
-    );
+    await expect(inbox.receive(delivery, input)).resolves.toMatchObject({
+      signalId: input.signalId,
+    });
+    await expect(readiness.close()).resolves.toBeUndefined();
     expect(drainMessage).toHaveBeenCalledTimes(8);
   });
 
-  it("propagates the exact target failure despite unrelated delivery success", async () => {
+  it("accepts a persisted row despite an unrelated delivery result", async () => {
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const input = processInput(targetTypeUrl, "failed-target");
     const persisted = writtenResult(input, 1n).message;
@@ -306,6 +392,7 @@ describe("LocalEntityInbox", () => {
         receive: () => Promise.resolve({ outcome: "WRITTEN", message: persisted }),
         readMessage: () => Promise.resolve(undefined),
       },
+      close: () => Promise.resolve(),
       drainMessage: () =>
         Promise.resolve({
           acknowledged: false,
@@ -319,17 +406,21 @@ describe("LocalEntityInbox", () => {
           },
         }),
     } as unknown as Delivery;
-    const inbox = new LocalEntityInbox("Tasks");
+    const readiness = new DeliveryReadiness();
+    const inbox = new LocalEntityInbox("Tasks", readiness);
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay: () => Promise.resolve(undefined),
+      deliver: () => Promise.resolve(undefined),
     });
 
-    await expect(inbox.receive(delivery, input)).rejects.toBe(failure);
+    await expect(inbox.receive(delivery, input)).resolves.toMatchObject({
+      signalId: input.signalId,
+    });
+    await expect(readiness.close()).resolves.toBeUndefined();
   });
 
-  it("preserves a batch replay infrastructure failure and pending rows", async () => {
+  it("accepts a batch while a direct target failure leaves unprocessed rows pending", async () => {
     const monitor = vi.fn();
     class ObservingMonitor extends DeliveryMonitor {
       override onReceptionFailure(reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0]) {
@@ -344,13 +435,13 @@ describe("LocalEntityInbox", () => {
     });
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const drainFailure = new Error("first drain failed");
-    const replayed: string[] = [];
+    const delivered: string[] = [];
     const inbox = new LocalEntityInbox("Tasks");
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay(message) {
-        replayed.push(targetValue(message));
+      deliver(message) {
+        delivered.push(targetValue(message));
         return targetValue(message) === "first"
           ? Promise.reject(drainFailure)
           : Promise.resolve(undefined);
@@ -362,17 +453,19 @@ describe("LocalEntityInbox", () => {
         delivery,
         ["first", "second"].map((targetId) => processInput(targetTypeUrl, targetId)),
       ),
-    ).rejects.toBe(drainFailure);
-    expect(replayed).toEqual(["first", "second"]);
+    ).resolves.toHaveLength(2);
+    await expect(delivery.whenIdle()).rejects.toBe(drainFailure);
+    expect(delivered).toEqual(["first"]);
     expect(monitor).not.toHaveBeenCalled();
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
-    ).resolves.toEqual([
-      expect.objectContaining({ signalId: "signal-first", status: "TO_DELIVER" }),
+    ).resolves.toMatchObject([
+      { signalId: "signal-first", status: "TO_DELIVER" },
+      { signalId: "signal-second", status: "TO_DELIVER" },
     ]);
   });
 
-  it("remote supervised Entity single and batch writes notify without local replay", async () => {
+  it("remote supervised Entity single and batch writes notify without local delivery", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -380,8 +473,12 @@ describe("LocalEntityInbox", () => {
     const onWake = vi.fn();
     const readiness = new DeliveryReadiness(undefined, delivery, onWake, true);
     const inbox = new LocalEntityInbox("Tasks", readiness);
-    const replay = vi.fn(() => Promise.resolve(undefined));
-    inbox.register({ targetTypeUrl: TaskSchema.typeName, labels: ["HANDLE_COMMAND"], replay });
+    const deliverTarget = vi.fn(() => Promise.resolve(undefined));
+    inbox.register({
+      targetTypeUrl: TaskSchema.typeName,
+      labels: ["HANDLE_COMMAND"],
+      deliver: deliverTarget,
+    });
 
     const batch = await inbox.receiveAll(delivery, [
       taskCommandInput("first"),
@@ -392,10 +489,53 @@ describe("LocalEntityInbox", () => {
     expect(batch).toHaveLength(2);
     expect(single.signalId).toBe("command-third");
     expect(onWake).toHaveBeenCalledTimes(3);
-    expect(replay).not.toHaveBeenCalled();
+    expect(deliverTarget).not.toHaveBeenCalled();
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toHaveLength(3);
+  });
+
+  it("accepts a local shared Command after its Inbox write and wakes delivery", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const onWake = vi.fn();
+    const readiness = new DeliveryReadiness(undefined, delivery, onWake, false);
+    const inbox = new LocalEntityInbox("Tasks", readiness);
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const deliverTarget = vi.fn(async () => {
+      entered.resolve(undefined);
+      await release.promise;
+      return undefined;
+    });
+    inbox.register({
+      targetTypeUrl: TaskSchema.typeName,
+      labels: ["HANDLE_COMMAND"],
+      deliver: deliverTarget,
+    });
+    readiness.configureDirect((message) => inbox.deliver(message));
+
+    try {
+      const accepted = await inbox.receive(delivery, taskCommandInput("locally-accepted"));
+      await entered.promise;
+
+      expect(accepted.signalId).toBe("command-locally-accepted");
+      expect(onWake).toHaveBeenCalledExactlyOnceWith(ShardIndex.single());
+      expect(deliverTarget).toHaveBeenCalledOnce();
+      const closing = readiness.close();
+      let closed = false;
+      void closing.then(() => {
+        closed = true;
+      });
+      await Promise.resolve();
+      expect(closed).toBe(false);
+      release.resolve(undefined);
+      await closing;
+    } finally {
+      release.resolve(undefined);
+    }
   });
 
   it("emits readiness after persistence before exact drain settles", async () => {
@@ -406,21 +546,21 @@ describe("LocalEntityInbox", () => {
     const ready: unknown[] = [];
     const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
-    let startReplay!: () => void;
-    let releaseReplay!: () => void;
-    const replayStarted = new Promise<void>((resolve) => {
-      startReplay = resolve;
+    let startDelivery!: () => void;
+    let releaseDelivery!: () => void;
+    const deliveryStarted = new Promise<void>((resolve) => {
+      startDelivery = resolve;
     });
-    const replayReleased = new Promise<void>((resolve) => {
-      releaseReplay = resolve;
+    const deliveryReleased = new Promise<void>((resolve) => {
+      releaseDelivery = resolve;
     });
 
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      async replay() {
-        startReplay();
-        await replayReleased;
+      async deliver() {
+        startDelivery();
+        await deliveryReleased;
       },
     });
 
@@ -435,7 +575,7 @@ describe("LocalEntityInbox", () => {
       },
       tenant("tenant-a"),
     );
-    await replayStarted;
+    await deliveryStarted;
 
     expect(ready).toEqual([
       {
@@ -446,7 +586,7 @@ describe("LocalEntityInbox", () => {
       },
     ]);
 
-    releaseReplay();
+    releaseDelivery();
     await receive;
   });
 
@@ -476,7 +616,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: ["REACT_UPON_EVENT"],
-      replay: () => Promise.resolve(undefined),
+      deliver: () => Promise.resolve(undefined),
     });
 
     await expect(inbox.receiveAll(delivery, inputs, tenant("tenant-a"))).rejects.toThrow(
@@ -505,7 +645,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay: () => Promise.resolve(undefined),
+      deliver: () => Promise.resolve(undefined),
     });
     const endpoints = vi.spyOn(inbox, "endpoints");
 
@@ -539,7 +679,7 @@ describe("LocalEntityInbox", () => {
     ]);
   });
 
-  it("isolates readiness observer failure from every batch write and exact drain", async () => {
+  it("isolates readiness observer failure from every batch write and recipient", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -554,7 +694,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay(message) {
+      deliver(message) {
         seen.push(targetValue(message));
         return Promise.resolve(undefined);
       },
@@ -574,6 +714,7 @@ describe("LocalEntityInbox", () => {
       ),
     ).resolves.toHaveLength(2);
     expect(notifications).toBe(2);
+    await delivery.whenIdle();
     expect(seen).toEqual(["first", "second"]);
   });
 
@@ -604,7 +745,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay: () => Promise.resolve(undefined),
+      deliver: () => Promise.resolve(undefined),
     });
 
     const receive = inbox.receive(delivery, {
@@ -669,42 +810,38 @@ describe("LocalEntityInbox", () => {
     expect(ready).toEqual([]);
   });
 
-  it("emits for all persisted batch rows before a later exact drain rejection", async () => {
+  it("notifies all persisted batch rows before a later processing failure", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
-    const drainFailure = new Error("batch replay failed");
+    const drainFailure = new Error("batch delivery failed");
     const ready: unknown[] = [];
     const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay: () => Promise.reject(drainFailure),
+      deliver: () => Promise.reject(drainFailure),
     });
 
-    const result = await inbox
-      .receiveAll(
-        delivery,
-        ["first", "second"].map((targetId) => ({
-          inboxId: { targetId: typedTarget(targetId), targetTypeUrl },
-          signalId: "event-drain-failure",
-          signal: eventSignal(),
-          label: "REACT_UPON_EVENT" as const,
-          status: "TO_DELIVER" as const,
-          shard: ShardIndex.single(),
-        })),
-      )
-      .then(
-        () => undefined,
-        (error: unknown) => error,
-      );
+    const accepted = await inbox.receiveAll(
+      delivery,
+      ["first", "second"].map((targetId) => ({
+        inboxId: { targetId: typedTarget(targetId), targetTypeUrl },
+        signalId: "event-drain-failure",
+        signal: eventSignal(),
+        label: "REACT_UPON_EVENT" as const,
+        status: "TO_DELIVER" as const,
+        shard: ShardIndex.single(),
+      })),
+    );
 
-    expect(result).toBe(drainFailure);
+    expect(accepted).toHaveLength(2);
     expect(ready).toHaveLength(2);
+    await expect(delivery.whenIdle()).rejects.toBe(drainFailure);
   });
-  it("replays and cleans eligible durable command and event rows through a delivery loop endpoint", async () => {
+  it("delivers and cleans eligible durable command and event rows through a delivery loop endpoint", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -716,7 +853,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay(message) {
+      deliver(message) {
         seen.push(message);
         return Promise.resolve(undefined);
       },
@@ -746,7 +883,7 @@ describe("LocalEntityInbox", () => {
     const run = await new DeliveryLoop({
       delivery,
       shard: ShardIndex.single(),
-      onMessage: (message) => inbox.replay(message),
+      onMessage: (message) => inbox.deliver(message),
     }).run();
 
     expect(seen.map(({ label }) => label)).toEqual(["HANDLE_COMMAND", "REACT_UPON_EVENT"]);
@@ -764,6 +901,116 @@ describe("LocalEntityInbox", () => {
     ).resolves.toEqual([]);
   });
 
+  it("acknowledges a recovered command before its same-shard event recipient completes", async () => {
+    const delivery = new Delivery({
+      context: { name: "RecoveredFollowUp", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new LocalEntityInbox("RecoveredFollowUp");
+    const shard = ShardIndex.single();
+    const commandTypeUrl = "type.example.dev/Tasks.Aggregate";
+    const eventTypeUrl = "type.example.dev/Tasks.Projection";
+    const recipientEntered = Promise.withResolvers<undefined>();
+    const recipientReleased = Promise.withResolvers<undefined>();
+    const publicationAttempted = Promise.withResolvers<undefined>();
+    const seen: string[] = [];
+    let publicationCommits = 0;
+    let recipientCommits = 0;
+    const validate = vi.spyOn(ShardedWorkRegistry.prototype, "validateOwnership");
+    inbox.register({
+      targetTypeUrl: commandTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      async deliver(message) {
+        seen.push(message.signalId);
+        await commitFenced({}, () => ({ status: "committed" }));
+        await withoutDeliveryCommitFence(async () => {
+          const priorValidations = validate.mock.calls.length;
+          try {
+            await commitFenced({}, () => {
+              publicationCommits += 1;
+              return { status: "committed" };
+            });
+          } finally {
+            publicationAttempted.resolve(undefined);
+          }
+          expect(validate.mock.calls.length).toBe(priorValidations);
+          await inbox.receive(delivery, {
+            inboxId: { targetId: typedTarget("recipient"), targetTypeUrl: eventTypeUrl },
+            signalId: "event-from-recovered-command",
+            signal: eventSignal(),
+            label: "REACT_UPON_EVENT",
+            status: "TO_DELIVER",
+          });
+        });
+      },
+    });
+    inbox.register({
+      targetTypeUrl: eventTypeUrl,
+      labels: ["REACT_UPON_EVENT"],
+      async deliver(message) {
+        seen.push(message.signalId);
+        const priorValidations = validate.mock.calls.length;
+        await commitFenced({}, () => {
+          recipientCommits += 1;
+          return { status: "committed" };
+        });
+        expect(validate.mock.calls.length).toBeGreaterThan(priorValidations);
+        recipientEntered.resolve(undefined);
+        await recipientReleased.promise;
+      },
+    });
+    const source = await delivery.inbox.receive({
+      ...processInput(commandTypeUrl, "recovered"),
+      shard,
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
+      version: 1n,
+      keepUntil: new Date("2100-01-01T00:00:00.000Z"),
+    });
+
+    const loop = new DeliveryLoop({
+      delivery,
+      shard,
+      onMessage: (message) => inbox.deliver(message),
+    }).run();
+    let idle: Promise<void> | undefined;
+    let followUpSettled = false;
+    try {
+      await Promise.race([
+        publicationAttempted.promise,
+        loop.then(() => {
+          throw new Error("Recovered source settled without publication attempt.");
+        }),
+      ]);
+      expect(publicationCommits).toBe(1);
+      await Promise.race([
+        recipientEntered.promise,
+        loop.then(() => {
+          throw new Error("Recovered source settled without recipient delivery.");
+        }),
+      ]);
+      idle = delivery.whenIdle().then(() => {
+        followUpSettled = true;
+      });
+      expect(seen).toEqual(["signal-recovered", "event-from-recovered-command"]);
+      expect(recipientCommits).toBe(1);
+      await expect(delivery.inbox.readMessage(source.message.id)).resolves.toMatchObject({
+        signalId: "signal-recovered",
+        status: "DELIVERED",
+      });
+      await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject(
+        [{ signalId: "event-from-recovered-command" }],
+      );
+      expect(followUpSettled).toBe(false);
+    } finally {
+      recipientReleased.resolve(undefined);
+      await Promise.allSettled([loop, idle ?? delivery.whenIdle()]);
+      validate.mockRestore();
+    }
+    expect(followUpSettled).toBe(true);
+    await delivery.whenIdle();
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
+  });
+
   it("delivers a handled command without the optional keepUntil field", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -776,7 +1023,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay(message) {
+      deliver(message) {
         seen.push(message);
         return Promise.resolve(undefined);
       },
@@ -789,6 +1036,8 @@ describe("LocalEntityInbox", () => {
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
     });
+
+    await delivery.whenIdle();
 
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({
@@ -822,7 +1071,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay: () => Promise.resolve(undefined),
+      deliver: () => Promise.resolve(undefined),
     });
 
     const first = await inbox.receive(delivery, {
@@ -857,7 +1106,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay: () => Promise.resolve(undefined),
+      deliver: () => Promise.resolve(undefined),
     });
 
     const received = await inbox.receive(delivery, {
@@ -868,6 +1117,8 @@ describe("LocalEntityInbox", () => {
       status: "TO_DELIVER",
       keepUntil,
     });
+
+    await delivery.whenIdle();
 
     await expect(delivery.inbox.readMessage(received.id)).resolves.toMatchObject({
       status: "DELIVERED",
@@ -887,7 +1138,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay(message) {
+      deliver(message) {
         seen.push(message);
         return Promise.resolve(undefined);
       },
@@ -901,6 +1152,8 @@ describe("LocalEntityInbox", () => {
       status: "TO_DELIVER",
     });
 
+    await delivery.whenIdle();
+
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({
       signalId: "event-1",
@@ -913,7 +1166,7 @@ describe("LocalEntityInbox", () => {
     ).resolves.toEqual([]);
   });
 
-  it("waits for a concurrent duplicate without replaying its command follow-up", async () => {
+  it("accepts a concurrent duplicate while its Command handler remains active", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -923,13 +1176,13 @@ describe("LocalEntityInbox", () => {
     const shard = ShardIndex.single();
     const seen: InboxMessage[] = [];
     let followUps = 0;
-    let startReplay!: () => void;
-    let releaseReplay!: () => void;
-    const replayStarted = new Promise<void>((resolve) => {
-      startReplay = resolve;
+    let startDelivery!: () => void;
+    let releaseDelivery!: () => void;
+    const deliveryStarted = new Promise<void>((resolve) => {
+      startDelivery = resolve;
     });
-    const replayReleased = new Promise<void>((resolve) => {
-      releaseReplay = resolve;
+    const deliveryReleased = new Promise<void>((resolve) => {
+      releaseDelivery = resolve;
     });
     const input = {
       inboxId: { targetId: typedTarget("pm-duplicate"), targetTypeUrl },
@@ -942,34 +1195,28 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      async replay(message) {
+      async deliver(message) {
         seen.push(message);
-        startReplay();
-        await replayReleased;
-        return () => {
-          followUps++;
-          return Promise.resolve();
-        };
+        startDelivery();
+        await deliveryReleased;
+        followUps++;
       },
     });
 
-    const first = inbox.receive(delivery, input);
-    await replayStarted;
-    const duplicate = inbox.receive(delivery, input);
-
-    await pause(150);
-    releaseReplay();
-
-    const [firstMessage, duplicateMessage] = await Promise.all([first, duplicate]);
-
-    expect(duplicateMessage.id).toEqual(firstMessage.id);
+    const firstMessage = await inbox.receive(delivery, input);
+    await deliveryStarted;
+    const duplicateMessage = await inbox.receive(delivery, input);
+    expect(duplicateMessage.id).not.toEqual(firstMessage.id);
+    expect(seen).toHaveLength(1);
+    expect(followUps).toBe(0);
+    releaseDelivery();
+    await delivery.whenIdle();
     expect(seen).toHaveLength(1);
     expect(followUps).toBe(1);
-    await delivery.whenIdle();
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
-  it("waits for a concurrent duplicate multi-target event batch", async () => {
+  it("accepts a duplicate multi-target Event batch while a handler remains active", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -979,13 +1226,13 @@ describe("LocalEntityInbox", () => {
     const secondTypeUrl = "type.example.dev/Tasks.SecondProcessManager";
     const shard = ShardIndex.single();
     const seen: InboxMessage[] = [];
-    let startReplay!: () => void;
-    let releaseReplay!: () => void;
-    const replayStarted = new Promise<void>((resolve) => {
-      startReplay = resolve;
+    let startDelivery!: () => void;
+    let releaseDelivery!: () => void;
+    const deliveryStarted = new Promise<void>((resolve) => {
+      startDelivery = resolve;
     });
-    const replayReleased = new Promise<void>((resolve) => {
-      releaseReplay = resolve;
+    const deliveryReleased = new Promise<void>((resolve) => {
+      releaseDelivery = resolve;
     });
     const inputs = [
       {
@@ -1008,42 +1255,37 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl: firstTypeUrl,
       labels: processManagerLabels,
-      async replay(message) {
+      async deliver(message) {
         seen.push(message);
-        startReplay();
-        await replayReleased;
+        startDelivery();
+        await deliveryReleased;
       },
     });
     inbox.register({
       targetTypeUrl: secondTypeUrl,
       labels: processManagerLabels,
-      replay(message) {
+      deliver(message) {
         seen.push(message);
         return Promise.resolve(undefined);
       },
     });
 
-    const first = inbox.receiveAll(delivery, inputs);
-    await replayStarted;
-    const duplicate = inbox.receiveAll(delivery, inputs);
+    const firstMessages = await inbox.receiveAll(delivery, inputs);
+    await deliveryStarted;
+    const duplicateMessages = await inbox.receiveAll(delivery, inputs);
 
     try {
-      await expect(
-        Promise.race([duplicate.then(() => "resolved"), pause(150).then(() => "pending")]),
-      ).resolves.toBe("pending");
+      expect(duplicateMessages.map(({ id }) => id)).not.toEqual(firstMessages.map(({ id }) => id));
+      expect(seen.map(targetValue)).toEqual(["pm-first"]);
     } finally {
-      releaseReplay();
+      releaseDelivery();
     }
-
-    const [firstMessages, duplicateMessages] = await Promise.all([first, duplicate]);
-
-    expect(duplicateMessages.map(({ id }) => id)).toEqual(firstMessages.map(({ id }) => id));
-    expect(seen.map(targetValue)).toEqual(["pm-first", "pm-second"]);
     await delivery.whenIdle();
+    expect(seen.map(targetValue)).toEqual(["pm-first", "pm-second"]);
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
-  it("waits for a duplicate single row while a batch row is in flight", async () => {
+  it("accepts a duplicate single row while its batch handler remains active", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -1053,13 +1295,13 @@ describe("LocalEntityInbox", () => {
     const secondTypeUrl = "type.example.dev/Tasks.SecondProcessManager";
     const shard = ShardIndex.single();
     const seen: InboxMessage[] = [];
-    let startReplay!: () => void;
-    let releaseReplay!: () => void;
-    const replayStarted = new Promise<void>((resolve) => {
-      startReplay = resolve;
+    let startDelivery!: () => void;
+    let releaseDelivery!: () => void;
+    const deliveryStarted = new Promise<void>((resolve) => {
+      startDelivery = resolve;
     });
-    const replayReleased = new Promise<void>((resolve) => {
-      releaseReplay = resolve;
+    const deliveryReleased = new Promise<void>((resolve) => {
+      releaseDelivery = resolve;
     });
     const firstInput = {
       inboxId: { targetId: typedTarget("pm-first"), targetTypeUrl: firstTypeUrl },
@@ -1080,48 +1322,37 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl: firstTypeUrl,
       labels: processManagerLabels,
-      async replay(message) {
+      async deliver(message) {
         seen.push(message);
-        startReplay();
-        await replayReleased;
+        startDelivery();
+        await deliveryReleased;
       },
     });
     inbox.register({
       targetTypeUrl: secondTypeUrl,
       labels: processManagerLabels,
-      replay(message) {
+      deliver(message) {
         seen.push(message);
         return Promise.resolve(undefined);
       },
     });
 
-    const batch = inbox.receiveAll(delivery, inputs);
-    await replayStarted;
-    const duplicate = inbox.receive(delivery, secondInput);
+    const batchMessages = await inbox.receiveAll(delivery, inputs);
+    await deliveryStarted;
+    const duplicateMessage = await inbox.receive(delivery, secondInput);
 
     try {
-      await expect(
-        Promise.race([
-          duplicate.then(
-            () => "resolved",
-            (error: unknown) => (error instanceof Error ? error.message : "rejected"),
-          ),
-          pause(150).then(() => "pending"),
-        ]),
-      ).resolves.toBe("pending");
+      expect(duplicateMessage.id).not.toEqual(batchMessages[1]?.id);
+      expect(seen.map(targetValue)).toEqual(["pm-first"]);
     } finally {
-      releaseReplay();
+      releaseDelivery();
     }
-
-    const [batchMessages, duplicateMessage] = await Promise.all([batch, duplicate]);
-
-    expect(duplicateMessage.id).toEqual(batchMessages[1]?.id);
-    expect(seen.map(targetValue)).toEqual(["pm-first", "pm-second"]);
     await delivery.whenIdle();
+    expect(seen.map(targetValue)).toEqual(["pm-first", "pm-second"]);
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
-  it("waits for a duplicate batch row while a single row is in flight", async () => {
+  it("accepts a duplicate batch row while its single-row handler remains active", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -1131,13 +1362,13 @@ describe("LocalEntityInbox", () => {
     const secondTypeUrl = "type.example.dev/Tasks.SecondProcessManager";
     const shard = ShardIndex.single();
     const seen: InboxMessage[] = [];
-    let startReplay!: () => void;
-    let releaseReplay!: () => void;
-    const replayStarted = new Promise<void>((resolve) => {
-      startReplay = resolve;
+    let startDelivery!: () => void;
+    let releaseDelivery!: () => void;
+    const deliveryStarted = new Promise<void>((resolve) => {
+      startDelivery = resolve;
     });
-    const replayReleased = new Promise<void>((resolve) => {
-      releaseReplay = resolve;
+    const deliveryReleased = new Promise<void>((resolve) => {
+      releaseDelivery = resolve;
     });
     const firstInput = {
       inboxId: { targetId: typedTarget("pm-first"), targetTypeUrl: firstTypeUrl },
@@ -1160,55 +1391,44 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl: firstTypeUrl,
       labels: processManagerLabels,
-      async replay(message) {
+      async deliver(message) {
         seen.push(message);
-        startReplay();
-        await replayReleased;
+        startDelivery();
+        await deliveryReleased;
       },
     });
     inbox.register({
       targetTypeUrl: secondTypeUrl,
       labels: processManagerLabels,
-      replay(message) {
+      deliver(message) {
         seen.push(message);
         return Promise.resolve(undefined);
       },
     });
 
-    const single = inbox.receive(delivery, firstInput);
-    await replayStarted;
-    const batch = inbox.receiveAll(delivery, inputs);
+    const singleMessage = await inbox.receive(delivery, firstInput);
+    await deliveryStarted;
+    const batchMessages = await inbox.receiveAll(delivery, inputs);
 
     try {
-      await expect(
-        Promise.race([
-          batch.then(
-            () => "resolved",
-            (error: unknown) => (error instanceof Error ? error.message : "rejected"),
-          ),
-          pause(150).then(() => "pending"),
-        ]),
-      ).resolves.toBe("pending");
+      expect(batchMessages[0]?.id).not.toEqual(singleMessage.id);
+      expect(seen.map(targetValue)).toEqual(["pm-first"]);
     } finally {
-      releaseReplay();
+      releaseDelivery();
     }
-
-    const [singleMessage, batchMessages] = await Promise.all([single, batch]);
-
-    expect(batchMessages[0]?.id).toEqual(singleMessage.id);
-    expect(seen.map(targetValue)).toEqual(["pm-first", "pm-second"]);
     await delivery.whenIdle();
+    expect(seen.map(targetValue)).toEqual(["pm-first", "pm-second"]);
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
-  it("stores optional signal and keepUntil while scheduled rows do not replay", async () => {
+  it("stores optional signal and keepUntil while scheduled rows do not delivery", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
     const readiness = new DeliveryReadiness();
     const inbox = new LocalEntityInbox("Tasks", readiness);
-    readiness.configureDirect((message) => inbox.replay(message));
+    readiness.configureDirect((message) => inbox.deliver(message));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const shard = ShardIndex.single();
     const seen: InboxMessage[] = [];
@@ -1219,7 +1439,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay(message) {
+      deliver(message) {
         seen.push(message);
         return Promise.resolve(undefined);
       },
@@ -1249,17 +1469,15 @@ describe("LocalEntityInbox", () => {
           keepUntil,
         }),
       ),
-    ).rejects.toThrow(
-      "Entity Inbox delivery did not reach the target row before the local drain finished.",
-    );
+    ).resolves.toMatchObject({ signalId: "signal-1", status: "SCHEDULED" });
 
     await delivery.whenIdle();
-    expect(seen).toHaveLength(1);
+    expect(seen).toHaveLength(0);
     const pending = await delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] });
     const delivered = await delivery.inbox.read(shard, { statuses: ["DELIVERED"] });
     const scheduled = await delivery.inbox.read(shard, { statuses: ["SCHEDULED"] });
 
-    expect(pending).toEqual([]);
+    expect(pending).toMatchObject([{ signalId: "signal-0" }]);
     expect(delivered).toEqual([]);
     await expect(delivery.inbox.read(shard, { statuses: ["SCHEDULED"] })).resolves.toMatchObject([
       {
@@ -1280,7 +1498,7 @@ describe("LocalEntityInbox", () => {
     });
     const readiness = new DeliveryReadiness();
     const inbox = new LocalEntityInbox("Tasks", readiness);
-    readiness.configureDirect((message) => inbox.replay(message));
+    readiness.configureDirect((message) => inbox.deliver(message));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const unrelatedProcessManagerTypeUrl = "type.example.dev/Tasks.OtherProcessManager";
     const shard = ShardIndex.single();
@@ -1290,7 +1508,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay(message) {
+      deliver(message) {
         seen.push(message);
         return Promise.resolve(undefined);
       },
@@ -1298,7 +1516,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl: unrelatedProcessManagerTypeUrl,
       labels: processManagerLabels,
-      replay(message) {
+      deliver(message) {
         unrelatedSeen.push(message);
         return Promise.resolve(undefined);
       },
@@ -1338,6 +1556,62 @@ describe("LocalEntityInbox", () => {
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
+  it("publishes a recovered direct-backlog command to a same-shard recipient", async () => {
+    const delivery = new Delivery({
+      context: { name: "DirectBacklogFollowUp", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const readiness = new DeliveryReadiness();
+    const inbox = new LocalEntityInbox("DirectBacklogFollowUp", readiness);
+    readiness.configureDirect((message) => inbox.deliver(message));
+    const sourceTypeUrl = "type.example.dev/Tasks.BacklogAggregate";
+    const triggerTypeUrl = "type.example.dev/Tasks.TriggerAggregate";
+    const recipientTypeUrl = "type.example.dev/Tasks.BacklogProjection";
+    const seen: string[] = [];
+    inbox.register({
+      targetTypeUrl: sourceTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      deliver() {
+        return inbox
+          .receive(delivery, {
+            inboxId: { targetId: typedTarget("recipient"), targetTypeUrl: recipientTypeUrl },
+            signalId: "backlog-event",
+            signal: eventSignal(),
+            label: "REACT_UPON_EVENT",
+            status: "TO_DELIVER",
+          })
+          .then(() => undefined);
+      },
+    });
+    inbox.register({
+      targetTypeUrl: triggerTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      deliver: () => Promise.resolve(undefined),
+    });
+    inbox.register({
+      targetTypeUrl: recipientTypeUrl,
+      labels: ["REACT_UPON_EVENT"],
+      deliver(message) {
+        seen.push(message.signalId);
+        return Promise.resolve(undefined);
+      },
+    });
+    await delivery.inbox.receive({
+      ...processInput(sourceTypeUrl, "backlog"),
+      shard: ShardIndex.single(),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
+      version: 1n,
+    });
+
+    await inbox.receive(delivery, processInput(triggerTypeUrl, "trigger"));
+    await delivery.whenIdle();
+    await delivery.whenIdle();
+    expect(seen).toEqual(["backlog-event"]);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toEqual([]);
+  });
+
   it("propagates an Error reception failure and retains the pending row", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -1349,7 +1623,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay() {
+      deliver() {
         return Promise.reject(new Error("target failed"));
       },
     });
@@ -1362,13 +1636,14 @@ describe("LocalEntityInbox", () => {
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       }),
-    ).rejects.toThrow("target failed");
+    ).resolves.toMatchObject({ signalId: "signal-2" });
+    await expect(delivery.whenIdle()).rejects.toThrow("target failed");
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([{ signalId: "signal-2", status: "TO_DELIVER" }]);
   });
 
-  it("preserves a primitive replay failure as the cause and retains the pending row", async () => {
+  it("reports a primitive delivery failure and retains the pending row", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -1380,8 +1655,8 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay() {
-        // The primitive rejection is intentional: managed replay retains it as the cause.
+      deliver() {
+        // The primitive rejection is intentional: the delivery result retains the original value.
         // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
         return Promise.reject(reason);
       },
@@ -1395,10 +1670,8 @@ describe("LocalEntityInbox", () => {
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       }),
-    ).rejects.toMatchObject({
-      message: "Entity Inbox replay failed.",
-      cause: reason,
-    });
+    ).resolves.toMatchObject({ signalId: "signal-3" });
+    await expect(delivery.whenIdle()).rejects.toBe(reason);
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([{ signalId: "signal-3", status: "TO_DELIVER" }]);
@@ -1422,7 +1695,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay: () => Promise.resolve(undefined),
+      deliver: () => Promise.resolve(undefined),
     });
     const session = await delivery.shards.pickUp(
       shard,
@@ -1433,9 +1706,7 @@ describe("LocalEntityInbox", () => {
     }
 
     try {
-      await expect(inbox.receive(delivery, input)).rejects.toThrow(
-        "Entity Inbox delivery was skipped before the target row was delivered.",
-      );
+      await expect(inbox.receive(delivery, input)).resolves.toMatchObject({ signalId: "signal-4" });
     } finally {
       await delivery.shards.release(session);
     }
@@ -1463,8 +1734,8 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay() {
-        return Promise.reject(new Error("scheduled rows should not replay"));
+      deliver() {
+        return Promise.reject(new Error("scheduled rows should not delivery"));
       },
     });
 
@@ -1480,9 +1751,7 @@ describe("LocalEntityInbox", () => {
           shard: ShardIndex.single(),
         }),
       ),
-    ).rejects.toThrow(
-      "Entity Inbox delivery did not reach the target row before the local drain finished.",
-    );
+    ).resolves.toMatchObject({ signalId: "signal-5", status: "SCHEDULED" });
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["SCHEDULED"] }),
     ).resolves.toMatchObject([
@@ -1507,8 +1776,8 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay() {
-        return Promise.reject(new Error("unexpected replay"));
+      deliver() {
+        return Promise.reject(new Error("unexpected delivery"));
       },
     });
 
@@ -1524,7 +1793,7 @@ describe("LocalEntityInbox", () => {
           shard: ShardIndex.single(),
         }),
       ),
-    ).rejects.toThrow('no handler for inbox label "UPDATE_SUBSCRIBER"');
+    ).resolves.toMatchObject({ signalId: "signal-6" });
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([{ signalId: "signal-6", status: "TO_DELIVER" }]);
@@ -1539,11 +1808,11 @@ describe("LocalEntityInbox", () => {
     const ready: unknown[] = [];
     const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
     const targetTypeUrl = "type.example.dev/Tasks.CommandOnlyProcessManager";
-    const replayFailure = new Error("unconfigured event label should not replay");
+    const deliveryFailure = new Error("unconfigured event label should not delivery");
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay: () => Promise.reject(replayFailure),
+      deliver: () => Promise.reject(deliveryFailure),
     });
 
     await expect(
@@ -1554,7 +1823,7 @@ describe("LocalEntityInbox", () => {
         label: "REACT_UPON_EVENT",
         status: "TO_DELIVER",
       }),
-    ).rejects.toBe(replayFailure);
+    ).resolves.toMatchObject({ signalId: "event-label-mismatch" });
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([{ signalId: "event-label-mismatch", status: "TO_DELIVER" }]);
@@ -1569,11 +1838,11 @@ describe("LocalEntityInbox", () => {
     const ready: unknown[] = [];
     const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
-    const replayFailure = new Error("non-configured shard should preserve drain failure");
+    const deliveryFailure = new Error("non-configured shard should preserve drain failure");
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay: () => Promise.reject(replayFailure),
+      deliver: () => Promise.reject(deliveryFailure),
     });
 
     await expect(
@@ -1584,7 +1853,7 @@ describe("LocalEntityInbox", () => {
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       }),
-    ).rejects.toBe(replayFailure);
+    ).resolves.toMatchObject({ signalId: "command-shard-mismatch" });
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([{ signalId: "command-shard-mismatch", status: "TO_DELIVER" }]);
@@ -1610,58 +1879,51 @@ describe("LocalEntityInbox", () => {
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       }),
-    ).rejects.toThrow("no Entity Inbox target");
+    ).resolves.toMatchObject({ signalId: "signal-7" });
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([{ signalId: "signal-7", status: "TO_DELIVER" }]);
     expect(ready).toEqual([]);
   });
 
-  it("chains same-scope follow-ups before admitting a later receive", async () => {
+  it("accepts later same-scope rows while the first handler remains active", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
     const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.Aggregate";
-    const first = Promise.withResolvers<undefined>();
-    const second = Promise.withResolvers<undefined>();
-    const followUps: string[] = [];
+    const firstStarted = Promise.withResolvers<undefined>();
+    const releaseFirst = Promise.withResolvers<undefined>();
+    const delivered: string[] = [];
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay(message) {
+      async deliver(message) {
         const targetId = targetValue(message);
-        return Promise.resolve(async () => {
-          followUps.push(targetId);
-          if (targetId === "first") await first.promise;
-          if (targetId === "second") await second.promise;
-        });
+        delivered.push(targetId);
+        if (targetId === "first") {
+          firstStarted.resolve(undefined);
+          await releaseFirst.promise;
+        }
       },
     });
 
     await inbox.receive(delivery, processInput(targetTypeUrl, "first"));
-    const secondReceive = inbox.receive(delivery, processInput(targetTypeUrl, "second"));
+    await firstStarted.promise;
     await expect(
-      Promise.race([secondReceive.then(() => "resolved"), pause(25).then(() => "pending")]),
-    ).resolves.toBe("pending");
-    first.resolve(undefined);
-    await secondReceive;
-
-    const laterReceive = inbox.receive(delivery, processInput(targetTypeUrl, "later"));
-    await expect(
-      Promise.race([laterReceive.then(() => "resolved"), pause(25).then(() => "pending")]),
-    ).resolves.toBe("pending");
-    second.resolve(undefined);
-    await laterReceive;
-    expect(followUps).toEqual(["first", "second", "later"]);
-
-    await expect(
-      inbox.receive(delivery, processInput(targetTypeUrl, "after-settle")),
+      inbox.receive(delivery, processInput(targetTypeUrl, "second")),
     ).resolves.toBeDefined();
+    await expect(
+      inbox.receive(delivery, processInput(targetTypeUrl, "later")),
+    ).resolves.toBeDefined();
+    expect(delivered).toEqual(["first"]);
+    releaseFirst.resolve(undefined);
+    await delivery.whenIdle();
+    expect(delivered).toEqual(["first", "second", "later"]);
   });
 
-  it("runs every publication follow-up when one shard drain replays two commands", async () => {
+  it("delivers both initial publications from one shard batch", async () => {
     const delivery = new Delivery({
       context: { name: "FollowUpBatch", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -1673,23 +1935,20 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay(message) {
-        return Promise.resolve(() => {
-          published.push(message.signalId);
-          return Promise.resolve();
-        });
+      deliver(message) {
+        published.push(message.signalId);
+        return Promise.resolve();
       },
     });
     await inbox.receiveAll(delivery, [
       processInput(targetTypeUrl, "first"),
       processInput(targetTypeUrl, "second"),
     ]);
-    await vi.waitFor(() => {
-      expect(published).toEqual(["signal-first", "signal-second"]);
-    });
+    await delivery.whenIdle();
+    expect(published).toEqual(["signal-first", "signal-second"]);
   });
 
-  it("attempts later initial publications after an earlier callback fails", async () => {
+  it("attempts a new row after an earlier handler fails and retains the failed batch", async () => {
     const delivery = new Delivery({
       context: { name: "FollowUpFailure", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -1698,32 +1957,36 @@ describe("LocalEntityInbox", () => {
     const inbox = new LocalEntityInbox("FollowUpFailure");
     const targetTypeUrl = "type.example.dev/Tasks.Aggregate";
     const attempted: string[] = [];
+    let unavailable = true;
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay(message) {
-        return Promise.resolve(() => {
-          attempted.push(message.signalId);
-          return message.signalId === "signal-first"
-            ? Promise.reject(new Error("first publication unavailable"))
-            : Promise.resolve();
-        });
+      deliver(message) {
+        attempted.push(message.signalId);
+        return message.signalId === "signal-first" && unavailable
+          ? Promise.reject(new Error("first publication unavailable"))
+          : Promise.resolve();
       },
     });
     await inbox.receiveAll(delivery, [
       processInput(targetTypeUrl, "first"),
       processInput(targetTypeUrl, "second"),
     ]);
-    await vi.waitFor(() => {
-      expect(attempted).toEqual(["signal-first", "signal-second"]);
-    });
+    await expect(delivery.whenIdle()).rejects.toThrow("first publication unavailable");
+    expect(attempted).toEqual(["signal-first"]);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toHaveLength(2);
+    unavailable = false;
     await inbox.receive(delivery, processInput(targetTypeUrl, "later"));
-    await vi.waitFor(() => {
-      expect(attempted).toEqual(["signal-first", "signal-second", "signal-later"]);
-    });
+    await delivery.whenIdle();
+    expect(attempted).toEqual(["signal-first", "signal-later"]);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toHaveLength(2);
   });
 
-  it("does not block a different tenant or shard behind a gated follow-up", async () => {
+  it("accepts a different tenant and shard while one handler remains active", async () => {
     const strategy = twoShardStrategy();
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -1731,22 +1994,30 @@ describe("LocalEntityInbox", () => {
     });
     const inbox = new LocalEntityInbox("Tasks", undefined, undefined, strategy);
     const targetTypeUrl = "type.example.dev/Tasks.Aggregate";
+    const entered = Promise.withResolvers<undefined>();
     const gate = Promise.withResolvers<undefined>();
+    const delivered: string[] = [];
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay(message) {
-        return Promise.resolve(async () => {
-          if (targetValue(message) === "even") await gate.promise;
-        });
+      async deliver(message) {
+        const targetId = targetValue(message);
+        delivered.push(targetId);
+        if (targetId === "even") {
+          entered.resolve(undefined);
+          await gate.promise;
+        }
       },
     });
 
     await inbox.receive(delivery, processInput(targetTypeUrl, "even"), tenant("tenant-a"));
+    await entered.promise;
     await expect(
       inbox.receive(delivery, processInput(targetTypeUrl, "odd"), tenant("tenant-b")),
     ).resolves.toMatchObject({ shard: { index: 1, ofTotal: 2 } });
     gate.resolve(undefined);
+    await delivery.whenIdle();
+    expect(delivered).toEqual(["even", "odd"]);
   });
 
   it("resolves each input shard once and persists that resolved shard", async () => {
@@ -1765,7 +2036,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay: () => Promise.resolve(undefined),
+      deliver: () => Promise.resolve(undefined),
     });
 
     const single = await inbox.receive(delivery, processInput(targetTypeUrl, "odd"));
@@ -1855,12 +2126,6 @@ function targetValue(message: Pick<InboxMessage, "inboxId">): string {
 interface ForeignDeferred {
   readonly promise: Promise<never>;
   reject(error: Error): void;
-}
-
-function pause(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
 }
 
 function corruptedInput(input: unknown): ReceiveInput {

@@ -13,11 +13,26 @@
  */
 
 import { Time } from "@spine-event-engine/core/time";
-import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  randomBytes as nodeRandomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  OidcLoginGrantSchema,
+  OidcLoginTransactionSchema,
+  type OidcLoginGrant,
+  type OidcLoginTransaction,
+} from "@spine-event-engine/proto/auth";
+import { Configuration, buildAuthorizationUrl, calculatePKCECodeChallenge } from "openid-client";
 
 import type { AuthenticatedPrincipal, RequestCredential, ResolvedSession } from "../index.js";
+import { MemoryOidcFlowStore, type OidcFlowStore } from "./flow-store.js";
+import { OidcFlowKeys } from "./records.js";
+import { SessionRecords } from "../sessions/session-record.js";
 import type {
   ApplicationSessionIssue,
   ApplicationSessionIssuer,
@@ -52,10 +67,14 @@ const RFC7636_VERIFIER = /^[A-Za-z0-9\-._~]{43,128}$/;
 /**
  * Bounded, framework-neutral authorization-code transaction manager.
  *
- * It owns finite start, callback, and one-time application-session exchange
+ * It manages finite start, callback, and one-time application-session exchange
  * transitions; HTTP endpoints and provider discovery remain application work.
  */
 export class OidcFlow {
+  readonly #store: OidcFlowStore;
+
+  readonly #localStore: MemoryOidcFlowStore | undefined;
+
   readonly #authorizationEndpoint: URL;
 
   readonly #callbackUri: string;
@@ -82,10 +101,6 @@ export class OidcFlow {
 
   readonly #grantTtlMilliseconds: number;
 
-  readonly #maxTransactions: number;
-
-  readonly #maxGrants: number;
-
   readonly #collisionAttempts: number;
 
   readonly #operationTimeoutMilliseconds: number;
@@ -94,11 +109,21 @@ export class OidcFlow {
 
   readonly #transactions = new Map<string, Transaction>();
 
-  readonly #grants = new Map<string, Grant>();
+  readonly #grants = new Map<string, number>();
 
   readonly #callbacks = new Set<AbortController>();
 
+  readonly #rawCollaborators = new Set<Promise<unknown>>();
+
+  #lateIssuerFailure: { readonly reason: unknown } | undefined;
+
   #closed = false;
+
+  #active = 0;
+
+  #drained: (() => void) | undefined;
+
+  #closing: Promise<void> | undefined;
 
   /**
    * Creates a bounded authorization-code flow.
@@ -120,20 +145,58 @@ export class OidcFlow {
     const limits = OidcFlowValues.limits(options);
     this.#transactionTtlMilliseconds = limits.transactionTtlMilliseconds;
     this.#grantTtlMilliseconds = limits.grantTtlMilliseconds;
-    this.#maxTransactions = limits.maxTransactions;
-    this.#maxGrants = limits.maxGrants;
     this.#collisionAttempts = limits.collisionAttempts;
     this.#operationTimeoutMilliseconds = limits.operationTimeoutMilliseconds;
     this.#maxAuthorizationUrlLength = limits.maxAuthorizationUrlLength;
+    this.#localStore = this.#selectMemoryStore(options, limits);
+    const selectedStore = options.store ?? this.#localStore;
+    if (selectedStore === undefined) throw new Error("OIDC flow store is unavailable.");
+    this.#store = selectedStore;
+    if (typeof this.#store.flowId !== "string" || this.#store.flowId.trim().length === 0)
+      throw new TypeError("OIDC flow store must provide a nonempty flow identity.");
+  }
+
+  /**
+   * Selects process-local storage only when no store was injected.
+   * @param options Flow configuration and optional injected store.
+   * @param limits Validated memory capacity settings.
+   * @returns A local store, or undefined when the caller supplied one.
+   */
+  #selectMemoryStore(
+    options: OidcFlowOptions,
+    limits: ReturnType<typeof OidcFlowValues.limits>,
+  ): MemoryOidcFlowStore | undefined {
+    if (options.store !== undefined) {
+      if (options.maxTransactions !== undefined || options.maxGrants !== undefined)
+        throw new TypeError("Memory-only OIDC capacity options require the default store.");
+      return undefined;
+    }
+    return new MemoryOidcFlowStore(
+      randomUUID(),
+      () => OidcFlowValues.timestamp(this.#clock.now()),
+      limits.maxTransactions,
+      limits.maxGrants,
+    );
   }
 
   /**
    * Starts one finite authorization-code transaction without exposing any application credential.
-   * @param input The browser redirect and requested scopes.
+   * @param input The browser challenge and post-login redirect.
+   * @param signal Optional host request cancellation; ordinary abort rejects with its reason.
    * @returns The authorization URL and state, or a rejection.
    */
-  start(input: OidcFlowStartInput): OidcFlowStartResult {
+  async start(input: OidcFlowStartInput, signal?: AbortSignal): Promise<OidcFlowStartResult> {
+    return this.#run(() => this.#start(input, signal));
+  }
+
+  /**
+   * Validates a start request and retries bounded entropy collisions.
+   * @param input Browser challenge and allowed redirect.
+   * @returns A persisted start or a rejected attempt.
+   */
+  async #start(input: OidcFlowStartInput, signal?: AbortSignal): Promise<OidcFlowStartResult> {
     if (this.#isClosed()) return OidcFlowValues.rejected("closed");
+    signal?.throwIfAborted();
     const request = OidcFlowValues.snapshotStartInput(input);
     if (
       request === undefined ||
@@ -141,12 +204,9 @@ export class OidcFlow {
     )
       return OidcFlowValues.rejected("invalid-input");
     const now = this.#now();
-    if (now === undefined) return OidcFlowValues.rejected("closed");
-    if (this.#closed) return OidcFlowValues.rejected("closed");
+    if (now === undefined || this.#isClosed()) return OidcFlowValues.rejected("closed");
     this.#sweepExpired(now);
-    if (this.#transactions.size >= this.#maxTransactions)
-      return OidcFlowValues.rejected("capacity-exceeded");
-
+    if (this.#localStore?.transactionsFull()) return OidcFlowValues.rejected("capacity-exceeded");
     for (let attempt = 0; attempt < this.#collisionAttempts; attempt += 1) {
       const material = this.#transactionMaterial();
       if (material === undefined) {
@@ -154,37 +214,8 @@ export class OidcFlow {
         continue;
       }
       try {
-        const current = this.#now();
-        if (current === undefined) return OidcFlowValues.rejected("closed");
-        this.#sweepExpired(current);
-        if (this.#isClosed()) return OidcFlowValues.rejected("closed");
-        if (this.#transactions.size >= this.#maxTransactions)
-          return OidcFlowValues.rejected("capacity-exceeded");
-        if (this.#transactions.has(material.state) || this.#transactionMaterialInUse(material))
-          continue;
-        const transactionExpiry = OidcFlowValues.expiryAt(
-          current,
-          this.#transactionTtlMilliseconds,
-        );
-        if (transactionExpiry === undefined) {
-          this.#failClosed();
-          return OidcFlowValues.rejected("clock-failure");
-        }
-        const authorizationUrl = this.#authorizationUrl(
-          material.state,
-          material.nonce,
-          Buffer.from(material.providerVerifierBytes).toString("base64url"),
-          request.browserCodeChallenge,
-        );
-        if (authorizationUrl === undefined) return OidcFlowValues.rejected("invalid-input");
-        this.#transactions.set(material.state, {
-          nonce: material.nonce,
-          providerVerifier: Uint8Array.from(material.providerVerifierBytes),
-          browserCodeChallenge: request.browserCodeChallenge,
-          postLoginRedirect: request.postLoginRedirect,
-          expiresAt: transactionExpiry,
-        });
-        return Object.freeze({ kind: "started", authorizationUrl, expiresAt: transactionExpiry });
+        const result = await this.#attemptStart(material, request, signal);
+        if (result !== undefined) return result;
       } finally {
         material.bytes.forEach((bytes) => bytes.fill(0));
       }
@@ -193,88 +224,351 @@ export class OidcFlow {
   }
 
   /**
+   * Persists one fully bound transaction before returning its authorization URL.
+   * @param material Fresh state, nonce, and verifier bytes.
+   * @param request Validated browser start request.
+   * @returns A start result, or undefined after a collision.
+   */
+  async #attemptStart(
+    material: TransactionMaterial,
+    request: OidcFlowStartInput,
+    signal?: AbortSignal,
+  ): Promise<OidcFlowStartResult | undefined> {
+    const current = this.#now();
+    if (current === undefined) return OidcFlowValues.rejected("closed");
+    this.#sweepExpired(current);
+    if (this.#isClosed()) return OidcFlowValues.rejected("closed");
+    if (this.#localStore?.transactionsFull()) return OidcFlowValues.rejected("capacity-exceeded");
+    if (this.#transactions.has(material.state) || this.#transactionMaterialInUse(material))
+      return undefined;
+    const expiry = OidcFlowValues.expiryAt(current, this.#transactionTtlMilliseconds);
+    if (expiry === undefined) {
+      this.#failClosed();
+      return OidcFlowValues.rejected("clock-failure");
+    }
+    const verifier = Buffer.from(material.providerVerifierBytes).toString("base64url");
+    const authorizationUrl = await this.#authorizationUrl(material.state, material.nonce, verifier);
+    signal?.throwIfAborted();
+    if (authorizationUrl === undefined) return OidcFlowValues.rejected("invalid-input");
+    const record = this.#transactionRecord(material, request, verifier, expiry);
+    if (!(await this.#store.insertTransaction(record, signal))) {
+      signal?.throwIfAborted();
+      return undefined;
+    }
+    if (signal?.aborted || this.#isClosed()) {
+      await this.#compensate(() => this.#store.consumeTransaction(record), signal);
+      return OidcFlowValues.rejected("closed");
+    }
+    this.#retainTransaction(material, expiry);
+    return Object.freeze({ kind: "started", authorizationUrl, expiresAt: expiry });
+  }
+
+  /**
+   * Removes a confirmed undisclosed write when its exact record remains.
+   * @param remove Conditional deletion of the exact inserted record.
+   * @param signal Optional caller cancellation signal.
+   * @returns Completion after confirmed compensation.
+   */
+  async #compensate(remove: () => Promise<boolean>, signal?: AbortSignal): Promise<void> {
+    try {
+      await remove();
+    } catch (error) {
+      throw new AggregateError(
+        [signal?.aborted ? signal.reason : new Error("OIDC flow closed."), error],
+        "OIDC confirmed-write compensation failed.",
+      );
+    }
+    signal?.throwIfAborted();
+  }
+
+  /**
+   * Builds one complete domain transaction from validated material.
+   * @param material Fresh state and nonce.
+   * @param request Validated browser start request.
+   * @param verifier Provider PKCE verifier.
+   * @param expiry Exact transaction deadline in milliseconds.
+   * @returns Complete typed transaction.
+   */
+  #transactionRecord(
+    material: TransactionMaterial,
+    request: OidcFlowStartInput,
+    verifier: string,
+    expiry: number,
+  ): OidcLoginTransaction {
+    return create(OidcLoginTransactionSchema, {
+      lookupDigest: OidcFlowKeys.digest(this.#store.flowId, material.state),
+      flowId: this.#store.flowId,
+      providerIssuer: this.#providerIssuer,
+      clientId: this.#clientId,
+      callbackUri: this.#callbackUri,
+      nonce: material.nonce,
+      providerCodeVerifier: verifier,
+      browserCodeChallenge: request.browserCodeChallenge,
+      postLoginRedirect: request.postLoginRedirect,
+      whenExpires: OidcFlowValues.timestamp(expiry),
+    });
+  }
+
+  /**
+   * Retains only local entropy-collision tracking after confirmed persistence.
+   * @param material Fresh state and verifier bytes.
+   * @param expiry Exact transaction deadline in milliseconds.
+   */
+  #retainTransaction(material: TransactionMaterial, expiry: number): void {
+    const verifier = Buffer.from(material.providerVerifierBytes).toString("base64url");
+    this.#transactions.set(material.state, {
+      nonce: material.nonce,
+      verifierChallenge: OidcFlowValues.sha256Base64Url(verifier),
+      expiresAt: expiry,
+    });
+  }
+
+  /**
    * Processes a callback state before provider verification or mapping.
    * A rejected callback never restores its transaction.
    * @param input The callback state and provider response.
+   * @param signal Optional host request cancellation; a consumed state remains consumed.
    * @returns The callback result, including a one-time grant when accepted.
    */
-  async callback(input: OidcFlowCallbackInput): Promise<OidcFlowCallbackResult> {
+  async callback(
+    input: OidcFlowCallbackInput,
+    signal?: AbortSignal,
+  ): Promise<OidcFlowCallbackResult> {
+    return this.#run(() => this.#callback(input, signal));
+  }
+
+  /**
+   * Consumes accepted state before invoking external identity collaborators.
+   * @param input Provider callback value.
+   * @returns A grant or a rejected callback.
+   */
+  async #callback(
+    input: OidcFlowCallbackInput,
+    signal?: AbortSignal,
+  ): Promise<OidcFlowCallbackResult> {
+    const accepted = await this.#consumeCallback(input, signal);
+    if ("kind" in accepted) return accepted;
+    const { transaction, callback } = accepted;
+    if (callback.error !== undefined) return OidcFlowValues.callbackRejected("provider-error");
+    signal?.throwIfAborted();
+    const mapped = await this.#mapCallback(callback.code, transaction, signal);
+    if ("kind" in mapped) return mapped;
+    return this.#createGrant(mapped, transaction, signal);
+  }
+
+  /**
+   * Validates binding and expiry before atomically consuming a transaction.
+   * @param input Browser callback input.
+   * @returns Accepted transaction and code or a rejection.
+   */
+  async #consumeCallback(
+    input: OidcFlowCallbackInput,
+    signal?: AbortSignal,
+  ): Promise<ConsumedTransaction | OidcFlowCallbackResult> {
     if (this.#isClosed()) return OidcFlowValues.callbackRejected("closed");
+    signal?.throwIfAborted();
     const state = OidcFlowValues.snapshotCallbackState(input);
     if (state === undefined) return OidcFlowValues.callbackRejected("invalid-input");
     const now = this.#now();
-    if (now === undefined) return OidcFlowValues.callbackRejected("closed");
-    if (this.#isClosed()) return OidcFlowValues.callbackRejected("closed");
-    const transaction = this.#transactions.get(state);
+    if (now === undefined || this.#isClosed()) return OidcFlowValues.callbackRejected("closed");
+    const transaction = await this.#store.readTransaction(
+      OidcFlowKeys.digest(this.#store.flowId, state),
+      signal,
+    );
+    signal?.throwIfAborted();
     if (transaction === undefined) return OidcFlowValues.callbackRejected("not-found");
-    this.#transactions.delete(state);
-    const callback = OidcFlowValues.snapshotCallbackInput(input);
-    if (callback === undefined || !OidcFlowValues.validCallbackInput(callback)) {
-      transaction.providerVerifier.fill(0);
-      return OidcFlowValues.callbackRejected("invalid-input");
-    }
-    if (now >= transaction.expiresAt) {
-      transaction.providerVerifier.fill(0);
-      return OidcFlowValues.callbackRejected("expired");
-    }
-    if (callback.error !== undefined) {
-      transaction.providerVerifier.fill(0);
-      return OidcFlowValues.callbackRejected("provider-error");
-    }
-    if (callback.responseIssuer !== undefined && callback.responseIssuer !== this.#providerIssuer) {
-      transaction.providerVerifier.fill(0);
-      return OidcFlowValues.callbackRejected("issuer-mismatch");
-    }
-
-    const providerVerifier = Buffer.from(transaction.providerVerifier).toString("base64url");
-    transaction.providerVerifier.fill(0);
-    const identity = await this.#runBounded((signal) =>
-      this.#provider.exchangeAuthorizationCode({
-        code: callback.code,
-        clientId: this.#clientId,
-        callbackUri: this.#callbackUri,
-        providerCodeVerifier: providerVerifier,
-        expectedNonce: transaction.nonce,
-        signal,
-      }),
-    );
     if (this.#isClosed()) return OidcFlowValues.callbackRejected("closed");
-    let verified: ExternalIdentity | undefined;
-    try {
-      verified = OidcFlowValues.validExternalIdentity(identity, this.#providerIssuer);
-    } catch {
-      verified = undefined;
+    const current = this.#now();
+    if (current === undefined || this.#isClosed()) return OidcFlowValues.callbackRejected("closed");
+    const callback = OidcFlowValues.snapshotCallbackInput(input);
+    if (callback === undefined || !OidcFlowValues.validCallbackInput(callback))
+      return OidcFlowValues.callbackRejected("invalid-input");
+    const invalid = this.#callbackValidity(transaction, callback, current);
+    if (invalid !== undefined) return invalid;
+    if (this.#isClosed()) return OidcFlowValues.callbackRejected("closed");
+    if (!(await this.#store.consumeTransaction(transaction, signal))) {
+      signal?.throwIfAborted();
+      return OidcFlowValues.callbackRejected("not-found");
     }
-    if (verified === undefined) return OidcFlowValues.callbackRejected("verification-failed");
-    const resolved = await this.#runBounded((signal) =>
-      this.#identityMapping.resolve(verified, signal),
+    return this.#settleConsumedCallback(state, transaction, callback, signal);
+  }
+
+  /**
+   * Rechecks expiry after a confirmed one-use transaction consumption.
+   * @param state Browser state whose local collision fact can be discarded.
+   * @param transaction Complete consumed transaction.
+   * @param callback Validated callback facts.
+   * @param signal Optional host request cancellation.
+   * @returns Accepted callback or a terminal rejection without state restoration.
+   */
+  #settleConsumedCallback(
+    state: string,
+    transaction: OidcLoginTransaction,
+    callback: ValidCallbackInputSnapshot,
+    signal?: AbortSignal,
+  ): ConsumedTransaction | OidcFlowCallbackResult {
+    this.#transactions.delete(state);
+    signal?.throwIfAborted();
+    const consumedAt = this.#now();
+    if (consumedAt === undefined || this.#isClosed())
+      return OidcFlowValues.callbackRejected("closed");
+    if (this.#expired(transaction, consumedAt)) return OidcFlowValues.callbackRejected("expired");
+    return { transaction, callback };
+  }
+
+  /**
+   * Checks exact expiry and provider binding before transaction consumption.
+   * @param transaction Persisted state snapshot.
+   * @param callback Validated callback facts.
+   * @param current Trusted time sampled after storage read.
+   * @returns Rejection when invalid, otherwise undefined.
+   */
+  #callbackValidity(
+    transaction: OidcLoginTransaction,
+    callback: ValidCallbackInputSnapshot,
+    current: number,
+  ): OidcFlowCallbackResult | undefined {
+    if (this.#expired(transaction, current)) return OidcFlowValues.callbackRejected("expired");
+    if (callback.responseIssuer !== undefined && callback.responseIssuer !== this.#providerIssuer)
+      return OidcFlowValues.callbackRejected("issuer-mismatch");
+    if (!this.#matchesTransaction(transaction))
+      return OidcFlowValues.callbackRejected("issuer-mismatch");
+    return undefined;
+  }
+
+  /**
+   * Compares a trusted time against a record's exact deadline.
+   * @param record Persisted transaction or grant being checked.
+   * @param current Trusted milliseconds after the latest awaited transition.
+   * @returns Whether the record has reached its deadline.
+   */
+  #expired(record: OidcLoginTransaction | OidcLoginGrant, current: number): boolean {
+    return (
+      SessionRecords.compare(OidcFlowValues.timestamp(current), OidcFlowKeys.expiry(record)) >= 0
     );
+  }
+
+  /**
+   * Checks a persisted transaction against the current trusted provider configuration.
+   * @param transaction Persisted callback binding.
+   * @returns Whether issuer, client, and exact callback URI still match.
+   */
+  #matchesTransaction(transaction: OidcLoginTransaction): boolean {
+    return (
+      transaction.providerIssuer === this.#providerIssuer &&
+      transaction.clientId === this.#clientId &&
+      transaction.callbackUri === this.#callbackUri
+    );
+  }
+
+  /**
+   * Verifies a consumed provider code and maps its verified external identity.
+   * @param code Provider authorization code.
+   * @param transaction Consumed transaction binding and nonce.
+   * @returns Resolved application identity or a rejected callback.
+   */
+  async #mapCallback(
+    code: string,
+    transaction: OidcLoginTransaction,
+    signal?: AbortSignal,
+  ): Promise<ResolvedApplicationIdentity | OidcFlowCallbackResult> {
+    signal?.throwIfAborted();
+    const identity = await this.#runBounded(
+      (bounded) =>
+        this.#provider.exchangeAuthorizationCode({
+          code,
+          clientId: this.#clientId,
+          callbackUri: this.#callbackUri,
+          providerCodeVerifier: transaction.providerCodeVerifier,
+          expectedNonce: transaction.nonce,
+          signal: bounded,
+        }),
+      signal,
+    );
+    signal?.throwIfAborted();
+    if (this.#isClosed()) return OidcFlowValues.callbackRejected("closed");
+    const verified = this.#verifiedIdentity(identity);
+    if (verified === undefined) return OidcFlowValues.callbackRejected("verification-failed");
+    const resolved = await this.#runBounded(
+      (bounded) => this.#identityMapping.resolve(verified, bounded),
+      signal,
+    );
+    signal?.throwIfAborted();
     if (this.#isClosed()) return OidcFlowValues.callbackRejected("closed");
     const mapped = OidcFlowValues.snapshotResolvedIdentity(resolved, verified);
-    if (mapped === undefined) return OidcFlowValues.callbackRejected("mapping-failed");
+    return mapped ?? OidcFlowValues.callbackRejected("mapping-failed");
+  }
 
+  /**
+   * Validates a provider identity without exposing hostile getter failures.
+   * @param identity Provider result.
+   * @returns Verified identity or undefined.
+   */
+  #verifiedIdentity(identity: unknown): ExternalIdentity | undefined {
+    try {
+      return OidcFlowValues.validExternalIdentity(identity, this.#providerIssuer);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Builds and persists a one-use application grant after identity mapping.
+   * @param mapped Validated mapped identity.
+   * @param transaction Consumed transaction binding.
+   * @returns Grant or rejection.
+   */
+  async #createGrant(
+    mapped: ResolvedApplicationIdentity,
+    transaction: OidcLoginTransaction,
+    signal?: AbortSignal,
+  ): Promise<OidcFlowCallbackResult> {
+    signal?.throwIfAborted();
     const current = this.#now();
-    if (current === undefined) return OidcFlowValues.callbackRejected("closed");
+    if (current === undefined || this.#isClosed()) return OidcFlowValues.callbackRejected("closed");
     this.#sweepGrants(current);
-    if (this.#isClosed()) return OidcFlowValues.callbackRejected("closed");
-    if (this.#grants.size >= this.#maxGrants)
-      return OidcFlowValues.callbackRejected("capacity-exceeded");
+    if (this.#localStore?.grantsFull()) return OidcFlowValues.callbackRejected("capacity-exceeded");
     const expiry = OidcFlowValues.expiryAt(current, this.#grantTtlMilliseconds);
     if (expiry === undefined) {
       this.#failClosed();
       return OidcFlowValues.callbackRejected("clock-failure");
     }
     const grant = this.#nextGrant();
-    if (grant === undefined)
+    if (
+      grant === undefined ||
+      this.#isClosed() ||
+      this.#localStore?.grantsFull() ||
+      this.#grants.has(grant)
+    )
       return OidcFlowValues.callbackRejected(this.#isClosed() ? "closed" : "entropy-exhausted");
-    if (this.#isClosed() || this.#grants.size >= this.#maxGrants || this.#grants.has(grant))
-      return OidcFlowValues.callbackRejected(this.#isClosed() ? "closed" : "entropy-exhausted");
-    this.#grants.set(grant, {
-      identity: mapped,
-      browserCodeChallenge: transaction.browserCodeChallenge,
-      postLoginRedirect: transaction.postLoginRedirect,
-      expiresAt: expiry,
-    });
+    return this.#persistGrant(grant, mapped, transaction, expiry, signal);
+  }
+
+  /**
+   * Persists a grant and compensates only a confirmed insertion after closure.
+   * @param grant Random browser grant value.
+   * @param mapped Validated mapped identity.
+   * @param transaction Consumed transaction binding.
+   * @param expiry Exact grant deadline in milliseconds.
+   * @returns Grant or rejection.
+   */
+  async #persistGrant(
+    grant: string,
+    mapped: ResolvedApplicationIdentity,
+    transaction: OidcLoginTransaction,
+    expiry: number,
+    signal?: AbortSignal,
+  ): Promise<OidcFlowCallbackResult> {
+    const record = this.#grantRecord(grant, mapped, transaction, expiry);
+    if (!(await this.#store.insertGrant(record, signal))) {
+      signal?.throwIfAborted();
+      return OidcFlowValues.callbackRejected("entropy-exhausted");
+    }
+    if (signal?.aborted || this.#isClosed()) {
+      await this.#compensate(() => this.#store.consumeGrant(record), signal);
+      return OidcFlowValues.callbackRejected("closed");
+    }
+    this.#grants.set(grant, expiry);
     return Object.freeze({
       kind: "granted",
       grant,
@@ -284,41 +578,61 @@ export class OidcFlow {
   }
 
   /**
-   * Processes a grant before validating browser PKCE proof or issuing a session.
-   * All failures deliberately have the same result to avoid grant-state enumeration.
+   * Builds a typed application grant bound to the consumed transaction.
+   * @param grant Random browser grant value.
+   * @param mapped Validated mapped identity.
+   * @param transaction Consumed transaction binding.
+   * @param expiry Exact grant deadline in milliseconds.
+   * @returns Complete typed grant record.
+   */
+  #grantRecord(
+    grant: string,
+    mapped: ResolvedApplicationIdentity,
+    transaction: OidcLoginTransaction,
+    expiry: number,
+  ): OidcLoginGrant {
+    return create(OidcLoginGrantSchema, {
+      lookupDigest: OidcFlowKeys.digest(this.#store.flowId, grant),
+      flowId: this.#store.flowId,
+      principal: SessionRecords.principal(mapped.principal),
+      browserCodeChallenge: transaction.browserCodeChallenge,
+      postLoginRedirect: transaction.postLoginRedirect,
+      whenExpires: OidcFlowValues.timestamp(expiry),
+    });
+  }
+
+  /**
+   * Validates and consumes a grant before issuing an application session.
+   * All failures deliberately have the same result to avoid grant enumeration.
    * @param input The grant and browser PKCE proof.
+   * @param signal Optional host request cancellation; a consumed grant remains consumed.
    * @returns The issued application session or an enumeration-safe rejection.
    */
-  async exchange(input: OidcFlowExchangeInput): Promise<OidcFlowExchangeResult> {
-    const grantRequest = OidcFlowValues.snapshotGrantExchangeInput(input);
-    if (
-      this.#isClosed() ||
-      grantRequest === undefined ||
-      !OidcFlowValues.validGrant(grantRequest.grant)
-    )
-      return OidcFlowValues.exchangeRejected();
-    const now = this.#now();
-    if (now === undefined) return OidcFlowValues.exchangeRejected();
-    const grant = this.#grants.get(grantRequest.grant);
+  async exchange(
+    input: OidcFlowExchangeInput,
+    signal?: AbortSignal,
+  ): Promise<OidcFlowExchangeResult> {
+    return this.#run(() => this.#exchange(input, signal));
+  }
+
+  /**
+   * Issues a session only after winning grant consumption.
+   * @param input Browser grant and verifier.
+   * @returns An issued session or enumeration-safe rejection.
+   */
+  async #exchange(
+    input: OidcFlowExchangeInput,
+    signal?: AbortSignal,
+  ): Promise<OidcFlowExchangeResult> {
+    const grant = await this.#consumeGrant(input, signal);
     if (grant === undefined) return OidcFlowValues.exchangeRejected();
-    this.#grants.delete(grantRequest.grant);
-    const browserCodeVerifier = OidcFlowValues.snapshotBrowserCodeVerifier(input);
-    if (
-      now >= grant.expiresAt ||
-      browserCodeVerifier === undefined ||
-      !OidcFlowValues.validBrowserCodeVerifier(browserCodeVerifier)
-    )
-      return OidcFlowValues.exchangeRejected();
-    if (
-      !OidcFlowValues.constantTimeEquals(
-        OidcFlowValues.sha256Base64Url(browserCodeVerifier),
-        grant.browserCodeChallenge,
-      )
-    )
-      return OidcFlowValues.exchangeRejected();
-    const issued = await this.#runBounded((signal) =>
-      this.#sessionIssuer.issue(grant.identity.principal, signal),
+    signal?.throwIfAborted();
+    const issued = await this.#runBounded(
+      (bounded) => this.#sessionIssuer.issue(OidcFlowKeys.principal(grant), bounded),
+      signal,
+      true,
     );
+    signal?.throwIfAborted();
     const safeIssue = OidcFlowValues.snapshotSessionIssue(issued);
     if (this.#isClosed() || safeIssue === undefined) return OidcFlowValues.exchangeRejected();
     return Object.freeze({
@@ -329,10 +643,74 @@ export class OidcFlow {
   }
 
   /**
-   * Closes the flow and discards retained OIDC transaction material.
+   * Validates binding, expiry, and browser proof before one atomic grant deletion.
+   * @param input Browser grant and verifier.
+   * @returns Consumed grant or undefined after rejection.
    */
-  close(): void {
-    if (this.#closed) return;
+  async #consumeGrant(
+    input: OidcFlowExchangeInput,
+    signal?: AbortSignal,
+  ): Promise<OidcLoginGrant | undefined> {
+    if (this.#isClosed()) return undefined;
+    signal?.throwIfAborted();
+    const request = OidcFlowValues.snapshotGrantExchangeInput(input);
+    if (request === undefined || !OidcFlowValues.validGrant(request.grant)) return undefined;
+    const now = this.#now();
+    if (now === undefined) return undefined;
+    const grant = await this.#store.readGrant(
+      OidcFlowKeys.digest(this.#store.flowId, request.grant),
+      signal,
+    );
+    signal?.throwIfAborted();
+    if (grant === undefined) return undefined;
+    if (this.#isClosed()) return undefined;
+    const current = this.#now();
+    if (current === undefined || this.#isClosed()) return undefined;
+    const verifier = OidcFlowValues.snapshotBrowserCodeVerifier(input);
+    if (!this.#validGrantProof(grant, verifier, current)) return undefined;
+    if (this.#isClosed()) return undefined;
+    if (!(await this.#store.consumeGrant(grant, signal))) {
+      signal?.throwIfAborted();
+      return undefined;
+    }
+    this.#grants.delete(request.grant);
+    signal?.throwIfAborted();
+    const consumedAt = this.#now();
+    if (consumedAt === undefined || this.#isClosed() || this.#expired(grant, consumedAt))
+      return undefined;
+    return grant;
+  }
+
+  /**
+   * Checks exact grant expiry and browser PKCE proof before consumption.
+   * @param grant Persisted grant snapshot.
+   * @param verifier Browser supplied verifier.
+   * @param current Trusted time sampled after storage read.
+   * @returns Whether the grant may be consumed.
+   */
+  #validGrantProof(grant: OidcLoginGrant, verifier: unknown, current: number): boolean {
+    if (
+      SessionRecords.compare(OidcFlowValues.timestamp(current), OidcFlowKeys.expiry(grant)) >= 0 ||
+      verifier === undefined ||
+      !OidcFlowValues.validBrowserCodeVerifier(verifier)
+    )
+      return false;
+    return OidcFlowValues.constantTimeEquals(
+      OidcFlowValues.sha256Base64Url(verifier),
+      grant.browserCodeChallenge,
+    );
+  }
+
+  /**
+   * Closes the flow after admitted work and original collaborator promises settle.
+   *
+   * An injected store and factory remain open. A late distinct issuer failure
+   * rejects this close operation; repeated calls retain that result.
+   *
+   * @returns Completion after raw work drains and local memory closes.
+   */
+  close(): Promise<void> {
+    if (this.#closing !== undefined) return this.#closing;
     this.#closed = true;
     this.#clearTransactions();
     this.#grants.clear();
@@ -340,31 +718,111 @@ export class OidcFlow {
       controller.abort();
     });
     this.#callbacks.clear();
+    this.#closing = this.#finishClose();
+    return this.#closing;
+  }
+
+  /**
+   * Removes eligible records through the selected flow store.
+   *
+   * @param cutoff Trusted current-or-earlier exact deadline.
+   * @param signal Optional cancellation.
+   * @returns Confirmed transaction and grant removals in this pass.
+   */
+  purgeExpired(
+    cutoff: Timestamp,
+    signal?: AbortSignal,
+  ): Promise<{ transactions: number; grants: number }> {
+    if (this.#isClosed()) return Promise.reject(new Error("OIDC flow is closed."));
+    return this.#run(() => this.#store.purgeExpired(cutoff, signal));
+  }
+
+  /**
+   * Waits for admitted work, then releases only internally selected memory.
+   *
+   * @returns Completion after all admitted operations settle.
+   */
+  async #finishClose(): Promise<void> {
+    if (this.#active > 0) await new Promise<void>((resolve) => (this.#drained = resolve));
+    while (this.#rawCollaborators.size > 0) await Promise.allSettled([...this.#rawCollaborators]);
+    let closeFailure: unknown;
+    try {
+      await this.#localStore?.close();
+    } catch (error) {
+      closeFailure = error;
+    }
+    if (this.#lateIssuerFailure !== undefined && closeFailure !== undefined)
+      throw new AggregateError(
+        [this.#lateIssuerFailure.reason, closeFailure],
+        "OIDC flow close failed.",
+      );
+    if (this.#lateIssuerFailure !== undefined) throw this.#lateIssuerFailure.reason;
+    // A store may reject with a non-Error reason; preserve its exact failure.
+    // eslint-disable-next-line @typescript-eslint/only-throw-error
+    if (closeFailure !== undefined) throw closeFailure;
+  }
+
+  /**
+   * Fences admitted asynchronous flow work against closure.
+   *
+   * @typeParam T Operation result.
+   * @param work Operation body.
+   * @returns Completion of admitted work.
+   */
+  async #run<T>(work: () => Promise<T>): Promise<T> {
+    if (this.#closed) return work();
+    this.#active += 1;
+    try {
+      return await work();
+    } finally {
+      this.#active -= 1;
+      if (this.#active === 0) this.#drained?.();
+    }
   }
 
   #isClosed(): boolean {
     return this.#closed;
   }
 
-  #authorizationUrl(
+  /**
+   * Builds one S256 authorization URL with the maintained OIDC client library.
+   *
+   * @param state Random state retained in the transaction.
+   * @param nonce Random ID-token nonce.
+   * @param providerVerifier Provider PKCE verifier.
+   * @returns Bounded URL, if representable under configured limits.
+   */
+  async #authorizationUrl(
     state: string,
     nonce: string,
     providerVerifier: string,
-    browserCodeChallenge: string,
-  ): string | undefined {
-    // The provider verifier is deliberately not serialized. Its S256 challenge is.
-    const url = new URL(this.#authorizationEndpoint);
-    const parameters = url.searchParams;
-    parameters.set("response_type", "code");
-    parameters.set("client_id", this.#clientId);
-    parameters.set("redirect_uri", this.#callbackUri);
-    parameters.set("scope", this.#scopes.join(" "));
-    parameters.set("state", state);
-    parameters.set("nonce", nonce);
-    parameters.set("code_challenge", OidcFlowValues.sha256Base64Url(providerVerifier));
-    parameters.set("code_challenge_method", "S256");
-    // The browser challenge is retained for the later, distinct application-session grant.
-    void browserCodeChallenge;
+  ): Promise<string | undefined> {
+    const endpoint = new URL(this.#authorizationEndpoint);
+    for (const name of [
+      "response_type",
+      "client_id",
+      "redirect_uri",
+      "scope",
+      "state",
+      "nonce",
+      "code_challenge",
+      "code_challenge_method",
+    ])
+      endpoint.searchParams.delete(name);
+    const config = new Configuration(
+      { issuer: this.#providerIssuer, authorization_endpoint: endpoint.toString() },
+      this.#clientId,
+    );
+    const url = buildAuthorizationUrl(config, {
+      response_type: "code",
+      client_id: this.#clientId,
+      redirect_uri: this.#callbackUri,
+      scope: this.#scopes.join(" "),
+      state,
+      nonce,
+      code_challenge: await calculatePKCECodeChallenge(providerVerifier),
+      code_challenge_method: "S256",
+    });
     const serialized = url.toString();
     return serialized.length <= this.#maxAuthorizationUrlLength ? serialized : undefined;
   }
@@ -398,39 +856,136 @@ export class OidcFlow {
   }
 
   /**
-   * Runs one provider callback under the configured timeout and shutdown signal.
+   * Runs one collaborator under the configured timeout and request signal.
    * @typeParam T The successful callback result.
    * @param operation The callback to run with a cancellation signal.
+   * @param signal Optional host request cancellation.
+   * @param issuer Whether distinct issuer failures must remain observable.
    * @returns The callback result, or undefined after timeout or closure.
    */
-  async #runBounded<T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T | undefined> {
+  async #runBounded<T>(
+    operation: (signal: AbortSignal) => Promise<T>,
+    signal?: AbortSignal,
+    issuer = false,
+  ): Promise<T | undefined> {
+    if (this.#isClosed()) return undefined;
+    signal?.throwIfAborted();
     const controller = new AbortController();
+    const onAbort = () => {
+      controller.abort(signal?.reason);
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
     this.#callbacks.add(controller);
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timer = setTimeout(() => {
+      controller.abort();
+    }, this.#operationTimeoutMilliseconds);
     try {
-      const aborted = new Promise<undefined>((resolve) => {
-        controller.signal.addEventListener(
+      return await this.#awaitBounded(operation, controller.signal, issuer);
+    } catch (error) {
+      if (issuer) throw error;
+      return undefined;
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      this.#callbacks.delete(controller);
+      controller.abort();
+    }
+  }
+
+  /**
+   * Races a tracked original collaborator with its cancellation signal.
+   * @typeParam T Collaborator result.
+   * @param operation Collaborator invoked with bounded signal.
+   * @param signal Bounded cancellation signal.
+   * @param issuer Whether distinct issuer failures remain observable.
+   * @returns Collaborator result or undefined after cancellation.
+   */
+  #awaitBounded<T>(
+    operation: (signal: AbortSignal) => Promise<T>,
+    signal: AbortSignal,
+    issuer: boolean,
+  ): Promise<T | undefined> {
+    const returned: CollaboratorSettlement = { done: false };
+    const raw = Promise.resolve().then(() => {
+      signal.throwIfAborted();
+      return operation(signal);
+    });
+    const observed = this.#observeRaw(raw, signal, issuer, returned);
+    this.#trackRaw(observed);
+    return Promise.race([observed, this.#aborted(signal)]).then((outcome) => {
+      returned.done = true;
+      if (outcome === undefined) {
+        if (returned.failure !== undefined) this.#lateIssuerFailure ??= returned.failure;
+        return undefined;
+      }
+      if (outcome.kind === "failed") throw outcome.reason;
+      return outcome.kind === "value" ? outcome.value : undefined;
+    });
+  }
+
+  /**
+   * Resolves when a bounded collaborator signal aborts.
+   * @param signal Bounded cancellation signal.
+   * @returns Undefined once cancelled.
+   */
+  #aborted(signal: AbortSignal): Promise<undefined> {
+    return new Promise((resolve) => {
+      if (signal.aborted) resolve(undefined);
+      else
+        signal.addEventListener(
           "abort",
           () => {
             resolve(undefined);
           },
           { once: true },
         );
-      });
-      const timeout = new Promise<undefined>((resolve) => {
-        timer = setTimeout(() => {
-          controller.abort();
-          resolve(undefined);
-        }, this.#operationTimeoutMilliseconds);
-      });
-      return await Promise.race([operation(controller.signal), timeout, aborted]);
-    } catch {
-      return undefined;
-    } finally {
-      if (timer !== undefined) clearTimeout(timer);
-      this.#callbacks.delete(controller);
-      controller.abort();
-    }
+    });
+  }
+
+  /**
+   * Tracks the original collaborator promise until it really settles.
+   * @typeParam T Collaborator result.
+   * @param raw Original collaborator promise.
+   */
+  #trackRaw<T>(raw: Promise<T>): void {
+    this.#rawCollaborators.add(raw);
+    void raw.then(
+      () => {
+        this.#rawCollaborators.delete(raw);
+      },
+      () => {
+        this.#rawCollaborators.delete(raw);
+      },
+    );
+  }
+
+  /**
+   * Preserves a late issuer failure after a caller-facing timeout or abort.
+   * @typeParam T Collaborator result.
+   * @param raw Original collaborator promise.
+   * @param signal Exact cancellation reason supplied to the collaborator.
+   * @param issuer Whether this is a durable session issuer.
+   * @param returned Caller-facing settlement and any issuer rejection.
+   * @returns The tagged collaborator outcome.
+   */
+  #observeRaw<T>(
+    raw: Promise<T>,
+    signal: AbortSignal,
+    issuer: boolean,
+    returned: CollaboratorSettlement,
+  ): Promise<CollaboratorOutcome<T>> {
+    return raw.then(
+      (value) => ({ kind: "value", value }),
+      (error: unknown) => {
+        if (!issuer || (signal.aborted && error === signal.reason))
+          return { kind: "declined" } as const;
+        const failure = { reason: error };
+        if (returned.done) this.#lateIssuerFailure ??= failure;
+        else returned.failure = failure;
+        return { kind: "failed", reason: error } as const;
+      },
+    );
   }
 
   #nextGrant(): string | undefined {
@@ -455,10 +1010,7 @@ export class OidcFlow {
     const challenge = OidcFlowValues.sha256Base64Url(verifier);
     return [...this.#transactions.values()].some(
       (transaction) =>
-        transaction.nonce === material.nonce ||
-        OidcFlowValues.sha256Base64Url(
-          Buffer.from(transaction.providerVerifier).toString("base64url"),
-        ) === challenge,
+        transaction.nonce === material.nonce || transaction.verifierChallenge === challenge,
     );
   }
 
@@ -475,21 +1027,14 @@ export class OidcFlow {
 
   #sweepExpired(now: number): void {
     for (const [state, transaction] of this.#transactions)
-      if (now >= transaction.expiresAt) this.#dropTransaction(state, transaction);
+      if (now >= transaction.expiresAt) this.#transactions.delete(state);
   }
 
   #sweepGrants(now: number): void {
-    for (const [grant, record] of this.#grants)
-      if (now >= record.expiresAt) this.#grants.delete(grant);
-  }
-
-  #dropTransaction(state: string, transaction: Transaction): void {
-    this.#transactions.delete(state);
-    transaction.providerVerifier.fill(0);
+    for (const [grant, expiresAt] of this.#grants) if (now >= expiresAt) this.#grants.delete(grant);
   }
 
   #clearTransactions(): void {
-    this.#transactions.forEach((transaction) => transaction.providerVerifier.fill(0));
     this.#transactions.clear();
   }
 
@@ -504,11 +1049,31 @@ export class OidcFlow {
   }
 }
 
+/**
+ * The selected result of a bounded collaborator call.
+ * @typeParam T The collaborator's successful value.
+ */
+type CollaboratorOutcome<T> =
+  | { readonly kind: "value"; readonly value: T }
+  | { readonly kind: "declined" }
+  | { readonly kind: "failed"; readonly reason: unknown };
+
+/**
+ * The caller-facing race state and any issuer failure awaiting attribution.
+ */
+interface CollaboratorSettlement {
+  done: boolean;
+  failure?: { readonly reason: unknown };
+}
+
+interface ConsumedTransaction {
+  readonly transaction: OidcLoginTransaction;
+  readonly callback: ValidCallbackInputSnapshot;
+}
+
 interface Transaction {
   readonly nonce: string;
-  readonly providerVerifier: Uint8Array;
-  readonly browserCodeChallenge: string;
-  readonly postLoginRedirect: string;
+  readonly verifierChallenge: string;
   readonly expiresAt: number;
 }
 
@@ -517,13 +1082,6 @@ interface TransactionMaterial {
   readonly nonce: string;
   readonly providerVerifierBytes: Uint8Array;
   readonly bytes: readonly Uint8Array[];
-}
-
-interface Grant {
-  readonly identity: ResolvedApplicationIdentity;
-  readonly browserCodeChallenge: string;
-  readonly postLoginRedirect: string;
-  readonly expiresAt: number;
 }
 
 /**
@@ -1221,6 +1779,20 @@ const OidcFlowValues = Object.freeze({
   expiryAt(now: number, ttl: number): number | undefined {
     const value = now + ttl;
     return OidcFlowValues.validTimestamp(value) ? value : undefined;
+  },
+
+  /**
+   * Converts safe epoch milliseconds to an exact Protobuf deadline.
+   *
+   * @param milliseconds Valid Unix epoch milliseconds.
+   * @returns Timestamp without negative-time truncation.
+   */
+  timestamp(milliseconds: number): Timestamp {
+    const seconds = Math.floor(milliseconds / 1_000);
+    return create(TimestampSchema, {
+      seconds: BigInt(seconds),
+      nanos: (milliseconds - seconds * 1_000) * 1_000_000,
+    });
   },
 
   /**

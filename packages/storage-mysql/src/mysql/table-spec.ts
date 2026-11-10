@@ -15,7 +15,8 @@
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { ScalarType } from "@bufbuild/protobuf";
-import type { RecordColumn, RecordColumnType } from "@spine-event-engine/storage";
+import { createHash } from "node:crypto";
+import type { RecordColumn, RecordColumnType, RecordIndex } from "@spine-event-engine/storage";
 import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 
 import { MysqlIdColumn } from "./id-column.js";
@@ -65,7 +66,7 @@ export function mysqlColumnType(type: RecordColumnType): string {
         case ScalarType.BOOL:
           return "BOOLEAN";
         case ScalarType.BYTES:
-          return "BLOB";
+          return type.byteLength === undefined ? "BLOB" : `VARBINARY(${String(type.byteLength)})`;
         case ScalarType.FLOAT:
         case ScalarType.DOUBLE:
           throw new Error("Spine JVM JDBC does not support floating-point record columns.");
@@ -143,6 +144,28 @@ export interface MysqlTableSpec<I, R extends Message> {
    * Lists primary-key column names in order.
    */
   readonly primaryKey: readonly string[];
+
+  /**
+   * Complete non-unique ascending secondary indexes required by this table.
+   */
+  readonly indexes?: readonly MysqlIndexSpec[];
+}
+
+/**
+ * Resolved MySQL secondary index with a table-scoped physical name.
+ */
+export interface MysqlIndexSpec {
+  // prettier-ignore
+
+  /**
+   * Names the physical index.
+   */
+  readonly name: string;
+
+  /**
+   * Lists complete physical columns in index order.
+   */
+  readonly columns: readonly string[];
 }
 
 /**
@@ -160,6 +183,7 @@ export function resolvedMysqlTableSpec<I, R extends Message>(input: {
   readonly idType: I extends Message ? GenMessage<I> : string;
   readonly groupName?: string;
   readonly declaredColumns: readonly RecordColumn<R>[];
+  readonly declaredIndexes?: readonly RecordIndex[];
 }): MysqlTableSpec<I, R> {
   return {
     tableName: input.tableName,
@@ -175,6 +199,13 @@ export function resolvedMysqlTableSpec<I, R extends Message>(input: {
       ),
     ],
     primaryKey: ["ID"],
+    indexes: (input.declaredIndexes ?? []).map((index) => ({
+      name: `ix_${createHash("sha256")
+        .update(JSON.stringify([input.tableName, index.name]))
+        .digest("hex")
+        .slice(0, 32)}`,
+      columns: index.columns.map((column) => (column === "id" ? "ID" : column)),
+    })),
   };
 }
 

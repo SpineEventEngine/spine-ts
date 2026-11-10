@@ -1,0 +1,158 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.examples.fieldnotes;
+
+import "google/protobuf/timestamp.proto";
+import "spine/core/user_id.proto";
+import "spine/examples/fieldnotes/types.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.examples.fieldnotes";
+
+// Records creation of one private place.
+message PlaceAdded {
+  // Identifies the created place.
+  PlaceId id = 1;
+
+  // Records its display name.
+  string name = 2;
+
+  // Fixes the latitude and longitude chosen at creation.
+  Coordinates coordinates = 3;
+
+  // Identifies the immutable author.
+  spine.core.UserId author = 4;
+
+  // Records its initial single Markdown note.
+  string markdown = 5;
+
+  // Counts accepted changes to this place.
+  int32 revision = 6;
+
+  // Records the trusted creation time.
+  google.protobuf.Timestamp when_occurred = 7;
+
+  // Preserves the place's original creation time in this complete result.
+  google.protobuf.Timestamp when_created = 8;
+}
+
+// Records a place's accepted name change.
+message PlaceRenamed {
+  // Identifies the changed place.
+  PlaceId id = 1;
+
+  // Records the new name.
+  string name = 2;
+
+  // Identifies the immutable author.
+  spine.core.UserId author = 3;
+
+  // Counts accepted changes to this place.
+  int32 revision = 4;
+
+  // Records the trusted change time.
+  google.protobuf.Timestamp when_occurred = 5;
+
+  // Retains the accepted location after this rename.
+  Coordinates coordinates = 6;
+
+  // Retains the single Markdown note after this rename.
+  string markdown = 7;
+
+  // Preserves the original trusted creation time.
+  google.protobuf.Timestamp when_created = 8;
+}
+
+// Records a place's accepted location change.
+message PlaceMoved {
+  // Identifies the changed place.
+  PlaceId id = 1;
+
+  // Records the new location.
+  Coordinates coordinates = 2;
+
+  // Identifies the immutable author.
+  spine.core.UserId author = 3;
+
+  // Counts accepted changes to this place.
+  int32 revision = 4;
+
+  // Records the trusted change time.
+  google.protobuf.Timestamp when_occurred = 5;
+
+  // Retains the accepted name after this move.
+  string name = 6;
+
+  // Retains the single Markdown note after this move.
+  string markdown = 7;
+
+  // Preserves the original trusted creation time.
+  google.protobuf.Timestamp when_created = 8;
+}
+
+// Records an accepted replacement of the single Markdown note.
+message PlaceNoteEdited {
+  // Identifies the changed place.
+  PlaceId id = 1;
+
+  // Records the complete replacement Markdown.
+  string markdown = 2;
+
+  // Identifies the immutable author.
+  spine.core.UserId author = 3;
+
+  // Counts accepted changes to this place.
+  int32 revision = 4;
+
+  // Records the trusted change time.
+  google.protobuf.Timestamp when_occurred = 5;
+
+  // Retains the accepted name after this note edit.
+  string name = 6;
+
+  // Retains the accepted location after this note edit.
+  Coordinates coordinates = 7;
+
+  // Preserves the original trusted creation time.
+  google.protobuf.Timestamp when_created = 8;
+}
+
+// Records removal of a place without erasing its history.
+message PlaceDeleted {
+  // Identifies the deleted place.
+  PlaceId id = 1;
+
+  // Identifies the immutable author for filtering.
+  spine.core.UserId author = 2;
+
+  // Counts accepted changes to this place.
+  int32 revision = 3;
+
+  // Records the trusted deletion time.
+  google.protobuf.Timestamp when_occurred = 4;
+
+  // Clears the current display name after deletion.
+  string name = 5;
+
+  // Leaves the deleted place without a current location.
+  Coordinates coordinates = 6;
+
+  // Clears the current Markdown note after deletion.
+  string markdown = 7;
+
+  // Preserves the original trusted creation time.
+  google.protobuf.Timestamp when_created = 8;
+}

@@ -59,7 +59,9 @@ const managed = await ManagedServerApplication.run({
   processCount: 1,
   port: 0,
   moduleUrl: import.meta.url,
-  readerAdmission: { direct: { authenticate: () => ({ principal: { id: "managed-reader" } }) } },
+  readerAdmission: {
+    direct: { authenticate: () => ({ reader: { principal: { id: "managed-reader" } } }) },
+  },
   forwardingProof: { issue: () => "managed-proof" },
   createServer: async ({ host, port }) =>
     Server.atPort(port, {

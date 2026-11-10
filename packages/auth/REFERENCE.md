@@ -83,11 +83,133 @@ receiving boundary. Credentials and provider tokens are not forwarding fields.
 
 ## Sessions and sign-in
 
-`OpaqueSessions` implements a bounded, process-local `SessionResolver` with random cookie credentials. Defaults are an eight-hour lifetime, 10,000 retained sessions, and three identifier attempts. It lazily removes expired entries and is terminal after `close()`. It suits local development and the supported single-Gateway shape; choose an application session strategy that meets that gateway's restart and revocation requirements.
+`OpaqueSessions.create` requires an application scope, iron-session password
+configuration, trusted clock, and positive lifetime. `issue` seals a random
+stable reference and generation before atomic absent insertion. `resolve`
+checks the current stored generation and exact deadline without renewal.
+The authenticated application deadline is authoritative: any grace period in
+iron-session's seal validation cannot extend it. Rotation seals before
+compare-and-set. An old unexpired seal can revoke the current generation, but
+an expired seal cannot resolve or revoke.
 
-`SignedSessions` provides signed application session tokens. Local signature validation can delay revocation; shared revocation requires an explicit `SignedTokenRevocation` implementation. `OpaqueSessionCookies` supplies strict cookie parsing and serialization helpers. Neither strategy provisions users nor grants permissions.
+Omitting the store selects process-local memory. `PersistentOpaqueSessionStore.create`
+accepts a common storage factory and group; it prepares the indexed session
+family before returning by default. `createMissingStructures: false` opens a
+non-preparing handle for already prepared structures. The strategy leaves an
+injected store open, so the application closes the strategy, store, and factory
+separately. Explicit `purgeExpired(cutoff, signal)` traverses finite indexed
+pages with conditional removal in the persistent store; process-local memory
+scans its own records. If a row changes during conditional removal, the pass
+finishes that expiry group and returns its removed count. The changed row and
+other eligible rows in later groups can remain for another explicit purge.
+Storage errors and cancellation reject, possibly after partial removal. No
+timer calls maintenance automatically.
+
+For cancellation after a confirmed insertion or replacement, the strategy
+attempts conditional compensation and returns no credential. A storage error
+that does not confirm whether a commit occurred cannot safely authorize removal:
+another session may already occupy the same stable reference. The operation
+fails without returning a credential, but a committed row may require later
+explicit maintenance. This is a best-effort cleanup guarantee.
+
+`SignedSessions` issues and verifies ES256 application bearer tokens using jose.
+Without a `SignedTokenRevocation` source, logout is expiry-only. For shared
+revocation, create `PersistentTokenRevocations` with a storage factory, group,
+issuer, and audience, then inject it as `revocation`. Its asynchronous factory
+prepares the indexed record family by default; `createMissingStructures: false`
+opens a non-preparing handle with no physical schema checks or DDL at creation
+or during later operations. If structures are missing, ordinary storage
+operations fail. Close the strategy, revocation store, and shared
+factory separately. The strategy passes the full inclusive acceptance deadline,
+including clock skew, to the store. Reads ignore records after that deadline
+even before maintenance. Explicit `purgeExpired(cutoff, signal)` removes only
+records strictly before a cutoff no later than the store's trusted clock. It
+uses scoped indexed pages and conditional deletion; a concurrent change can
+leave eligible rows for a later invocation. No automatic cleanup runs.
+
+`SessionResolver.resolve(credential, lifetime?)` accepts an optional operation
+signal. Omitting it performs one validation without a retained monitor. With
+one, standard opaque and signed strategies register by stable authenticated
+identity before the authoritative storage or revocation read and return
+`ResolvedSession.invalidated`. Local logout, the captured resolved deadline,
+or strategy close aborts that signal. The supplied operation ending releases
+the listener and expiry timer. Opaque rotation does not extend an existing
+operation's captured deadline; signed token verification skew and durable
+revocation retention do not extend it either. The Gateway links invalidation
+to its backend cancellation and suppresses late updates. Logout errors remain
+visible even when local forwarding has stopped. Another process receives no
+local abort signal and must validate against shared durable state separately.
+`OpaqueSessionCookies` binds its CSRF value to the complete sealed credential,
+parses Cookie fields with cookie 2.0.1 after duplicate checks, and emits separate
+secure `__Host-` session and CSRF `Set-Cookie` fields. Pass the actual issued
+deadline to `issue`; `persistent: true` gives both cookies that deadline while
+the default keeps them as browser-session cookies. `sameSite` accepts `lax`,
+`strict`, or `none`; the session cookie remains `HttpOnly` and the CSRF cookie
+remains readable by the browser.
+
+```ts
+import { OpaqueSessionCookies, type OpaqueSessions } from "@spine-event-engine/auth";
+
+declare const sessions: OpaqueSessions;
+const cookies = new OpaqueSessionCookies({
+  csrfSecret: crypto.getRandomValues(new Uint8Array(32)),
+  origins: ["https://app.example"],
+  sameSite: "strict",
+  persistent: true,
+});
+const issued = await sessions.issue({ id: "example-user" });
+if (issued.kind === "created") {
+  const setCookieFields = cookies.issue(issued.credential.value, issued.session.expiresAt);
+  // Append each field separately to the HTTP response.
+  void setCookieFields;
+}
+```
+
+After rotation, call `issue` again with the new sealed value and its deadline;
+`clear()` emits matching host-only removal fields. `read` distinguishes missing
+credentials from terminal rejection so browser hosting does not fall back to a
+different reader after invalid input.
+Neither strategy provisions users nor grants permissions.
 
 `OidcFlow` is a bounded authorization-code and PKCE transaction manager. It works with `createGoogleProvider`, `createGitHubProvider`, or a discovered or configured OIDC provider. Applications expose start/callback/exchange endpoints, perform HTTP routing, map verified external identity through `IdentityMapping`, and issue an application session through `ApplicationSessionIssuer`. Provider access, refresh, and ID tokens remain sensitive server-side material; do not return them to browser application code.
+
+`OidcFlow.start()` awaits transaction persistence before returning an
+authorization URL. Callback binding and expiry are validated before the
+transaction is atomically consumed; provider exchange and identity mapping
+follow consumption. Browser PKCE proof and grant expiry are validated before
+the grant is consumed; application session issuance follows consumption. A
+trusted clock check after each confirmed consumption stops the next external
+step if the record reached expiry while storage was pending. A
+failed external step does not restore a consumed record. Independent flow
+instances select the same one-use records through their configured store.
+The optional second `AbortSignal` on start, callback, and exchange carries host
+request cancellation. Ordinary abort rejects with that reason; a distinct
+session issuer failure rejects the pending exchange or, after an abort or
+timeout has returned, is reported by `close()`. Close waits for admitted work
+and the original provider, mapping, and issuer promises to settle. A consumed
+transaction or grant is never restored after cancellation.
+
+The default `OidcFlow` store is process-local. `PersistentOidcFlowStore.create()`
+selects two record families from the supplied `StorageFactory` and `StorageGroup`;
+`flowId` qualifies state, grants, and indexed expiry queries. Preparation of
+both families completes by default. `createMissingStructures: false` returns
+non-preparing handles that do not probe for structures later. `OidcFlow.close()`
+drains admitted work and closes only its default memory store. Close an injected
+store and its factory separately. `purgeExpired(cutoff)` is explicit and uses a
+flow-scoped exact expiry index in persistent storage. A concurrent row change
+can leave eligible records for a later invocation. Cancellation or storage
+failure rejects with partial progress possible. A known confirmed late insert
+is conditionally removed after close; if another writer has replaced that
+record, the replacement remains. An ambiguous thrown storage result cannot be
+rolled back safely and may need later explicit maintenance.
+
+`discoverOidcProvider()` uses the exact selected discovery URL, including an
+application supplied path and query, and rejects a returned issuer mismatch.
+The selected URL does not replace token or JWKS destinations. Authorization
+URLs use S256 and replace reserved protocol parameters while retaining other
+provider query values. Token exchange uses the configured client authentication
+and exact callback URI; the provider returns an identity only after bounded
+response parsing and JOSE ID-token verification.
 
 ## Subscription and native adapters
 

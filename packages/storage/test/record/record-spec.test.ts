@@ -20,10 +20,72 @@ import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { RecordColumn } from "../../src/record/record-column.js";
-import { ColumnTypes } from "../../src/record/column-type.js";
+import { ColumnTypes, type RecordColumnType } from "../../src/record/column-type.js";
 import { RecordSpec } from "../../src/record/record-spec.js";
 
 describe("RecordSpec", () => {
+  it("restricts fixed-byte width to byte scalar descriptors at compile time", () => {
+    expectTypeOf<{
+      readonly kind: "scalar";
+      readonly scalar: ScalarType.BYTES;
+      readonly longAsString: false;
+      readonly byteLength: 12;
+    }>().toExtend<RecordColumnType>();
+    expectTypeOf<{
+      readonly kind: "scalar";
+      readonly scalar: ScalarType.STRING;
+      readonly longAsString: false;
+      readonly byteLength: 12;
+    }>().not.toExtend<RecordColumnType>();
+  });
+
+  it.each([
+    [
+      "non-byte scalar",
+      { kind: "scalar", scalar: ScalarType.STRING, longAsString: false, byteLength: 12 },
+    ],
+    [
+      "zero byte width",
+      { kind: "scalar", scalar: ScalarType.BYTES, longAsString: false, byteLength: 0 },
+    ],
+    [
+      "fractional byte width",
+      { kind: "scalar", scalar: ScalarType.BYTES, longAsString: false, byteLength: 1.5 },
+    ],
+    [
+      "non-numeric byte width",
+      { kind: "scalar", scalar: ScalarType.BYTES, longAsString: false, byteLength: "12" },
+    ],
+  ])("rejects a malformed %s descriptor when declaring a column", (_case, descriptor) => {
+    expect(
+      () =>
+        new RecordColumn<Event>("digest", descriptor as unknown as RecordColumnType, () => null),
+    ).toThrow(/byte width|bytes/i);
+  });
+
+  it("retains index-free scalar columns without an exact byte width", () => {
+    const column = new RecordColumn<Event>(
+      "payload",
+      ColumnTypes.scalar(ScalarType.BYTES),
+      () => new Uint8Array([1, 2]),
+    );
+    expect(column.valueIn(create(EventSchema))).toEqual(new Uint8Array([1, 2]));
+  });
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects fixed-byte width %s",
+    (width) => {
+      expect(() => ColumnTypes.fixedBytes(width)).toThrow(/positive safe integer/);
+    },
+  );
+
+  it("accepts positive safe fixed-byte widths without allocating values", () => {
+    expect(ColumnTypes.fixedBytes(1)).toMatchObject({ byteLength: 1 });
+    expect(ColumnTypes.fixedBytes(Number.MAX_SAFE_INTEGER)).toMatchObject({
+      byteLength: Number.MAX_SAFE_INTEGER,
+    });
+  });
+
   it("exposes the JVM-style types and defaults source type to the record type", () => {
     const columns = [
       new RecordColumn<Event>("kind", ColumnTypes.scalar(ScalarType.STRING), () => "event"),
@@ -168,6 +230,48 @@ describe("RecordSpec", () => {
           ],
         }),
     ).toThrow('duplicate record column "kind"');
+  });
+
+  it("captures validated immutable ordered index declarations", () => {
+    const columns = [
+      new RecordColumn<Event>("digest", ColumnTypes.fixedBytes(32), () => new Uint8Array(32)),
+    ];
+    const index = { name: "lookup", columns: ["digest", "id"] };
+    const spec = new RecordSpec({
+      recordType: EventSchema,
+      idSchema: EventIdSchema,
+      extractId: (event) => event.id ?? create(EventIdSchema),
+      columns,
+      indexes: [index],
+    });
+    index.columns[0] = "other";
+
+    expect(spec.indexes).toEqual([{ name: "lookup", columns: ["digest", "id"] }]);
+    expect(Object.isFrozen(spec.indexes)).toBe(true);
+    expect(Object.isFrozen(spec.indexes[0]?.columns)).toBe(true);
+  });
+
+  it.each([
+    { indexes: [{ name: " ", columns: ["id"] }] },
+    { indexes: [{ name: "lookup", columns: [] }] },
+    { indexes: [{ name: "lookup", columns: ["id", "id"] }] },
+    { indexes: [{ name: "lookup", columns: ["missing"] }] },
+    {
+      indexes: [
+        { name: "lookup", columns: ["id"] },
+        { name: "lookup", columns: ["id"] },
+      ],
+    },
+  ])("rejects malformed index requirements %#", ({ indexes }) => {
+    expect(
+      () =>
+        new RecordSpec({
+          recordType: EventSchema,
+          idSchema: EventIdSchema,
+          extractId: (event) => event.id ?? create(EventIdSchema),
+          indexes,
+        }),
+    ).toThrow();
   });
 
   it("does not admit legacy schema, storage key, or fingerprint members", () => {

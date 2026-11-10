@@ -35,17 +35,42 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { InMemoryStorageFactory, RecordSpec } from "@spine-event-engine/storage";
 
-const records = new InMemoryStorageFactory().createRecordStorage(
-  { name: "Users", multitenant: false },
-  new RecordSpec({
-    recordType: StringValueSchema,
-    idKind: "string",
-    extractId: (user) => user.value,
-  }),
-);
+const factory = new InMemoryStorageFactory();
+const context = { name: "Users", multitenant: false } as const;
+const spec = new RecordSpec({
+  recordType: StringValueSchema,
+  idKind: "string",
+  extractId: (user) => user.value,
+});
+const records = factory.createRecordStorage(context, spec);
 await records.write(create(StringValueSchema, { value: "ava" }));
 console.log((await records.read("ava"))?.value);
 ```
+
+Record handles prepare their physical family on access by default. When an
+application has already prepared a family, pass
+`{ prepareOnAccess: false }` as the fourth `createRecordStorage` argument. With
+the context and spec above, omit the group by passing `undefined`:
+
+```ts
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { InMemoryStorageFactory, RecordSpec } from "@spine-event-engine/storage";
+
+const factory = new InMemoryStorageFactory();
+const context = { name: "Users", multitenant: false } as const;
+const spec = new RecordSpec({
+  recordType: StringValueSchema,
+  idKind: "string",
+  extractId: (user) => user.value,
+});
+const unpreparedRecords = factory.createRecordStorage(context, spec, undefined, {
+  prepareOnAccess: false,
+});
+```
+
+This setting applies only to that handle. The provider's explicit
+`StoragePreparations` create/check operations remain available; a skipped
+handle reports missing physical structures through ordinary data errors.
 
 For detailed query, lifecycle, and adapter notes, see
 [REFERENCE documentation for agents](REFERENCE.md).
@@ -122,6 +147,14 @@ const users = await records.query({
   limit: 20,
 });
 ```
+
+`RecordSpec.indexes` can require ordered, non-unique physical lookup indexes;
+`id` names the storage slot ID in an index. Use
+`ColumnTypes.fixedBytes(width)` when a byte column has an exact persisted and
+query width. Explicit or automatic preparation of indexed specifications
+requires a provider that attests physical index checks. A handle with
+`prepareOnAccess: false` skips preparation, while provider-local declaration
+validation still applies.
 
 `InMemoryStorageFactory` creates a fresh backend by default. Pass the same
 `InMemoryStorageBackend` to separate factories only when they intentionally

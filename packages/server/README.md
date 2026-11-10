@@ -44,7 +44,6 @@ Add generated entities with `BoundedContext.add(...)` and use
 `build()` to assemble the context and load generated repositories when configured. A
 context is single-tenant or multitenant by construction; select that mode
 before registering application handlers and storage.
-
 `build()` prepares the current model storage and awaits the first subscription
 registry pass. Set `createStorageStructures: false` or
 `startSubscriptionMonitoring: false` in `build({...})` to defer either phase
@@ -111,6 +110,15 @@ analysis. Storage writes happen in separate short operations after the handler s
 A failed handler leaves previous persisted state unchanged and
 suppresses produced output. An external HTTP request or other side effect may
 already have happened.
+
+Repository-backed Command and Event posting resolves after recipient Inbox
+writes. Delivery starts immediately and handles the stored row separately, so
+successful posting does not mean the handler has completed. Restart durability
+depends on the configured storage provider; custom dispatchers define their own
+completion contract. A committed Entity awaits one outgoing handoff attempt for
+handler-produced domain Commands and Events. A failed attempt is reported without
+rerunning successful source handling. Internal diagnostic publication remains
+best effort.
 
 Handler return declarations can use native unions for one of several results,
 or fixed tuples for several ordered results. For example,
@@ -232,13 +240,35 @@ override. Single-tenant execution uses `SINGLE_TENANT`, even when the request
 omits a tenant field. A named tenant cannot query a single-tenant context: that
 fails before reading. See the [query contract](REFERENCE.md#handler-routing-and-operations)
 for the complete tenant rules and empty-result behavior.
-For a multitenant receiving context, explicitly register each accepted tenant
-through `context.tenantIndex.keep(tenantId)` or the configured directory.
-Provider-backed indexes may only confirm existing membership: fixed SQL catalogs
-cannot add tenants, and the Datastore index requires native namespace metadata.
-Use an application-managed `TenantIndex` to register tenants before provider
-data exists or to add tenants dynamically.
+For a multitenant receiving Bounded Context, supply an application tenant directory and
+register each accepted tenant through its `keep(tenantId)` method before sending
+tenant-scoped work. The optional environment setting defaults to `SINGLE_TENANT`;
+that mode creates no directory or provider catalog. A multitenant Bounded Context
+requires an environment directory before assembly, even when `withTenantIndex()`
+selects another directory for that Bounded Context. In one environment, a
+single-tenant Identity Bounded Context still uses `SINGLE_TENANT` while a
+multitenant Orders Bounded Context uses the configured directory.
+Both public `tenantIndex` getters return `TenantIndexSetting`, so narrow against
+`SINGLE_TENANT` before calling directory methods. A single-tenant Bounded Context always
+returns the marker, even when its environment has a directory for other Bounded Contexts.
+Provider catalogs remain available as storage-provider APIs, but environment
+assembly does not infer membership from them.
+`PersistentTenantIndex.create({ storageFactory, group })` stores registrations
+through the selected factory. Remote providers can retain them across process
+restarts; memory storage remains process-local. Its async factory prepares supported structures by
+default; set `createMissingStructures: false` when the application prepares
+the selected record family separately before data access. Close the index after its admitted work
+finishes; it leaves the supplied storage factory open.
 Unknown tenants fail before reads or handlers run; input never registers them.
+
+The [Orders application](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/orders/README.md)
+demonstrates this setup with memory, PostgreSQL, and Datastore. Its PostgreSQL
+launch uses separate shared, Northwind, and Contoso databases, validates persisted
+membership against configured routing, and prepares supported structures before
+opening the listener. Orders focuses on tenant storage and has no sign-in UI.
+The [Fieldnotes application](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/fieldnotes/README.md)
+demonstrates browser authentication and private data in a single-tenant Bounded
+Context without a tenant index.
 
 Use `EntityQuery.all(...)` when every predicate must match and
 `EntityQuery.either(...)` when any branch may match.
@@ -411,6 +441,21 @@ and backend forwarding. Authenticated durable bindings are browser-host
 infrastructure, not native `Server` state. See the [browser/auth extension guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 before exposing a backend to a browser.
 
+For a standalone Gateway, call `BrowserServer.run` with a canonical
+`backend.baseUrl` (or discovery), `origins`, `sessions`, `authorize`, `contexts`,
+`clock`, and explicit `bindings`. Supply `credentials` with a
+`BrowserCredentialReader` to select a browser auth engine. The reader and each
+`authRoutes` entry declare `csrfHeaderNames`, `credentialCookieNames`, and
+`stateCookieNames`; empty arrays state that a category is unused. The Gateway
+validates those names before it starts listening, then checks raw headers before
+calling the reader or a route. Preflight never calls the credential reader;
+permitted origins receive credentialed CORS headers covering the configured CSRF
+fields and Connect protocol headers. Connect stops waiting for a reader and
+does not forward its late result when the request is cancelled or its deadline
+passes. The reader receives no abort signal, so its underlying work may continue.
+This setup does not construct a
+`ServerEnvironment` or Bounded Context. Close the returned server at shutdown.
+
 ## Native reader admission
 
 Native authentication is configured through `ServerOptions.services.readerAdmission`.
@@ -423,7 +468,10 @@ public and supplies no authenticated principal or authority facts.
 
 Subscription activation and cancellation also check the admitted principal
 against the stored reader binding. A different principal cannot reuse a
-subscription even with the same ActorContext. See [native reader admission](REFERENCE.md#native-reader-admission)
+subscription even with the same ActorContext. The host supplies an operation
+signal before authentication and closes it after unary work or the complete
+Activate stream. A direct authenticator can return a separately captured
+`invalidated` signal for local logout and session expiry. See [native reader admission](REFERENCE.md#native-reader-admission)
 for adapter signatures, public admission, and managed application configuration.
 
 ## Limits

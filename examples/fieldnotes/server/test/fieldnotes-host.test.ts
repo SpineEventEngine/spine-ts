@@ -1,0 +1,608 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+import { randomBytes } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { create } from "@bufbuild/protobuf";
+import { createClient } from "@connectrpc/connect";
+import { createConnectTransport, createGrpcTransport } from "@connectrpc/connect-node";
+import { Client } from "@spine-event-engine/client-web";
+import { AnyPacker } from "@spine-event-engine/core";
+import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
+import {
+  QueryService,
+  SubscriptionService,
+  TopicIdSchema,
+  TopicSchema,
+} from "@spine-event-engine/proto/client";
+import { PlaceViewSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/entities_pb.js";
+import { PlaceViewQuery } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/entities_query.js";
+import { AddPlaceSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/commands_pb.js";
+import { DeletePlaceSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/commands_pb.js";
+import { RenamePlaceSchema } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/commands_pb.js";
+import {
+  CoordinatesSchema,
+  PlaceIdSchema,
+} from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/types_pb.js";
+import { ServerTests } from "@spine-event-engine/server/testing";
+import { EnvironmentType } from "@spine-event-engine/server";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { FieldnotesHost } from "../src/fieldnotes-host.js";
+import type { FieldnotesSettings } from "../src/host-settings.js";
+import { EnvironmentTests } from "../../../../packages/server/dist/server/environment.js";
+
+const settings = (): FieldnotesSettings => ({
+  postgresUrl: "postgres://localhost/fieldnotes",
+  publicOrigin: "https://localhost:3000",
+  sessionPassword: randomBytes(32).toString("base64url"),
+  csrfSecret: randomBytes(32),
+  readerProofSecret: randomBytes(32),
+  sessionTtlMilliseconds: 3_600_000,
+  authRouteTimeoutMs: 10_000,
+  authRouteMaxBytes: 65_536,
+});
+
+describe("Fieldnotes host private Connect boundary", () => {
+  afterEach(async () => ServerTests.resetEnvironment());
+
+  it("closes the selected storage after startup connection failure", async () => {
+    const factory = new InMemoryStorageFactory();
+    vi.spyOn(factory, "checkConnection").mockRejectedValueOnce(new Error("connection unavailable"));
+    const closed = vi.spyOn(factory, "close");
+    await expect(FieldnotesHost.open(settings(), { storageFactory: factory })).rejects.toThrow(
+      "connection unavailable",
+    );
+    expect(closed).toHaveBeenCalled();
+    expect(factory.isOpen()).toBe(false);
+  });
+
+  it("closes storage when selected Google flow setup fails before listeners start", async () => {
+    const factory = new InMemoryStorageFactory();
+    const closed = vi.spyOn(factory, "close");
+    await expect(
+      FieldnotesHost.open(settings(), {
+        storageFactory: factory,
+        authentication: { mode: "google", clientId: "client-id", clientSecret: "client-secret" },
+        googleProvider: {
+          authorizationEndpoint: "invalid-url",
+          recommendedScopes: ["openid"],
+          provider: {
+            issuer: "https://issuer.test",
+            exchangeAuthorizationCode: () => Promise.resolve(undefined),
+          },
+        },
+      }),
+    ).rejects.toThrow();
+    expect(closed).toHaveBeenCalledTimes(1);
+    expect(factory.isOpen()).toBe(false);
+  });
+
+  it("rejects production test injection, missing provider launch and emulator configuration", async () => {
+    EnvironmentTests.use(EnvironmentType.Production);
+    const selected = settings();
+    await expect(
+      FieldnotesHost.open(selected, { storageFactory: new InMemoryStorageFactory() }),
+    ).rejects.toThrow("forbids test provider and storage injection");
+    await expect(FieldnotesHost.open(selected)).rejects.toThrow(
+      "requires provider mode and gateway port",
+    );
+    const prior = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+    process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
+    try {
+      await expect(
+        FieldnotesHost.open(selected, {
+          authentication: {
+            mode: "firebase",
+            projectId: "demo-fieldnotes",
+            recentLoginMilliseconds: 300_000,
+          },
+          gatewayPort: 4311,
+        }),
+      ).rejects.toThrow("Firebase Auth Emulator is forbidden in production");
+    } finally {
+      if (prior === undefined) delete process.env.FIREBASE_AUTH_EMULATOR_HOST;
+      else process.env.FIREBASE_AUTH_EMULATOR_HOST = prior;
+    }
+  });
+
+  it("reports a final storage close failure after stopping session admission", async () => {
+    const factory = new InMemoryStorageFactory();
+    const host = await FieldnotesHost.open(settings(), { storageFactory: factory });
+    const close = factory.close.bind(factory);
+    const failing = vi.spyOn(factory, "close").mockImplementation(async () => {
+      await close();
+      throw new Error("storage close failed");
+    });
+    try {
+      await expect(host.close()).rejects.toThrow("Fieldnotes host close failed");
+      expect(factory.isOpen()).toBe(false);
+      expect(await host.sessions.issue({ id: "after-close" })).toMatchObject({
+        kind: "rejected",
+        reason: "closed",
+      });
+    } finally {
+      failing.mockRestore();
+    }
+  });
+
+  it("rejects direct native reads without a verified forwarding proof", async () => {
+    const host = await FieldnotesHost.open(settings(), {
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    try {
+      const native = host.native;
+      if (native === undefined) throw new Error("Native listener did not start.");
+      const query = PlaceViewQuery.create().build().build();
+      const client = createClient(QueryService, createGrpcTransport({ baseUrl: native.baseUrl }));
+      await expect(client.read(query)).rejects.toThrow("Reader authentication failed");
+      await expect(
+        client.read(query, {
+          headers: {
+            "spine-internal-reader": "forged",
+            "spine-internal-reader-proof": "forged",
+          },
+        }),
+      ).rejects.toThrow("Reader authentication failed");
+    } finally {
+      await host.close();
+    }
+  });
+
+  it("rejects broad and foreign PlaceView topics before starting a stream", async () => {
+    const host = await FieldnotesHost.open(settings(), {
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const issued = await host.sessions.issue({ id: "reader" });
+    if (issued.kind !== "created") throw new Error("Expected issued session.");
+    const credential = issued.credential.value;
+    const client = Client.forConnect(host.gateway.baseUrl, {
+      onRequestMetadata: () => ({
+        origin: "https://localhost:3000",
+        cookie: `__Host-spine-session=${credential}; __Host-spine-csrf=${host.cookies.csrf(credential)}`,
+        "x-spine-csrf": host.cookies.csrf(credential),
+      }),
+    });
+    const reader = client.onBehalfOf("reader");
+    const queryFor = (author?: string) =>
+      author === undefined
+        ? PlaceViewQuery.create().build()
+        : PlaceViewQuery.create()
+            .author()
+            .is(create(UserIdSchema, { value: author }))
+            .build();
+    const subscribe = async (author?: string) => {
+      const query = queryFor(author);
+      return reader.createSubscription(
+        create(TopicSchema, {
+          id: create(TopicIdSchema, { value: `t-${randomUUID()}` }),
+          target: query.build().target,
+        }),
+        { kind: "entity", authoritativeQuery: () => query },
+      );
+    };
+    try {
+      const broad = await subscribe();
+      await expect(broad.activate()).rejects.toThrow();
+      await broad.cancel();
+      const foreign = await subscribe("another-author");
+      await expect(foreign.activate()).rejects.toThrow();
+      await foreign.cancel();
+      const admitted = await subscribe("reader");
+      await admitted.activate();
+      await admitted.cancel();
+    } finally {
+      await client.close();
+      await host.close();
+    }
+  });
+
+  it("keeps a subscribed handle private when another session steals its wire", async () => {
+    const host = await FieldnotesHost.open(settings(), {
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const author = await host.sessions.issue({ id: "author-a" });
+    const foreign = await host.sessions.issue({ id: "author-b" });
+    if (author.kind !== "created" || foreign.kind !== "created")
+      throw new Error("Expected issued sessions.");
+    const transport = createConnectTransport({ baseUrl: host.gateway.baseUrl, httpVersion: "1.1" });
+    const service = createClient(SubscriptionService, transport);
+    const headers = (credential: string) => ({
+      origin: "https://localhost:3000",
+      cookie: `__Host-spine-session=${credential}; __Host-spine-csrf=${host.cookies.csrf(credential)}`,
+      "x-spine-csrf": host.cookies.csrf(credential),
+    });
+    const firstHeaders = { headers: headers(author.credential.value) };
+    const stolenHeaders = { headers: headers(foreign.credential.value) };
+    const target = PlaceViewQuery.create()
+      .author()
+      .is(create(UserIdSchema, { value: "author-a" }))
+      .build()
+      .build().target;
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: `t-${randomUUID()}` }),
+      context: create(ActorContextSchema, { actor: create(UserIdSchema, { value: "author-a" }) }),
+      target,
+    });
+    try {
+      const wire = await service.subscribe(topic, firstHeaders);
+      await expect(service.cancel(wire, stolenHeaders)).rejects.toThrow();
+      const stolen = service.activate(wire, stolenHeaders)[Symbol.asyncIterator]();
+      await expect(stolen.next()).rejects.toThrow();
+      await expect(service.cancel(wire, firstHeaders)).resolves.toBeDefined();
+    } finally {
+      await host.close();
+    }
+  });
+
+  it("serves the author's PlaceView and hides it from another valid raw client", async () => {
+    const host = await FieldnotesHost.open(settings(), {
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const first = await host.sessions.issue({ id: "author-a" });
+    const second = await host.sessions.issue({ id: "author-b" });
+    if (first.kind !== "created" || second.kind !== "created")
+      throw new Error("Expected issued sessions.");
+    const client = (credential: string) =>
+      Client.forConnect(host.gateway.baseUrl, {
+        onRequestMetadata: () => ({
+          origin: "https://localhost:3000",
+          cookie: `__Host-spine-session=${credential}; __Host-spine-csrf=${host.cookies.csrf(credential)}`,
+          "x-spine-csrf": host.cookies.csrf(credential),
+        }),
+      });
+    const author = client(first.credential.value);
+    const foreign = client(second.credential.value);
+    const id = create(PlaceIdSchema, { value: "private-place" });
+    try {
+      await author.onBehalfOf("author-a").post(
+        AddPlaceSchema,
+        create(AddPlaceSchema, {
+          id,
+          name: "Private",
+          coordinates: create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
+          markdown: "private note",
+        }),
+      );
+      await vi.waitFor(async () => {
+        const result = await author.onBehalfOf("author-a").send(
+          PlaceViewQuery.create()
+            .author()
+            .is(create(UserIdSchema, { value: "author-a" }))
+            .build(),
+        );
+        expect(
+          result.message.map((entry) => AnyPacker.tryUnpack(entry.state, PlaceViewSchema)),
+        ).toMatchObject([{ id, name: "Private" }]);
+      });
+      const foreignResult = await foreign.onBehalfOf("author-b").send(
+        PlaceViewQuery.create()
+          .author()
+          .is(create(UserIdSchema, { value: "author-b" }))
+          .byId(id)
+          .build(),
+      );
+      expect(foreignResult.message).toHaveLength(0);
+      await expect(
+        foreign.onBehalfOf("author-b").send(
+          PlaceViewQuery.create()
+            .author()
+            .is(create(UserIdSchema, { value: "author-a" }))
+            .build(),
+        ),
+      ).rejects.toThrow();
+      await expect(
+        foreign.onBehalfOf("author-a").send(PlaceViewQuery.create().build()),
+      ).rejects.toThrow();
+    } finally {
+      await author.close();
+      await foreign.close();
+      await host.close();
+    }
+  });
+
+  it("selects an authorized row before a caller's ordered one-row query limit", async () => {
+    const host = await FieldnotesHost.open(settings(), {
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const first = await host.sessions.issue({ id: "author-a" });
+    const second = await host.sessions.issue({ id: "author-b" });
+    if (first.kind !== "created" || second.kind !== "created")
+      throw new Error("Expected issued sessions.");
+    const clientFor = (credential: string) =>
+      Client.forConnect(host.gateway.baseUrl, {
+        onRequestMetadata: () => ({
+          origin: "https://localhost:3000",
+          cookie: `__Host-spine-session=${credential}; __Host-spine-csrf=${host.cookies.csrf(credential)}`,
+          "x-spine-csrf": host.cookies.csrf(credential),
+        }),
+      });
+    const clientA = clientFor(first.credential.value);
+    const clientB = clientFor(second.credential.value);
+    const ownId = create(PlaceIdSchema, { value: `own-${randomUUID()}` });
+    const foreignId = create(PlaceIdSchema, { value: `foreign-${randomUUID()}` });
+    const coordinates = create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 });
+    try {
+      await clientB.onBehalfOf("author-b").post(
+        AddPlaceSchema,
+        create(AddPlaceSchema, {
+          id: foreignId,
+          name: "A foreign first",
+          coordinates,
+        }),
+      );
+      await clientA.onBehalfOf("author-a").post(
+        AddPlaceSchema,
+        create(AddPlaceSchema, {
+          id: ownId,
+          name: "Z authorized second",
+          coordinates,
+        }),
+      );
+      await vi.waitFor(async () => {
+        const foreign = await clientB.onBehalfOf("author-b").send(
+          PlaceViewQuery.create()
+            .author()
+            .is(create(UserIdSchema, { value: "author-b" }))
+            .orderBy("name")
+            .limit(1)
+            .build(),
+        );
+        expect(
+          foreign.message.map(
+            (entry) => AnyPacker.tryUnpack(entry.state, PlaceViewSchema)?.id?.value,
+          ),
+        ).toEqual([foreignId.value]);
+      });
+      const scoped = PlaceViewQuery.create()
+        .author()
+        .is(create(UserIdSchema, { value: "author-a" }))
+        .orderBy("name")
+        .limit(1)
+        .build();
+      await vi.waitFor(async () => {
+        const result = await clientA.onBehalfOf("author-a").send(scoped);
+        expect(
+          result.message.map(
+            (entry) => AnyPacker.tryUnpack(entry.state, PlaceViewSchema)?.id?.value,
+          ),
+        ).toEqual([ownId.value]);
+      });
+      await expect(
+        clientA
+          .onBehalfOf("author-a")
+          .send(PlaceViewQuery.create().orderBy("name").limit(1).build()),
+      ).rejects.toThrow();
+    } finally {
+      await clientA.close();
+      await clientB.close();
+      await host.close();
+    }
+  });
+
+  it("delivers a removed Place only through its author's canonical entity stream", async () => {
+    const host = await FieldnotesHost.open(settings(), {
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const issued = await host.sessions.issue({ id: "author-a" });
+    if (issued.kind !== "created") throw new Error("Expected issued session.");
+    const credential = issued.credential.value;
+    const client = Client.forConnect(host.gateway.baseUrl, {
+      onRequestMetadata: () => ({
+        origin: "https://localhost:3000",
+        cookie: `__Host-spine-session=${credential}; __Host-spine-csrf=${host.cookies.csrf(credential)}`,
+        "x-spine-csrf": host.cookies.csrf(credential),
+      }),
+    });
+    const author = client.onBehalfOf("author-a");
+    const id = create(PlaceIdSchema, { value: `removed-${randomUUID()}` });
+    const query = PlaceViewQuery.create()
+      .author()
+      .is(create(UserIdSchema, { value: "author-a" }))
+      .build();
+    const subscription = await author.createSubscription(
+      create(TopicSchema, {
+        id: create(TopicIdSchema, { value: `t-${randomUUID()}` }),
+        target: query.build().target,
+      }),
+      { kind: "entity", authoritativeQuery: () => query },
+    );
+    const seen: string[] = [];
+    const collect = (async () => {
+      for await (const delivery of subscription.updates) {
+        if (delivery.kind !== "update" || delivery.update.update.case !== "entityUpdates") continue;
+        for (const entry of delivery.update.update.value.update) {
+          if (entry.kind.case === undefined) throw new Error("Entity update has no kind.");
+          seen.push(entry.kind.case);
+        }
+      }
+    })();
+    try {
+      await subscription.activate();
+      await author.post(
+        AddPlaceSchema,
+        create(AddPlaceSchema, {
+          id,
+          name: "Temporary",
+          coordinates: create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 }),
+        }),
+      );
+      await vi.waitFor(
+        () => {
+          expect(seen).toContain("state");
+        },
+        { timeout: 5_000 },
+      );
+      await author.post(DeletePlaceSchema, create(DeletePlaceSchema, { id, expectedRevision: 1 }));
+      await vi.waitFor(
+        () => {
+          expect(seen).toContain("noLongerMatching");
+        },
+        { timeout: 5_000 },
+      );
+    } finally {
+      await subscription.cancel();
+      await collect;
+      await client.close();
+      await host.close();
+    }
+  });
+
+  it.each([
+    { observer: "author-a", foreign: "author-b" },
+    { observer: "author-b", foreign: "author-a" },
+  ])("keeps foreign Place IDs out of $observer's raw stream", async ({ observer, foreign }) => {
+    const host = await FieldnotesHost.open(settings(), {
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const first = await host.sessions.issue({ id: observer });
+    const second = await host.sessions.issue({ id: foreign });
+    if (first.kind !== "created" || second.kind !== "created")
+      throw new Error("Expected issued sessions.");
+    const clientFor = (credential: string) =>
+      Client.forConnect(host.gateway.baseUrl, {
+        onRequestMetadata: () => ({
+          origin: "https://localhost:3000",
+          cookie: `__Host-spine-session=${credential}; __Host-spine-csrf=${host.cookies.csrf(credential)}`,
+          "x-spine-csrf": host.cookies.csrf(credential),
+        }),
+      });
+    const observerClient = clientFor(first.credential.value);
+    const foreignClient = clientFor(second.credential.value);
+    const observerRequest = observerClient.onBehalfOf(observer);
+    const foreignRequest = foreignClient.onBehalfOf(foreign);
+    const observerId = create(PlaceIdSchema, { value: `observed-${randomUUID()}` });
+    const foreignId = create(PlaceIdSchema, { value: `foreign-${randomUUID()}` });
+    const markerId = create(PlaceIdSchema, { value: `marker-${randomUUID()}` });
+    const queryFor = (name: string) =>
+      PlaceViewQuery.create()
+        .author()
+        .is(create(UserIdSchema, { value: name }))
+        .build();
+    const subscribe = (name: string, author: typeof observerRequest) => {
+      const query = queryFor(name);
+      return author.createSubscription(
+        create(TopicSchema, {
+          id: create(TopicIdSchema, { value: `t-${randomUUID()}` }),
+          target: query.build().target,
+        }),
+        { kind: "entity", authoritativeQuery: () => query },
+      );
+    };
+    const stream = await subscribe(observer, observerRequest);
+    const foreignStream = await subscribe(foreign, foreignRequest);
+    const seen: { id: string | undefined; kind: string }[] = [];
+    const foreignSeen: { id: string | undefined; kind: string }[] = [];
+    const collect = async (source: typeof stream, target: typeof seen) => {
+      for await (const delivery of source.updates) {
+        if (delivery.kind !== "update" || delivery.update.update.case !== "entityUpdates") continue;
+        for (const entry of delivery.update.update.value.update) {
+          if (entry.kind.case === undefined) throw new Error("Entity update has no kind.");
+          target.push({
+            id: AnyPacker.tryUnpack(entry.id, PlaceIdSchema)?.value,
+            kind: entry.kind.case,
+          });
+        }
+      }
+    };
+    const collecting = collect(stream, seen);
+    const collectingForeign = collect(foreignStream, foreignSeen);
+    let primary: unknown;
+    const failures: unknown[] = [];
+    try {
+      await stream.activate();
+      await foreignStream.activate();
+      const coordinates = create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 });
+      await foreignRequest.post(
+        AddPlaceSchema,
+        create(AddPlaceSchema, { id: foreignId, name: "Foreign", coordinates }),
+      );
+      await vi.waitFor(() => {
+        expect(
+          foreignSeen.filter((entry) => entry.id === foreignId.value && entry.kind === "state"),
+        ).toHaveLength(1);
+      });
+      await observerRequest.post(
+        AddPlaceSchema,
+        create(AddPlaceSchema, { id: observerId, name: "Observed", coordinates }),
+      );
+      await vi.waitFor(() => {
+        expect(
+          seen.filter((entry) => entry.id === observerId.value && entry.kind === "state"),
+        ).toHaveLength(1);
+      });
+      expect(seen.every((entry) => entry.id === observerId.value)).toBe(true);
+
+      await foreignRequest.post(
+        RenamePlaceSchema,
+        create(RenamePlaceSchema, { id: foreignId, name: "Foreign renamed", expectedRevision: 1 }),
+      );
+      await vi.waitFor(() => {
+        expect(
+          foreignSeen.filter((entry) => entry.id === foreignId.value && entry.kind === "state"),
+        ).toHaveLength(2);
+      });
+      await observerRequest.post(
+        RenamePlaceSchema,
+        create(RenamePlaceSchema, {
+          id: observerId,
+          name: "Observed renamed",
+          expectedRevision: 1,
+        }),
+      );
+      await vi.waitFor(() => {
+        expect(
+          seen.filter((entry) => entry.id === observerId.value && entry.kind === "state"),
+        ).toHaveLength(2);
+      });
+      expect(seen.every((entry) => entry.id === observerId.value)).toBe(true);
+
+      await foreignRequest.post(
+        DeletePlaceSchema,
+        create(DeletePlaceSchema, { id: foreignId, expectedRevision: 2 }),
+      );
+      await vi.waitFor(() => {
+        expect(
+          foreignSeen.some(
+            (entry) => entry.id === foreignId.value && entry.kind === "noLongerMatching",
+          ),
+        ).toBe(true);
+      });
+      await observerRequest.post(
+        AddPlaceSchema,
+        create(AddPlaceSchema, { id: markerId, name: "Observer marker", coordinates }),
+      );
+      await vi.waitFor(() => {
+        expect(seen.some((entry) => entry.id === markerId.value && entry.kind === "state")).toBe(
+          true,
+        );
+      });
+      expect(
+        seen.every((entry) => entry.id === observerId.value || entry.id === markerId.value),
+      ).toBe(true);
+    } catch (error) {
+      primary = error;
+    } finally {
+      const cancels = await Promise.allSettled([stream.cancel(), foreignStream.cancel()]);
+      const drains = await Promise.allSettled([collecting, collectingForeign]);
+      const clients = await Promise.allSettled([observerClient.close(), foreignClient.close()]);
+      const closed = await Promise.allSettled([host.close()]);
+      for (const result of [...cancels, ...drains, ...clients, ...closed])
+        if (result.status === "rejected") failures.push(result.reason as unknown);
+    }
+    if (primary instanceof Error) throw primary;
+    if (primary !== undefined) throw new Error("Raw stream test failed.", { cause: primary });
+    if (failures.length > 0) throw new AggregateError(failures, "Raw stream cleanup failed.");
+  });
+});

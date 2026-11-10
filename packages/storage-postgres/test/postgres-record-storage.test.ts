@@ -114,6 +114,47 @@ import {
 } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 describe("Postgres record storage", () => {
+  it("uses indexed byte equality while retaining null-safe equality for absent values", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const spec = new RecordSpec<string, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+      columns: [new RecordColumn("lookup", ColumnTypes.fixedBytes(12), () => new Uint8Array(12))],
+      indexes: [{ name: "lookup", columns: ["lookup", "id"] }],
+    });
+    const storage = factory.createRecordStorage(
+      { name: "bytes", multitenant: false },
+      spec,
+      undefined,
+      { prepareOnAccess: false },
+    );
+    try {
+      await storage.queryEntries({
+        filters: [{ column: "lookup", value: new Uint8Array(12) }],
+        limit: 1,
+      });
+      expect(driver.calls.at(-1)?.sql).toContain('"lookup" = $1');
+      await storage.queryEntries({ filters: [{ column: "lookup", value: null }], limit: 1 });
+      expect(driver.calls.at(-1)?.sql).toContain('"lookup" IS NOT DISTINCT FROM $1');
+      await storage.queryPlan({
+        predicate: {
+          kind: "comparison",
+          column: "lookup",
+          operator: "equal",
+          value: new Uint8Array(12),
+        },
+        order: [{ column: "lookup", direction: "asc" }],
+        limit: 1,
+      });
+      expect(driver.calls.at(-1)?.sql).toContain('"lookup" = $1');
+    } finally {
+      storage.close();
+      await factory.close();
+    }
+  });
   it("binds each legacy scalar-list member and makes an empty list match no rows", async () => {
     const storage = await recordStorage();
     await (storage as unknown as { prepare(): Promise<void> }).prepare();
@@ -208,6 +249,82 @@ describe("Postgres record storage", () => {
     expect(write?.sql).toContain("VALUES ($1, $2, $3)");
     expect(write?.values?.[0]).toBe("one");
     expect(write?.values?.[1]).toBeInstanceOf(Uint8Array);
+  });
+
+  it("skips schema probes and DDL on a false handle while later default use validates", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const context = { name: "test", multitenant: false } as const;
+    const spec = recordSpec();
+    const options = { prepareOnAccess: false };
+    const skipped = factory.createRecordStorage(context, spec, undefined, options);
+    options.prepareOnAccess = true;
+    await skipped.read("missing");
+    await skipped.write(create(StringValueSchema, { value: "first" }));
+    await skipped.queryEntries({ filters: [] });
+    expect(driver.calls.some(({ sql }) => /schemata|information_schema|^CREATE/u.test(sql))).toBe(
+      false,
+    );
+
+    const prepared = factory.createRecordStorage(context, spec);
+    await prepared.read("missing");
+    expect(driver.calls.some(({ sql }) => sql.includes("schemata"))).toBe(true);
+    expect(driver.calls.some(({ sql }) => sql.startsWith("CREATE"))).toBe(true);
+    driver.calls.length = 0;
+    await skipped.read("later");
+    expect(driver.calls.some(({ sql }) => /schemata|information_schema|^CREATE/u.test(sql))).toBe(
+      false,
+    );
+    skipped.close();
+    await prepared.read("still-open");
+    await factory.close();
+  });
+
+  it("discovers an omitted schema without checking that it exists on false access", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine" })
+      .build();
+    const skipped = factory.createRecordStorage(
+      { name: "test", multitenant: false },
+      recordSpec(),
+      undefined,
+      { prepareOnAccess: false },
+    );
+    driver.query.mockImplementationOnce((sql, values) => {
+      driver.recordCall(sql, values);
+      expect(sql).toContain("current_schema()");
+      return Promise.resolve({ rows: [{ schema: "public" }] });
+    });
+    await skipped.read("missing");
+    expect(driver.calls.some(({ sql }) => sql.includes("current_schema()"))).toBe(true);
+    expect(driver.calls.some(({ sql }) => /information_schema|^CREATE/u.test(sql))).toBe(false);
+    await factory.close();
+  });
+
+  it("keeps a skipped handle usable across a failed default schema check and retry", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const context = { name: "test", multitenant: false } as const;
+    const spec = recordSpec();
+    const prepared = factory.createRecordStorage(context, spec);
+    const skipped = factory.createRecordStorage(context, spec, undefined, {
+      prepareOnAccess: false,
+    });
+    driver.query.mockImplementationOnce((sql, values) => {
+      driver.recordCall(sql, values);
+      return Promise.resolve({ rowCount: 0, rows: [] });
+    });
+    const results = await Promise.allSettled([prepared.read("missing"), skipped.read("missing")]);
+    expect(results[0].status).toBe("rejected");
+    expect(results[1].status).toBe("fulfilled");
+    driver.calls.length = 0;
+    await skipped.read("after-failure");
+    expect(driver.calls.some(({ sql }) => sql.includes("schemata"))).toBe(false);
+    await prepared.read("retry");
+    expect(driver.calls.some(({ sql }) => sql.includes("schemata"))).toBe(true);
+    await factory.close();
   });
 
   it("checks a physical family without DDL and reuses its readiness on first write", async () => {

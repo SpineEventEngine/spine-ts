@@ -185,10 +185,19 @@ Proto snippets in README files, tutorials, and PR descriptions. Reviewers must
 check meaning as well as formatting; generated comments do not substitute for
 documentation in the authored Proto source.
 
+Every `google.protobuf.Timestamp` field must have a name beginning with
+`when_`. Name the occurrence it records, for example `when_created`,
+`when_updated`, or `when_expires`. Generated TypeScript uses `whenCreated`,
+`whenUpdated`, or `whenExpires`. The same rule applies to framework code,
+examples, fixtures, and documentation snippets. Correct existing violations
+within the approved change scope. Report conflicts with frozen external
+contracts before changing them; neither a silent exemption nor an unapproved
+external-contract rewrite is acceptable.
+
 Authored example Proto follows these rules. Its
 package is `spine.examples.<domain>` and its type URL prefix is
 `type.spine.examples.<domain>`, where `<domain>` is exactly `messageboard`, `projects`,
-`orders`, `todo`, or `releasenotes`. Authored example paths, packages, and imports contain no
+`orders`, `fieldnotes`, `todo`, or `releasenotes`. Authored example paths, packages, and imports contain no
 `v1` component. Manifest-declared frozen copied Proto sources remain exempt and
 unchanged. `check-owned-proto-style` covers tracked authored framework, example,
 and package test-fixture Proto sources. It mechanically checks source layout
@@ -204,6 +213,15 @@ Human READMEs teach in reader order: explain what the subject is and the
 smallest useful start before architecture, source-backed behavior, tests,
 limits, and deployment or image operations. Keep the `README.md` approachable
 and move exhaustive contracts to its sibling `REFERENCE.md`.
+
+### Mermaid Diagram Syntax
+
+Use `mermaid` Markdown fences in documentation, examples, PR descriptions,
+and chat explanations. In sequence-diagram message and note text, a literal
+semicolon must be encoded as `#59;`; a bare `;` separates statements. Rephrasing
+with a comma or separate sentence is also valid. Parse-check each new or
+changed diagram before presenting it, including every diagram in a revised
+document. Do not infer syntax validity from how the source looks.
 
 ## Review Standards
 

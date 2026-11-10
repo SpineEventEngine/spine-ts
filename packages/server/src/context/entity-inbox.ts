@@ -12,12 +12,10 @@
  * the License.
  */
 
-import { AsyncLocalStorage } from "node:async_hooks";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { Time } from "@spine-event-engine/core/time";
 
 import type { TenantId } from "@spine-event-engine/proto";
-import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import { deliveryTenantKey } from "../delivery/delivery-tenant.js";
 
 import { Delivery } from "../delivery/delivery.js";
@@ -36,7 +34,7 @@ import {
 } from "./local-inbox-handoff.js";
 
 /**
- * Persists and replays delivery rows for Aggregate and Process Manager handlers.
+ * Persists Entity Inbox rows and schedules Aggregate and Process Manager delivery.
  */
 export class LocalEntityInbox implements EntityInbox {
   readonly #contextName: string;
@@ -59,27 +57,13 @@ export class LocalEntityInbox implements EntityInbox {
 
   readonly #acknowledgedMessageIds = new Set<string>();
 
-  readonly #followUps = new Map<string, Promise<void>>();
-
-  /**
-   * Waits for exact local handoff callbacks already scheduled by this Inbox.
-   * @returns Completion after all scheduled callbacks settle.
-   */
-  async whenFollowUpsIdle(): Promise<void> {
-    while (this.#followUps.size > 0) await Promise.allSettled([...this.#followUps.values()]);
-  }
-
-  readonly #followUpScope = new AsyncLocalStorage<symbol>();
-
-  readonly #followUpToken = Symbol("entity-inbox-follow-up");
-
   #nextVersion = 0n;
 
   /**
    * Creates a local Entity Inbox.
    * @param contextName Names the bounded context that owns this inbox.
    * @param readiness Coordinates delivery readiness after persistence.
-   * @param onAdmit Checks current tenant membership before persistence or replay.
+   * @param onAdmit Checks current tenant membership before persistence or delivery.
    * @param strategy Derives shard ownership for Entity Inbox targets.
    */
   constructor(
@@ -96,7 +80,7 @@ export class LocalEntityInbox implements EntityInbox {
   }
 
   /**
-   * Registers a target that replays Entity Inbox messages.
+   * Registers a target that delivers Entity Inbox messages.
    * @param target Handles messages for one Entity type.
    */
   register(target: EntityInboxTarget): void {
@@ -136,22 +120,20 @@ export class LocalEntityInbox implements EntityInbox {
 
   /**
    * Dispatches a durable inbox row through its Entity Inbox target.
-   * @param message Contains the persisted inbox row to replay.
+   * @param message Contains the persisted Inbox row to deliver.
    * @param deliveryTenantId Identifies the tenant that owns the row when present.
-   * @returns A promise that resolves after the inbox row is replayed.
+   * @returns Completion after handler processing and follow-up registration.
    */
-  replay(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void> {
-    return this.#replay(message, deliveryTenantId, true, this.#expectedShard(message)).then(
-      () => undefined,
-    );
+  async deliver(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void> {
+    await this.#deliver(message, deliveryTenantId, this.#expectedShard(message));
   }
 
   /**
-   * Persists and drains one Entity Inbox message.
-   * @param delivery Stores and drains the inbox row.
+   * Persists one Entity Inbox message and schedules eligible delivery.
+   * @param delivery Stores the Inbox row and schedules eligible delivery.
    * @param input Describes the message to persist.
    * @param deliveryTenantId Identifies the tenant that owns the message when present.
-   * @returns Resolves to the persisted inbox row.
+   * @returns Resolves after the Inbox row is persisted and eligible delivery is scheduled.
    */
   async receive(
     delivery: Delivery,
@@ -163,16 +145,16 @@ export class LocalEntityInbox implements EntityInbox {
     return await InboxHandoff.coordinate({
       handoffs: this.#inFlightHandoffs,
       key: InboxHandoff.key(routedInput, deliveryTenantId),
-      onHandoff: () => this.#receiveAndDrain(routed, routedInput, deliveryTenantId),
+      onHandoff: () => this.#receiveAndSchedule(routed, routedInput, deliveryTenantId),
     });
   }
 
   /**
-   * Persists and drains a batch of Entity Inbox messages.
-   * @param delivery Stores and drains the inbox rows.
+   * Persists a batch of Entity Inbox messages and schedules eligible delivery.
+   * @param delivery Stores the Inbox rows and schedules eligible delivery.
    * @param inputs Describe the messages to persist.
    * @param deliveryTenantId Identifies the tenant that owns the messages when present.
-   * @returns Resolves to the persisted inbox rows in input order.
+   * @returns Resolves after the Inbox rows are persisted and eligible delivery is scheduled.
    */
   async receiveAll(
     delivery: Delivery,
@@ -188,7 +170,7 @@ export class LocalEntityInbox implements EntityInbox {
       return await inFlightHandoff;
     }
 
-    const handoff = this.#receiveAndDrainAll(routed, routedInputs, deliveryTenantId);
+    const handoff = this.#receiveAndScheduleAll(routed, routedInputs, deliveryTenantId);
     this.#inFlightBatchHandoffs.set(key, handoff);
     try {
       return await handoff;
@@ -199,12 +181,19 @@ export class LocalEntityInbox implements EntityInbox {
     }
   }
 
-  async #receiveAndDrain(
+  /**
+   * Persists one routed input and starts eligible delivery without awaiting its handler.
+   *
+   * @param delivery Delivery used for the stored row.
+   * @param input Routed Entity input.
+   * @param deliveryTenantId Tenant selected for the row.
+   * @returns The accepted Inbox receipt.
+   */
+  async #receiveAndSchedule(
     delivery: Delivery,
     input: RoutedEntityInput,
     deliveryTenantId?: TenantId,
   ): Promise<InboxMessage> {
-    await this.#followUpFor(input, deliveryTenantId);
     await this.#admitDeliveryTenant(deliveryTenantId);
     const written = await this.#writeInboxRow(
       delivery,
@@ -213,34 +202,39 @@ export class LocalEntityInbox implements EntityInbox {
       deliveryTenantId,
     );
     this.#trackMessage(written.message);
-    try {
-      await written.handoff.complete(() =>
-        this.#isAcknowledged(written.message)
-          ? Promise.resolve()
-          : this.#drainInboxRow(delivery, written.message, deliveryTenantId, input.shard),
-      );
-      return written.message;
-    } finally {
-      this.#untrackMessage(written.message);
-    }
+    const processing = written.handoff.complete(() =>
+      this.#isAcknowledged(written.message)
+        ? Promise.resolve()
+        : this.#drainInboxRow(delivery, written.message, deliveryTenantId, input.shard),
+    );
+    void processing
+      .finally(() => {
+        this.#untrackMessage(written.message);
+      })
+      .catch(() => undefined);
+    return written.message;
   }
 
-  async #receiveAndDrainAll(
+  /**
+   * Persists batch inputs and schedules written rows before shared receipts settle.
+   *
+   * @param delivery Delivery used for the stored rows.
+   * @param inputs Routed Entity inputs in caller order.
+   * @param deliveryTenantId Tenant selected for the batch.
+   * @returns Inbox receipts in the same order as the inputs.
+   */
+  async #receiveAndScheduleAll(
     delivery: Delivery,
     inputs: readonly RoutedEntityInput[],
     deliveryTenantId?: TenantId,
   ): Promise<readonly InboxMessage[]> {
-    const followUps = inputs
-      .map((input) => this.#followUpFor(input, deliveryTenantId))
-      .filter((followUp): followUp is Promise<void> => followUp !== undefined);
-    if (followUps.length > 0) await Promise.all(followUps);
     await this.#admitDeliveryTenant(deliveryTenantId);
     const rows = this.#claimRows(inputs, deliveryTenantId);
     const failures: unknown[] = [];
 
     try {
       await this.#writeRows(delivery, rows, deliveryTenantId, failures);
-      await this.#drainRows(delivery, rows, deliveryTenantId, failures);
+      await this.#scheduleRows(delivery, rows, deliveryTenantId, failures);
       if (failures.length > 0) {
         throw failures[0];
       }
@@ -250,10 +244,23 @@ export class LocalEntityInbox implements EntityInbox {
     }
   }
 
+  /**
+   * Prepares the tenant before Inbox persistence.
+   *
+   * @param deliveryTenantId Tenant selected for the incoming work.
+   */
   async #admitDeliveryTenant(deliveryTenantId: TenantId | undefined): Promise<void> {
     await this.#onAdmit(deliveryTenantId);
   }
 
+  /**
+   * Persists newly claimed batch rows until the first write failure.
+   *
+   * @param delivery Delivery used for the stored rows.
+   * @param rows Claimed inputs in caller order.
+   * @param deliveryTenantId Tenant selected for the batch.
+   * @param failures Collects the first write error.
+   */
   async #writeRows(
     delivery: Delivery,
     rows: readonly BatchRow[],
@@ -279,19 +286,24 @@ export class LocalEntityInbox implements EntityInbox {
     }
   }
 
-  async #drainRows(
+  /**
+   * Starts each written row before awaiting receipts shared with another call.
+   *
+   * @param delivery Delivery used for the stored rows.
+   * @param rows Claimed inputs in caller order.
+   * @param deliveryTenantId Tenant selected for these rows.
+   * @param failures Collects handoff and shared-receipt failures.
+   */
+  async #scheduleRows(
     delivery: Delivery,
     rows: readonly BatchRow[],
     deliveryTenantId: TenantId | undefined,
     failures: unknown[],
   ): Promise<void> {
+    const sharedReceipts: Promise<InboxMessage>[] = [];
     for (const row of rows) {
       if (row.owner === undefined) {
-        try {
-          await row.promise;
-        } catch (error) {
-          failures.push(error);
-        }
+        sharedReceipts.push(row.promise);
         continue;
       }
       const written = row.owner.written;
@@ -299,17 +311,52 @@ export class LocalEntityInbox implements EntityInbox {
         LocalEntityInbox.#reject(row.owner, failures[0]);
         continue;
       }
-      try {
-        await written.handoff.complete(() =>
-          this.#isAcknowledged(written.message)
-            ? Promise.resolve()
-            : this.#drainInboxRow(delivery, written.message, deliveryTenantId, row.input.shard),
-        );
-        LocalEntityInbox.#resolve(row.owner, written.message);
-      } catch (error) {
-        failures.push(error);
-        LocalEntityInbox.#reject(row.owner, error);
-      }
+      this.#startBatchRow(
+        delivery,
+        written,
+        row.owner,
+        row.input.shard,
+        deliveryTenantId,
+        failures,
+      );
+    }
+    const settled = await Promise.allSettled(sharedReceipts);
+    for (const result of settled) if (result.status === "rejected") failures.push(result.reason);
+  }
+
+  /**
+   * Starts one accepted batch row without making its receipt await processing.
+   *
+   * @param delivery Delivery used for the exact stored row.
+   * @param written Stored row and its handoff claim.
+   * @param receipt Deferred result for the receiving caller.
+   * @param shard Shard recorded with the row.
+   * @param deliveryTenantId Tenant selected for the delivery attempt.
+   * @param failures Collects synchronous handoff errors.
+   */
+  #startBatchRow(
+    delivery: Delivery,
+    written: InboxWrite,
+    receipt: InboxDeferred,
+    shard: ShardIndex,
+    deliveryTenantId: TenantId | undefined,
+    failures: unknown[],
+  ): void {
+    try {
+      const processing = written.handoff.complete(() =>
+        this.#isAcknowledged(written.message)
+          ? Promise.resolve()
+          : this.#drainInboxRow(delivery, written.message, deliveryTenantId, shard),
+      );
+      void processing
+        .finally(() => {
+          this.#untrackMessage(written.message);
+        })
+        .catch(() => undefined);
+      LocalEntityInbox.#resolve(receipt, written.message);
+    } catch (error) {
+      failures.push(error);
+      LocalEntityInbox.#reject(receipt, error);
     }
   }
 
@@ -353,25 +400,9 @@ export class LocalEntityInbox implements EntityInbox {
     deliveryTenantId?: TenantId,
     expectedShard?: ShardIndex,
   ): Promise<void> {
-    const followUps: EntityInboxFollowUp[] = [];
-    try {
-      await InboxHandoff.drain(
-        this.#drainOptions(message, delivery, deliveryTenantId, expectedShard, (value) => {
-          if (value !== undefined) followUps.push(value);
-        }),
-      );
-    } finally {
-      if (followUps.length > 0)
-        this.#chainFollowUp(message, deliveryTenantId, async () => {
-          for (const followUp of followUps) {
-            try {
-              await followUp();
-            } catch {
-              // A failed initial publication must not suppress a later Command's one attempt.
-            }
-          }
-        });
-    }
+    await InboxHandoff.drain(
+      this.#drainOptions(message, delivery, deliveryTenantId, expectedShard),
+    );
   }
 
   #drainOptions(
@@ -379,39 +410,21 @@ export class LocalEntityInbox implements EntityInbox {
     delivery: Delivery,
     deliveryTenantId: TenantId | undefined,
     expectedShard: ShardIndex | undefined,
-    onSetFollowUp: (followUp: (() => Promise<void>) | undefined) => void,
   ): LocalInboxDrainOptions {
     return {
       delivery,
       received: message,
       node: this.#contextName,
-      onReplay: (next) =>
-        this.#replayAndFollowUp(next, deliveryTenantId, expectedShard, onSetFollowUp),
+      onDispatch: (next) => this.#deliver(next, deliveryTenantId, expectedShard),
       acceptMessage: (next) => this.#acceptsDrainedMessage(next, message),
       onResolved: (next) => {
         this.#recordAcknowledgement(next);
       },
-      replayFailureMessage: "Entity Inbox replay failed.",
+      deliveryFailureMessage: "Entity Inbox delivery failed.",
       skippedMessage: "Entity Inbox delivery was skipped before the target row was delivered.",
       unfinishedMessage:
         "Entity Inbox delivery did not reach the target row before the local drain finished.",
     };
-  }
-
-  async #replayAndFollowUp(
-    message: InboxMessage,
-    deliveryTenantId: TenantId | undefined,
-    expectedShard: ShardIndex | undefined,
-    onSetFollowUp: (followUp: (() => Promise<void>) | undefined) => void,
-  ): Promise<void> {
-    onSetFollowUp(
-      await this.#replay(
-        message,
-        deliveryTenantId,
-        false,
-        expectedShard ?? this.#expectedShard(message),
-      ),
-    );
   }
 
   #acceptsDrainedMessage(next: InboxMessage, received: InboxMessage): boolean {
@@ -440,7 +453,6 @@ export class LocalEntityInbox implements EntityInbox {
 
   #cleanupRows(rows: readonly BatchRow[]): void {
     for (const row of rows) {
-      if (row.owner?.written !== undefined) this.#untrackMessage(row.owner.written.message);
       if (row.owner !== undefined && this.#inFlightHandoffs.get(row.key) === row.promise) {
         this.#inFlightHandoffs.delete(row.key);
       }
@@ -482,38 +494,11 @@ export class LocalEntityInbox implements EntityInbox {
     return JSON.stringify(inputs.map((input) => InboxHandoff.key(input, deliveryTenantId)));
   }
 
-  #followUpFor(input: RoutedEntityInput, tenantId?: TenantId): Promise<void> | undefined {
-    if (this.#followUpScope.getStore() === this.#followUpToken) return undefined;
-    return this.#followUps.get(this.#followUpKey(input.shard, tenantId));
-  }
-
-  #chainFollowUp(
-    message: InboxMessage,
-    tenantId: TenantId | undefined,
-    callback: EntityInboxFollowUp,
-  ): void {
-    const key = this.#followUpKey(message.shard, tenantId);
-    const prior = this.#followUps.get(key) ?? Promise.resolve();
-    const next: Promise<void> = prior
-      .then(() => this.#followUpScope.run(this.#followUpToken, callback))
-      .catch(() => undefined);
-    this.#followUps.set(key, next);
-    void next.finally(() => {
-      if (this.#followUps.get(key) === next) this.#followUps.delete(key);
-    });
-  }
-
-  #followUpKey(shard: ShardIndex, tenantId?: TenantId): string {
-    const key = tenantId === undefined ? "" : String(TenantBoundary.from(tenantId).key);
-    return `${key}:${String(shard.index)}:${String(shard.ofTotal)}`;
-  }
-
-  async #replay(
+  async #deliver(
     message: InboxMessage,
     deliveryTenantId?: TenantId,
-    runFollowUp = true,
     expectedShard = this.#expectedShard(message),
-  ): Promise<(() => Promise<void>) | undefined> {
+  ): Promise<void> {
     receptionObservation.markManaged();
     LocalEntityInbox.#assert(message);
     await this.#admitDeliveryTenant(deliveryTenantId);
@@ -530,12 +515,9 @@ export class LocalEntityInbox implements EntityInbox {
       message.shard.index !== expectedShard.index ||
       message.shard.ofTotal !== expectedShard.ofTotal
     ) {
-      throw new Error("Entity Inbox replay stored shard does not match the routed target.");
+      throw new Error("Entity Inbox delivery stored shard does not match the routed target.");
     }
-    const followUp = await target.replay(message, deliveryTenantId);
-    const callback = typeof followUp === "function" ? followUp : undefined;
-    if (callback !== undefined && runFollowUp) await callback();
-    return callback;
+    await target.deliver(message, deliveryTenantId);
   }
 
   #expectedShard(message: InboxMessage): ShardIndex {
@@ -569,7 +551,7 @@ export class LocalEntityInbox implements EntityInbox {
     }
     if (message.status !== "TO_DELIVER") {
       throw new Error(
-        `BoundedContext delivery cannot replay Entity Inbox message with status "${message.status}".`,
+        `BoundedContext delivery cannot deliver Entity Inbox message with status "${message.status}".`,
       );
     }
   }
@@ -577,8 +559,7 @@ export class LocalEntityInbox implements EntityInbox {
 
 type EntityInput = Parameters<EntityInbox["receive"]>[1];
 type EntityInputs = Parameters<EntityInbox["receiveAll"]>[1];
-type EntityMessage = Parameters<EntityInboxTarget["replay"]>[0];
-type EntityInboxFollowUp = () => Promise<void>;
+type EntityMessage = Parameters<EntityInboxTarget["deliver"]>[0];
 type RoutedEntityInput = EntityInput & { readonly shard: ShardIndex };
 
 interface InboxDeferred {

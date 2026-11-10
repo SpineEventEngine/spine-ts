@@ -29,6 +29,53 @@ import { ShardIndex } from "../../src/index.js";
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Delivery fencing", () => {
+  it("reports a detached run that resolves with a failed message", async () => {
+    const row = createMessage("failed-message", "signal", 1n);
+    const acknowledged = new Set<string>();
+    const logs: string[] = [];
+    const logger = { withMetadata: () => ({ error: (message: string) => logs.push(message) }) };
+    const delivery = agentDelivery(
+      [row],
+      (message) => acknowledged.add(message.id.value),
+      undefined,
+      acknowledged,
+      logger as unknown as ILogLayer,
+    );
+    delivery.setDispatcher(() => {
+      throw new Error("recipient failed");
+    });
+    delivery.wake(row.shard);
+    await delivery.whenIdle();
+    expect(logs).toEqual(["Background Delivery failed."]);
+    await delivery.close();
+  });
+
+  it("reports a failed selected row after its durable handoff was detached", async () => {
+    const row = createMessage("selected-failure", "signal", 1n);
+    const acknowledged = new Set<string>();
+    const logs: string[] = [];
+    const logger = { withMetadata: () => ({ error: (message: string) => logs.push(message) }) };
+    const delivery = agentDelivery(
+      [row],
+      (message) => acknowledged.add(message.id.value),
+      undefined,
+      acknowledged,
+      logger as unknown as ILogLayer,
+    );
+    const handoff = delivery.drainMessage(row, {
+      onMessage: () => {
+        throw new Error("selected recipient failed");
+      },
+    });
+    await expect(handoff).resolves.toMatchObject({
+      acknowledged: true,
+      outcome: { kind: "acknowledged" },
+    });
+    await delivery.whenIdle();
+    expect(logs).toEqual(["Background Delivery failed."]);
+    await delivery.close();
+  });
+
   it("reports one safe detached failure for a burst of wakes during shard pickup", async () => {
     const row = createMessage("burst-failure", "signal", 1n);
     const pickup = Promise.withResolvers<ReturnType<typeof session>>();
@@ -58,7 +105,7 @@ describe("Delivery fencing", () => {
     };
     const sensitive = { secret: "background read details" };
     delivery.inbox.read = vi.fn().mockRejectedValue(sensitive);
-    delivery.setReplay(() => undefined);
+    delivery.setDispatcher(() => undefined);
     for (let count = 0; count < 4; count++) delivery.wake(row.shard);
     await entered.promise;
     pickup.resolve(session());
@@ -68,7 +115,7 @@ describe("Delivery fencing", () => {
     await delivery.close().catch(() => undefined);
   });
 
-  it("does not log a failed background run joined by an exact handoff", async () => {
+  it("reports a failed shard run after a direct handoff observes its rejection", async () => {
     const row = createMessage("mixed-failure", "signal", 1n);
     const pickup = Promise.withResolvers<ReturnType<typeof session>>();
     const entered = Promise.withResolvers<undefined>();
@@ -91,7 +138,7 @@ describe("Delivery fencing", () => {
       return Promise.resolve(undefined);
     };
     delivery.inbox.read = () => Promise.reject(failure);
-    delivery.setReplay(() => undefined);
+    delivery.setDispatcher(() => undefined);
     delivery.wake(row.shard);
     await entered.promise;
     const handoff = delivery.drainMessage(row, { onMessage: () => undefined });
@@ -101,7 +148,7 @@ describe("Delivery fencing", () => {
       outcome: { kind: "failed", error: failure },
     });
     await delivery.whenIdle().catch(() => undefined);
-    expect(logs).toEqual([]);
+    expect(logs).toEqual(["Background Delivery failed."]);
     await delivery.close().catch(() => undefined);
   });
 
@@ -131,7 +178,7 @@ describe("Delivery fencing", () => {
       acknowledged.has(row.id.value)
         ? Promise.reject(new Error("later inbox read failed"))
         : Promise.resolve([row]);
-    delivery.setReplay(() => undefined);
+    delivery.setDispatcher(() => undefined);
     delivery.wake(row.shard);
     await entered.promise;
     const handoff = delivery.drainMessage(row, { onMessage: () => undefined });
@@ -189,7 +236,7 @@ describe("Delivery fencing", () => {
         () => undefined,
         acknowledged,
       );
-      delivery.setReplay(() => undefined);
+      delivery.setDispatcher(() => undefined);
       const entered = Promise.withResolvers<undefined>();
       const release = Promise.withResolvers<undefined>();
       let pickups = 0;
@@ -265,7 +312,7 @@ describe("Delivery fencing", () => {
       }
       return Promise.resolve(rows);
     };
-    delivery.setReplay(() => undefined);
+    delivery.setDispatcher(() => undefined);
     delivery.wake(message.shard);
     await delivered.promise;
     await delivery.whenIdle();
@@ -280,9 +327,9 @@ describe("Delivery fencing", () => {
       acknowledged.add(next.id.value);
     });
     const readiness = new DeliveryReadiness();
-    let replayed = 0;
+    let delivered = 0;
     readiness.configureDirect(() => {
-      replayed++;
+      delivered++;
       return Promise.resolve();
     });
     readiness.route(delivery);
@@ -292,7 +339,7 @@ describe("Delivery fencing", () => {
       shard: message.shard,
     });
     await delivery.whenIdle();
-    expect(replayed).toBe(1);
+    expect(delivered).toBe(1);
     expect(acknowledged.has(message.id.value)).toBe(true);
     await readiness.close();
   });
@@ -773,7 +820,7 @@ describe("Delivery fencing", () => {
       },
       acknowledged,
     );
-    delivery.setReplay(() => undefined);
+    delivery.setDispatcher(() => undefined);
     await expect(
       delivery.drainMessage(first, { onMessage: () => undefined }),
     ).resolves.toMatchObject({
@@ -888,7 +935,7 @@ describe("Delivery fencing", () => {
     const delivery = agentDelivery([message], (next) => acknowledged.add(next.id.value));
     let pickups = 0;
     delivery.shards.pickUp = () => Promise.resolve(++pickups === 1 ? session() : undefined);
-    delivery.setReplay(() => undefined);
+    delivery.setDispatcher(() => undefined);
     delivery.beginStartupDrain();
     await expect(
       delivery.runControlled({
@@ -905,15 +952,15 @@ describe("Delivery fencing", () => {
     await delivery.close();
   });
 
-  it("does not replay an unrelated row beside an admitted fatal handoff", async () => {
+  it("does not deliver an unrelated row beside an admitted fatal handoff", async () => {
     const exact = createMessage("fatal-selected", "signal-a", 1n);
     const other = createMessage("fatal-unrelated", "signal-b", 2n);
     const acknowledged = new Set<string>();
     const delivery = agentDelivery([exact, other], (message) => acknowledged.add(message.id.value));
-    let replayed = 0;
+    let delivered = 0;
     delivery.shards.pickUp = () => Promise.resolve(session());
-    delivery.setReplay(() => {
-      replayed++;
+    delivery.setDispatcher(() => {
+      delivered++;
     });
     delivery.beginStartupDrain();
     await expect(
@@ -924,7 +971,7 @@ describe("Delivery fencing", () => {
     await delivery.whenIdle();
     expect(acknowledged.has(exact.id.value)).toBe(true);
     expect(acknowledged.has(other.id.value)).toBe(false);
-    expect(replayed).toBe(0);
+    expect(delivered).toBe(0);
     await delivery.close();
   });
 
@@ -964,7 +1011,7 @@ describe("Delivery fencing", () => {
       await release.promise;
       return current;
     };
-    delivery.setReplay(
+    delivery.setDispatcher(
       () => {
         dispatched++;
       },
@@ -994,7 +1041,7 @@ describe("Delivery fencing", () => {
     const delivery = agentDelivery([message], () => {
       acknowledged++;
     });
-    delivery.setReplay(
+    delivery.setDispatcher(
       () => {
         if (++dispatched === 1) throw new Error("first receptor failed");
       },
@@ -1023,7 +1070,7 @@ describe("Delivery fencing", () => {
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
     let pickups = 0;
-    let replayed = 0;
+    let delivered = 0;
     let custom = 0;
     delivery.shards.pickUp = () => Promise.resolve(++pickups === 1 ? session() : undefined);
     delivery.inbox.read = async () => {
@@ -1031,8 +1078,8 @@ describe("Delivery fencing", () => {
       await release.promise;
       return acknowledged.has(message.id.value) ? [] : [message];
     };
-    delivery.setReplay(() => {
-      replayed++;
+    delivery.setDispatcher(() => {
+      delivered++;
     });
     delivery.wake(message.shard);
     await entered.promise;
@@ -1045,7 +1092,7 @@ describe("Delivery fencing", () => {
     await expect(explicit).resolves.toMatchObject({ status: "SKIPPED" });
     await delivery.whenIdle();
     expect(pickups).toBe(2);
-    expect(replayed).toBe(1);
+    expect(delivered).toBe(1);
     expect(custom).toBe(0);
     await delivery.close();
   });

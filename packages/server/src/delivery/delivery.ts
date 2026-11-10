@@ -279,8 +279,6 @@ export class Delivery {
 
   readonly #backgroundObserved = new WeakSet<Promise<DeliveryRun>>();
 
-  readonly #callerObserved = new WeakSet<Promise<DeliveryRun>>();
-
   readonly #activeDirect = new Map<
     string,
     { readonly completed: Promise<DeliveryRun>; wake(): void }
@@ -292,9 +290,9 @@ export class Delivery {
 
   readonly #pendingDirectWake = new Set<string>();
 
-  #replay: OnDeliveryMessage | undefined;
+  #dispatcher: OnDeliveryMessage | undefined;
 
-  #acceptReplay: ((message: InboxMessage) => boolean) | undefined;
+  #acceptDispatcher: ((message: InboxMessage) => boolean) | undefined;
 
   #closing = false;
 
@@ -308,12 +306,15 @@ export class Delivery {
    * Sets the complete direct fallback dispatcher before receiving work.
    *
    * @internal
-   * @param onReplay Callback that replays a ready Inbox route.
+   * @param onDispatch Callback that delivers a ready Inbox route.
    * @param onAccept Reports whether a live recipient currently serves the row.
    */
-  setReplay(onReplay: OnDeliveryMessage, onAccept?: (message: InboxMessage) => boolean): void {
-    this.#replay = onReplay;
-    this.#acceptReplay = onAccept;
+  setDispatcher(
+    onDispatch: OnDeliveryMessage,
+    onAccept?: (message: InboxMessage) => boolean,
+  ): void {
+    this.#dispatcher = onDispatch;
+    this.#acceptDispatcher = onAccept;
   }
 
   /**
@@ -404,7 +405,7 @@ export class Delivery {
       if (!drain.wake()) this.#pendingDirectWake.add(shard.key());
       return;
     }
-    if (this.#replay !== undefined) this.#observeBackground(this.#startDirect(shard), shard);
+    if (this.#dispatcher !== undefined) this.#observeBackground(this.#startDirect(shard), shard);
   }
 
   /**
@@ -475,7 +476,7 @@ export class Delivery {
     if (options.onMessageSettled !== undefined)
       controlledMessageSettlers.set(drainOptions, options.onMessageSettled);
     const completed =
-      this.#replay === undefined
+      this.#dispatcher === undefined
         ? this.drain(shard, drainOptions)
         : this.#startShared(shard, drainOptions);
     return completed
@@ -498,12 +499,12 @@ export class Delivery {
   }
 
   /**
-   * Builds the exact controlled options for an endpoint or retained replay run.
+   * Builds the exact controlled options for an endpoint or retained delivery run.
    * @param options Controlled run input.
    * @returns The options passed to one physical shard drain.
    */
   #controlledOptions(options: DeliveryControlledRun): DeliveryDrainOptions {
-    return this.#replay === undefined
+    return this.#dispatcher === undefined
       ? {
           onMessage: options.onMessage,
           ...(options.acceptMessage === undefined ? {} : { acceptMessage: options.acceptMessage }),
@@ -558,6 +559,7 @@ export class Delivery {
     });
     const completed = this.#startDirect(message.shard);
     this.#observeSelectedRun(message.shard, key, completed, settle);
+    this.#observeBackground(completed, message.shard);
     return selected.promise;
   }
 
@@ -579,7 +581,7 @@ export class Delivery {
         } else settle({ kind: "unresolved", run });
       },
       (error: unknown) => {
-        if (settle({ kind: "failed", error })) this.#callerObserved.add(completed);
+        settle({ kind: "failed", error });
       },
     );
   }
@@ -653,16 +655,23 @@ export class Delivery {
   #observeBackground(completed: Promise<DeliveryRun>, shard: ShardIndex): void {
     if (this.#backgroundObserved.has(completed)) return;
     this.#backgroundObserved.add(completed);
-    void completed.catch(async (error: unknown) => {
-      // Give exact-row observers of this rejection a chance to settle first.
-      await Promise.resolve();
-      if (this.#closing || this.#logger === undefined || this.#callerObserved.has(completed))
-        return;
+    const report = (error: unknown): void => {
+      if (this.#closing || this.#logger === undefined) return;
       emitServerError(this.#logger, "Background Delivery failed.", {
         shardId: shard.key(),
         errorName: error instanceof Error ? error.name : "UnknownError",
       });
-    });
+    };
+    void completed.then(
+      (run) => {
+        if (run.failed > 0 || run.status === "FAILED") report(run.failures[0]?.error);
+      },
+      async (error: unknown) => {
+        // Give exact-row observers of this rejection a chance to settle first.
+        await Promise.resolve();
+        report(error);
+      },
+    );
   }
 
   /**
@@ -674,14 +683,16 @@ export class Delivery {
     return {
       onMessage: (message) => {
         const selected = request(message);
-        return selected === undefined ? this.#replay?.(message) : selected.input.onMessage(message);
+        return selected === undefined
+          ? this.#dispatcher?.(message)
+          : selected.input.onMessage(message);
       },
       acceptMessage: (message) => {
         const selected = request(message);
         return selected === undefined
           ? !this.#startupDraining &&
-              this.#replay !== undefined &&
-              (this.#acceptReplay?.(message) ?? true)
+              this.#dispatcher !== undefined &&
+              (this.#acceptDispatcher?.(message) ?? true)
           : (selected.input.acceptMessage?.(message) ?? true);
       },
       onDelivered: (message) => request(message)?.input.onDelivered?.(message),
@@ -705,7 +716,7 @@ export class Delivery {
    * Tracks one complete physical drain before opening its shard session.
    * @param shard Selected shard.
    * @param options Complete drain callbacks.
-   * @param shared Whether the run serves the shared replay route.
+   * @param shared Whether the run serves the shared delivery route.
    * @returns Completion after shard release.
    */
   #trackDrain(

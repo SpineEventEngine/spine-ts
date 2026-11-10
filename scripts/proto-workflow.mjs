@@ -87,6 +87,11 @@ export const modelAtomicTargets = [
     handlerProjectPath: "examples/orders/tsconfig.json",
   },
   {
+    displayPath: "examples/fieldnotes/model/generated",
+    packagePath: "examples/fieldnotes/model",
+    moduleName: "FieldnotesModel",
+  },
+  {
     displayPath: "examples/support/generated",
     packagePath: "examples/support",
     moduleName: "Support",
@@ -108,15 +113,20 @@ export const modelAtomicTargets = [
 /**
  * Lists handler packages without local Proto sources that still publish generated metadata.
  */
-export const handlerOnlyTargets = ["command-handlers", "view-handlers", "composed-app", "app"].map(
-  (name) => ({
+export const handlerOnlyTargets = ["command-handlers", "view-handlers", "composed-app", "app"]
+  .map((name) => ({
     displayPath: `examples/message-board/${name}/generated`,
     packagePath: `examples/message-board/${name}`,
     handlerProjectPath: `examples/message-board/${name}/tsconfig.json`,
     moduleName: `MessageBoard ${name}`,
     ...(name === "app" ? { protoModulePackagePath: "examples/message-board/model" } : {}),
-  }),
-);
+  }))
+  .concat({
+    displayPath: "examples/fieldnotes/server/generated",
+    packagePath: "examples/fieldnotes/server",
+    handlerProjectPath: "examples/fieldnotes/server/tsconfig.json",
+    moduleName: "FieldnotesServer",
+  });
 
 /**
  * Combines every generated directory that publication and cleanliness checks treat atomically.
@@ -263,6 +273,7 @@ const workspaceProtoRoots = [
   "examples/todo/proto",
   "examples/projects/proto",
   "examples/orders/proto",
+  "examples/fieldnotes/model/proto",
   "examples/support/proto",
   "examples/release-notes/proto",
 ];

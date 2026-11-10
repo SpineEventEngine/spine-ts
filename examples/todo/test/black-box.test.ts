@@ -780,7 +780,7 @@ describe("@spine-event-engine/example-todo", () => {
       await expectTaskAssigneeEventually(fixture, context, secondAssignee, []);
 
       await expect(context.catchUpReadSide()).resolves.toMatchObject({
-        replayedEventCount: 4,
+        processedEventCount: 4,
         clearedStateTypes: [TypeUrls.derive(TaskListSchema), TypeUrls.derive(TaskAssigneeSchema)],
       });
       await expectTaskAssigneeEventually(fixture, context, firstAssignee, []);
@@ -879,7 +879,7 @@ describe("@spine-event-engine/example-todo", () => {
     }
   });
 
-  it("replays a persisted projection Inbox target without rerouting after restart", async () => {
+  it("delivers a persisted projection Inbox target without rerouting after restart", async () => {
     const todo: TodoModule = await import("../dist/src/index.js");
     const { TaskEvent }: typeof import("../dist/generated/interfaces/task-event.js") =
       await import("../dist/generated/interfaces/task-event.js");
@@ -900,20 +900,20 @@ describe("@spine-event-engine/example-todo", () => {
         eventRouting: firstRouting,
       })
       .build();
-    const listId = create(TaskListIdSchema, { value: "task-inbox-replay" });
+    const listId = create(TaskListIdSchema, { value: "task-inbox-retained" });
     const event = SignalEnvelopes.event({
       context: create(EventContextSchema, {
         timestamp: signalMetadata.timestamp(),
         producerId: AnyPacker.pack(
           TaskIdSchema,
-          create(TaskIdSchema, { value: "task-inbox-replay" }),
+          create(TaskIdSchema, { value: "task-inbox-retained" }),
         ),
       }),
       schema: TaskCreatedSchema,
       message: create(TaskCreatedSchema, {
-        id: create(TaskIdSchema, { value: "task-inbox-replay" }),
+        id: create(TaskIdSchema, { value: "task-inbox-retained" }),
         taskListId: listId,
-        title: "Replay",
+        title: "Retained",
       }),
     });
     try {
@@ -929,9 +929,9 @@ describe("@spine-event-engine/example-todo", () => {
     const delivery = new DeliveryBuilder()
       .withContext({ name: "Tasks", multitenant: false })
       .withStorageFactory(new InMemoryStorageFactory(storageBackend))
-      .withNode("todo-replay-seed")
+      .withNode("todo-retained-seed")
       .build();
-    const replayEvent = create(EventSchema, {
+    const retainedEvent = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-inbox-restart" }),
       context: create(EventContextSchema, {
         timestamp: signalMetadata.timestamp(),
@@ -945,14 +945,14 @@ describe("@spine-event-engine/example-todo", () => {
         create(TaskCreatedSchema, {
           id: create(TaskIdSchema, { value: "task-inbox-restart" }),
           taskListId: listId,
-          title: "Restart replay",
+          title: "Restart delivery",
         }),
       ),
     });
     await delivery.inbox.receive({
       inboxId: { targetId, targetTypeUrl },
       signalId: "event-inbox-restart",
-      signal: AnyPacker.pack(EventSchema, replayEvent),
+      signal: AnyPacker.pack(EventSchema, retainedEvent),
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
       shard: delivery.strategy.shardFor(targetId, targetTypeUrl),
@@ -960,31 +960,31 @@ describe("@spine-event-engine/example-todo", () => {
       version: 1n,
     });
 
-    const replayRoute = vi.fn(() => {
-      throw new Error("durable Inbox replay must not reroute");
+    const retainedRoute = vi.fn(() => {
+      throw new Error("retained Inbox delivery must not reroute");
     });
-    const replayRouting = EventRouting.create<TaskListId>();
-    replayRouting.route(TaskEvent, replayRoute);
+    const retainedRouting = EventRouting.create<TaskListId>();
+    retainedRouting.route(TaskEvent, retainedRoute);
     ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: new InMemoryStorageFactory(storageBackend),
     });
     await ServerEnvironment.instance().completeSetup();
-    const replay = await BoundedContext.singleTenant("Tasks")
+    const restarted = await BoundedContext.singleTenant("Tasks")
       .add(todo.TaskAggregate)
       .add(todo.TaskListProjection, {
         // Generated interface tokens cross the dynamic compiled-example boundary.
-        eventRouting: replayRouting,
+        eventRouting: retainedRouting,
       })
       .build();
-    const replayFixture = await createTodoBlackBox(replay);
+    const restartedFixture = await createTodoBlackBox(restarted);
     try {
-      await replayFixture.eventually(
-        async () => await replay.stand().read(TaskListSchema, listId),
-        (state) => state?.tasks.some((task) => task.title === "Restart replay") === true,
+      await restartedFixture.eventually(
+        async () => await restarted.stand().read(TaskListSchema, listId),
+        (state) => state?.tasks.some((task) => task.title === "Restart delivery") === true,
       );
-      expect(replayRoute).not.toHaveBeenCalled();
+      expect(retainedRoute).not.toHaveBeenCalled();
     } finally {
-      await replayFixture.close();
+      await restartedFixture.close();
     }
   });
 
@@ -1882,7 +1882,7 @@ describe("@spine-event-engine/example-todo", () => {
       );
 
       await expect(context.catchUpReadSide()).resolves.toEqual({
-        replayedEventCount: 2,
+        processedEventCount: 2,
         clearedEntityCount: 1,
         clearedStateTypes: [TypeUrls.derive(TaskListSchema), TypeUrls.derive(TaskAssigneeSchema)],
       });

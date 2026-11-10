@@ -22,6 +22,9 @@ export default defineConfig({
   esbuild: false,
   plugins: [typescriptVitestPlugin()],
   test: {
+    server: {
+      deps: { inline: ["@uiw/react-md-editor", "@uiw/react-markdown-preview"] },
+    },
     include: [
       "packages/*/test/**/*.test.ts",
       "packages/*/test/**/*.test.mjs",

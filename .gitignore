@@ -2,6 +2,9 @@
 compatibility-tests/jvm/.cache/
 node_modules/
 dist/
+examples/fieldnotes/web/.next/
+examples/fieldnotes/web/next-env.d.ts
+examples/fieldnotes/web/tsconfig.tsbuildinfo
 coverage/
 test-results/
 examples/message-board/web/.local/

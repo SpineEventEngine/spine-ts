@@ -491,6 +491,7 @@ export class MysqlStorageFactory extends StorageFactory {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
     StoragePreparations.register(this, {
+      supportsRecordIndexes: true,
       prepareRecord: (context, spec, group, mode) => this.prepareRecord(context, spec, group, mode),
       prepareEntity: (input, mode) => this.prepareEntity(input, mode),
       prepareAgentHistory: (input, mode) => this.prepareAgentHistory(input, mode),
@@ -669,6 +670,32 @@ export class MysqlStorageFactory extends StorageFactory {
   }
 
   /**
+   * Opens a record handle whose operations leave table preparation explicit.
+   *
+   * @param context Provides the storage context.
+   * @param spec Describes the record family.
+   * @param group Identifies an optional storage group.
+   * @returns The unprepared MySQL record handle.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   */
+  protected override onCreateUnprepared<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): RecordStorage<I, R> {
+    return this.createMysqlRecordStorage(
+      context,
+      spec,
+      group,
+      this.database(context),
+      true,
+      true,
+      false,
+    );
+  }
+
+  /**
    * Creates a record-family handle for its tenant database.
    *
    * @typeParam I Record identifier type.
@@ -680,6 +707,7 @@ export class MysqlStorageFactory extends StorageFactory {
    * @returns The opened MySQL record-storage handle.
    * @param tracked Whether the factory tracks this public handle.
    * @param publicHandle Whether calls use the public intake fence.
+   * @param prepareOnAccess Whether this handle prepares its table on access.
    */
   private createMysqlRecordStorage<I, R extends Message>(
     context: StorageContext,
@@ -688,6 +716,7 @@ export class MysqlStorageFactory extends StorageFactory {
     boundary = this.database(context),
     tracked = true,
     publicHandle = false,
+    prepareOnAccess = true,
   ): MysqlRecordStorage<I, R> {
     const tableSpec = this.tableSpec(spec, group);
     const table = { tableName: tableSpec.tableName };
@@ -703,6 +732,7 @@ export class MysqlStorageFactory extends StorageFactory {
       tableSpec,
       this.stringifiers,
       publicHandle,
+      prepareOnAccess,
     );
     if (tracked) this.#handles.add(handle);
     return handle;
@@ -733,6 +763,7 @@ export class MysqlStorageFactory extends StorageFactory {
       recordType: spec.recordType,
       idType: spec.idType,
       declaredColumns: spec.columns,
+      declaredIndexes: spec.indexes,
       ...(group === undefined ? {} : { groupName: group.name }),
     });
   }
@@ -1179,6 +1210,7 @@ export class MysqlStorageFactory extends StorageFactory {
       typeof id === "string" ? id : id.typeName,
       table.groupName ?? null,
       table.primaryKey,
+      table.indexes ?? [],
       [...table.columns]
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((column) => [

@@ -15,7 +15,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { create, type Message } from "@bufbuild/protobuf";
 import { Identifiers, SignalEnvelopes, spineCoreRegistry } from "@spine-event-engine/core";
-import { EventContextSchema, VersionSchema, type TenantId } from "@spine-event-engine/proto";
+import {
+  EventContextSchema,
+  TenantSchema,
+  VersionSchema,
+  type TenantId,
+} from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
   StorageFactory,
@@ -42,7 +47,7 @@ import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { createMessage } from "../delivery/inbox-message-fixture.js";
 import { EnvironmentTests, EnvironmentType } from "../../src/server/environment.js";
 import { BoundedContext } from "../../src/context/bounded-context.js";
-import type { TenantIndex } from "../../src/context/tenant-index.js";
+import { SINGLE_TENANT, type TenantIndex } from "../../src/context/tenant-index.js";
 import { tenant } from "../tenant-fixture.js";
 import {
   InMemorySubscriptionRegistry,
@@ -71,6 +76,68 @@ function configured(
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
+  it.each([undefined, SINGLE_TENANT] as const)(
+    "selects single-tenant mode without consulting a provider catalog (%s)",
+    async (setting) => {
+      const storage = new InMemoryStorageFactory();
+      const catalog = vi.spyOn(storage, "tenantCatalog");
+      const records = vi.spyOn(storage, "createRecordStorage");
+      ServerEnvironment.when(EnvironmentType.Local).use({
+        storageFactory: storage,
+        ...(setting === undefined ? {} : { tenantIndex: setting }),
+      });
+      const environment = ServerEnvironment.instance();
+      expect(environment.tenantIndex).toBe(SINGLE_TENANT);
+      await environment.completeSetup();
+      const context = await BoundedContext.singleTenant("NoDirectory").build({
+        createStorageStructures: false,
+        startSubscriptionMonitoring: false,
+      });
+      expect(context.tenantIndex).toBe(SINGLE_TENANT);
+      expect(catalog).not.toHaveBeenCalled();
+      expect(records.mock.calls.some(([, spec]) => spec.recordType === TenantSchema)).toBe(false);
+      await context.close();
+    },
+  );
+
+  it("requires an environment directory before opening multitenant business storage", async () => {
+    const storage = new InMemoryStorageFactory();
+    const records = vi.spyOn(storage, "createRecordStorage");
+    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: storage });
+    const environment = ServerEnvironment.instance();
+    await environment.completeSetup();
+    await expect(BoundedContext.multitenant("RequiresDirectory").build()).rejects.toThrow(
+      /tenant index|tenant directory/i,
+    );
+    expect(records).not.toHaveBeenCalled();
+  });
+
+  it("rejects a local multitenant directory when the environment remains single-tenant", async () => {
+    const storage = new InMemoryStorageFactory();
+    const records = vi.spyOn(storage, "createRecordStorage");
+    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: storage });
+    await ServerEnvironment.instance().completeSetup();
+    await expect(
+      BoundedContext.multitenant("LocalDirectoryOnly").withTenantIndex(tenantIndex()).build(),
+    ).rejects.toThrow(/environment tenant index/i);
+    expect(records).not.toHaveBeenCalled();
+  });
+
+  it("exposes the marker for a single context inside an indexed environment", async () => {
+    const directory = tenantIndex();
+    const lookup = vi.spyOn(directory, "contains");
+    ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: directory });
+    await ServerEnvironment.instance().completeSetup();
+    const context = await BoundedContext.singleTenant("MixedSingle").build({
+      createStorageStructures: false,
+      startSubscriptionMonitoring: false,
+    });
+    expect(ServerEnvironment.instance().tenantIndex).toBe(directory);
+    expect(context.tenantIndex).toBe(SINGLE_TENANT);
+    expect(lookup).not.toHaveBeenCalled();
+    await context.close();
+  });
+
   it("resolves the default subscription waiting capacity", () => {
     expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(100);
   });
@@ -500,7 +567,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     await context.close();
     await expect(resetServerEnvironmentForTest()).resolves.toBeUndefined();
   });
-  it("uses transient membership when a custom storage factory has no catalog", async () => {
+  it("uses the marker when a custom storage factory has no catalog", async () => {
     const factory = new CataloglessStorageFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
     const environment = ServerEnvironment.instance();
@@ -509,9 +576,8 @@ describe("ServerEnvironment delivery lifecycle", () => {
       createStorageStructures: false,
       startSubscriptionMonitoring: false,
     });
-    expect(context.tenantIndex).toBe(environment.tenantIndex);
-    await environment.tenantIndex.keep(tenant("known"));
-    await expect(context.tenantIndex.contains(tenant("known"))).resolves.toBe(true);
+    expect(environment.tenantIndex).toBe(SINGLE_TENANT);
+    expect(context.tenantIndex).toBe(SINGLE_TENANT);
     await context.close();
   });
   it("shares the configured live index and keeps a context override separate", async () => {

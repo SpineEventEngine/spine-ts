@@ -102,6 +102,7 @@ describe("verify-task", () => {
     expect(recordOnly).toEqual({ proto: false, typeDoc: false });
     expect(taskGateCommands(recordOnly)).not.toContain("proto:generate");
     expect(taskGateCommands(recordOnly)).not.toContain("proto:check-fixtures");
+    expect(taskGateCommands(recordOnly)).not.toContain("web:build");
     expect(taskGateCommands(recordOnly)).not.toContain("docs:check:generated");
     expect(taskGateCommands(recordOnly)).toContain("docs:audience:check");
     expect(taskGateCommands(recordOnly)).toContain("check:time-reads");
@@ -119,6 +120,7 @@ describe("verify-task", () => {
     const gates = taskGateCommands({ proto: true, typeDoc: true });
     expect(gates[0]).toBe("proto:check-fixtures");
     expect(gates[1]).toBe("proto:generate");
+    expect(gates).toContain("web:build");
   });
 
   it("runs the generation fixture contract before the release build", () => {
@@ -131,6 +133,10 @@ describe("verify-task", () => {
       /^pnpm proto:check-fixtures && pnpm verify:generated-gates/u,
     );
     expect(scripts["verify:release"]).toContain("pnpm verify:release:generated");
+    expect(scripts["verify:generated-gates"]).toContain("pnpm web:build");
+    expect(scripts["web:build"]).toBe(
+      "pnpm --filter @spine-event-engine/example-fieldnotes-web build",
+    );
   });
 
   it("requires repository tests for every non-Markdown classification", () => {

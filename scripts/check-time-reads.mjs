@@ -171,6 +171,7 @@ export function timeReadPolicy(path) {
   if (path.startsWith("packages/delivery-client/test-fixtures/") && path.endsWith(".mjs"))
     return "runtime";
   if (path === "packages/testing/test/black-box.contract.mjs") return "test";
+  if (path === "examples/orders/test/postgres-interruption-child.mjs") return "test";
   if (path.startsWith("packages/proto-tools/src/generation/") && path.endsWith(".mjs"))
     return "platform";
   if (/^(?:packages|examples)\/.+\/src\/.*\.(?:[cm]?ts|[cm]?js)$/u.test(path)) return "runtime";

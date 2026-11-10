@@ -15,7 +15,7 @@
 import { clone, create, fromBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { AnyPacker, TypeUrls, Validate } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls, Validate, QUERY_SERVICE_MAX_RESULTS } from "@spine-event-engine/core";
 import type { AppQueryResponseFor } from "@spine-event-engine/core";
 import {
   snapshotTrustedReader,
@@ -441,7 +441,7 @@ export class AppQueryExecution {
       schema,
       plan,
       destination,
-      1_000,
+      QUERY_SERVICE_MAX_RESULTS,
       wire,
       this.#childReadContext(wire, enclosing, target, reader, destination, signal),
     );

@@ -25,6 +25,7 @@ import {
   type RecordEntry,
   type RecordQuery,
   type RecordSpec,
+  type RecordIndex,
   type StorageContext,
   type StorageGroup,
   type StorageQueryCapabilities,
@@ -33,6 +34,7 @@ import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import { StorageQueryValues } from "@spine-event-engine/storage/provider";
 
 import { DatastoreColumnMapping } from "./column-mapping.js";
+import { DatastoreRecordIndexes } from "./record-indexes.js";
 import { RecordKinds } from "./record-kind.js";
 import { DatastoreIdColumn } from "./id-column.js";
 import {
@@ -95,6 +97,8 @@ export interface DatastorePageQuery {
 
   /**
    * Limits the number of rows decoded for this page.
+   *
+   * @param indexes Declared lookup index requirements.
    */
   readonly limit: number;
 }
@@ -180,6 +184,7 @@ class FlatEntityCodec<I, R extends Message> {
     stringifiers: StringifierRegistry,
     namespace?: string,
   ) {
+    DatastoreRecordIndexes.validate(recordSpec.indexes);
     this.#kind =
       kind ?? RecordKinds.of(recordSpec.sourceType.typeName, recordSpec.recordType.typeName, group);
     if (this.#kind.trim().length === 0 || Buffer.byteLength(this.#kind, "utf8") > 1_500)
@@ -661,19 +666,25 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     _query: RecordQuery<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
     const query = this.#codec.createQuery(this.client);
-    const providerLimit = DatastoreRecordQuery.limit(_query, this.#codec.queryLimit());
+    const exactPage = DatastoreRecordQuery.isKeysetPage(_query, this.recordSpec.indexes);
+    const providerLimit = this.queryPageLimit(_query);
     DatastoreQueryPushdown.translate(
       query,
       _query,
       (id) => this.#codec.key(this.client, id),
       (column) => this.#codec.columnProperty(column),
       (column, value) => this.#codec.columnValue(column, value),
+      exactPage,
     );
     query.limit(providerLimit);
     const entities = DatastoreResults.entities(
       await this.provider(() => this.client.runQuery(query, wrappedReadOptions)),
     );
-    if (providerLimit === this.#codec.queryLimit() && entities.length >= providerLimit) {
+    if (
+      !exactPage &&
+      providerLimit === this.#codec.queryLimit() &&
+      entities.length >= providerLimit
+    ) {
       throw new DatastoreQueryLimitError(providerLimit - 1);
     }
     const entries = entities.map((entity) => ({
@@ -682,9 +693,18 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       columns: this.#codec.columns(entity),
     }));
 
-    if (DatastoreRecordQuery.isKeysetPage(_query))
-      return entries.map(({ id, record }) => ({ id, record }));
+    if (exactPage) return entries.map(({ id, record }) => ({ id, record }));
     return LocalQueryResults.apply(entries, _query);
+  }
+
+  /**
+   * Returns the safe native row limit for one record query.
+   *
+   * @param query Requested record query.
+   * @returns Exact page size or configured candidate limit.
+   */
+  private queryPageLimit(query: RecordQuery<I>): number {
+    return DatastoreRecordQuery.limit(query, this.#codec.queryLimit(), this.recordSpec.indexes);
   }
 
   /**
@@ -1084,6 +1104,7 @@ class DatastoreQueryPushdownHelper {
    * @param keyFor Converts a record ID to a Datastore key.
    * @param columnProperty Resolves a declared column to a property name.
    * @param columnValue Converts a column value for the provider.
+   * @param exactPage Whether the requested keyset page is fully pushed down.
    */
   translate<I>(
       query: ReturnType<Datastore["createQuery"]>,
@@ -1091,43 +1112,63 @@ class DatastoreQueryPushdownHelper {
       keyFor: (id: I) => ReturnType<Datastore["key"]>,
       columnProperty: (column: string) => string,
       columnValue: (column: string, value: unknown) => unknown,
+      exactPage: boolean,
     ): void {
-      if (recordQuery.ids !== undefined && recordQuery.ids.length > 0) {
-        const keys = recordQuery.ids.map(keyFor);
-        const first = recordQuery.ids[0];
-        if (first === undefined) throw new Error("Datastore record query ID is invalid.");
-        const key = keyFor(first);
-        query.filter(
-          new PropertyFilter(
-            "__key__",
-            keys.length === 1 ? "=" : "IN",
-            keys.length === 1 ? key : keys,
-          ),
-        );
-      }
-      for (const filter of recordQuery.filters ?? []) {
-        const values = Array.isArray(filter.value) ? filter.value : [filter.value];
-        const providerValues =
-          filter.column === "id"
-            ? values.map((value) => keyFor(value as I))
-            : values.map((value) => columnValue(filter.column, value));
-        query.filter(
-          new PropertyFilter(
-            filter.column === "id" ? "__key__" : columnProperty(filter.column),
-            values.length === 1 ? "=" : "IN",
-            values.length === 1 ? providerValues[0] : providerValues,
-          ),
-        );
-      }
+      this.translateFilters(query, recordQuery, keyFor, columnProperty, columnValue);
       for (const order of recordQuery.sort ?? []) {
         query.order(order.field === "id" ? "__key__" : columnProperty(order.field), {
           descending: order.direction === "desc",
         });
       }
       if (!(recordQuery.sort ?? []).some((order) => order.field === "id")) query.order("__key__");
-      if (recordQuery.after !== undefined && DatastoreRecordQuery.isKeysetPage(recordQuery))
+      if (recordQuery.after !== undefined && exactPage)
         query.filter(new PropertyFilter("__key__", ">", keyFor(recordQuery.after.id)));
     }
+
+  /**
+   * Applies legacy ID and column filters to one native query.
+   * @typeParam I Record identifier type.
+   * @param query Mutable Datastore query.
+   * @param recordQuery Legacy record query.
+   * @param keyFor Converts a record ID to a Datastore key.
+   * @param columnProperty Resolves a declared column to a property name.
+   * @param columnValue Converts a column value for the provider.
+   */
+  private translateFilters<I>(
+    query: ReturnType<Datastore["createQuery"]>,
+    recordQuery: RecordQuery<I>,
+    keyFor: (id: I) => ReturnType<Datastore["key"]>,
+    columnProperty: (column: string) => string,
+    columnValue: (column: string, value: unknown) => unknown,
+  ): void {
+    if (recordQuery.ids !== undefined && recordQuery.ids.length > 0) {
+      const keys = recordQuery.ids.map(keyFor);
+      const first = recordQuery.ids[0];
+      if (first === undefined) throw new Error("Datastore record query ID is invalid.");
+      const key = keyFor(first);
+      query.filter(
+        new PropertyFilter(
+          "__key__",
+          keys.length === 1 ? "=" : "IN",
+          keys.length === 1 ? key : keys,
+        ),
+      );
+    }
+    for (const filter of recordQuery.filters ?? []) {
+      const values = Array.isArray(filter.value) ? filter.value : [filter.value];
+      const providerValues =
+        filter.column === "id"
+          ? values.map((value) => keyFor(value as I))
+          : values.map((value) => columnValue(filter.column, value));
+      query.filter(
+        new PropertyFilter(
+          filter.column === "id" ? "__key__" : columnProperty(filter.column),
+          values.length === 1 ? "=" : "IN",
+          values.length === 1 ? providerValues[0] : providerValues,
+        ),
+      );
+    }
+  }
 
   /**
    * Applies the all-or-nothing legal portion of a normalized query plan.
@@ -1291,11 +1332,12 @@ class DatastoreRecordQueryMethods {
    * @typeParam I Record identifier type in the legacy query.
    * @param query Supplies the requested record query.
    * @param scanLimit Supplies the configured materialization limit.
+   * @param indexes Declared native-compatible equality indexes.
    * @returns The finite provider row bound.
    */
-  limit<I>(query: RecordQuery<I>, scanLimit: number): number {
+  limit<I>(query: RecordQuery<I>, scanLimit: number, indexes: readonly RecordIndex[]): number {
       const requestedLimit = query.limit;
-      if (requestedLimit !== undefined && this.isKeysetPage(query)) return requestedLimit;
+      if (requestedLimit !== undefined && this.isKeysetPage(query, indexes)) return requestedLimit;
       if (
         query.limit !== undefined &&
         query.ids === undefined &&
@@ -1313,16 +1355,22 @@ class DatastoreRecordQueryMethods {
    *
    * @typeParam I Record identifier type in the legacy query.
    * @param query The record query to classify.
+   * @param indexes Declared native-compatible equality indexes.
    * @returns `true` when Datastore can apply its limit and continuation completely.
    */
-  isKeysetPage<I>(query: RecordQuery<I>): boolean {
+  isKeysetPage<I>(query: RecordQuery<I>, indexes: readonly RecordIndex[]): boolean {
     const order = query.sort;
     const continuation = query.after;
     const continuationValue = continuation?.values[0];
     return (
       query.limit !== undefined &&
       query.ids === undefined &&
-      query.filters === undefined &&
+      (query.filters === undefined ||
+        (query.filters.length === 1 &&
+          query.filters[0] !== undefined &&
+          query.filters[0].column !== "id" &&
+          !Array.isArray(query.filters[0].value) &&
+          DatastoreRecordIndexes.hasEquality(indexes, query.filters[0].column))) &&
       query.offset === undefined &&
       order?.length === 1 &&
       order[0]?.field === "id" &&

@@ -85,6 +85,25 @@ await context.close();
 Continue with the [server introduction](../packages/server/README.md) for
 application assembly and lifecycle.
 
+### Choose tenant membership before building
+
+A single-tenant Bounded Context uses `SINGLE_TENANT`. Omitting the environment
+setting selects it; an application can also set it explicitly. Neither form
+constructs a tenant directory or looks up membership. A multitenant Bounded
+Context requires a live `TenantIndex` in the environment or a local
+`withTenantIndex(index)` override. Register a complete `TenantId` with
+`keep()` before tenant-scoped work. An unknown tenant is rejected before
+business storage preparation.
+
+For cross-process membership, inject a durable `StorageFactory` and the same
+`StorageGroup` into `PersistentTenantIndex.create()` in each process. The
+provider's database must already exist; index creation prepares only the
+selected record family by default. `createMissingStructures: false` skips
+creation and checks both at construction and later operations. Application
+code closes the index and factory separately. The
+[server reference](../packages/server/REFERENCE.md) describes exact tenant
+admission and preparation semantics.
+
 ## 3. Describe the model in Proto
 
 Proto is the shared language between your server and clients. Define identifiers,
@@ -706,14 +725,15 @@ for the common packaging and discovery contract.
 
 Use the examples to choose the next narrow learning step:
 
-| Example                                                                      | Best next question                                                       |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| [Message Board](../examples/message-board/README.md)                         | How do a browser, Aggregate, and Projection work together?               |
-| [Distributed Message Board](../examples/distributed-message-board/README.md) | How do two equal nodes, delivery, and one Gateway run locally?           |
-| [To-Do](../examples/todo/README.md)                                          | What is the smallest server-side command/query application?              |
-| [Orders](../examples/orders/README.md)                                       | How do provider-oriented records and durable storage fit an application? |
-| [Projects](../examples/projects/README.md)                                   | How do queries and data-oriented views shape a larger model?             |
-| [Support](../examples/support/README.md)                                     | How does an Agent turn ticket facts into an auditable draft for review?  |
+| Example                                                                      | Best next question                                                                           |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [Message Board](../examples/message-board/README.md)                         | How do a browser, Aggregate, and Projection work together?                                   |
+| [Distributed Message Board](../examples/distributed-message-board/README.md) | How do two equal nodes, delivery, and one Gateway run locally?                               |
+| [To-Do](../examples/todo/README.md)                                          | What is the smallest server-side command/query application?                                  |
+| [Orders](../examples/orders/README.md)                                       | How do registered tenants use isolated memory, PostgreSQL, or Datastore storage?             |
+| [Fieldnotes](../examples/fieldnotes/README.md)                               | How do Google or Firebase sign-in, persistent sessions, and private map notes work together? |
+| [Projects](../examples/projects/README.md)                                   | How do queries and data-oriented views shape a larger model?                                 |
+| [Support](../examples/support/README.md)                                     | How does an Agent turn ticket facts into an auditable draft for review?                      |
 
 Keep the loop small: model one command and event, implement one visible
 behavior, test it, observe it, and only then add another boundary. The detailed

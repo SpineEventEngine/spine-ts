@@ -50,6 +50,7 @@ import type {
   DeliveryWorkRegistry,
 } from "../../src/delivery/delivery-ports.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
+import { DeliveryRunControl } from "../../src/delivery/delivery-run-control.js";
 import { deliverySupervisorAccess } from "../../src/delivery/delivery-supervisor.js";
 
 import type {
@@ -299,7 +300,7 @@ describe("DeliverySupervisor", () => {
     await supervisor.close();
   });
 
-  it("does not log a returned failed run as a detached exception", async () => {
+  it("logs a returned failed run once without exposing storage details", async () => {
     const error = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ error })) };
     const registry = new OpenRegistry();
@@ -323,9 +324,49 @@ describe("DeliverySupervisor", () => {
     supervisor.notify(newShard(0));
     await supervisor.whenIdle();
 
-    expect(logger.withMetadata).not.toHaveBeenCalled();
-    expect(error).not.toHaveBeenCalled();
+    expect(logger.withMetadata).toHaveBeenCalledExactlyOnceWith({
+      operation: "delivery.run",
+      reasonCode: "failed",
+    });
+    expect(error).toHaveBeenCalledExactlyOnceWith("Delivery run failed.");
     await supervisor.close();
+  });
+
+  it.each([
+    { name: "FAILED status", status: "FAILED" as const, failed: 0 },
+    { name: "nonzero message failure count", status: "COMPLETED" as const, failed: 1 },
+  ])("logs one contained error for a resolved $name", async ({ status, failed }) => {
+    const error = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ error })) };
+    const run = vi.spyOn(DeliveryRunControl.prototype, "run").mockImplementation((options) => {
+      options.onDrainResult?.({
+        status: failed > 0 ? "FAILED" : "DRAINED",
+        processed: 1,
+        accepted: 1,
+        delivered: failed > 0 ? 0 : 1,
+        failed,
+        failures: [],
+      });
+      return Promise.resolve({ status });
+    });
+    const supervisor = supervisorFor({
+      run: () => Promise.resolve({ status: "COMPLETED", pages: [] }),
+    });
+    deliverySupervisorAccess.installLogger(supervisor, logger as never);
+
+    try {
+      await supervisor.start();
+      supervisor.notify(newShard(0));
+      await supervisor.whenIdle();
+      expect(logger.withMetadata).toHaveBeenCalledExactlyOnceWith({
+        operation: "delivery.run",
+        reasonCode: "failed",
+      });
+      expect(error).toHaveBeenCalledExactlyOnceWith("Delivery run failed.");
+    } finally {
+      await supervisor.close();
+      run.mockRestore();
+    }
   });
 
   it("warns once when initial recovery is retained for a later retry", async () => {
@@ -972,6 +1013,40 @@ describe("DeliverySupervisor", () => {
 
     expect(seen).toEqual([0, 1]);
     await supervisor.close();
+  });
+
+  it("retains an active shard wake when the pending shard capacity is full", async () => {
+    const first = Promise.withResolvers<undefined>();
+    const firstStarted = Promise.withResolvers<undefined>();
+    const seen: number[] = [];
+    const supervisor = supervisorFor(
+      {
+        run: async ({ shard }) => {
+          const index = requireShard(shard).index;
+          seen.push(index);
+          if (index === 0 && seen.length === 1) {
+            firstStarted.resolve(undefined);
+            await first.promise;
+          }
+          return { status: "COMPLETED", pages: [] };
+        },
+      },
+      { concurrency: 1, pendingLimit: 1 },
+    );
+
+    try {
+      await supervisor.start();
+      supervisor.notify(newShard(0));
+      await firstStarted.promise;
+      supervisor.notify(newShard(1));
+      supervisor.notify(newShard(0));
+      first.resolve(undefined);
+      await supervisor.whenIdle();
+      expect(seen).toEqual([0, 0, 1]);
+    } finally {
+      first.resolve(undefined);
+      await supervisor.close();
+    }
   });
 
   it("skips an active shard repeat to start unrelated pending work", async () => {

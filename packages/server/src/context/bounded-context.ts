@@ -59,7 +59,7 @@ import { type DeliveryEndpoint, DeliveryReadiness } from "./local-inbox-handoff.
 import { LocalEntityInbox } from "./entity-inbox.js";
 import { LocalProjectionInbox } from "./projection-handoff.js";
 import { TenantAdmissions } from "./tenant-unknown-error.js";
-import type { TenantIndex } from "./tenant-index.js";
+import { SINGLE_TENANT, type TenantIndex, type TenantIndexSetting } from "./tenant-index.js";
 import {
   AgentExecutionCapacity,
   type AgentCapacityReservation,
@@ -305,13 +305,6 @@ interface RepositoryRegistration {
  */
 interface RegisteredEntityInbox extends EntityInbox {
   /**
-   * Waits for callbacks already accepted by exact local handoffs.
-   *
-   * @returns Completion after all accepted callbacks settle.
-   */
-  whenFollowUpsIdle(): Promise<void>;
-
-  /**
    * Registers an Aggregate or Process Manager target for local delivery.
    *
    * @param target Target delivery metadata.
@@ -361,11 +354,11 @@ export interface ContextDeliveryDescriptor {
   /**
    * Dispatches a durable inbox message through its registered target.
    *
-   * @param message Contains the delivery message to replay.
+   * @param message Contains the stored Inbox message to deliver.
    * @param tenantId Identifies the delivery tenant when the context is multitenant.
-   * @returns A promise that resolves after the message is replayed.
+   * @returns Completion after the recipient processes the message.
    */
-  replay(message: DeliveryEndpointMessage, tenantId?: TenantId): Promise<void>;
+  deliver(message: DeliveryEndpointMessage, tenantId?: TenantId): Promise<void>;
 }
 
 /**
@@ -426,7 +419,7 @@ export interface EventEndpoint {
 }
 
 /**
- * Tenant-scoped options for the legacy-named local read-side reset/replay helper.
+ * Tenant-scoped options for the local read-side reset helper.
  *
  * Single-tenant contexts reject `tenantId`. Multitenant contexts require a
  * complete generated `tenantId` and preserve its typed identity.
@@ -441,9 +434,9 @@ export interface ReadCatchUpOptions {
 }
 
 /**
- * Summary from one legacy-named local read-side reset/replay run.
+ * Summary from one local read-side reset run.
  *
- * The replay boundary covers only already-stored events routed to registered
+ * The catch-up boundary covers only already-stored events routed to registered
  * projection subscribers after `Stand.clear()` removes the target projection
  * rows for the selected tenant slice.
  */
@@ -453,23 +446,23 @@ export interface ReadCatchUpResult {
   /**
    * Number of already-stored events dispatched to at least one projection subscriber.
    */
-  readonly replayedEventCount: number;
+  readonly processedEventCount: number;
 
   /**
-   * Number of cleared projection-state rows before replay.
+   * Number of cleared projection-state rows before catch-up dispatch.
    */
   readonly clearedEntityCount: number;
 
   /**
-   * Unique projection state type URLs cleared once before replay.
+   * Unique projection state type URLs cleared once before catch-up dispatch.
    */
   readonly clearedStateTypes: readonly string[];
 }
 
 /**
- * Stable reason code attached to failures while validating or dispatching a stored read-side replay event.
+ * Stable reason code attached to failures while processing a stored read-side catch-up Event.
  */
-type CatchUpReplayCode = "READ_SIDE_CATCH_UP_REPLAY_FAILED";
+type CatchUpDispatchCode = "READ_SIDE_CATCH_UP_DISPATCH_FAILED";
 
 /**
  * Error thrown when a bounded context name cannot be accepted.
@@ -551,7 +544,7 @@ const eventSubscribers = new WeakMap<
   (typeUrl: string, subscriber: EventSubscriber) => EventSubscription
 >();
 const contextSystemPairings = new WeakMap<BoundedContext, SystemPairingSnapshot>();
-const contextTenantIndexes = new WeakMap<BoundedContext, TenantIndex>();
+const contextTenantIndexes = new WeakMap<BoundedContext, TenantIndexSetting>();
 const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
 const contextDeliveryDescriptors = new WeakMap<BoundedContext, ContextDeliveryDescriptor>();
 const contextSubscriptionRuntimes = new WeakMap<BoundedContext, SubscriptionRuntime>();
@@ -577,7 +570,7 @@ const contextClosePhases = new WeakMap<
   {
     readonly begin: () => void;
     readonly drain: () => Promise<void>;
-    readonly trackReplay: (onReplay: () => Promise<void>) => Promise<void>;
+    readonly trackDelivery: (onDelivery: () => Promise<void>) => Promise<void>;
   }
 >();
 const contextIntegrations = new WeakMap<
@@ -646,13 +639,13 @@ interface BoundedContextAccess {
   ): Promise<void>;
 
   /**
-   * Registers an entered shared replay through its complete callback.
+   * Registers an entered Inbox delivery through its complete callback.
    *
    * @param context Selected Bounded Context.
-   * @param onReplay Complete replay callback.
+   * @param onDelivery Complete delivery callback.
    * @returns Completion of the captured callback.
    */
-  trackReplay(context: BoundedContext, onReplay: () => Promise<void>): Promise<void>;
+  trackDelivery(context: BoundedContext, onDelivery: () => Promise<void>): Promise<void>;
 
   /**
    * Resolves an original or Bounded Context-issued copy-safe repository view.
@@ -750,12 +743,12 @@ interface BoundedContextAccess {
   systemPairing(context: BoundedContext): SystemPairingSnapshot;
 
   /**
-   * Returns the context tenant index.
+   * Returns the captured marker or directory for a built Bounded Context.
    *
-   * @param context Context whose index is read.
-   * @returns Tenant index for the built context.
+   * @param context Bounded Context whose tenant setting is read.
+   * @returns SINGLE_TENANT in single mode or the captured directory in multitenant mode.
    */
-  tenantIndex(context: BoundedContext): TenantIndex;
+  tenantIndex(context: BoundedContext): TenantIndexSetting;
 
   /**
    * Returns the storage factory configured for a built context.
@@ -828,9 +821,9 @@ interface BoundedContextAssembly {
   readonly snapshot: BoundedContextSnapshot;
 
   /**
-   * Effective live tenant membership index.
+   * Captured marker for single mode or directory for multitenant admission.
    */
-  readonly tenantIndex: TenantIndex;
+  readonly tenantIndex: TenantIndexSetting;
 
   /**
    * Command dispatch for this context.
@@ -910,9 +903,9 @@ interface ContextDeliveryParts {
   readonly deliveryReadiness: DeliveryReadiness;
 
   /**
-   * Effective tenant index for delivery scopes.
+   * Captured tenant setting for delivery admission.
    */
-  readonly tenantIndex: TenantIndex;
+  readonly tenantIndex: TenantIndexSetting;
 
   /**
    * Inbox for Entity messages.
@@ -1018,7 +1011,7 @@ export class BoundedContext {
 
   readonly #agentReservations = new Set<Promise<void>>();
 
-  readonly #activeReplays = new Set<Promise<void>>();
+  readonly #activeDeliveries = new Set<Promise<void>>();
 
   readonly #activePreparations = new Set<Promise<void>>();
 
@@ -1107,7 +1100,7 @@ export class BoundedContext {
       this.#admitTenant(command.context?.actorContext?.tenantId),
     );
     eventBusAccess.setAdmission(this.#eventBus, (event) =>
-      this.#admitTenant(ContextParts.readReplayTenant(event)),
+      this.#admitTenant(ContextParts.readCatchUpTenant(event)),
     );
     standAccess.setAdmission(this.#stand, (tenantId) => this.#admitTenant(tenantId));
     standAccess.setPublicAdmission(this.#stand, () => {
@@ -1284,10 +1277,13 @@ export class BoundedContext {
   async #prepareCurrentTenants(mode: StoragePreparationMode): Promise<void> {
     if (!this.isMultitenant)
       return this.#requiredPrepare(() => this.#prepareTenant(undefined, mode));
+    const index = this.tenantIndex;
+    if (index === SINGLE_TENANT)
+      throw new Error("Multitenant preparation requires a tenant index.");
     let after: import("./tenant-index.js").TenantIndexCursor | undefined;
     do {
       serverEnvironmentAccess.requireAvailable(this.#environment);
-      const page = await this.tenantIndex.page({
+      const page = await index.page({
         count: 64,
         signal: this.#preparationController.signal,
         ...(after === undefined ? {} : { after }),
@@ -1295,7 +1291,7 @@ export class BoundedContext {
       serverEnvironmentAccess.requireAvailable(this.#environment);
       for (const id of page.ids) {
         serverEnvironmentAccess.requireAvailable(this.#environment);
-        await TenantAdmissions.require(this.tenantIndex, this.name.value, true, id);
+        await TenantAdmissions.require(index, this.name.value, true, id);
         serverEnvironmentAccess.requireAvailable(this.#environment);
         await this.#requiredPrepare(() => this.#prepareTenant(id, mode));
       }
@@ -1389,10 +1385,10 @@ export class BoundedContext {
   /**
    * Creates tenant-aware Inboxes and their shared readiness signal.
    *
-   * @param tenantIndex Effective membership index for this context.
-   * @returns Inboxes, tenant index, and readiness signal.
+   * @param tenantIndex Captured marker or directory for this Bounded Context.
+   * @returns Inboxes, tenant setting, and readiness signal.
    */
-  #createDelivery(tenantIndex: TenantIndex): ContextDeliveryParts {
+  #createDelivery(tenantIndex: TenantIndexSetting): ContextDeliveryParts {
     const deliveryReadiness = this.#createReadiness();
     const onAdmit = (tenantId?: TenantId) => this.#admitTenant(tenantId);
     const entityInbox = new LocalEntityInbox(
@@ -1408,8 +1404,8 @@ export class BoundedContext {
     );
     deliveryReadiness.configureDirect((message, tenantId) =>
       message.label === "UPDATE_SUBSCRIBER"
-        ? projectionInbox.replay(message, tenantId)
-        : entityInbox.replay(message, tenantId),
+        ? projectionInbox.deliver(message, tenantId)
+        : entityInbox.deliver(message, tenantId),
     );
     return { deliveryReadiness, tenantIndex, entityInbox, projectionInbox };
   }
@@ -1462,7 +1458,7 @@ export class BoundedContext {
         this.#beginClose();
       },
       drain: () => this.#drainWork(),
-      trackReplay: (onReplay) => this.#trackReplay(onReplay),
+      trackDelivery: (onDelivery) => this.#trackDelivery(onDelivery),
     });
     contextDeliveryDescriptors.set(
       this,
@@ -1670,11 +1666,12 @@ export class BoundedContext {
   }
 
   /**
-   * Returns the live index configured for this Bounded Context.
+   * Returns the captured tenant setting for this Bounded Context.
    *
-   * @returns The effective configured index.
+   * @returns SINGLE_TENANT in single mode, even when the environment has an index;
+   * otherwise the effective directory. Narrow before calling index methods.
    */
-  get tenantIndex(): TenantIndex {
+  get tenantIndex(): TenantIndexSetting {
     return ContextParts.requireTenantIndex(this);
   }
 
@@ -1759,17 +1756,16 @@ export class BoundedContext {
   }
 
   /**
-   * Clears and locally replays every registered Projection from already-stored events.
+   * Clears registered Projection state and processes already-stored Events locally.
    *
-   * Despite its legacy name, this method is not Projection catch-up. It is a
-   * process-local maintenance helper and provides no Projection targeting,
+   * This process-local maintenance helper provides no Projection targeting,
    * historical starting point, durable operation identity, progress,
    * historical/live coordination, restart, resumption, or multi-node work.
    *
    * Supported boundary:
    * - projection subscribers only;
    * - already-stored events only;
-   * - clear then replay, with no event re-append;
+   * - clear then dispatch stored Events, with no event re-append;
    * - single-tenant contexts reject `tenantId`;
    * - multitenant contexts require the exact non-blank `tenantId`;
    * - process-local sequential execution on the same EventBus runtime queue as
@@ -1781,7 +1777,7 @@ export class BoundedContext {
    * - durable live-traffic catch-up orchestration across processes.
    *
    * @param options Selects the tenant slice to rebuild.
-   * @returns Resolves to replay and clear counts for the selected slice.
+   * @returns Dispatch and clear counts for the selected slice.
    */
   async catchUpReadSide(options: ReadCatchUpOptions = {}): Promise<ReadCatchUpResult> {
     return eventBusAccess.runExclusive(this.#eventBus, () => this.#catchUpReadSideOnce(options));
@@ -1789,7 +1785,7 @@ export class BoundedContext {
 
   /**
    * Clears registered Projection state for the selected tenant slice, reads stored events,
-   * validates each event’s tenant, and dispatches replay sequentially.
+   * validates each Event’s tenant, and dispatches stored Events sequentially.
    */
   async #catchUpReadSideOnce(options: ReadCatchUpOptions): Promise<ReadCatchUpResult> {
     const storageContext = ContextParts.catchUpStorageContext(this.#snapshot.spec, options);
@@ -1798,7 +1794,7 @@ export class BoundedContext {
     const clearTargets = ContextParts.projectionStateClearTargets(projections);
     const clearedStateTypes: string[] = [];
     let clearedEntityCount = 0;
-    let replayedEventCount = 0;
+    let processedEventCount = 0;
 
     for (const target of clearTargets) {
       clearedEntityCount += await this.#stand.clear(target.schema, tenantOptions);
@@ -1809,19 +1805,19 @@ export class BoundedContext {
 
     for (const event of events) {
       try {
-        ContextParts.validateReplayTenant(storageContext, event);
-        replayedEventCount += await ContextParts.dispatchStoredProjectionEvent(
+        ContextParts.validateCatchUpTenant(storageContext, event);
+        processedEventCount += await ContextParts.dispatchStoredProjectionEvent(
           projections,
           event,
           true,
         );
       } catch (error) {
-        throw ContextParts.catchUpReplayError(event, error);
+        throw ContextParts.catchUpDispatchError(event, error);
       }
     }
 
     return Object.freeze({
-      replayedEventCount,
+      processedEventCount,
       clearedEntityCount,
       clearedStateTypes: Object.freeze(clearedStateTypes),
     });
@@ -1912,7 +1908,7 @@ export class BoundedContext {
   }
 
   /**
-   * Settles entered replay, local follow-ups, and reserved Agent turns.
+   * Settles entered deliveries, outgoing handoffs, and reserved Agent turns.
    * @param errors Collects independent close failures.
    */
   async #drainAdmittedContextWork(errors: unknown[]): Promise<void> {
@@ -1921,10 +1917,9 @@ export class BoundedContext {
       errors,
     );
     await this.#closePart(
-      () => Promise.allSettled([...this.#activeReplays]).then(() => undefined),
+      () => Promise.allSettled([...this.#activeDeliveries]).then(() => undefined),
       errors,
     );
-    await this.#closePart(() => this.#entityInbox.whenFollowUpsIdle(), errors);
     await this.#closePart(
       () => Promise.allSettled([...this.#agentReservations]).then(() => undefined),
       errors,
@@ -1964,18 +1959,18 @@ export class BoundedContext {
   }
 
   /**
-   * Registers an entered shared replay through its complete follow-up callback.
-   * @param onReplay Complete replay callback.
-   * @returns Completion of the captured callback.
+   * Registers an entered Inbox delivery through recipient processing and outgoing handoff.
+   * @param onDelivery Delivers the stored message.
+   * @returns Completion after the delivery callback returns.
    */
-  #trackReplay(onReplay: () => Promise<void>): Promise<void> {
-    const replay = Promise.resolve().then(onReplay);
-    this.#activeReplays.add(replay);
-    void replay.then(
-      () => this.#activeReplays.delete(replay),
-      () => this.#activeReplays.delete(replay),
+  #trackDelivery(onDelivery: () => Promise<void>): Promise<void> {
+    const delivery = Promise.resolve().then(onDelivery);
+    this.#activeDeliveries.add(delivery);
+    void delivery.then(
+      () => this.#activeDeliveries.delete(delivery),
+      () => this.#activeDeliveries.delete(delivery),
     );
-    return replay;
+    return delivery;
   }
 
   /**
@@ -2040,7 +2035,7 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     const phase = contextClosePhases.get(context);
     if (prepare === undefined || phase === undefined)
       return Promise.reject(new TypeError("Service input requires a built context."));
-    return phase.trackReplay(async () => {
+    return phase.trackDelivery(async () => {
       await onMembership();
       await prepare(tenantId);
       await onReady?.();
@@ -2063,17 +2058,17 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     const phase = contextClosePhases.get(context);
     if (phase === undefined)
       return Promise.reject(new TypeError("Service registry requires a built context."));
-    return phase.trackReplay(onOperation);
+    return phase.trackDelivery(onOperation);
   },
 
   /**
-   * Registers replay work with the context close lifecycle so shutdown waits for it.
+   * Registers entered delivery work with the context close lifecycle.
    */
-  trackReplay(context: BoundedContext, onReplay: () => Promise<void>): Promise<void> {
+  trackDelivery(context: BoundedContext, onDelivery: () => Promise<void>): Promise<void> {
     const phase = contextClosePhases.get(context);
     if (phase === undefined)
-      return Promise.reject(new TypeError("Replay requires a built context."));
-    return phase.trackReplay(onReplay);
+      return Promise.reject(new TypeError("Delivery requires a built context."));
+    return phase.trackDelivery(onDelivery);
   },
 
   /**
@@ -2102,7 +2097,7 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
   },
 
   /**
-   * Waits for accepted runtime work and replay operations to finish.
+   * Waits for accepted runtime work and entered delivery operations to finish.
    */
   drainWork(context: BoundedContext): Promise<void> {
     const phase = contextClosePhases.get(context);
@@ -2234,9 +2229,9 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
   },
 
   /**
-   * Returns the live tenant membership index configured for this context.
+   * Returns the captured marker or directory for this Bounded Context.
    */
-  tenantIndex(context: BoundedContext): TenantIndex {
+  tenantIndex(context: BoundedContext): TenantIndexSetting {
     return ContextParts.requireTenantIndex(context);
   },
 
@@ -2648,7 +2643,9 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Sets a live tenant index for this Bounded Context.
+   * Sets a directory that overrides the environment index for this multitenant Bounded Context.
+   * The environment must already have a real index at build time; an override
+   * cannot enable multitenancy in a SINGLE_TENANT environment.
    *
    * @param tenantIndex Application membership index.
    * @returns This builder.
@@ -2741,6 +2738,7 @@ export class BoundedContextBuilder {
     options: BoundedContextBuildOptions,
     environment: ServerEnvironment,
   ): Promise<BoundedContext> {
+    const tenantIndex = this.#selectTenantIndex(environment);
     const generated = this.#loadGeneratedArtifacts([...this.#entityTypes]);
     serverEnvironmentAccess.requireAvailable(environment);
     const repositories = [...this.#repositories, ...generated.repositories];
@@ -2750,6 +2748,7 @@ export class BoundedContextBuilder {
       environment.storageFactory,
       generated.standalone,
       this.#aiRegistry ?? environment.ai,
+      tenantIndex,
     );
     try {
       await this.#integrateBuiltContext(context, options, environment);
@@ -2757,6 +2756,20 @@ export class BoundedContextBuilder {
       return this.#closeFailedBuild(context, environment, error);
     }
     return context;
+  }
+
+  /**
+   * Captures tenant selection before acquiring business storage.
+   *
+   * @param environment Process facilities selected for this build.
+   * @returns Marker for single mode or the effective directory for multi mode.
+   */
+  #selectTenantIndex(environment: ServerEnvironment): TenantIndexSetting {
+    if (!this.#specSnapshot.multitenant) return SINGLE_TENANT;
+    const configured = environment.tenantIndex;
+    if (configured === SINGLE_TENANT)
+      throw new Error("Multitenant Bounded Context requires an environment tenant index.");
+    return this.#tenantIndex ?? configured;
   }
 
   /**
@@ -2815,6 +2828,7 @@ export class BoundedContextBuilder {
    * @param storageFactory Storage factory for the context.
    * @param standalone Generated standalone handler groups.
    * @param ai Optional AI registry.
+   * @param tenantIndex Captured marker or directory for admission.
    * @returns The assembled context.
    */
   async #buildWithResources(
@@ -2822,6 +2836,7 @@ export class BoundedContextBuilder {
     storageFactory: StorageFactory,
     standalone: readonly GeneratedStandaloneHandlerGroup[],
     ai: AiRegistry | undefined,
+    tenantIndex: TenantIndexSetting,
   ): Promise<BoundedContext> {
     const resources: ContextBuildResources =
       this.#subscriptionRegistry === undefined ? {} : { registry: this.#subscriptionRegistry };
@@ -2834,6 +2849,7 @@ export class BoundedContextBuilder {
         standalone,
         resources,
         ai,
+        tenantIndex,
       );
     } catch (error) {
       return await this.#failBuild(resources, error);
@@ -2843,13 +2859,22 @@ export class BoundedContextBuilder {
   /**
    * Assembles dispatchers, buses, Stand, subscription runtime, and integration hooks, registering
    * the completed context with its environment.
+   *
+   * @param repositories Registered repository views.
+   * @param storageFactory Provider for business records.
+   * @param standalone Generated standalone handlers.
+   * @param resources Partial resources to close if assembly fails.
+   * @param ai Selected AI registry, when configured.
+   * @param tenantIndex Captured marker or directory.
+   * @returns Assembled Bounded Context.
    */
   #assembleContext(
     repositories: readonly RepositoryView[],
     storageFactory: StorageFactory,
     standalone: readonly GeneratedStandaloneHandlerGroup[],
     resources: ContextBuildResources,
-    ai?: AiRegistry,
+    ai: AiRegistry | undefined,
+    tenantIndex: TenantIndexSetting,
   ): BoundedContext {
     ContextParts.preflightRepositories(repositories);
     this.#preflightAgents(repositories, storageFactory, ai);
@@ -2862,12 +2887,37 @@ export class BoundedContextBuilder {
       ...ContextParts.repositoryProducedEventSchemas(repositories),
       ...ContextParts.standaloneProducedEventSchemas(standalone),
     ]);
-    const running = this.#buildRuntime(storageFactory, buses, resources);
-    const context = this.#createContext(repositories, storageFactory, buses, running, ai);
+    const running = this.#buildRuntime(storageFactory, buses, resources, tenantIndex);
+    const context = this.#createContext(
+      repositories,
+      storageFactory,
+      buses,
+      running,
+      tenantIndex,
+      ai,
+    );
     resources.context = context;
     if (registerBoundedContext === undefined)
       throw new Error("Context registration is unavailable.");
     registerBoundedContext(context, repositories);
+    this.#attachIntegration(context, buses, dispatchers, standaloneEvent);
+    return context;
+  }
+
+  /**
+   * Registers external Event routes after Bounded Context construction.
+   *
+   * @param context Completed Bounded Context.
+   * @param buses Signal buses and System metadata.
+   * @param dispatchers Repository dispatchers.
+   * @param standaloneEvent Generated standalone Event dispatcher, when present.
+   */
+  #attachIntegration(
+    context: BoundedContext,
+    buses: ContextBuildBuses,
+    dispatchers: ContextBuildDispatchers,
+    standaloneEvent: EventDispatcher | undefined,
+  ): void {
     ContextParts.attachIntegration(
       context,
       buses.eventBus,
@@ -2877,7 +2927,6 @@ export class BoundedContextBuilder {
         ...(standaloneEvent === undefined ? [] : [standaloneEvent]),
       ]),
     );
-    return context;
   }
 
   /**
@@ -3027,13 +3076,20 @@ export class BoundedContextBuilder {
 
   /**
    * Creates the context Stand, subscription registry, and runtime that observes domain and System events.
+   *
+   * @param storageFactory Provider for business records.
+   * @param buses Assembled signal buses.
+   * @param resources Partial resources to close if assembly fails.
+   * @param tenantIndex Captured marker or directory.
+   * @returns Assembled Stand and subscription runtime.
    */
   #buildRuntime(
     storageFactory: StorageFactory,
     buses: ContextBuildBuses,
     resources: ContextBuildResources,
+    tenantIndex: TenantIndexSetting,
   ): ContextBuildRuntime {
-    const stand = this.#buildStand(storageFactory);
+    const stand = this.#buildStand(storageFactory, tenantIndex);
     resources.stand = stand;
     const registry =
       resources.registry ??
@@ -3055,13 +3111,13 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Builds the context Stand with a captured live membership directory.
+   * Builds the Bounded Context Stand with captured tenant admission.
    *
    * @param storageFactory Provider used for Entity records.
+   * @param tenantIndex Captured marker or directory.
    * @returns Direct read-side Stand.
    */
-  #buildStand(storageFactory: StorageFactory): Stand {
-    const tenantIndex = this.#tenantIndex ?? ServerEnvironment.instance().tenantIndex;
+  #buildStand(storageFactory: StorageFactory, tenantIndex: TenantIndexSetting): Stand {
     const stand = new Stand({
       context: ContextParts.createStorageMode(this.#specSnapshot),
       storageFactory,
@@ -3080,13 +3136,22 @@ export class BoundedContextBuilder {
 
   /**
    * Constructs the immutable BoundedContext using assembled buses, runtime parts, environment
-   * delivery strategy, and tenant index.
+   * delivery strategy, and tenant setting.
+   *
+   * @param repositories Registered repository views.
+   * @param storageFactory Provider for business records.
+   * @param buses Assembled signal buses.
+   * @param running Prepared Stand and subscription runtime.
+   * @param tenantIndex Captured marker or directory.
+   * @param ai Selected AI registry, when configured.
+   * @returns Immutable Bounded Context.
    */
   #createContext(
     repositories: readonly RepositoryView[],
     storageFactory: StorageFactory,
     buses: ContextBuildBuses,
     running: ContextBuildRuntime,
+    tenantIndex: TenantIndexSetting,
     ai?: AiRegistry,
   ): BoundedContext {
     return ContextParts.createBoundedContext(
@@ -3097,7 +3162,7 @@ export class BoundedContextBuilder {
       buses,
       running,
       ai,
-      this.#tenantIndex ?? ServerEnvironment.instance().tenantIndex,
+      tenantIndex,
     );
   }
 
@@ -3290,7 +3355,7 @@ interface PreparedRepository {
 const registeredRepositories = new WeakMap<RepositoryView, RepositoryOwner>();
 
 /**
- * Pairs a registered Projection dispatcher with its Entity state schema for replay dispatch.
+ * Pairs a registered Projection dispatcher with its Entity state schema for catch-up dispatch.
  */
 interface ProjectionDispatch {
   readonly repository: RepositoryView;
@@ -3301,7 +3366,7 @@ interface ProjectionDispatch {
 }
 
 /**
- * Identifies a Projection state schema and type URL whose rows must be cleared before replay.
+ * Identifies a Projection state schema and type URL whose rows are cleared before catch-up.
  */
 interface ProjectionStateClearTarget {
   readonly schema: DescriptorMessageSchema;
@@ -3309,32 +3374,32 @@ interface ProjectionStateClearTarget {
 }
 
 /**
- * Carries the stored event identity and underlying failure used to report a replay error.
+ * Carries the stored Event identity and bounded failure details for catch-up.
  */
-interface CatchUpReplayDetail {
+interface CatchUpDispatchDetail {
   readonly name: string;
   readonly message: string;
 }
 
 /**
- * Reports failure while redispatching a stored event during read-side replay.
+ * Reports failure while dispatching a stored Event during read-side catch-up.
  */
-class CatchUpReplayError extends Error {
-  readonly code: CatchUpReplayCode = "READ_SIDE_CATCH_UP_REPLAY_FAILED";
+class CatchUpDispatchError extends Error {
+  readonly code: CatchUpDispatchCode = "READ_SIDE_CATCH_UP_DISPATCH_FAILED";
 
   readonly eventId: string;
 
-  readonly detail: CatchUpReplayDetail;
+  readonly detail: CatchUpDispatchDetail;
 
   /**
-   * Creates a replay error tied to the stored event that failed.
+   * Creates a catch-up error tied to the stored Event that failed.
    *
    * @param eventId Identifies the stored event.
    * @param detail Contains the bounded cause name and message.
    */
-  constructor(eventId: string, detail: CatchUpReplayDetail) {
+  constructor(eventId: string, detail: CatchUpDispatchDetail) {
     super(`Read-side catch-up failed for stored event "${eventId}".`);
-    this.name = "ReadCatchUpReplayError";
+    this.name = "ReadSideCatchUpDispatchError";
     this.eventId = eventId;
     this.detail = detail;
     Object.setPrototypeOf(this, new.target.prototype);
@@ -3342,7 +3407,7 @@ class CatchUpReplayError extends Error {
 }
 
 /**
- * Assembles private bounded-context lifecycle and replay details.
+ * Assembles private bounded-context lifecycle and catch-up details.
  */
 const ContextParts = Object.freeze({
   /**
@@ -3505,7 +3570,7 @@ const ContextParts = Object.freeze({
    * @param buses Prepared domain and System buses.
    * @param running Prepared Stand and subscription runtime.
    * @param ai Effective AI registry when Agent repositories are present.
-   * @param tenantIndex Effective live membership index.
+   * @param tenantIndex Captured marker or directory.
    * @returns Constructed bounded context.
    */
   createBoundedContext(
@@ -3515,8 +3580,8 @@ const ContextParts = Object.freeze({
     deliveryStrategy: DeliveryStrategy,
     buses: ContextBuildBuses,
     running: ContextBuildRuntime,
-    ai?: AiRegistry,
-    tenantIndex?: TenantIndex,
+    ai: AiRegistry | undefined,
+    tenantIndex: TenantIndexSetting,
   ): BoundedContext {
     const context = constructBoundedContext({
       snapshot: ContextParts.snapshotFor(specSnapshot),
@@ -3529,7 +3594,7 @@ const ContextParts = Object.freeze({
       subscriptionRuntime: running.runtime,
       systemSpec: buses.systemSpec,
       storageFactory,
-      tenantIndex: tenantIndex ?? ServerEnvironment.instance().tenantIndex,
+      tenantIndex,
       repositories,
       deliveryStrategy,
       ...(ai === undefined ? {} : { ai }),
@@ -3841,7 +3906,7 @@ const ContextParts = Object.freeze({
    * @param event Imported event to validate.
    */
   validateImportedTenant(context: BoundedContext, event: Event): void {
-    const tenantId = ContextParts.readReplayTenant(event);
+    const tenantId = ContextParts.readCatchUpTenant(event);
     if (!context.isMultitenant) {
       if (tenantId !== undefined) {
         throw new Error(`Single-tenant context "${context.name.value}" does not accept tenantId.`);
@@ -3905,12 +3970,12 @@ const ContextParts = Object.freeze({
   },
 
   /**
-   * Reads the tenant index recorded for a built context.
+   * Reads the marker or directory recorded for a built Bounded Context.
    *
-   * @param context Context to inspect.
-   * @returns Tenant index; throws if unavailable.
+   * @param context Bounded Context to inspect.
+   * @returns Captured marker or directory; throws if unavailable.
    */
-  requireTenantIndex(context: BoundedContext): TenantIndex {
+  requireTenantIndex(context: BoundedContext): TenantIndexSetting {
     const tenantIndex = contextTenantIndexes.get(context);
 
     if (tenantIndex === undefined) {
@@ -4323,10 +4388,10 @@ const ContextParts = Object.freeze({
   ): ContextDeliveryDescriptor {
     return Object.freeze<ContextDeliveryDescriptor>({
       endpoints: () => Object.freeze([...entityInbox.endpoints(), ...projections.endpoints()]),
-      replay: (message, tenantId) =>
+      deliver: (message, tenantId) =>
         message.label === "UPDATE_SUBSCRIBER"
-          ? projections.replay(message, tenantId)
-          : entityInbox.replay(message, tenantId),
+          ? projections.deliver(message, tenantId)
+          : entityInbox.deliver(message, tenantId),
     });
   },
 
@@ -4654,14 +4719,14 @@ const ContextParts = Object.freeze({
    * @param context Catch-up storage context.
    * @param event Stored event to validate.
    */
-  validateReplayTenant(context: StorageContext, event: Event): void {
+  validateCatchUpTenant(context: StorageContext, event: Event): void {
     if (!context.multitenant) {
       return;
     }
 
     const expectedTenantId = context.tenantId;
 
-    const envelopeTenantId = ContextParts.readReplayTenant(event);
+    const envelopeTenantId = ContextParts.readCatchUpTenant(event);
     if (envelopeTenantId === undefined) {
       throw new Error("Read-side catch-up requires stored event envelope tenant.");
     }
@@ -4676,7 +4741,7 @@ const ContextParts = Object.freeze({
    * @param event Event whose origin is inspected.
    * @returns Cloned tenant ID when present.
    */
-  readReplayTenant(event: Event): TenantId | undefined {
+  readCatchUpTenant(event: Event): TenantId | undefined {
     switch (event.context?.origin.case) {
       case "importContext":
         return ContextParts.tenantIdValue(event.context.origin.value.tenantId);
@@ -4733,16 +4798,16 @@ const ContextParts = Object.freeze({
   },
 
   /**
-   * Creates a replay error with the event ID and bounded cause details.
+   * Creates a catch-up error with the Event ID and bounded cause details.
    *
    * @param event Event that failed.
-   * @param cause Thrown replay cause.
-   * @returns Replay error.
+   * @param cause Thrown catch-up cause.
+   * @returns Catch-up error.
    */
-  catchUpReplayError(event: Event, cause: unknown): Error {
-    return new CatchUpReplayError(
+  catchUpDispatchError(event: Event, cause: unknown): Error {
+    return new CatchUpDispatchError(
       event.id?.value ?? "(missing)",
-      ContextParts.catchUpReplayDetail(cause),
+      ContextParts.catchUpDispatchDetail(cause),
     );
   },
 
@@ -4763,7 +4828,7 @@ const ContextParts = Object.freeze({
    * @param error Thrown value.
    * @returns Immutable bounded details.
    */
-  catchUpReplayDetail(error: unknown): CatchUpReplayDetail {
+  catchUpDispatchDetail(error: unknown): CatchUpDispatchDetail {
     if (error instanceof Error) {
       return Object.freeze({
         name: ContextParts.boundedErrorString(error.name, errorDetailLimit) || "Error",

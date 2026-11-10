@@ -13,7 +13,7 @@ points fit together and records cross-package API limits.
 generated message-interface token. Exact schema wins; otherwise the first
 registered matching token wins; otherwise the replacement/default applies.
 Routes run when a message is accepted; retries use the targets saved with it.
-The legacy-named local `catchUpReadSide()` reset/replay helper reruns current
+The local `catchUpReadSide()` read-side reset helper reruns current
 Projection subscriptions; it is not Projection catch-up. The [To-Do
 guide](../../examples/todo/USER_GUIDE.md) contains executable source-linked
 registration.
@@ -104,7 +104,7 @@ routing declarations. Each accepts an exact generated schema or a generated
 interface token. Matching selects exact schema, then the first registered
 matching token, then the replacement/default route. Route functions are
 deterministic and side-effect-free when accepting a message, while durable
-replay uses stored typed targets rather than calculating them again.
+delivery uses stored typed targets rather than calculating them again.
 
 TypeScript consumes `ts_type` and ignores Java-only option fields. Frozen Proto
 options remain preserved wire definitions; `ts_type` does not create transport
@@ -273,13 +273,14 @@ the context repository registration list, and `build()` registers those
 repositories with the built context after opening state record storage through
 the context `StorageFactory`; registered repositories also make their entity
 state schemas known to the context `Stand`. Built contexts also create the
-built-in system-pairing metadata and use the live `TenantIndex` selected by
-`ServerEnvironment`, or the builder's `withTenantIndex()` override. Both
-`environment.tenantIndex` and `context.tenantIndex` return that exact object.
-Single-tenant contexts do not register a synthetic directory member. A default
-provider catalog exposes explicit memory registrations, configured SQL tenants,
-or Datastore native namespaces; a custom factory without a catalog gets a
-transient in-memory index. No generic `TenantId` record is persisted. The full
+built-in system-pairing metadata. An omitted `tenantIndex` setting selects
+`SINGLE_TENANT` without constructing a directory or consulting a provider catalog.
+Multitenant Bounded Contexts require an application-supplied environment index before
+assembly. `withTenantIndex()` may select another directory for that Bounded Context,
+but it cannot enable multitenancy in a `SINGLE_TENANT` environment. Both public getters return
+`TenantIndexSetting`; callers narrow against the marker before directory methods.
+A single-tenant Bounded Context returns the marker even inside an indexed environment.
+Provider catalogs remain separate provider APIs. The full
 system-context runtime,
 command-log repositories, system event taxonomy, tracing/monitors/debug UI, and
 broader JVM production runtime remain outside this public surface.
@@ -290,21 +291,20 @@ dispatcher adapters that execute aggregate command assignees in framework
 transactions and execute projection subscribers. Aggregate command execution
 requires `command.id` so produced events can carry a contract-valid command
 origin; missing IDs reject before
-mutation or storage. Aggregate command completion resolves after traceability
-event-journal append and latest persisted state write. Later produced-signal
-publication is contained by the internal publisher and does not extend the
-`BoundedContext` API. Generated entity-class assembly creates default repositories
+mutation or storage. Aggregate execution commits traceability and current state
+before attempting one outgoing Event bus handoff. The bus handoff awaits
+recipient Inbox writes; a publication failure is contained and reported without
+rerunning a successful Command. Generated entity-class assembly creates default repositories
 through `add(EntityClass).build()` after importing the generated bootstrap. This
 implementation does not invoke query handlers, run durable delivery catch-up, expose a
-broad server lifecycle, or integrate transports. The supported durable inbox
-handoffs are framework process-manager command replay, live
-process-manager event replay, and live projection subscriber replay. The
-local runtime writes the inbox row, drains the local shard immediately, requires
-tenant-safe replay in multitenant contexts, and resolves only after that
-received row is marked delivered. Process-manager event rows use
+broad server lifecycle, or integrate transports. The supported repository Inbox
+handoffs are Process Manager Commands and Events, Aggregate Event reactions, and Projection subscriber
+updates. Routing resolves after recipient Inbox writes and immediately notifies
+normal Delivery; recipient processing and acknowledgement continue separately.
+Aggregate and Process Manager Event rows use
 `REACT_UPON_EVENT`, projection subscriber rows use `UPDATE_SUBSCRIBER`, both
-store the original `Event` envelope, and both replay only the routed row target
-before the independent persistence steps and `Stand` update. Before handler code runs, replay
+store the original `Event` envelope, and both deliver only to the stored row target
+before the independent persistence steps and `Stand` update. Before handler code runs, delivery
 validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
 target type URL, and routed target ID.
 Pending and delivered `InboxMessage` rows are stored directly. Shard ownership
@@ -334,8 +334,8 @@ it starts another scan only if it delivered messages during the completed scan.
 It stops after a scan with no deliveries, rather than returning to the beginning
 after every productive page. The 30-second Inbox
 deduplication window controls how long delivered rows remain available as
-duplicate evidence. It is not a replay-retention period; ordinary accepted rows
-follow their Inbox lifecycle and may be replayed after the duplicate window has
+duplicate evidence. It is not a delivery-retention period; ordinary accepted rows
+follow their Inbox lifecycle and may be redelivered after the duplicate window has
 elapsed. An accepted Agent interaction has a stored receipt and never resumes
 handler or model execution after interruption. The receipt survives process
 termination with persistent storage; memory storage retains it only within that
@@ -348,10 +348,10 @@ command/event buses: default command routing reads the first command field,
 process-manager event routing reads the first event message field, state is
 loaded/created and stored through `Stand`, and returned domain commands/events
 are wrapped only after the prepared Entity write sequence succeeds.
-`BoundedContext.catchUpReadSide(options?)` is a legacy-named, process-local
-whole-read-side reset/replay maintenance helper. It is not the framework's
+`BoundedContext.catchUpReadSide(options?)` is a process-local
+whole-read-side reset and dispatch maintenance helper. It is not the framework's
 Projection catch-up boundary. It clears registered projection rows through
-`Stand.clear()`, reads only already-stored events, and replays each event only
+`Stand.clear()`, reads only already-stored events, and dispatches each Event only
 to registered projection subscribers whose dispatcher declares that event
 message schema/type URL. It never re-appends events. Single-tenant contexts
 reject `tenantId`; multitenant contexts require the exact non-blank `tenantId`.
@@ -443,14 +443,13 @@ event store before queueing them for event-bus delivery without appending them
 again. Process-manager repositories
 also participate in those adapters: command assignees are invoked from the
 command bus through a durable process-manager inbox handoff. The local
-runtime drains that inbox immediately, requires tenant-safe replay in
-multitenant contexts, and resolves only after the received inbox row is marked
-delivered. Live projection subscribers use the same local handoff shape with
+runtime notifies Delivery immediately after a successful Inbox write and resolves
+after recipient Inbox acceptance. Live projection subscribers use the same local handoff shape with
 `UPDATE_SUBSCRIBER` rows, original event IDs as dedup signal IDs, and exact-row
-target replay through the Inbox delivery lifecycle. Live
+stored-target dispatch through the Inbox delivery lifecycle. Live
 process-manager event reactors and event-commanding handlers use the same
 durable inbox handoff with `REACT_UPON_EVENT` rows, original `Event`
-envelopes, and exact-row target replay. Before handler code runs, replay
+envelopes, and stored-row target dispatch. Before handler code runs, delivery
 validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
 target type URL, and routed target ID.
 State is stored in tenant-scoped `Stand` records with Spine `Version`
@@ -659,6 +658,16 @@ tenancy, and publishes through the private broker. `close()` releases that
 context and its broker resources.
 `DurableSubscriptionBindings` and `DurableSubscriptionBindingsOptions` configure
 the gateway storage registry used by production browser access.
+`BrowserCredentialAdmission` declares raw-header and cookie names consumed by
+one browser reader or auth route; `BrowserCredentialReader` reads admitted raw
+request facts before application service handling. Connect stops waiting and
+does not forward a late result after request cancellation or deadline expiry;
+the reader receives no abort signal to stop its underlying work.
+`DirectReaderAuthenticator` receives a host operation signal and returns
+`ReaderAdmissionResult` with detached reader facts and optional local
+invalidation. The operation spans unary work or the full native Activate
+stream. Standard monitored `SessionResolver` results signal local logout,
+captured expiry, and strategy close; one-shot resolution retains no monitor.
 `isDurableSubscriptionBindings` lets hosting code check that a supplied
 `SubscriptionBindings` implementation declares this durable capability.
 `@spine-event-engine/testing` exports exactly `BlackBox`, `BlackBoxOptions`,
@@ -694,7 +703,7 @@ reads direct pending rows in bounded, stable order. It neither exposes pages or
 retained summaries nor creates guard records, per-message claims, attempt
 history, a retry policy, or a scheduler. Direct inbox writes require
 `InboxMessage.id.shard` to match `InboxMessage.shard`; delivered rows are the
-deduplication fact. Framework replay handles `HANDLE_COMMAND`,
+deduplication fact. Framework delivery handles `HANDLE_COMMAND`,
 `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; `CATCH_UP` remains pending and
 `IMPORT_EVENT` fails closed as storage corruption.
 
@@ -733,7 +742,7 @@ lost acknowledgement can redeliver after a handler runs, and downstream effects
 must be idempotent. The delivery model has no persisted attempt history,
 exhaustion, claims, quarantine, receipts, markers, backoff, dead-letter storage,
 or scheduler state beyond the configured in-process recovery timer.
-The package does not expose a raw worker callback API; framework replay
+The package does not expose a raw worker callback API; framework delivery
 uses the framework's validated endpoints. Delivery operations check that the
 worker still holds the shard, rather than renewing it on a timer around callbacks.
 `InboxReadOptions.limit` remains the page-size control for a single ordered
@@ -1106,13 +1115,18 @@ validator, service, transport, or handler invocation.
 
 Storage exports include `Storage`, `StorageContext`, `StorageFactory`,
 `StorageGroup`,
-`RecordStorage`, `RecordEntry`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
-`RecordContinuation`, `RecordContinuationValue`, `RecordFilter`,
+`RecordStorage`, `RecordStorageOptions`, `RecordEntry`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
+`RecordContinuation`, `RecordContinuationValue`, `RecordFilter`, `RecordIndex`,
 `RecordOrder`, `InMemoryStorageFactory`,
 `InMemoryStorageBackend`, `InMemoryRecordStorage`, `EventStore`,
 `OnEventAccepted`, `EntityStateHistoryStorage`, and `EntityEventStorage`.
 `StorageFactory` defines one mandatory adapter seam,
-`createRecordStorage(context, spec, group?)`.
+`createRecordStorage(context, spec, group?, options?)`. A handle prepares its
+record family on access by default. Pass `{ prepareOnAccess: false }` in
+`RecordStorageOptions` when the application prepares that family explicitly;
+the choice stays with that handle, and missing structures cause ordinary data
+operation failures. Custom factories reject the option until they implement
+the protected `onCreateUnprepared` hook.
 `RecordStorage` persists identified Protobuf records with deterministic
 ID/column/path queries, stable continuations after sorted row keys,
 non-negative offsets, positive limits, and complete cloned

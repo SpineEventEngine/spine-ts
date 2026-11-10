@@ -31,6 +31,14 @@ mode reads physical metadata without creating tables or indexes. Its `create`
 mode creates missing structures and verifies their complete layout. Both modes
 reuse a bound runtime pool or release temporary pools, and compatible results
 are shared with later ordinary use. A failed attempt remains retryable.
+
+Both preparation modes also verify declared `RecordSpec.indexes`: each is a complete non-unique,
+ascending B-tree index with no prefix, expression, or hidden component. Indexed
+fixed byte columns use the declared `VARBINARY(width)`; stored and queried byte
+values must have that exact width. An incompatible existing index rejects
+without alteration. A record handle with `prepareOnAccess: false` performs no
+index metadata probe or DDL on ordinary data operations.
+
 The default shared registry converts message-valued IDs and ordinary message
 columns using generated descriptors registered on module import.
 `setStringifierRegistry(registry)` accepts a custom registry; the builder
@@ -134,6 +142,13 @@ the runtime materialization bound. To keep one normalized statement finite,
 MySQL accepts at most 1,000 bound parameters including its provider limit;
 oversized ID sets or composite predicate bind work reject before a connection is
 acquired.
+
+For a limited non-exhaustive plan ordered by an unrestricted `BLOB` byte column, MySQL may sort
+only a configured byte prefix. The adapter therefore fetches through the existing record-evaluation
+budget plus one before applying full unsigned byte order and the requested result limit in the
+shared evaluator. If the set of matching records exceeds that budget, the existing record-evaluation budget error
+is returned instead of an inaccurate prefix. Fixed-width `VARBINARY` columns and exhaustive reads
+retain their prior planning behavior.
 
 ## Entity history seam
 

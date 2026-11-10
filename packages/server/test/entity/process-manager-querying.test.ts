@@ -59,6 +59,7 @@ import {
   SingleProcessServerRuntime,
 } from "../../src/index.js";
 import { processManagerQueryAccess } from "../../src/entity/entity.js";
+import { TestTenantIndex } from "../tenant-index-fixture.js";
 import {
   registerSpineMetadata,
   spineMetadataTestAccess,
@@ -158,9 +159,11 @@ afterEach(async () => {
 
 beforeEach(async () => {
   const { ServerEnvironment } = await import("../../src/server/server-environment.js");
+  const { EnvironmentType } = await import("../../src/server/environment.js");
+  const index = new TestTenantIndex();
+  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: index });
   const environment = ServerEnvironment.instance();
   await environment.completeSetup();
-  const index = environment.tenantIndex;
   for (const value of ["tenant-a", "tenant-b", "SINGLE_TENANT"]) {
     await index.keep(create(TenantIdSchema, { kind: { case: "value", value } }));
   }
@@ -605,6 +608,12 @@ function queryCommand(id: string, name: string, tenant?: string, suffix?: string
       create(CreateReviewProjectSchema, { id, name }),
     ),
   });
+}
+
+async function queryDeliveryIdle(): Promise<void> {
+  const { ServerEnvironment, serverEnvironmentAccess } =
+    await import("../../src/server/server-environment.js");
+  await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
 }
 
 async function startPausedQueryServer(order: "target-first" | "handler-first") {
@@ -1103,7 +1112,7 @@ describe("Process Manager querying", () => {
     expect(RegisteredTargets.forStand(context.stand())).toBeUndefined();
   });
 
-  it("replays persisted Process Manager work with a foreign state read after restart", async () => {
+  it("delivers retained Process Manager work with a foreign state read after restart", async () => {
     ProjectLookup.reset();
     const factory = new InMemoryStorageFactory();
     const { ServerEnvironment, ServerEnvironmentLifecycle } =
@@ -1114,10 +1123,10 @@ describe("Process Manager querying", () => {
     await ServerEnvironment.instance().completeSetup();
     const createdVersions: number[] = [];
     const buildContexts = async () => {
-      const projects = await BoundedContext.singleTenant("ReplayProjects")
+      const projects = await BoundedContext.singleTenant("RestartProjects")
         .add(projectionRepository())
         .build();
-      const workflows = await BoundedContext.singleTenant("ReplayWorkflows")
+      const workflows = await BoundedContext.singleTenant("RestartWorkflows")
         .add(processManagerRepository(identityNameFilter, createdVersions))
         .build();
       return { projects, workflows };
@@ -1138,7 +1147,7 @@ describe("Process Manager querying", () => {
     await initial.close();
     ProjectLookup.reset();
 
-    const pending = queryCommand("project-1", "ready", undefined, "replay");
+    const pending = queryCommand("project-1", "ready", undefined, "retained");
     const { serverEnvironmentAccess } = await import("../../src/server/server-environment.js");
     const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
     await delivery.inbox.receive({
@@ -1879,16 +1888,19 @@ describe("Process Manager querying", () => {
         );
 
       await context.commandBus().post(queryCommand("shared", "A", "tenant-a"));
+      await queryDeliveryIdle();
       expect(ProjectLookup.results).toEqual([
         create(ProjectOverviewStateSchema, { id: "shared", name: "A", priority: 1 }),
       ]);
 
       await context.commandBus().post(queryCommand("shared", "B", "tenant-b"));
+      await queryDeliveryIdle();
       expect(ProjectLookup.results).toEqual([
         create(ProjectOverviewStateSchema, { id: "shared", name: "B", priority: 2 }),
       ]);
 
       await context.commandBus().post(queryCommand("shared", "A", "tenant-a", "restored"));
+      await queryDeliveryIdle();
       expect(ProjectLookup.results).toEqual([
         create(ProjectOverviewStateSchema, { id: "shared", name: "A", priority: 1 }),
       ]);
@@ -1910,8 +1922,10 @@ describe("Process Manager querying", () => {
           { tenantId: tenantB },
         );
       await context.commandBus().post(queryCommand("shared-query", "shared", "tenant-a"));
+      await queryDeliveryIdle();
       expect(ProjectLookup.results[0]?.priority).toBe(4);
       await context.commandBus().post(queryCommand("shared-query", "shared", "tenant-b"));
+      await queryDeliveryIdle();
       expect(ProjectLookup.results[0]?.priority).toBe(7);
       expect(sharedQuery.build().context).toBeUndefined();
     } finally {
@@ -1933,6 +1947,7 @@ describe("Process Manager querying", () => {
 
     try {
       await context.commandBus().post(command);
+      await queryDeliveryIdle();
       expect(observed).toHaveLength(1);
       expect(observed[0]).toMatchObject({
         context: {
@@ -1993,6 +2008,7 @@ describe("Process Manager querying", () => {
       await expect(
         context.commandBus().post(queryCommand("query-id", "invalid")),
       ).resolves.toBeUndefined();
+      await queryDeliveryIdle();
       expect(ProjectLookup.failure).toBeInstanceOf(Error);
       expect((ProjectLookup.failure as Error).message).toBe(message);
       expect(reads).toBe(0);
@@ -2032,12 +2048,14 @@ describe("Process Manager querying", () => {
         );
 
       await context.commandBus().post(queryCommand("manager", "all", undefined, "second"));
+      await queryDeliveryIdle();
       expect(ProjectLookup.results.map((state) => state.name).sort()).toEqual(["archived", "live"]);
       const live = ProjectLookup.results.find((state) => state.id === "live");
       if (live === undefined) throw new Error("Expected live query result.");
       live.name = "changed by handler";
 
       await context.commandBus().post(queryCommand("manager", "all"));
+      await queryDeliveryIdle();
       expect(ProjectLookup.results.find((state) => state.id === "live")).toEqual(
         create(ProjectOverviewStateSchema, { id: "live", name: "live", priority: 1 }),
       );

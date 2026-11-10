@@ -390,8 +390,10 @@ is checked on each lifecycle request and again on reconnect/expiry.
 
 ## Third-party sign-in: generic OIDC, Google, GitHub, and custom providers
 
-`OidcFlow` is in-memory, finite coordination for an application gateway. It is
-not an HTTP server and does not provision users or grant permissions.
+`OidcFlow` coordinates a finite application login. Its default store is
+process-local; `PersistentOidcFlowStore` can share transactions and grants
+across processes. The flow is not an HTTP server and does not provision users
+or grant permissions.
 
 ```mermaid
 sequenceDiagram
@@ -425,7 +427,6 @@ one-time. Require exact HTTPS callback and allowed post-login URLs, POST for
 the application grant exchange, and `Cache-Control: no-store` for callback and
 exchange responses. The application handles refresh and re-login: an expired session
 must lead to a fresh application/provider flow without reusing a grant.
-
 Identity mapping handles provisioning, tenant selection, disabled
 users, and principal attributes. Keep provider identity separate from local
 actor and optional tenant:

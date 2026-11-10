@@ -1225,6 +1225,7 @@ describe("proto-workflow", () => {
       "examples/todo/generated",
       "examples/projects/generated",
       "examples/orders/generated",
+      "examples/fieldnotes/model/generated",
       "examples/support/generated",
       "examples/release-notes/generated",
       "examples/message-board/model/generated",
@@ -1238,6 +1239,7 @@ describe("proto-workflow", () => {
       "examples/todo/generated",
       "examples/projects/generated",
       "examples/orders/generated",
+      "examples/fieldnotes/model/generated",
       "examples/support/generated",
       "examples/release-notes/generated",
       "examples/message-board/model/generated",
@@ -1245,6 +1247,7 @@ describe("proto-workflow", () => {
       "examples/message-board/view-handlers/generated",
       "examples/message-board/composed-app/generated",
       "examples/message-board/app/generated",
+      "examples/fieldnotes/server/generated",
     ]);
   });
 
@@ -1323,9 +1326,34 @@ describe("proto-workflow", () => {
     expect(
       modelAtomicTargets.find((target) => target.packagePath === "examples/message-board/model"),
     ).not.toHaveProperty("handlerProjectPath");
-    expect(atomicGeneratedTargets.at(-1)).toMatchObject({
+    const paths = atomicGeneratedTargets.map((target) => target.displayPath);
+    const appPath = "examples/message-board/app/generated";
+    const appIndex = paths.indexOf(appPath);
+    expect(appIndex).toBeGreaterThanOrEqual(0);
+    for (const name of ["model", "command-handlers", "view-handlers", "composed-app"]) {
+      const dependencyIndex = paths.indexOf(`examples/message-board/${name}/generated`);
+      expect(dependencyIndex).toBeGreaterThanOrEqual(0);
+      expect(dependencyIndex).toBeLessThan(appIndex);
+    }
+    expect(atomicGeneratedTargets.find((target) => target.displayPath === appPath)).toMatchObject({
       handlerProjectPath: "examples/message-board/app/tsconfig.json",
       protoModulePackagePath: "examples/message-board/model",
+    });
+  });
+
+  it("stages the Fieldnotes model before its server metadata", () => {
+    const paths = atomicGeneratedTargets.map((target) => target.displayPath);
+    const modelIndex = paths.indexOf("examples/fieldnotes/model/generated");
+    const serverIndex = paths.indexOf("examples/fieldnotes/server/generated");
+    expect(modelIndex).toBeGreaterThanOrEqual(0);
+    expect(serverIndex).toBeGreaterThanOrEqual(0);
+    expect(modelIndex).toBeLessThan(serverIndex);
+    expect(
+      atomicGeneratedTargets.find(
+        (target) => target.displayPath === "examples/fieldnotes/server/generated",
+      ),
+    ).toMatchObject({
+      handlerProjectPath: "examples/fieldnotes/server/tsconfig.json",
     });
   });
 
@@ -2628,6 +2656,7 @@ describe("proto-workflow", () => {
       "examples/todo/proto",
       "examples/projects/proto",
       "examples/orders/proto",
+      "examples/fieldnotes/model/proto",
       "examples/support/proto",
     ];
 
@@ -2645,6 +2674,7 @@ describe("proto-workflow", () => {
     const validExampleModules = [
       ["examples/projects/proto/spine/examples/projects", "projects"],
       ["examples/orders/proto/spine/examples/orders", "orders"],
+      ["examples/fieldnotes/model/proto/spine/examples/fieldnotes", "fieldnotes"],
       ["examples/support/proto/spine/examples/support", "support"],
     ];
     for (const [directory, packageSegment] of validExampleModules) {

@@ -52,15 +52,50 @@ import { eventStoreRecordSpec, EventStoreGroups } from "@spine-event-engine/stor
 import {
   ColumnTypes,
   EventStore,
+  QueryCandidateLimitError,
   StorageGroup,
   type StorageContext,
 } from "@spine-event-engine/storage";
 import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import type { RowDataPacket } from "mysql2";
 import { createPool } from "mysql2/promise";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { MysqlStorageFactory } from "../src/index.js";
+import { resolvedMysqlTableSpec } from "../src/mysql/table-spec.js";
+
+const preparationTrace = vi.hoisted(() => ({
+  active: false,
+  statements: [] as string[],
+  wrapped: new WeakSet<object>(),
+}));
+
+vi.mock("mysql2/promise", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("mysql2/promise")>();
+  return {
+    ...actual,
+    createPool: (...args: Parameters<typeof actual.createPool>) => {
+      const pool = actual.createPool(...args);
+      const getConnection = pool.getConnection.bind(pool);
+      pool.getConnection = async () => {
+        const connection = await getConnection();
+        if (!preparationTrace.wrapped.has(connection)) {
+          preparationTrace.wrapped.add(connection);
+          for (const method of ["query", "execute"] as const) {
+            const original = connection[method];
+            connection[method] = function (this: unknown, ...inputs: unknown[]) {
+              if (preparationTrace.active && typeof inputs[0] === "string")
+                preparationTrace.statements.push(inputs[0]);
+              return Reflect.apply(original, this, inputs) as unknown;
+            } as never;
+          }
+        }
+        return connection;
+      };
+      return pool;
+    },
+  };
+});
 import { providerEntityInput } from "../../storage/test/entity/agent-execution-provider-fixtures.js";
 import { scope as agentScope } from "../../storage/test/entity/agent-history-fixtures.js";
 import {
@@ -76,6 +111,10 @@ const tenantAUrl = process.env.SPINE_TS_MYSQL_TENANT_A_URL;
 const tenantBUrl = process.env.SPINE_TS_MYSQL_TENANT_B_URL;
 const live = url === undefined ? describe.skip : describe;
 const tenantLive = tenantAUrl === undefined || tenantBUrl === undefined ? describe.skip : describe;
+
+function isPreparationSql(sql: string): boolean {
+  return /information_schema|^CREATE\b|^ALTER\b|^DROP\b/u.test(sql);
+}
 
 live("MySQL-family record layout", () => {
   let factory: MysqlStorageFactory;
@@ -99,6 +138,249 @@ live("MySQL-family record layout", () => {
   });
   afterAll(async () => {
     await factory.close();
+  });
+
+  it("prepares a complete fixed-byte lookup index usable for equality and range", async () => {
+    if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
+    const context = {
+      name: `mysql_index_${randomUUID().replaceAll("-", "")}`,
+      multitenant: false,
+    } as const;
+    const group = new StorageGroup(`index_${randomUUID().replaceAll("-", "")}`);
+    const key = (record: StringValue) => {
+      const bytes = new Uint8Array(12);
+      bytes[11] = Number(record.value.split(":", 1)[0]);
+      return bytes;
+    };
+    const spec = new RecordSpec<string, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+      columns: [new RecordColumn("lookup", ColumnTypes.fixedBytes(12), key)],
+      indexes: [{ name: "lookup", columns: ["lookup", "id"] }],
+    });
+    const records = factory.createRecordStorage(context, spec, group);
+    const pool = createPool(url);
+    try {
+      await StoragePreparations.for(factory).prepareRecord(context, spec, group, "create");
+      await StoragePreparations.for(factory).prepareRecord(context, spec, group, "check");
+      await records.writeAll(
+        Array.from({ length: 300 }, (_, i) =>
+          create(StringValueSchema, { value: `${String(i % 3)}:${String(i).padStart(4, "0")}` }),
+        ),
+      );
+      const equal = await records.queryEntries({
+        filters: [{ column: "lookup", value: key(create(StringValueSchema, { value: "2:0000" })) }],
+        sort: [{ field: "id", direction: "asc" }],
+        limit: 2,
+      });
+      expect(equal.map(({ id }) => id)).toEqual(["2:0002", "2:0005"]);
+      const skippedFactory = await MysqlStorageFactory.newBuilder().setOptions({ url }).build();
+      try {
+        preparationTrace.statements.length = 0;
+        preparationTrace.active = true;
+        const skipped = skippedFactory.createRecordStorage(context, spec, group, {
+          prepareOnAccess: false,
+        });
+        try {
+          const extra = create(StringValueSchema, { value: "2:9999" });
+          await skipped.write(extra);
+          await skipped.read(extra.value);
+          await skipped.queryEntries({
+            filters: [{ column: "lookup", value: key(extra) }],
+            sort: [{ field: "id", direction: "asc" }],
+            limit: 1,
+          });
+          await skipped.compareAndSet(extra.value, extra, extra);
+          await skipped.delete(extra.value);
+        } finally {
+          skipped.close();
+          preparationTrace.active = false;
+        }
+        expect(preparationTrace.statements.some(isPreparationSql)).toBe(false);
+      } finally {
+        preparationTrace.active = false;
+        await skippedFactory.close();
+      }
+      const table = mysqlRecordTableName(spec, group);
+      const index = resolvedMysqlTableSpec({
+        tableName: table,
+        sourceType: spec.sourceType,
+        recordType: spec.recordType,
+        idType: spec.idType,
+        declaredColumns: spec.columns,
+        declaredIndexes: spec.indexes,
+      }).indexes?.[0]?.name;
+      if (index === undefined) throw new Error("Expected resolved MySQL index.");
+      const [catalog] = await pool.query<RowDataPacket[]>(
+        "SELECT column_name AS column_name, seq_in_index AS seq_in_index, " +
+          "non_unique AS non_unique, sub_part AS sub_part, collation AS collation, index_type AS index_type " +
+          "FROM information_schema.statistics WHERE table_schema=DATABASE() " +
+          "AND table_name=? AND index_name=? ORDER BY seq_in_index",
+        [table, index],
+      );
+      expect(catalog.map(({ column_name }) => column_name as string)).toEqual(["lookup", "ID"]);
+      expect(
+        catalog.every(
+          ({ non_unique, sub_part, collation, index_type }) =>
+            Number(non_unique) === 1 &&
+            sub_part === null &&
+            collation === "A" &&
+            index_type === "BTREE",
+        ),
+      ).toBe(true);
+      for (const operator of ["=", "<="]) {
+        const [plans] = await pool.query<RowDataPacket[]>(
+          `EXPLAIN FORMAT=JSON SELECT ID FROM \`${table}\` FORCE INDEX (\`${index}\`) ` +
+            `WHERE \`lookup\` ${operator} ? ORDER BY \`lookup\`, ID LIMIT 1`,
+          [Buffer.from(key(create(StringValueSchema, { value: "2:0000" })))],
+        );
+        const plan = String(plans[0]?.EXPLAIN ?? "");
+        expect(plan).toContain(index);
+        expect(plan).toContain("lookup");
+      }
+      await pool.query(`DROP INDEX \`${index}\` ON \`${table}\``);
+      const first = await MysqlStorageFactory.newBuilder().setOptions({ url }).build();
+      const second = await MysqlStorageFactory.newBuilder().setOptions({ url }).build();
+      try {
+        await expect(
+          StoragePreparations.for(first).prepareRecord(context, spec, group, "check"),
+        ).rejects.toThrow(/index is missing/i);
+        await Promise.all(
+          [first, second].map((candidate) =>
+            StoragePreparations.for(candidate).prepareRecord(context, spec, group, "create"),
+          ),
+        );
+        await pool.query(`DROP INDEX \`${index}\` ON \`${table}\``);
+        await pool.query(`CREATE INDEX \`${index}\` ON \`${table}\` (ID, lookup)`);
+        const incompatible = await MysqlStorageFactory.newBuilder().setOptions({ url }).build();
+        try {
+          await expect(
+            StoragePreparations.for(incompatible).prepareRecord(context, spec, group, "check"),
+          ).rejects.toThrow(/index is incompatible/i);
+          await expect(
+            StoragePreparations.for(incompatible).prepareRecord(context, spec, group, "create"),
+          ).rejects.toThrow(/index is incompatible/i);
+        } finally {
+          await incompatible.close();
+        }
+      } finally {
+        await first.close();
+        await second.close();
+      }
+    } finally {
+      records.close();
+      await pool.end();
+    }
+  });
+
+  it("evaluates complete long BLOB keys or rejects the existing candidate budget", async () => {
+    const context = {
+      name: `mysql_blob_order_${randomUUID().replaceAll("-", "")}`,
+      multitenant: false,
+    } as const;
+    const group = new StorageGroup(context.name);
+    const raw = (record: StringValue) => {
+      const bytes = new Uint8Array(4_097).fill(0x70);
+      bytes[4_096] = record.value.endsWith("high") ? 3 : record.value.endsWith("middle") ? 2 : 1;
+      return bytes;
+    };
+    const spec = new RecordSpec<string, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+      columns: [new RecordColumn("raw", ColumnTypes.scalar<Uint8Array>(ScalarType.BYTES), raw)],
+    });
+    const records = factory.createRecordStorage(context, spec, group);
+    const plan = {
+      order: [{ column: "raw", direction: "asc" }] as const,
+      limit: 1,
+      candidateLimit: 2,
+    };
+    try {
+      await records.writeAll([
+        create(StringValueSchema, { value: "a-high" }),
+        create(StringValueSchema, { value: "z-low" }),
+      ]);
+      expect((await records.queryPlan(plan)).map((record) => record.value)).toEqual(["z-low"]);
+      await records.write(create(StringValueSchema, { value: "m-middle" }));
+      await expect(records.queryPlan(plan)).rejects.toBeInstanceOf(QueryCandidateLimitError);
+    } finally {
+      records.close();
+    }
+  });
+
+  it("uses real missing and prepared Event tables without schema SQL on a skipped handle", async () => {
+    const context = { name: `mysql_skip_${randomUUID()}`, multitenant: false } as const;
+    const group = new StorageGroup(`skip_${randomUUID().replaceAll("-", "")}`);
+    const spec = eventStoreRecordSpec;
+    const taskId = create(TaskIdSchema, { value: `task-${randomUUID()}` });
+    const record = create(EventSchema, {
+      id: create(EventIdSchema, { value: `event-${randomUUID()}` }),
+      context: { producerId: AnyPacker.pack(TaskIdSchema, taskId) },
+      message: AnyPacker.pack(
+        TaskCreatedSchema,
+        create(TaskCreatedSchema, {
+          id: taskId,
+          taskListId: create(TaskListIdSchema, { value: "list" }),
+          title: "Created",
+        }),
+      ),
+    });
+    if (record.id === undefined) throw new Error("Event ID is required.");
+    const skipped = factory.createRecordStorage(context, spec, group, {
+      prepareOnAccess: false,
+    });
+    try {
+      preparationTrace.active = true;
+      await expect(skipped.read(record.id)).rejects.toThrow();
+      expect(preparationTrace.statements.some((sql) => sql.startsWith("SELECT"))).toBe(true);
+      expect(preparationTrace.statements.some(isPreparationSql)).toBe(false);
+      preparationTrace.active = false;
+      await StoragePreparations.for(factory).prepareRecord(context, spec, group, "create");
+      preparationTrace.statements.length = 0;
+      preparationTrace.active = true;
+      await skipped.write(record);
+      const stored = await skipped.read(record.id);
+      expect(stored?.id).toEqual(record.id);
+      expect((await skipped.query()).map((item) => item.id)).toEqual([record.id]);
+      if (stored === undefined) throw new Error("Stored Event was not found.");
+      await expect(skipped.compareAndSet(record.id, stored, stored)).resolves.toBe(true);
+      await expect(skipped.delete(record.id)).resolves.toBe(true);
+      expect(preparationTrace.statements.some(isPreparationSql)).toBe(false);
+
+      const mixedGroup = new StorageGroup(`mixed_${randomUUID().replaceAll("-", "")}`);
+      const falseFirst = factory.createRecordStorage(context, spec, mixedGroup, {
+        prepareOnAccess: false,
+      });
+      await expect(falseFirst.read(record.id)).rejects.toThrow();
+      preparationTrace.statements.length = 0;
+      const defaultSecond = factory.createRecordStorage(context, spec, mixedGroup);
+      await expect(defaultSecond.read(record.id)).resolves.toBeUndefined();
+      expect(preparationTrace.statements.some((sql) => sql.includes("information_schema"))).toBe(
+        true,
+      );
+      preparationTrace.statements.length = 0;
+      await falseFirst.read(record.id);
+      expect(preparationTrace.statements.some(isPreparationSql)).toBe(false);
+      defaultSecond.close();
+      const reverseGroup = new StorageGroup(`reverse_${randomUUID().replaceAll("-", "")}`);
+      const defaultFirst = factory.createRecordStorage(context, spec, reverseGroup);
+      await defaultFirst.read(record.id);
+      const falseSecond = factory.createRecordStorage(context, spec, reverseGroup, {
+        prepareOnAccess: false,
+      });
+      preparationTrace.statements.length = 0;
+      await falseSecond.read(record.id);
+      expect(preparationTrace.statements.some(isPreparationSql)).toBe(false);
+      falseFirst.close();
+      falseSecond.close();
+      defaultFirst.close();
+    } finally {
+      preparationTrace.active = false;
+      preparationTrace.statements.length = 0;
+      skipped.close();
+    }
   });
 
   it("checks then creates physical records, Entity history, and Agent audit indexes", async () => {
@@ -550,7 +832,7 @@ live("MySQL-family record layout", () => {
       const initialEvents = (await eventStore.read()).length;
       const actualTables = [
         ...mysqlEntityTables(input),
-        mysqlRecordTableName(eventStoreRecordSpec),
+        mysqlRecordTableName(eventStoreRecordSpec, EventStoreGroups.forContext(context.name)),
       ];
       expect(actualTables).toHaveLength(4);
       for (const tableName of actualTables)
@@ -684,7 +966,10 @@ live("MySQL-family record layout", () => {
     let tables: readonly string[] = [];
     try {
       await commits.commit(mutation(context, input, "seed"));
-      tables = [...mysqlEntityTables(input), mysqlRecordTableName(eventStoreRecordSpec)];
+      tables = [
+        ...mysqlEntityTables(input),
+        mysqlRecordTableName(eventStoreRecordSpec, EventStoreGroups.forContext(context.name)),
+      ];
       for (const table of tables)
         await pool.query(
           `ALTER TABLE \`${table}\` MODIFY \`ID\` VARCHAR(512) ` +

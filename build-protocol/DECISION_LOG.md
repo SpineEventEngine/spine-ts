@@ -7188,3 +7188,229 @@ retain each public metadata export's actual TypeScript type. Bootstrap treats
 dependency values as unvalidated input, validates the complete metadata graph,
 and publishes its registrations only after all descriptions and conflicts pass.
 A missing or malformed dependency export is an error rather than an omission.
+
+## Persistent tenant and authentication storage (2026-11-04)
+
+The accepted [implementation specification](tasks/tenant-auth-storage/PROPOSAL.md)
+selects explicit tenant and authentication persistence. Single-tenant execution
+uses `SINGLE_TENANT` without a tenant index. Multi-tenant applications supply
+an index; `PersistentTenantIndex` is the standard implementation. Authentication
+stores are provided by the existing auth package.
+
+New persistent stores have private constructors and async factories. Their
+optional `createMissingStructures` setting defaults to `true`: creation and
+compatibility checking finish before the factory returns. Explicit `false`
+skips both preparation and later lazy preparation. Existing Bounded Context
+and business-storage preparation behavior stays unchanged.
+
+The common record-handle seam supports an immutable preparation choice for
+each handle. Built-in providers implement the explicit skip path; unsupported
+custom factories reject it rather than silently ignoring it. This avoids a
+factory-global setting that could change another consumer's behavior. Explicit
+preparation continues through the existing storage preparation mechanism.
+
+The implementation uses maintained authentication libraries. Application-supplied
+identity and session sources remain replaceable. Cleanup is explicitly invoked
+by the application. The task introduces no migration, audit-log subsystem, or
+Gateway replication.
+
+## Declared record indexes (2026-11-04)
+
+Persistent authentication lookup and cleanup require physical secondary indexes.
+Generic record specifications declare these through optional non-unique ascending
+`RecordIndex` entries. Existing specifications without indexes retain their
+behavior. Preparation creates missing indexes and verifies complete definitions;
+incompatible structures are rejected without repair. Explicit preparation skip
+continues to suppress all schema and index probes and creation.
+
+`ColumnTypes.fixedBytes()` describes exact derived encodings without imposing
+new length restrictions on domain fields. Auth equality candidates use SHA-256
+keys and retain full-predicate checks; expiry uses a reversible signed-seconds
+and nanoseconds ordering key. The complete domain values remain in Protobuf
+records. These representations avoid native index-size and timestamp-precision
+limitations without truncation or extra lookup record families.
+
+The provider preparation interface explicitly advertises index support so an
+older custom implementation cannot silently ignore declared requirements.
+Datastore uses built-in indexes for the selected equality and range shapes;
+cloud resource or composite-index administration is not introduced. Exact
+provider pages remain distinct from bounded client-side scans.
+
+The [index prerequisite](tasks/tenant-auth-storage/M3A.md) specifies this bounded
+extension, its preparation and query behavior, and required acceptance tests.
+
+## OIDC request and verification libraries (2026-11-04)
+
+The component provider uses openid-client for discovery, authorization URLs and
+PKCE, and oauth4webapi's public request API for the authorization-code exchange.
+JOSE verification and the existing provider key cache retain the configured
+clock, HTTP cache freshness, key rotation and shared-fetch cancellation behavior.
+The request helper does not authenticate its response; verified identity is
+returned only after the existing signature and claim checks succeed.
+
+This composition replaces handwritten token-request assembly while preserving
+the provider API. openid-client's high-level grant captures a numeric wall-clock
+offset and checks time before awaited key verification, so it cannot represent
+the existing clock semantics during network waits. The lower-level request API
+accepts the exact redirect URI and operation signal without introducing an
+earlier token-time check. The [M5 contract](tasks/tenant-auth-storage/M5.md)
+records the selected boundary and required provider acceptance.
+
+## Flow-specific OIDC cleanup (2026-11-04)
+
+OIDC transaction and grant families can share a configured storage group across
+login flows. Their maintenance query must select one flow through the database
+index, rather than read other flows and discard them in application code.
+The derived expiry property combines a 32-byte SHA-256 flow prefix with the
+existing exact 12-byte Timestamp ordering component. A range bounded by that
+prefix and the caller cutoff selects the flow; exact-key and ID paging retain
+the existing provider-supported query shape. Records keep their complete flow
+identity, which is checked after lookup.
+
+This specializes the accepted fixed-byte index representation without a new
+public option, per-flow table, input limit, or Datastore composite-index
+deployment. Actual provider acceptance remains part of M5 verification.
+
+## OIDC operation cancellation and draining (2026-11-04)
+
+The newly asynchronous flow methods accept an optional per-call AbortSignal,
+consistent with the session strategy API. A host request can stop its own login
+step without closing the flow used by other requests. Existing collaborator
+timeout scopes and defaults remain unchanged. Consumed one-time state is never
+restored, and only confirmed undisclosed writes can be compensated safely.
+
+Caller-facing timeout races do not establish that collaborator work has settled.
+The flow retains the actual promises until settlement, so close waits for late
+issuance and its compensation. Issuer failures remain observable through the
+pending exchange or through a draining close after that exchange has ended.
+Every issuer rejection except the exact supplied abort reason follows that rule;
+undefined represents ordinary declined issuance. A compensation failure takes
+precedence over cancellation and retains both causes. Storage cancellation is
+cooperative and does not establish rollback. Injected stores remain open.
+Custom issuers must honor cancellation and await their persistence/compensation;
+the framework does not add a generic rollback API or a forced drain deadline.
+
+The [M5 contract](tasks/tenant-auth-storage/M5.md) and proposal describe this
+clarification and its operation-boundary regressions.
+
+## Signed revocation retention at the clock-domain boundary (2026-11-04)
+
+SignedSessions supplies its revocation source with the full last-acceptance
+deadline, including configured tolerance. A persistent revocation remains active
+at that endpoint; explicit cleanup removes only earlier deadlines. Expired rows
+may remain physically present without continuing to revoke a later token.
+
+The pre-existing clock contract admits only safe millisecond instants inside the
+Protobuf Timestamp range. When mathematical expiry plus tolerance exceeds that
+range, the representable full acceptance window ends at the maximum Timestamp.
+Retain through that complete value, including its final nanoseconds; do not cap
+at the start of its final second. Exact arithmetic avoids overflow for large
+configured tolerance. This derives from the existing clock domain and does not
+change clock, lifetime or tolerance settings, retired-key behavior, or introduce
+a retention default. The M6 temporal tests and reliability review cover this edge.
+
+## Browser admission names before credential extraction (2026-11-04)
+
+A reader's executable read method cannot tell the host which names to check
+before that method runs. The canonical proposal therefore adds required data-only
+BrowserCredentialAdmission metadata to readers and auth routes. Its three arrays
+separate CSRF headers, primary credential cookies and supporting state cookies.
+The host validates and copies declarations and route configuration before its
+first asynchronous startup step, reuses that policy throughout startup and request
+handling, unions names for
+duplicate checks, and uses only the active reader or route for simultaneous
+credential rejection. Standard and optional native integrations derive names
+from their actual effective configuration. External implementations declare
+their trusted configuration; metadata cannot certify arbitrary executable code.
+
+## Native authentication lifetime outside trusted reader facts (2026-11-04)
+
+The direct native authentication port cannot currently return session invalidation
+through its facts-only result. The canonical proposal adds host-managed request.signal
+and ReaderAdmissionResult { reader, invalidated? }, exported with the existing port
+from server. Runtime signals stay outside core trusted facts, Protobuf, subscription
+identity and forwarding proofs. The host lifetime spans authentication through unary
+completion or full activation iteration and releases on every exit. Coordinator
+fan-out/output guards and independent cleanup use existing paths.
+
+Standard monitored resolvers signal expiry, local logout and close using their
+existing clock and captured deadline; one-shot resolution retains no resources.
+Signed-token verification tolerance/retention remains distinct from operation expiry.
+Custom native integrations must provide equivalent signaling for these guarantees.
+The material amendment requires independent review before M8 runtime changes; source
+tracing is not proof of actual output cancellation or resource release.
+
+Independent no-memory API, reliability and documentation review accepted this
+native lifetime amendment after tightening the standard-strategy example to deny
+admission without its required invalidation signal and clarifying the port's
+one-time admission decision. Actual native/Coordinator output, cleanup and expiry
+behavior remain M8 runtime acceptance; no implementation success is inferred.
+
+## Fieldnotes complete collection reads (2026-11-07)
+
+The existing native QueryService has a fixed per-request result/candidate
+capacity and no wire continuation token. Unbounded queries can exceed the
+candidate budget. A single author-filtered query therefore cannot establish
+that a private map contains all saved places.
+
+Use generated PostgreSQL keyset queries over immutable `PlaceView.place_key`
+bytes derived with standard UTF-8 encoding of the typed PlaceId. Expose the existing service capacity
+once from browser-safe core and consume it in native services and the example.
+The value and native validation behavior stay unchanged. Continue ordered
+active-place pages until an empty page; no total-place limit, request-count
+limit, or retry policy is added. Each cursor request retains the verified
+author predicate and the normal gateway/native read boundaries.
+
+Retain the browser Client's author-only Entity subscription and reconnect
+behavior. Its one bounded recovery response is a scan trigger, not the complete
+collection. Merge a fresh complete scan with concurrent live updates by domain
+revision; retain terminal deletion IDs and reject stale principal/generation
+results. A completed scan can replace the previous collection after the live
+changes are applied. This provides eventual live reconciliation rather than a
+multi-query snapshot. PostgreSQL ordering and large collections require live
+acceptance; the in-memory provider's different candidate-selection behavior
+does not substitute for that evidence.
+
+Raw string cursors are unsuitable: PostgreSQL collation and the shared
+JavaScript string evaluator can disagree at a page boundary and discard every
+SQL candidate. A C collation still differs from JavaScript UTF-16 ordering for
+some BMP and supplementary characters. PostgreSQL BYTEA and the shared byte
+evaluator already use the same unsigned lexicographic order. Expose that
+existing behavior in the generated-query classifier and native admission.
+This is a small TypeScript query capability extension, not a claim of matching
+JVM byte-range query support. No ID alphabet, hash, truncation, or key-size
+restriction is added.
+
+MySQL variable BLOB ordering may use only a server-configured prefix. For those
+bounded ordered plans, retain the existing candidate-budget probe rather than
+pushing a smaller requested result limit into SQL. The evaluator then returns
+the exact prefix or the existing candidate-budget error. Fixed-width binary
+columns and exhaustive reads retain their current behavior. PostgreSQL and
+Datastore need no provider runtime rewrite for this byte-query capability.
+
+This reuses current filter and subscription messages. A new generic cursor
+protocol, additional Projection, raw application storage reads, or custom
+subscription lifecycle would add unnecessary implementation surface. Local JVM
+query processing likewise uses filters and ResponseFormat without a wire
+cursor. Detailed source analysis is retained outside Git with task evidence.
+
+## Fieldnotes browser transport (2026-11-07)
+
+Fieldnotes uses an HTTP/2 HTTPS ingress in front of Next.js for both local
+development and deployment. Next forwards permitted same-origin application
+routes to the long-lived loopback host. The included Caddy configuration uses
+externally supplied certificates and explicit listener/upstream addresses.
+
+The browser's live collection and Command-outcome subscriptions can occupy all
+HTTP/1.1 connections to an origin, preventing a Command or logout request from
+reaching the host. Selecting only the rejection types a Command can emit reduces
+unnecessary streams but cannot solve this across multiple tabs. HTTP/2 ingress
+addresses the transport limitation without changing the framework subscription
+protocol or introducing a single-tab restriction.
+
+Preserve unknown-length streaming responses and cancellation through Caddy and
+Next. Leave Caddy's `flush_interval` unset; its negative mode changes backend
+cancellation behavior. The supplied runtime log filter omits request URI and
+headers because disabling access logs alone does not remove callback credentials
+from upstream-failure logs. Browser acceptance includes negotiated HTTP/2 and
+closing an active tab without logout, separately from session revocation.

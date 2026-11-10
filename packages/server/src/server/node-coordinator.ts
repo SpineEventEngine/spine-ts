@@ -79,7 +79,9 @@ import { ReadRequestStatus } from "../services/read-request-status.js";
 import {
   TrustedReaderIngress,
   type DirectReaderAuthenticator,
+  type ReaderAdmissionResult,
 } from "../services/trusted-reader-ingress.js";
+import { NativeOperation } from "../services/native-operation.js";
 import { ServerEnvironment } from "./server-environment.js";
 
 const defaultHost = "127.0.0.1";
@@ -319,6 +321,8 @@ export class NodeCoordinator {
 
   #draining = false;
 
+  readonly #admissionShutdown = new AbortController();
+
   #membershipReconciliation = Promise.resolve();
 
   /**
@@ -495,6 +499,7 @@ export class NodeCoordinator {
    * @returns Completion after bounded Coordinator cleanup.
    */
   close(): Promise<void> {
+    this.#admissionShutdown.abort();
     this.#close ??= this.#closeOnce().catch((error: unknown) => {
       this.#close = undefined;
       throw error;
@@ -530,21 +535,24 @@ export class NodeCoordinator {
    * @returns Child acknowledgment after forwarding.
    */
   async #post(command: Command, context: HandlerContext): Promise<Ack> {
-    const reader = await this.#admit(
+    return this.#runAdmitted(
       "spine.client.CommandService",
       "Post",
       toBinary(CommandService.method.post.input, command),
       context,
+      async (reader, signal) => {
+        const request: CoordinatorCommand = {
+          kind: "command",
+          command,
+          context,
+          reader,
+          signal,
+          response: create(AckSchema),
+        };
+        await this.#forward(request);
+        return request.response;
+      },
     );
-    const request: CoordinatorCommand = {
-      kind: "command",
-      command,
-      context,
-      reader,
-      response: create(AckSchema),
-    };
-    await this.#forward(request);
-    return request.response;
   }
 
   /**
@@ -555,22 +563,25 @@ export class NodeCoordinator {
    * @returns Child read response after forwarding.
    */
   async #read(query: Query, context: HandlerContext): Promise<QueryResponse> {
-    const reader = await this.#admit(
+    return this.#runAdmitted(
       "spine.client.QueryService",
       "Read",
       toBinary(QuerySchema, query),
       context,
+      async (reader, signal) => {
+        ReadRequestStatus.check("query", () => Validate.check(QuerySchema, query));
+        const request: CoordinatorQuery = {
+          kind: "query",
+          query,
+          context,
+          reader,
+          signal,
+          response: create(QueryResponseSchema),
+        };
+        await this.#forward(request);
+        return request.response;
+      },
     );
-    ReadRequestStatus.check("query", () => Validate.check(QuerySchema, query));
-    const request: CoordinatorQuery = {
-      kind: "query",
-      query,
-      context,
-      reader,
-      response: create(QueryResponseSchema),
-    };
-    await this.#forward(request);
-    return request.response;
   }
 
   /**
@@ -581,22 +592,25 @@ export class NodeCoordinator {
    * @returns The application replica's response.
    */
   async #execute(query: AppQuery, context: HandlerContext): Promise<AppQueryResponse> {
-    const reader = await this.#admit(
+    return this.#runAdmitted(
       "spine.client.QueryService",
       "Execute",
       toBinary(QueryService.method.execute.input, query),
       context,
+      async (reader, signal) => {
+        ReadRequestStatus.check("query", () => Validate.check(AppQuerySchema, query));
+        const request: CoordinatorAppQuery = {
+          kind: "app-query",
+          query,
+          context,
+          reader,
+          signal,
+          response: create(AppQueryResponseSchema),
+        };
+        await this.#forward(request);
+        return request.response;
+      },
     );
-    ReadRequestStatus.check("query", () => Validate.check(AppQuerySchema, query));
-    const request: CoordinatorAppQuery = {
-      kind: "app-query",
-      query,
-      context,
-      reader,
-      response: create(AppQueryResponseSchema),
-    };
-    await this.#forward(request);
-    return request.response;
   }
 
   /**
@@ -606,23 +620,57 @@ export class NodeCoordinator {
    * @param method Canonical RPC method.
    * @param request Canonical request bytes.
    * @param context Native transport context.
-   * @returns Detached trusted reader facts.
+   * @param signal Host-managed operation lifetime.
+   * @returns Captured reader admission and invalidation.
    */
   #admit(
     service: string,
     method: string,
     request: Uint8Array,
     context: HandlerContext,
-  ): Promise<TrustedReaderContext> {
+    signal: AbortSignal,
+  ): Promise<ReaderAdmissionResult> {
     return TrustedReaderIngress.admit({
       service,
       method,
       request,
       headers: context.requestHeader,
       peer: context,
+      signal,
       maxBytes: this.#readMaxBytes,
       ...this.#readerAdmission,
     });
+  }
+
+  /**
+   * Holds one unary operation through admission and child work.
+   *
+   * @typeParam T Native response type.
+   * @param service Canonical RPC service.
+   * @param method Canonical RPC method.
+   * @param bytes Canonical request bytes.
+   * @param context Original peer metadata.
+   * @param work Verified action using the effective signal.
+   * @returns Result while admission remains valid.
+   */
+  async #runAdmitted<T>(
+    service: string,
+    method: string,
+    bytes: Uint8Array,
+    context: HandlerContext,
+    work: (reader: TrustedReaderContext, signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const operation = new NativeOperation(context.signal, this.#admissionShutdown.signal);
+    try {
+      const admission = await this.#admit(service, method, bytes, context, operation.signal);
+      operation.link(admission.invalidated);
+      operation.check();
+      const result = await work(admission.reader, operation.signal);
+      operation.check();
+      return result;
+    } finally {
+      operation.close();
+    }
   }
 
   /**
@@ -633,12 +681,62 @@ export class NodeCoordinator {
    * @returns The new subscription definition.
    */
   async #subscribe(topic: Topic, context: HandlerContext): Promise<Subscription> {
-    const reader = await this.#admit(
-      "spine.client.SubscriptionService",
-      "Subscribe",
-      toBinary(TopicSchema, topic),
-      context,
-    );
+    const operation = new NativeOperation(context.signal, this.#admissionShutdown.signal);
+    try {
+      const admission = await this.#admit(
+        "spine.client.SubscriptionService",
+        "Subscribe",
+        toBinary(TopicSchema, topic),
+        context,
+        operation.signal,
+      );
+      operation.link(admission.invalidated);
+      operation.check();
+      const subscription = await this.#subscribeReader(topic, admission.reader, operation.signal);
+      try {
+        operation.check();
+      } catch (error) {
+        return await this.#compensateSubscribe(subscription, error);
+      }
+      return subscription;
+    } finally {
+      operation.close();
+    }
+  }
+
+  /**
+   * Removes a committed definition after a failed final admission check.
+   *
+   * @param subscription Created logical definition.
+   * @param error Final admission failure.
+   * @returns Rejected completion after conditional cleanup.
+   */
+  async #compensateSubscribe(subscription: Subscription, error: unknown): Promise<never> {
+    this.#clearPendingActivation(subscription);
+    try {
+      await this.#cancelDefinition(
+        toBinary(SubscriptionSchema, subscription),
+        new AbortController().signal,
+      );
+    } catch (cleanup) {
+      throw new AggregateError([error, cleanup], "Coordinator Subscribe cleanup failed.");
+    }
+    throw error;
+  }
+
+  /**
+   * Creates a reader-bound definition under its native operation lifetime.
+   *
+   * @param topic Framework subscription Topic.
+   * @param reader Detached authenticated facts.
+   * @param signal Effective cancellation.
+   * @returns Created logical definition.
+   */
+  async #subscribeReader(
+    topic: Topic,
+    reader: TrustedReaderContext,
+    signal: AbortSignal,
+  ): Promise<Subscription> {
     ReadRequestStatus.check("topic", () => Validate.check(TopicSchema, topic));
     if (this.#draining) throw new ConnectError("Managed application is closing.", Code.Unavailable);
     const subscription = create(SubscriptionSchema, {
@@ -647,22 +745,59 @@ export class NodeCoordinator {
     });
     const id = subscription.id?.value;
     if (id === undefined) throw new Error("Created subscription has no ID.");
+    const definition = toBinary(SubscriptionSchema, subscription);
     this.#readers.set(id, reader);
     try {
-      await this.#subscriptionKernel.subscribe(
-        toBinary(SubscriptionSchema, subscription),
-        context.signal,
-      );
+      await this.#createDefinition(definition, signal);
     } catch (error) {
-      this.#forgetReader(id);
+      if (!(error instanceof AggregateError)) this.#forgetReader(id);
+      if (signal.aborted && !(error instanceof AggregateError))
+        throw new ConnectError("Reader operation cancelled.", Code.Canceled);
       throw this.#availabilityError(error);
     }
-    if (this.#isDraining()) {
-      await this.#cancelDefinition(toBinary(SubscriptionSchema, subscription), context.signal);
+    if (this.#isDraining() || signal.aborted) {
+      await this.#cancelDefinition(definition, new AbortController().signal);
       throw new ConnectError("Managed application is closing.", Code.Unavailable);
     }
     this.#schedulePendingActivation(subscription);
     return subscription;
+  }
+
+  /**
+   * Cancels a pending child creation when the requesting reader loses authority.
+   *
+   * @param definition Logical subscription definition.
+   * @param signal Reader operation lifetime.
+   * @returns Completion after creation or conditional cancellation settles.
+   */
+  async #createDefinition(definition: Uint8Array, signal: AbortSignal): Promise<void> {
+    let cancellation: Promise<void> | undefined;
+    const abort = () => {
+      cancellation = this.#cancelDefinition(definition, new AbortController().signal);
+      void cancellation.catch(() => undefined);
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    let failed = false;
+    let primary: unknown;
+    try {
+      await this.#subscriptionKernel.subscribe(definition, signal);
+    } catch (error) {
+      failed = true;
+      primary = error;
+    } finally {
+      signal.removeEventListener("abort", abort);
+    }
+    if (signal.aborted && cancellation === undefined) abort();
+    try {
+      await cancellation;
+    } catch (cleanup) {
+      throw new AggregateError(
+        failed ? [primary, cleanup] : [cleanup],
+        "Subscription cancellation failed.",
+      );
+    }
+    if (failed) throw primary;
+    if (signal.aborted) throw new ConnectError("Reader operation cancelled.", Code.Canceled);
   }
 
   /**
@@ -685,7 +820,27 @@ export class NodeCoordinator {
     subscription: Subscription,
     context: HandlerContext,
   ): AsyncIterable<SubscriptionUpdate> {
-    await this.#admitActivation(subscription, context);
+    const operation = new NativeOperation(context.signal, this.#admissionShutdown.signal);
+    try {
+      await this.#admitActivation(subscription, context, operation);
+      operation.check();
+      yield* this.#relayActivation(subscription, operation);
+    } finally {
+      operation.close();
+    }
+  }
+
+  /**
+   * Relays one admitted definition through ACK and complete child iteration.
+   *
+   * @param subscription Retained logical definition.
+   * @param operation Host-managed activation lifetime.
+   * @returns ACK and surviving updates.
+   */
+  async *#relayActivation(
+    subscription: Subscription,
+    operation: NativeOperation,
+  ): AsyncIterable<SubscriptionUpdate> {
     if (this.#draining) throw new ConnectError("Managed application is closing.", Code.Unavailable);
     const definition = toBinary(SubscriptionSchema, subscription);
     this.#clearPendingActivation(subscription);
@@ -693,20 +848,24 @@ export class NodeCoordinator {
     const abort = () => {
       overflow.abort();
     };
-    context.signal.addEventListener("abort", abort, { once: true });
-    if (context.signal.aborted) abort();
+    operation.signal.addEventListener("abort", abort, { once: true });
+    if (operation.signal.aborted) abort();
     const updates = new SubscriptionUpdateQueue(this.#subscriptionQueueCapacity, abort);
     const ack = Promise.withResolvers<SubscriptionUpdate | undefined>();
     const activation = this.#activateChild(definition, subscription, updates, ack, overflow.signal);
     let failure: Error | undefined;
     try {
       const ready = await ack.promise;
+      operation.check();
       if (ready !== undefined) yield ready;
-      for await (const update of updates) yield update;
+      for await (const update of updates) {
+        operation.check();
+        yield update;
+      }
     } catch (error) {
       failure = NodeCoordinatorValues.error(error);
     } finally {
-      context.signal.removeEventListener("abort", abort);
+      operation.signal.removeEventListener("abort", abort);
       overflow.abort();
       updates.close();
       await this.#finishActivation(definition, activation, failure);
@@ -720,16 +879,23 @@ export class NodeCoordinator {
    * @param context The trusted context for this operation.
    * @returns Completion after the operation settles.
    */
-  async #admitActivation(subscription: Subscription, context: HandlerContext): Promise<void> {
-    const reader = await this.#admit(
+  async #admitActivation(
+    subscription: Subscription,
+    context: HandlerContext,
+    operation: NativeOperation,
+  ): Promise<void> {
+    const admission = await this.#admit(
       "spine.client.SubscriptionService",
       "Activate",
       toBinary(SubscriptionSchema, subscription),
       context,
+      operation.signal,
     );
+    operation.link(admission.invalidated);
+    operation.check();
     ReadRequestStatus.check("subscription", () => Validate.check(SubscriptionSchema, subscription));
     ReadRequestStatus.checkLifecycleCriterion(subscription);
-    this.#requireReader(subscription, reader);
+    this.#requireReader(subscription, admission.reader);
   }
 
   /**
@@ -753,6 +919,7 @@ export class NodeCoordinator {
       .activate(
         definition,
         async (childUpdate) => {
+          if (signal.aborted) return;
           const update = fromBinary(SubscriptionUpdateSchema, childUpdate);
           update.subscription = clone(SubscriptionSchema, subscription);
           if (update.response?.status?.status.case === "ok" && update.update.case === undefined) {
@@ -807,12 +974,28 @@ export class NodeCoordinator {
    * @returns The cancellation acknowledgment.
    */
   async #cancel(subscription: Subscription, context: HandlerContext): Promise<Response> {
-    const reader = await this.#admit(
+    return this.#runAdmitted(
       "spine.client.SubscriptionService",
       "Cancel",
       toBinary(SubscriptionSchema, subscription),
       context,
+      (reader, signal) => this.#cancelReader(subscription, reader, signal),
     );
+  }
+
+  /**
+   * Checks reader binding before removing an existing definition.
+   *
+   * @param subscription Logical definition.
+   * @param reader Detached authenticated facts.
+   * @param signal Effective cancellation.
+   * @returns Cancellation acknowledgment.
+   */
+  async #cancelReader(
+    subscription: Subscription,
+    reader: TrustedReaderContext,
+    signal: AbortSignal,
+  ): Promise<Response> {
     ReadRequestStatus.check("subscription", () => Validate.check(SubscriptionSchema, subscription));
     ReadRequestStatus.checkLifecycleCriterion(subscription);
     const id = subscription.id?.value;
@@ -822,7 +1005,7 @@ export class NodeCoordinator {
         status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
       });
     this.#clearPendingActivation(subscription);
-    await this.#cancelDefinition(toBinary(SubscriptionSchema, subscription), context.signal);
+    await this.#cancelDefinition(toBinary(SubscriptionSchema, subscription), signal);
     return create(ResponseSchema, {
       status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
     });
@@ -837,6 +1020,8 @@ export class NodeCoordinator {
   async #forward(request: CoordinatorRequest): Promise<void> {
     if (this.#draining)
       throw new ConnectError("No ready application replica is available.", Code.Unavailable);
+    if (request.signal.aborted)
+      throw new ConnectError("Reader operation cancelled.", Code.Canceled);
     try {
       await this.#unaryKernel.forward(request);
     } catch (error) {
@@ -1044,6 +1229,7 @@ interface CoordinatorCommand {
   readonly kind: "command";
   readonly command: Command;
   readonly context: HandlerContext;
+  readonly signal: AbortSignal;
   readonly reader: TrustedReaderContext;
   response: Ack;
 }
@@ -1055,6 +1241,7 @@ interface CoordinatorQuery {
   readonly kind: "query";
   readonly query: Query;
   readonly context: HandlerContext;
+  readonly signal: AbortSignal;
   readonly reader: TrustedReaderContext;
   response: QueryResponse;
 }
@@ -1066,6 +1253,7 @@ interface CoordinatorAppQuery {
   readonly kind: "app-query";
   readonly query: AppQuery;
   readonly context: HandlerContext;
+  readonly signal: AbortSignal;
   readonly reader: TrustedReaderContext;
   response: AppQueryResponse;
 }
@@ -1458,6 +1646,7 @@ const NodeCoordinatorValues = Object.freeze({
       issuer,
       maxBytes,
     );
+    if (signal.aborted) throw new ConnectError("Reader operation cancelled.", Code.Canceled);
     const created = await createClient(SubscriptionService, transport).subscribe(topic, {
       signal,
       ...(headers === undefined ? {} : { headers }),
@@ -1491,7 +1680,6 @@ const NodeCoordinatorValues = Object.freeze({
     maxBytes: number,
   ): Promise<void> {
     const subscription = fromBinary(SubscriptionSchema, child);
-    members?.onChildSubscriptionCancelled?.(member, subscription);
     const headers = await NodeCoordinatorValues.readerHeaders(
       "Cancel",
       child,
@@ -1499,6 +1687,8 @@ const NodeCoordinatorValues = Object.freeze({
       issuer,
       maxBytes,
     );
+    if (signal.aborted) throw new ConnectError("Reader operation cancelled.", Code.Canceled);
+    members?.onChildSubscriptionCancelled?.(member, subscription);
     await createClient(SubscriptionService, transport).cancel(subscription, {
       signal,
       ...(headers === undefined ? {} : { headers }),
@@ -1521,12 +1711,14 @@ const NodeCoordinatorValues = Object.freeze({
     maxBytes = defaultMessageMaxBytes,
   ): Promise<Uint8Array> {
     const headers = await NodeCoordinatorValues.forwardHeaders(request, issuer, maxBytes);
+    if (request.signal.aborted)
+      throw new ConnectError("Reader operation cancelled.", Code.Canceled);
     if (request.kind === "command") {
       await NodeCoordinatorValues.forwardCommand(transport, request, headers);
     } else if (request.kind === "query") {
       const response = await transport.unary(
         QueryService.method.read,
-        request.context.signal,
+        request.signal,
         request.context.timeoutMs(),
         headers,
         request.query,
@@ -1536,7 +1728,7 @@ const NodeCoordinatorValues = Object.freeze({
     } else {
       const response = await transport.unary(
         QueryService.method.execute,
-        request.context.signal,
+        request.signal,
         request.context.timeoutMs(),
         headers,
         request.query,
@@ -1562,7 +1754,7 @@ const NodeCoordinatorValues = Object.freeze({
   ): Promise<void> {
     const response = await transport.unary(
       CommandService.method.post,
-      request.context.signal,
+      request.signal,
       request.context.timeoutMs(),
       headers,
       request.command,
@@ -1634,7 +1826,6 @@ const NodeCoordinatorValues = Object.freeze({
     maxBytes = defaultMessageMaxBytes,
   ): Promise<void> {
     const subscription = fromBinary(SubscriptionSchema, child);
-    members?.onChildSubscriptionActivated?.(member, subscription);
     const headers = await NodeCoordinatorValues.readerHeaders(
       "Activate",
       child,
@@ -1642,6 +1833,8 @@ const NodeCoordinatorValues = Object.freeze({
       issuer,
       maxBytes,
     );
+    if (signal.aborted) throw new ConnectError("Reader operation cancelled.", Code.Canceled);
+    members?.onChildSubscriptionActivated?.(member, subscription);
     for await (const update of createClient(SubscriptionService, transport).activate(subscription, {
       signal,
       ...(headers === undefined ? {} : { headers }),

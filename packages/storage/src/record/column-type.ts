@@ -12,31 +12,61 @@
  * the License.
  */
 
-import type { DescEnum, DescField, DescMessage, ScalarType } from "@bufbuild/protobuf";
+import { ScalarType, type DescEnum, type DescField, type DescMessage } from "@bufbuild/protobuf";
 
 declare const columnValueType: unique symbol;
 
 /**
  * Generated Protobuf type retained for one materialized record column.
+ *
+ * @typeParam V Declared column value type.
  */
 export type RecordColumnType<V = unknown> = (
   | {
       // prettier-ignore
 
       /**
-       * Identifies a Protobuf scalar column.
+       * Identifies a Protobuf byte scalar column.
        */
       readonly kind: "scalar";
 
       /**
-       * Protobuf scalar kind retained by the column.
+       * Retains the Protobuf BYTES scalar kind.
        */
-      readonly scalar: ScalarType;
+      readonly scalar: ScalarType.BYTES;
 
       /**
        * Whether generated code represents a 64-bit value as a string.
        */
       readonly longAsString: boolean;
+
+      /**
+       * Exact byte width when this scalar is BYTES and was declared with fixedBytes.
+       */
+      readonly byteLength?: number;
+    }
+  | {
+      // prettier-ignore
+
+      /**
+       * Identifies a non-byte Protobuf scalar column.
+       */
+      readonly kind: "scalar";
+
+      /**
+       * Retains a scalar kind that cannot declare an exact byte width.
+       */
+      readonly scalar: Exclude<ScalarType, ScalarType.BYTES>;
+
+      /**
+       * Whether generated code represents a 64-bit value as a string.
+       */
+      readonly longAsString: boolean;
+
+      /**
+       * Prevents byte widths on non-byte scalar descriptors.
+       */
+      readonly byteLength?: never;
     }
   | {
       // prettier-ignore
@@ -80,15 +110,26 @@ export const ColumnTypes = {
   // prettier-ignore
 
   /**
+   * Declares bytes with an exact stored and queried width.
+   * @param byteLength Positive safe-integer width.
+   * @returns Fixed-width byte column type.
+   */
+  fixedBytes(byteLength: number): RecordColumnType<Uint8Array> {
+    if (!Number.isSafeInteger(byteLength) || byteLength <= 0)
+      throw new RangeError("Fixed-byte width must be a positive safe integer.");
+    return Object.freeze({ kind: "scalar", scalar: ScalarType.BYTES, longAsString: false, byteLength });
+  },
+
+  /**
    * Declares a scalar type for a derived column value.
    * @param scalar The Protobuf scalar type.
    * @param longAsString Whether a 64-bit value uses its generated string form.
    * @returns The scalar column type.
+   * @typeParam V Declared column value type.
    */
-  scalar<V = unknown>(
-    scalar: ScalarType,
-    longAsString?: boolean,
-  ): RecordColumnType<V> {
+  scalar<V = unknown>(scalar: ScalarType, longAsString?: boolean): RecordColumnType<V> {
+    if (scalar === ScalarType.BYTES)
+      return Object.freeze({ kind: "scalar", scalar, longAsString: longAsString ?? false });
     return Object.freeze({ kind: "scalar", scalar, longAsString: longAsString ?? false });
   },
 
@@ -96,6 +137,7 @@ export const ColumnTypes = {
    * Declares an enum type for a derived column value.
    * @param schema The generated enum descriptor.
    * @returns The enum column type.
+   * @typeParam V Declared column value type.
    */
   enum<V = unknown>(schema: DescEnum): RecordColumnType<V> {
     return Object.freeze({ kind: "enum", enum: schema });
@@ -105,6 +147,7 @@ export const ColumnTypes = {
    * Declares a message type for a derived column value.
    * @param schema The generated message descriptor.
    * @returns The message column type.
+   * @typeParam V Declared column value type.
    */
   message<V = unknown>(schema: DescMessage): RecordColumnType<V> {
     return Object.freeze({ kind: "message", message: schema });
@@ -115,10 +158,17 @@ export const ColumnTypes = {
    * @param field The generated field descriptor.
    * @returns The corresponding column type.
    * @throws Error when the field is repeated or a map.
+   * @typeParam V Declared column value type.
    */
   fromField<V = unknown>(field: DescField): RecordColumnType<V> {
     switch (field.fieldKind) {
       case "scalar":
+        if (field.scalar === ScalarType.BYTES)
+          return Object.freeze({
+            kind: "scalar",
+            scalar: field.scalar,
+            longAsString: field.longAsString,
+          });
         return Object.freeze({
           kind: "scalar",
           scalar: field.scalar,
@@ -135,3 +185,30 @@ export const ColumnTypes = {
   },
 } as const;
 Object.freeze(ColumnTypes);
+
+/**
+ * Validates present values for fixed-width byte columns.
+ */
+export const FixedByteWidthValidation: Readonly<{
+  /**
+   * Requires a present byte value to match its declared exact width.
+   *
+   * @param type Validated record-column descriptor.
+   * @param value Present stored or queried column value.
+   * @throws TypeError when a fixed-byte value is not bytes or has the wrong width.
+   */
+  require(type: RecordColumnType, value: unknown): void;
+}> = Object.freeze({
+  /**
+   * Requires a present byte value to match its declared exact width.
+   *
+   * @param type Validated record-column descriptor.
+   * @param value Present stored or queried column value.
+   * @throws TypeError when a fixed-byte value is not bytes or has the wrong width.
+   */
+  require(type: RecordColumnType, value: unknown): void {
+    if (type.kind !== "scalar" || type.byteLength === undefined) return;
+    if (!(value instanceof Uint8Array) || value.byteLength !== type.byteLength)
+      throw new TypeError(`Fixed-byte column requires exactly ${String(type.byteLength)} bytes.`);
+  },
+});

@@ -38,11 +38,15 @@ describe("Orders query routing example", () => {
     const { OrderCard, OrderCardContext } = await import("../dist/src/query-routing.js");
     const reaction = vi.spyOn(OrderCard.prototype, "onSkuRegistered");
     const backend = new InMemoryStorageBackend();
-    const context: BoundedContext = await OrderCardContext.create(
-      new InMemoryStorageFactory(backend),
-    );
+    const { configureOrdersEnvironment, ordersTenants } = await import("../dist/src/index.js");
+    const setup = await configureOrdersEnvironment({
+      storageFactory: new InMemoryStorageFactory(backend),
+      tenants: [ordersTenants.northwind, ordersTenants.contoso],
+    });
+    const context: BoundedContext = await OrderCardContext.create();
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "orders-query-routing" }),
+      tenantId: ordersTenants.northwind,
     });
     const post = async (message: Any): Promise<void> => {
       await context.commandBus().post(
@@ -73,7 +77,11 @@ describe("Orders query routing example", () => {
         ),
       );
       await vi.waitFor(async () => {
-        expect(await context.stand().readAllVersioned(OrderCardSchema)).toHaveLength(3);
+        expect(
+          await context
+            .stand()
+            .readAllVersioned(OrderCardSchema, { tenantId: ordersTenants.northwind }),
+        ).toHaveLength(3);
       });
       await post(
         AnyPacker.pack(
@@ -85,7 +93,9 @@ describe("Orders query routing example", () => {
         ),
       );
       await vi.waitFor(async () => {
-        const cards = await context.stand().readAllVersioned(OrderCardSchema);
+        const cards = await context
+          .stand()
+          .readAllVersioned(OrderCardSchema, { tenantId: ordersTenants.northwind });
         expect(cards.map(({ state }) => [state.id, state.skuName]).sort()).toEqual([
           ["order-a", "Blue mug"],
           ["order-b", "Blue mug"],
@@ -93,9 +103,11 @@ describe("Orders query routing example", () => {
         ]);
       });
       expect(reaction).toHaveBeenCalledTimes(2);
-      const before = (await context.stand().readAllVersioned(OrderCardSchema)).toSorted(
-        (left, right) => left.state.id.localeCompare(right.state.id),
-      );
+      const before = (
+        await context
+          .stand()
+          .readAllVersioned(OrderCardSchema, { tenantId: ordersTenants.northwind })
+      ).toSorted((left, right) => left.state.id.localeCompare(right.state.id));
       await post(
         AnyPacker.pack(
           RegisterSkuSchema,
@@ -114,21 +126,76 @@ describe("Orders query routing example", () => {
           }),
         ),
       );
+      const contosoActor = metadata.actorContext({
+        actor: create(UserIdSchema, { value: "orders-query-routing" }),
+        tenantId: ordersTenants.contoso,
+      });
+      await context.commandBus().post(
+        create(CommandSchema, {
+          id: metadata.commandId(),
+          context: metadata.commandContext({ actorContext: contosoActor }),
+          message: AnyPacker.pack(
+            CreateOrderSchema,
+            create(CreateOrderSchema, {
+              id: "order-a",
+              skuId: "sku-1",
+            }),
+          ),
+        }),
+      );
+      await vi.waitFor(async () => {
+        expect(
+          await context.stand().readAllVersioned(OrderCardSchema, {
+            tenantId: ordersTenants.contoso,
+          }),
+        ).toHaveLength(1);
+      });
+      await context.commandBus().post(
+        create(CommandSchema, {
+          id: metadata.commandId(),
+          context: metadata.commandContext({ actorContext: contosoActor }),
+          message: AnyPacker.pack(
+            RegisterSkuSchema,
+            create(RegisterSkuSchema, {
+              id: "sku-1",
+              displayName: "Red mug",
+            }),
+          ),
+        }),
+      );
+      await vi.waitFor(async () => {
+        expect(
+          (
+            await context.stand().readAllVersioned(OrderCardSchema, {
+              tenantId: ordersTenants.contoso,
+            })
+          )[0]?.state.skuName,
+        ).toBe("Red mug");
+      });
+      expect(
+        (
+          await context.stand().readAllVersioned(OrderCardSchema, {
+            tenantId: ordersTenants.northwind,
+          })
+        ).map(({ state }) => state.skuName),
+      ).toEqual(["Blue mug", "Blue mug", ""]);
       // Closing drains accepted Event delivery before either negative assertion.
       await context.close();
-      await ServerTests.resetEnvironment();
-      const inspection = await OrderCardContext.create(new InMemoryStorageFactory(backend));
+      const inspection = await OrderCardContext.create();
       try {
-        const after = (await inspection.stand().readAllVersioned(OrderCardSchema)).toSorted(
-          (left, right) => left.state.id.localeCompare(right.state.id),
-        );
-        expect(reaction).toHaveBeenCalledTimes(2);
+        const after = (
+          await inspection
+            .stand()
+            .readAllVersioned(OrderCardSchema, { tenantId: ordersTenants.northwind })
+        ).toSorted((left, right) => left.state.id.localeCompare(right.state.id));
+        expect(reaction).toHaveBeenCalledTimes(3);
         expect(after).toEqual(before);
       } finally {
         await inspection.close();
       }
     } finally {
       await context.close();
+      await setup.close();
     }
   });
 });

@@ -203,6 +203,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @param tableSpec Supplies the canonical table layout.
    * @param stringifiers The schema-bound message stringifiers.
    * @param publicHandle Whether this is a public factory record handle.
+   * @param prepareOnAccess Whether data access prepares this handle's table.
    */
   constructor(
     context: StorageContext,
@@ -214,6 +215,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     tableSpec?: MysqlTableSpec<I, R>,
     stringifiers: StringifierRegistry = defaultStringifierRegistry,
     private readonly publicHandle = false,
+    private readonly prepareOnAccess = true,
   ) {
     super(context, recordSpec);
     this.#idColumn = new MysqlIdColumn(recordSpec.idType, stringifiers);
@@ -226,6 +228,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
         recordType: recordSpec.recordType,
         idType: recordSpec.idType,
         declaredColumns: recordSpec.columns,
+        declaredIndexes: recordSpec.indexes,
       });
   }
 
@@ -646,7 +649,8 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     if (bound !== undefined) {
       return work(bound);
     }
-    if (this.lifecycle.prepare !== undefined) await this.lifecycle.prepare();
+    if (this.prepareOnAccess && this.lifecycle.prepare !== undefined)
+      await this.lifecycle.prepare();
     const connection = await this.lifecycle.acquire();
     try {
       await this.ready(connection);
@@ -665,7 +669,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @returns Resolves when the table is ready.
    */
   private async ready(connection: import("mysql2/promise").PoolConnection): Promise<void> {
-    if (this.lifecycle.prepare !== undefined) return;
+    if (!this.prepareOnAccess || this.lifecycle.prepare !== undefined) return;
     this.#ready ??= new MysqlTableInitializer(this.table, this.tableSpec, this.createOperation)
       .prepare(connection, "create")
       .catch((error: unknown) => {
@@ -1022,10 +1026,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
         `MySQL normalized query exceeds the ${String(maximumNormalizedPlanBinds)}-parameter bind budget.`,
       );
     }
-    const candidateLimit = plan.candidateLimit ?? defaultQueryCandidateLimit;
-    const limit = plan.exhaustive
-      ? plan.limit
-      : Math.min(plan.limit ?? Number.MAX_SAFE_INTEGER, candidateLimit + 1);
+    const limit = this.planResultBound(plan);
     const exactLimit =
       !plan.exhaustive ||
       (!scanAll && safePredicate === plan.predicate && this.exhaustiveOrderMatches(plan));
@@ -1039,6 +1040,27 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
         limitClause,
       values,
     };
+  }
+
+  /**
+   * Calculates the SQL bound before full byte ordering by the shared evaluator.
+   *
+   * @param plan Validated normalized query plan.
+   * @returns Exact or candidate-budget SQL bound.
+   */
+  private planResultBound(plan: NormalizedQueryPlan<I>): number | undefined {
+    if (plan.exhaustive) return plan.limit;
+    const variableBytesOrder = (plan.order ?? []).some(({ column }) => {
+      const type = this.recordSpec.columns.find((candidate) => candidate.name === column)?.type;
+      return (
+        type?.kind === "scalar" && type.scalar === ScalarType.BYTES && type.byteLength === undefined
+      );
+    });
+    const candidateLimit = plan.candidateLimit ?? defaultQueryCandidateLimit;
+    return Math.min(
+      variableBytesOrder ? Number.MAX_SAFE_INTEGER : (plan.limit ?? Number.MAX_SAFE_INTEGER),
+      candidateLimit + 1,
+    );
   }
 
   /**
@@ -1358,6 +1380,8 @@ export class MysqlTableInitializer<I, R extends Message> {
     await this.inspectPrimary(connection, nativeMetadata);
     await this.inspectUnique(connection);
     await this.inspectEngine(connection);
+    for (const index of this.spec.indexes ?? [])
+      await this.ensureRecordIndex(connection, index.name, index.columns, mode);
   }
 
   /**
@@ -1513,6 +1537,46 @@ export class MysqlTableInitializer<I, R extends Message> {
   }
 
   /**
+   * Creates a missing lookup index and verifies its complete native definition.
+   * @param connection Preparation connection.
+   * @param name Table-scoped physical name.
+   * @param columns Ordered complete columns.
+   * @param mode Creation or check mode.
+   * @returns Completion after the required index is verified compatible.
+   */
+  private async ensureRecordIndex(
+    connection: import("mysql2/promise").PoolConnection,
+    name: string,
+    columns: readonly string[],
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    let rows = await this.historyIndex(connection, name);
+    if (rows.length === 0) {
+      if (mode === "check") throw new MysqlStorageSchemaError("MySQL record index is missing.");
+      const quoted = columns.map((column) => `\`${column.replaceAll("`", "``")}\``).join(", ");
+      try {
+        await connection.query(
+          `CREATE INDEX \`${name.replaceAll("`", "``")}\` ` +
+            `ON \`${this.table.tableName.replaceAll("`", "``")}\` (${quoted})`,
+        );
+      } catch (error) {
+        if ((error as { code?: string }).code !== "ER_DUP_KEYNAME") throw error;
+      }
+      rows = await this.historyIndex(connection, name);
+    }
+    this.assertHistoryIndex(rows, columns);
+    if (
+      rows.some(
+        (row) =>
+          row.is_visible === "NO" ||
+          row.ignored === "YES" ||
+          (row.expression !== null && row.expression !== undefined),
+      )
+    )
+      throw new MysqlStorageSchemaError("MySQL record index is incompatible.");
+  }
+
+  /**
    * Creates or checks one complete native Agent history index.
    *
    * @param connection Active preparation connection.
@@ -1556,10 +1620,21 @@ export class MysqlTableInitializer<I, R extends Message> {
     connection: import("mysql2/promise").PoolConnection,
     name: string,
   ): Promise<readonly IndexRow[]> {
+    const [available] = await connection.query<{ column_name: string }[] & RowDataPacket[]>(
+      "SELECT column_name AS column_name FROM information_schema.columns WHERE table_schema='information_schema' " +
+        "AND table_name='STATISTICS' AND column_name IN ('IS_VISIBLE', 'IGNORED', 'EXPRESSION')",
+    );
+    const fields = new Set(available.map(({ column_name }) => column_name.toUpperCase()));
+    const optional = [
+      ...(fields.has("IS_VISIBLE") ? ["is_visible AS is_visible"] : []),
+      ...(fields.has("IGNORED") ? ["ignored AS ignored"] : []),
+      ...(fields.has("EXPRESSION") ? ["expression AS expression"] : []),
+    ];
     const [rows] = await connection.query<IndexRow[]>(
       "SELECT index_name AS index_name, non_unique AS non_unique, " +
         "column_name AS column_name, seq_in_index AS seq_in_index, " +
-        "sub_part AS sub_part, collation AS collation, index_type AS index_type " +
+        "sub_part AS sub_part, collation AS collation, index_type AS index_type" +
+        (optional.length === 0 ? " " : `, ${optional.join(", ")} `) +
         "FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? " +
         "AND index_name=? ORDER BY seq_in_index",
       [this.table.tableName, name],
@@ -1624,6 +1699,9 @@ interface IndexRow extends RowDataPacket {
   sub_part?: number | null;
   collation?: string | null;
   index_type?: string;
+  is_visible?: string;
+  ignored?: string;
+  expression?: string | null;
 }
 
 function mysqlColumnDefinition(
@@ -1653,7 +1731,9 @@ function compatibleMysqlType(expected: string, actual: string | undefined): bool
     return (
       actualCapacity !== null &&
       actualCapacity[1] === expectedCapacity[1] &&
-      Number(actualCapacity[2]) >= Number(expectedCapacity[2])
+      (expectedCapacity[1] === "varbinary"
+        ? Number(actualCapacity[2]) === Number(expectedCapacity[2])
+        : Number(actualCapacity[2]) >= Number(expectedCapacity[2]))
     );
   if (normalizedExpected === "blob")
     return ["blob", "mediumblob", "longblob"].includes(normalizedActual);

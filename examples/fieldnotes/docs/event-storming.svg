@@ -1,0 +1,481 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="3200" height="2890" viewBox="0 0 3200 2890" role="img" aria-labelledby="title description">
+<title id="title">Fieldnotes — private places, one note per place</title>
+<desc id="description">Fieldnotes event-storming board. One Fieldnotes Bounded Context, five command groups handled by Place, resulting domain events, typed business rejections and one projection. A separate gray integration band shows direct Google or Firebase sign-in and application-session logout; these are not Place domain events.</desc>
+<metadata id="model">{&quot;status&quot;: &quot;current Fieldnotes domain model&quot;, &quot;boundedContexts&quot;: [&quot;Fieldnotes&quot;], &quot;aggregate&quot;: &quot;Place&quot;, &quot;invariant&quot;: &quot;Exactly one Markdown note per saved place&quot;, &quot;flows&quot;: [{&quot;n&quot;: &quot;01&quot;, &quot;title&quot;: &quot;PLACE CREATION&quot;, &quot;cmd&quot;: [&quot;Add&quot;, &quot;place&quot;], &quot;command&quot;: &quot;AddPlace&quot;, &quot;evt&quot;: [&quot;Place&quot;, &quot;added&quot;], &quot;event&quot;: &quot;PlaceAdded&quot;, &quot;reject&quot;: [&quot;Place already&quot;, &quot;exists&quot;], &quot;rejection&quot;: &quot;PlaceAlreadyExists&quot;, &quot;foot&quot;: &quot;One save records the pin, name and initial note together.&quot;}, {&quot;n&quot;: &quot;02&quot;, &quot;title&quot;: &quot;PLACE NAME&quot;, &quot;cmd&quot;: [&quot;Rename&quot;, &quot;place&quot;], &quot;command&quot;: &quot;RenamePlace&quot;, &quot;evt&quot;: [&quot;Place&quot;, &quot;renamed&quot;], &quot;event&quot;: &quot;PlaceRenamed&quot;, &quot;reject&quot;: [&quot;Place changed&quot;, &quot;since last edit&quot;], &quot;rejection&quot;: &quot;PlaceRevisionConflict&quot;, &quot;foot&quot;: &quot;Changes the name shown beside the pin; keeps the same note.&quot;}, {&quot;n&quot;: &quot;03&quot;, &quot;title&quot;: &quot;PIN POSITION&quot;, &quot;cmd&quot;: [&quot;Move&quot;, &quot;place&quot;], &quot;command&quot;: &quot;MovePlace&quot;, &quot;evt&quot;: [&quot;Place&quot;, &quot;moved&quot;], &quot;event&quot;: &quot;PlaceMoved&quot;, &quot;reject&quot;: [&quot;Place changed&quot;, &quot;since last edit&quot;], &quot;rejection&quot;: &quot;PlaceRevisionConflict&quot;, &quot;foot&quot;: &quot;Updates coordinates on the same place; the note moves with it.&quot;}, {&quot;n&quot;: &quot;04&quot;, &quot;title&quot;: &quot;NOTE CONTENT&quot;, &quot;cmd&quot;: [&quot;Edit place&quot;, &quot;note&quot;], &quot;command&quot;: &quot;EditPlaceNote&quot;, &quot;evt&quot;: [&quot;Place note&quot;, &quot;edited&quot;], &quot;event&quot;: &quot;PlaceNoteEdited&quot;, &quot;reject&quot;: [&quot;Place changed&quot;, &quot;since last edit&quot;], &quot;rejection&quot;: &quot;PlaceRevisionConflict&quot;, &quot;foot&quot;: &quot;Replaces the one Markdown body. Never adds a second note.&quot;}, {&quot;n&quot;: &quot;05&quot;, &quot;title&quot;: &quot;PLACE DELETION&quot;, &quot;cmd&quot;: [&quot;Delete&quot;, &quot;place&quot;], &quot;command&quot;: &quot;DeletePlace&quot;, &quot;evt&quot;: [&quot;Place&quot;, &quot;deleted&quot;], &quot;event&quot;: &quot;PlaceDeleted&quot;, &quot;reject&quot;: [&quot;Place changed&quot;, &quot;since last edit&quot;], &quot;rejection&quot;: &quot;PlaceRevisionConflict&quot;, &quot;foot&quot;: &quot;Removes the place and its note from visible results together.&quot;}], &quot;projections&quot;: [&quot;PlaceView&quot;], &quot;technicalIntegrations&quot;: [&quot;Google OIDC&quot;, &quot;Firebase Auth&quot;, &quot;Spine opaque sessions&quot;]}</metadata>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#758394"/></marker></defs>
+<g font-family="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+<rect x="0" y="0" width="3200" height="2890" rx="4" fill="#FFFFFF" stroke="none" stroke-width="2"/>
+<text x="60" y="88" font-size="58" fill="#182331" font-weight="650" text-anchor="start">
+<tspan x="60" dy="0">Fieldnotes</tspan>
+</text>
+<text x="60" y="135" font-size="29" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="60" dy="0">Private places. One Markdown note per place.</tspan>
+</text>
+<rect x="2640" y="45" width="500" height="62" rx="31" fill="#EAF0F5" stroke="none" stroke-width="2"/>
+<text x="2890" y="85" font-size="24" fill="#526273" font-weight="600" text-anchor="middle">
+<tspan x="2890" dy="0">DOMAIN DESIGN • v2</tspan>
+</text>
+<rect x="60" y="183" width="70" height="60" rx="4" fill="#B7D1FF" stroke="none" stroke-width="2"/>
+<text x="150" y="222" font-size="24" fill="#182331" font-weight="400" text-anchor="start">
+<tspan x="150" dy="0">Command</tspan>
+</text>
+<rect x="580" y="183" width="70" height="60" rx="4" fill="#FFBA7B" stroke="none" stroke-width="2"/>
+<text x="670" y="222" font-size="24" fill="#182331" font-weight="400" text-anchor="start">
+<tspan x="670" dy="0">Domain event</tspan>
+</text>
+<rect x="1100" y="183" width="70" height="60" rx="4" fill="#FFA1AB" stroke="none" stroke-width="2"/>
+<text x="1190" y="222" font-size="24" fill="#182331" font-weight="400" text-anchor="start">
+<tspan x="1190" dy="0">Business rejection</tspan>
+</text>
+<rect x="1620" y="183" width="70" height="60" rx="4" fill="#D1EEA1" stroke="none" stroke-width="2"/>
+<text x="1710" y="222" font-size="24" fill="#182331" font-weight="400" text-anchor="start">
+<tspan x="1710" dy="0">Projection</tspan>
+</text>
+<rect x="2140" y="183" width="70" height="60" rx="4" fill="#FFF5A4" stroke="none" stroke-width="2"/>
+<text x="2230" y="222" font-size="24" fill="#182331" font-weight="400" text-anchor="start">
+<tspan x="2230" dy="0">Aggregate</tspan>
+</text>
+<rect x="2660" y="183" width="70" height="60" rx="4" fill="#FFF5A4" stroke="none" stroke-width="2"/>
+<circle cx="2695" cy="200" r="7" fill="#394653"/><path d="M2686,212 Q2695,205 2704,212 L2707,234 L2683,234 Z" fill="#394653"/>
+<text x="2750" y="222" font-size="24" fill="#182331" font-weight="400" text-anchor="start">
+<tspan x="2750" dy="0">Actor in role</tspan>
+</text>
+<text x="60" y="280" font-size="23" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="60" dy="0">Read each group left to right. Large labels explain the action; monospace labels name the message or state.</tspan>
+</text>
+<rect x="40" y="315" width="3120" height="1800" rx="14" fill="#FFFFFF" stroke="#A9BACB" stroke-width="2"/>
+<rect x="42" y="317" width="3116" height="118" rx="12" fill="#EDF3FA" stroke="none" stroke-width="2"/>
+<text x="75" y="367" font-size="29" fill="#254D72" font-weight="650" text-anchor="start">
+<tspan x="75" dy="0">BOUNDED CONTEXT  /  FIELDNOTES</tspan>
+</text>
+<text x="75" y="409" font-size="25" fill="#182331" font-weight="400" text-anchor="start">
+<tspan x="75" dy="0">One Place aggregate holds a position, a name, one Markdown body, its author and a version.</tspan>
+</text>
+<text x="75" y="464" font-size="23" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="75" dy="0">Verified author required before access. Commands, queries, subscriptions and results are scoped to that author.</tspan>
+</text>
+<text x="75" y="496" font-size="21" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="75" dy="0">Repeated yellow cards show the same Aggregate type; each saved Place is a separate consistency boundary.</tspan>
+</text>
+<text x="80" y="525" font-size="22" fill="#526273" font-weight="650" text-anchor="start">
+<tspan x="80" dy="0">01  PLACE CREATION</tspan>
+</text>
+<rect x="273" y="554" width="585" height="75" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="270" y="550" width="585" height="75" rx="3" fill="#FFF5A4" stroke="none" stroke-width="2"/>
+<text x="562.5" y="578.625" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="562.5" dy="0">Place</tspan>
+</text>
+<text x="562.5" y="609" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="562.5" dy="0">Aggregate type</tspan>
+</text>
+<rect x="85" y="685" width="132" height="100" rx="4" fill="#FFF5A4" stroke="none" stroke-width="2"/>
+<circle cx="151" cy="706" r="7" fill="#394653"/><path d="M142,718 Q151,711 160,718 L163,740 L139,740 Z" fill="#394653"/>
+<text x="151" y="763" font-size="21" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="151" dy="0">Author</tspan>
+</text>
+<rect x="273" y="659" width="235" height="170" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="270" y="655" width="235" height="170" rx="3" fill="#B7D1FF" stroke="none" stroke-width="2"/>
+<text x="387.5" y="716.0" font-size="26" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="387.5" dy="0">Add</tspan>
+<tspan x="387.5" dy="32.5">place</tspan>
+</text>
+<text x="387.5" y="809" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="387.5" dy="0">AddPlace</tspan>
+</text>
+<rect x="623" y="659" width="235" height="170" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="620" y="655" width="235" height="170" rx="3" fill="#FFBA7B" stroke="none" stroke-width="2"/>
+<text x="737.5" y="716.0" font-size="26" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="737.5" dy="0">Place</tspan>
+<tspan x="737.5" dy="32.5">added</tspan>
+</text>
+<text x="737.5" y="809" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="737.5" dy="0">PlaceAdded</tspan>
+</text>
+<rect x="1038" y="679" width="430" height="120" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="1035" y="675" width="430" height="120" rx="3" fill="#D1EEA1" stroke="none" stroke-width="2"/>
+<text x="1250.0" y="726.125" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="1250.0" dy="0">Place view</tspan>
+</text>
+<text x="1250.0" y="779" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="1250.0" dy="0">PlaceView</tspan>
+</text>
+<rect x="623" y="869" width="340" height="120" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="620" y="865" width="340" height="120" rx="3" fill="#FFA1AB" stroke="none" stroke-width="2"/>
+<text x="790.0" y="901.75" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="790.0" dy="0">Place already</tspan>
+<tspan x="790.0" dy="28.75">exists</tspan>
+</text>
+<text x="790.0" y="969" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="790.0" dy="0">PlaceAlreadyExists</tspan>
+</text>
+<rect x="1038" y="869" width="430" height="120" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="1035" y="865" width="430" height="120" rx="3" fill="#FFA1AB" stroke="none" stroke-width="2"/>
+<text x="1250.0" y="916.125" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="1250.0" dy="0">Place unavailable</tspan>
+</text>
+<text x="1250.0" y="969" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="1250.0" dy="0">PlaceUnavailable</tspan>
+</text>
+<path d="M 217,735 L 265,735" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 505,735 L 615,735" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 855,735 L 1030,735" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 555,735 L 555,925 L 615,925" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 555,840 L 1010,840 L 1010,925 L 1030,925" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="88" y="1023" font-size="21" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="88" dy="0">One save records the pin, name and initial note together.</tspan>
+</text>
+<text x="1630" y="525" font-size="22" fill="#526273" font-weight="650" text-anchor="start">
+<tspan x="1630" dy="0">02  PLACE NAME</tspan>
+</text>
+<rect x="1823" y="554" width="585" height="75" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="1820" y="550" width="585" height="75" rx="3" fill="#FFF5A4" stroke="none" stroke-width="2"/>
+<text x="2112.5" y="578.625" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="2112.5" dy="0">Place</tspan>
+</text>
+<text x="2112.5" y="609" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="2112.5" dy="0">Aggregate type</tspan>
+</text>
+<rect x="1635" y="685" width="132" height="100" rx="4" fill="#FFF5A4" stroke="none" stroke-width="2"/>
+<circle cx="1701" cy="706" r="7" fill="#394653"/><path d="M1692,718 Q1701,711 1710,718 L1713,740 L1689,740 Z" fill="#394653"/>
+<text x="1701" y="763" font-size="21" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="1701" dy="0">Author</tspan>
+</text>
+<rect x="1823" y="659" width="235" height="170" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="1820" y="655" width="235" height="170" rx="3" fill="#B7D1FF" stroke="none" stroke-width="2"/>
+<text x="1937.5" y="716.0" font-size="26" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="1937.5" dy="0">Rename</tspan>
+<tspan x="1937.5" dy="32.5">place</tspan>
+</text>
+<text x="1937.5" y="809" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="1937.5" dy="0">RenamePlace</tspan>
+</text>
+<rect x="2173" y="659" width="235" height="170" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="2170" y="655" width="235" height="170" rx="3" fill="#FFBA7B" stroke="none" stroke-width="2"/>
+<text x="2287.5" y="716.0" font-size="26" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="2287.5" dy="0">Place</tspan>
+<tspan x="2287.5" dy="32.5">renamed</tspan>
+</text>
+<text x="2287.5" y="809" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="2287.5" dy="0">PlaceRenamed</tspan>
+</text>
+<rect x="2588" y="679" width="430" height="120" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="2585" y="675" width="430" height="120" rx="3" fill="#D1EEA1" stroke="none" stroke-width="2"/>
+<text x="2800.0" y="726.125" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="2800.0" dy="0">Place view</tspan>
+</text>
+<text x="2800.0" y="779" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="2800.0" dy="0">PlaceView</tspan>
+</text>
+<rect x="2173" y="869" width="340" height="120" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="2170" y="865" width="340" height="120" rx="3" fill="#FFA1AB" stroke="none" stroke-width="2"/>
+<text x="2340.0" y="901.75" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="2340.0" dy="0">Place changed</tspan>
+<tspan x="2340.0" dy="28.75">since last edit</tspan>
+</text>
+<text x="2340.0" y="969" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="2340.0" dy="0">PlaceRevisionConflict</tspan>
+</text>
+<rect x="2588" y="869" width="430" height="120" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="2585" y="865" width="430" height="120" rx="3" fill="#FFA1AB" stroke="none" stroke-width="2"/>
+<text x="2800.0" y="916.125" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="2800.0" dy="0">Place unavailable</tspan>
+</text>
+<text x="2800.0" y="969" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="2800.0" dy="0">PlaceUnavailable</tspan>
+</text>
+<path d="M 1767,735 L 1815,735" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 2055,735 L 2165,735" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 2405,735 L 2580,735" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 2105,735 L 2105,925 L 2165,925" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 2105,840 L 2560,840 L 2560,925 L 2580,925" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="1638" y="1023" font-size="21" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="1638" dy="0">Changes the name shown beside the pin; keeps the same note.</tspan>
+</text>
+<text x="80" y="1055" font-size="22" fill="#526273" font-weight="650" text-anchor="start">
+<tspan x="80" dy="0">03  PIN POSITION</tspan>
+</text>
+<rect x="273" y="1084" width="585" height="75" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="270" y="1080" width="585" height="75" rx="3" fill="#FFF5A4" stroke="none" stroke-width="2"/>
+<text x="562.5" y="1108.625" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="562.5" dy="0">Place</tspan>
+</text>
+<text x="562.5" y="1139" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="562.5" dy="0">Aggregate type</tspan>
+</text>
+<rect x="85" y="1215" width="132" height="100" rx="4" fill="#FFF5A4" stroke="none" stroke-width="2"/>
+<circle cx="151" cy="1236" r="7" fill="#394653"/><path d="M142,1248 Q151,1241 160,1248 L163,1270 L139,1270 Z" fill="#394653"/>
+<text x="151" y="1293" font-size="21" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="151" dy="0">Author</tspan>
+</text>
+<rect x="273" y="1189" width="235" height="170" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="270" y="1185" width="235" height="170" rx="3" fill="#B7D1FF" stroke="none" stroke-width="2"/>
+<text x="387.5" y="1246.0" font-size="26" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="387.5" dy="0">Move</tspan>
+<tspan x="387.5" dy="32.5">place</tspan>
+</text>
+<text x="387.5" y="1339" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="387.5" dy="0">MovePlace</tspan>
+</text>
+<rect x="623" y="1189" width="235" height="170" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="620" y="1185" width="235" height="170" rx="3" fill="#FFBA7B" stroke="none" stroke-width="2"/>
+<text x="737.5" y="1246.0" font-size="26" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="737.5" dy="0">Place</tspan>
+<tspan x="737.5" dy="32.5">moved</tspan>
+</text>
+<text x="737.5" y="1339" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="737.5" dy="0">PlaceMoved</tspan>
+</text>
+<rect x="1038" y="1209" width="430" height="120" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="1035" y="1205" width="430" height="120" rx="3" fill="#D1EEA1" stroke="none" stroke-width="2"/>
+<text x="1250.0" y="1256.125" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="1250.0" dy="0">Place view</tspan>
+</text>
+<text x="1250.0" y="1309" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="1250.0" dy="0">PlaceView</tspan>
+</text>
+<rect x="623" y="1399" width="340" height="120" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="620" y="1395" width="340" height="120" rx="3" fill="#FFA1AB" stroke="none" stroke-width="2"/>
+<text x="790.0" y="1431.75" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="790.0" dy="0">Place changed</tspan>
+<tspan x="790.0" dy="28.75">since last edit</tspan>
+</text>
+<text x="790.0" y="1499" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="790.0" dy="0">PlaceRevisionConflict</tspan>
+</text>
+<rect x="1038" y="1399" width="430" height="120" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="1035" y="1395" width="430" height="120" rx="3" fill="#FFA1AB" stroke="none" stroke-width="2"/>
+<text x="1250.0" y="1446.125" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="1250.0" dy="0">Place unavailable</tspan>
+</text>
+<text x="1250.0" y="1499" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="1250.0" dy="0">PlaceUnavailable</tspan>
+</text>
+<path d="M 217,1265 L 265,1265" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 505,1265 L 615,1265" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 855,1265 L 1030,1265" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 555,1265 L 555,1455 L 615,1455" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 555,1370 L 1010,1370 L 1010,1455 L 1030,1455" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="88" y="1553" font-size="21" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="88" dy="0">Updates coordinates on the same place; the note moves with it.</tspan>
+</text>
+<text x="1630" y="1055" font-size="22" fill="#526273" font-weight="650" text-anchor="start">
+<tspan x="1630" dy="0">04  NOTE CONTENT</tspan>
+</text>
+<rect x="1823" y="1084" width="585" height="75" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="1820" y="1080" width="585" height="75" rx="3" fill="#FFF5A4" stroke="none" stroke-width="2"/>
+<text x="2112.5" y="1108.625" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="2112.5" dy="0">Place</tspan>
+</text>
+<text x="2112.5" y="1139" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="2112.5" dy="0">Aggregate type</tspan>
+</text>
+<rect x="1635" y="1215" width="132" height="100" rx="4" fill="#FFF5A4" stroke="none" stroke-width="2"/>
+<circle cx="1701" cy="1236" r="7" fill="#394653"/><path d="M1692,1248 Q1701,1241 1710,1248 L1713,1270 L1689,1270 Z" fill="#394653"/>
+<text x="1701" y="1293" font-size="21" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="1701" dy="0">Author</tspan>
+</text>
+<rect x="1823" y="1189" width="235" height="170" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="1820" y="1185" width="235" height="170" rx="3" fill="#B7D1FF" stroke="none" stroke-width="2"/>
+<text x="1937.5" y="1246.0" font-size="26" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="1937.5" dy="0">Edit place</tspan>
+<tspan x="1937.5" dy="32.5">note</tspan>
+</text>
+<text x="1937.5" y="1339" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="1937.5" dy="0">EditPlaceNote</tspan>
+</text>
+<rect x="2173" y="1189" width="235" height="170" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="2170" y="1185" width="235" height="170" rx="3" fill="#FFBA7B" stroke="none" stroke-width="2"/>
+<text x="2287.5" y="1246.0" font-size="26" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="2287.5" dy="0">Place note</tspan>
+<tspan x="2287.5" dy="32.5">edited</tspan>
+</text>
+<text x="2287.5" y="1339" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="2287.5" dy="0">PlaceNoteEdited</tspan>
+</text>
+<rect x="2588" y="1209" width="430" height="120" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="2585" y="1205" width="430" height="120" rx="3" fill="#D1EEA1" stroke="none" stroke-width="2"/>
+<text x="2800.0" y="1256.125" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="2800.0" dy="0">Place view</tspan>
+</text>
+<text x="2800.0" y="1309" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="2800.0" dy="0">PlaceView</tspan>
+</text>
+<rect x="2173" y="1399" width="340" height="120" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="2170" y="1395" width="340" height="120" rx="3" fill="#FFA1AB" stroke="none" stroke-width="2"/>
+<text x="2340.0" y="1431.75" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="2340.0" dy="0">Place changed</tspan>
+<tspan x="2340.0" dy="28.75">since last edit</tspan>
+</text>
+<text x="2340.0" y="1499" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="2340.0" dy="0">PlaceRevisionConflict</tspan>
+</text>
+<rect x="2588" y="1399" width="430" height="120" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="2585" y="1395" width="430" height="120" rx="3" fill="#FFA1AB" stroke="none" stroke-width="2"/>
+<text x="2800.0" y="1446.125" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="2800.0" dy="0">Place unavailable</tspan>
+</text>
+<text x="2800.0" y="1499" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="2800.0" dy="0">PlaceUnavailable</tspan>
+</text>
+<path d="M 1767,1265 L 1815,1265" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 2055,1265 L 2165,1265" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 2405,1265 L 2580,1265" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 2105,1265 L 2105,1455 L 2165,1455" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 2105,1370 L 2560,1370 L 2560,1455 L 2580,1455" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="1638" y="1553" font-size="21" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="1638" dy="0">Replaces the one Markdown body. Never adds a second note.</tspan>
+</text>
+<text x="80" y="1585" font-size="22" fill="#526273" font-weight="650" text-anchor="start">
+<tspan x="80" dy="0">05  PLACE DELETION</tspan>
+</text>
+<rect x="273" y="1614" width="585" height="75" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="270" y="1610" width="585" height="75" rx="3" fill="#FFF5A4" stroke="none" stroke-width="2"/>
+<text x="562.5" y="1638.625" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="562.5" dy="0">Place</tspan>
+</text>
+<text x="562.5" y="1669" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="562.5" dy="0">Aggregate type</tspan>
+</text>
+<rect x="85" y="1745" width="132" height="100" rx="4" fill="#FFF5A4" stroke="none" stroke-width="2"/>
+<circle cx="151" cy="1766" r="7" fill="#394653"/><path d="M142,1778 Q151,1771 160,1778 L163,1800 L139,1800 Z" fill="#394653"/>
+<text x="151" y="1823" font-size="21" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="151" dy="0">Author</tspan>
+</text>
+<rect x="273" y="1719" width="235" height="170" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="270" y="1715" width="235" height="170" rx="3" fill="#B7D1FF" stroke="none" stroke-width="2"/>
+<text x="387.5" y="1776.0" font-size="26" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="387.5" dy="0">Delete</tspan>
+<tspan x="387.5" dy="32.5">place</tspan>
+</text>
+<text x="387.5" y="1869" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="387.5" dy="0">DeletePlace</tspan>
+</text>
+<rect x="623" y="1719" width="235" height="170" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="620" y="1715" width="235" height="170" rx="3" fill="#FFBA7B" stroke="none" stroke-width="2"/>
+<text x="737.5" y="1776.0" font-size="26" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="737.5" dy="0">Place</tspan>
+<tspan x="737.5" dy="32.5">deleted</tspan>
+</text>
+<text x="737.5" y="1869" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="737.5" dy="0">PlaceDeleted</tspan>
+</text>
+<rect x="1038" y="1739" width="430" height="120" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="1035" y="1735" width="430" height="120" rx="3" fill="#D1EEA1" stroke="none" stroke-width="2"/>
+<text x="1250.0" y="1786.125" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="1250.0" dy="0">Place view</tspan>
+</text>
+<text x="1250.0" y="1839" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="1250.0" dy="0">PlaceView</tspan>
+</text>
+<rect x="623" y="1929" width="340" height="120" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="620" y="1925" width="340" height="120" rx="3" fill="#FFA1AB" stroke="none" stroke-width="2"/>
+<text x="790.0" y="1961.75" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="790.0" dy="0">Place changed</tspan>
+<tspan x="790.0" dy="28.75">since last edit</tspan>
+</text>
+<text x="790.0" y="2029" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="790.0" dy="0">PlaceRevisionConflict</tspan>
+</text>
+<rect x="1038" y="1929" width="430" height="120" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
+<rect x="1035" y="1925" width="430" height="120" rx="3" fill="#FFA1AB" stroke="none" stroke-width="2"/>
+<text x="1250.0" y="1976.125" font-size="23" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="1250.0" dy="0">Place unavailable</tspan>
+</text>
+<text x="1250.0" y="2029" font-size="17" fill="#526273" font-weight="400" text-anchor="middle" font-family="monospace">
+<tspan x="1250.0" dy="0">PlaceUnavailable</tspan>
+</text>
+<path d="M 217,1795 L 265,1795" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 505,1795 L 615,1795" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 855,1795 L 1030,1795" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 555,1795 L 555,1985 L 615,1985" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 555,1900 L 1010,1900 L 1010,1985 L 1030,1985" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="88" y="2083" font-size="21" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="88" dy="0">Removes the place and its note from visible results together.</tspan>
+</text>
+<text x="1055" y="1880" font-size="19" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="1055" dy="0">Removed from map/list</tspan>
+<tspan x="1055" dy="23">and private detail results.</tspan>
+</text>
+<rect x="1630" y="1560" width="1450" height="500" rx="10" fill="#F5F8FA" stroke="none" stroke-width="2"/>
+<text x="1658" y="1608" font-size="24" fill="#254D72" font-weight="650" text-anchor="start">
+<tspan x="1658" dy="0">READING THE BOARD</tspan>
+</text>
+<text x="1658" y="1656" font-size="22" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="1658" dy="0">PlaceView: one record per saved place, including its Markdown.</tspan>
+<tspan x="1658" dy="32">The map, places list, reading panel and editor use the same view.</tspan>
+<tspan x="1658" dy="32">The write commits first; event subscriptions update views afterward.</tspan>
+<tspan x="1658" dy="32">Each Event carries complete details for its saved revision.</tspan>
+<tspan x="1658" dy="32">Read/Preview, search, pan, zoom and selection emit no domain event.</tspan>
+<tspan x="1658" dy="32">Red notes are typed business refusals, not network/login errors.</tspan>
+<tspan x="1658" dy="32">Coordinate validation can return InvalidPlaceCoordinates.</tspan>
+<tspan x="1658" dy="32">Changes/deletion of unknown, removed or foreign IDs: PlaceUnavailable.</tspan>
+<tspan x="1658" dy="32">AddPlace saves a new Place; foreign/removed IDs give PlaceUnavailable.</tspan>
+<tspan x="1658" dy="32">An accessible existing ID gives PlaceAlreadyExists for AddPlace.</tspan>
+<tspan x="1658" dy="32">A stale edit keeps the draft visible so the author can reconcile it.</tspan>
+</text>
+<rect x="40" y="2160" width="3120" height="520" rx="12" fill="#F5F7F9" stroke="#9BA8B7" stroke-width="2" stroke-dasharray="10 8"/>
+<text x="75" y="2211" font-size="26" fill="#44566B" font-weight="650" text-anchor="start">
+<tspan x="75" dy="0">AUTHENTICATION &amp; ACCESS  /  TECHNICAL INTEGRATION — OUTSIDE THE FIELDNOTES BOUNDED CONTEXT</tspan>
+</text>
+<text x="75" y="2250" font-size="23" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="75" dy="0">Two launch options, one interface. Gray steps are authentication operations, not Place Commands or Events.</tspan>
+</text>
+<rect x="80" y="2280" width="900" height="95" rx="7" fill="#E4EBF2" stroke="none" stroke-width="2"/>
+<text x="105" y="2317" font-size="20" fill="#44566B" font-weight="650" text-anchor="start">
+<tspan x="105" dy="0">DIRECT GOOGLE</tspan>
+</text>
+<text x="105" y="2353" font-size="24" fill="#182331" font-weight="400" text-anchor="start">
+<tspan x="105" dy="0">Sign in with Google directly</tspan>
+</text>
+<rect x="80" y="2398" width="900" height="105" rx="7" fill="#E4EBF2" stroke="none" stroke-width="2"/>
+<text x="105" y="2434" font-size="20" fill="#44566B" font-weight="650" text-anchor="start">
+<tspan x="105" dy="0">FIREBASE AUTH</tspan>
+</text>
+<text x="105" y="2471" font-size="24" fill="#182331" font-weight="400" text-anchor="start">
+<tspan x="105" dy="0">Sign in with Google through Firebase Auth</tspan>
+</text>
+<rect x="1110" y="2312" width="720" height="160" rx="7" fill="#E4EBF2" stroke="none" stroke-width="2"/>
+<text x="1470" y="2362" font-size="28" fill="#182331" font-weight="400" text-anchor="middle">
+<tspan x="1470" dy="0">Establish the</tspan>
+<tspan x="1470" dy="38">verified author</tspan>
+</text>
+<text x="1470" y="2450" font-size="20" fill="#526273" font-weight="400" text-anchor="middle">
+<tspan x="1470" dy="0">Same application session strategy in both launches</tspan>
+</text>
+<path d="M 980,2327 L 1035,2327 L 1035,2390 L 1105,2390" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 980,2450 L 1035,2450 L 1035,2390" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="1960" y="2312" width="1110" height="160" rx="7" fill="#E4EBF2" stroke="none" stroke-width="2"/>
+<text x="1990" y="2360" font-size="28" fill="#182331" font-weight="550" text-anchor="start">
+<tspan x="1990" dy="0">Authorize each private operation</tspan>
+</text>
+<text x="1990" y="2405" font-size="23" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="1990" dy="0">Use the verified author; never trust a browser-supplied user ID.</tspan>
+<tspan x="1990" dy="34">Apply it to commands, reads, live updates and outcomes.</tspan>
+</text>
+<path d="M 1830,2390 L 1955,2390" fill="none" stroke="#758394" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="80" y="2553" font-size="21" fill="#44566B" font-weight="650" text-anchor="start">
+<tspan x="80" dy="0">LOGOUT</tspan>
+</text>
+<text x="260" y="2553" font-size="24" fill="#182331" font-weight="400" text-anchor="start">
+<tspan x="260" dy="0">Revoke this application session → clear cookie / SDK state → stop protected streams best effort.</tspan>
+</text>
+<text x="80" y="2603" font-size="22" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="80" dy="0">Technical note: direct Google uses OIDC; Firebase uses server-verified tokens. Both issue persistent Spine sessions.</tspan>
+</text>
+<text x="80" y="2637" font-size="22" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="80" dy="0">Expiry is deployment configuration; later Firebase revocation is not immediate. No email-based linking. One Spine host.</tspan>
+</text>
+<text x="60" y="2730" font-size="22" fill="#254D72" font-weight="650" text-anchor="start">
+<tspan x="60" dy="0">DESIGN RULES</tspan>
+</text>
+<text x="60" y="2770" font-size="25" fill="#182331" font-weight="400" text-anchor="start">
+<tspan x="60" dy="0">One note value per saved PlaceId, even if empty. Multiple saved pins at the same coordinates are allowed for any author.</tspan>
+</text>
+<text x="60" y="2812" font-size="23" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="60" dy="0">Delete removes current content from use; event-history and backup erasure require a separate retention policy.</tspan>
+</text>
+<text x="60" y="2853" font-size="22" fill="#526273" font-weight="400" text-anchor="start">
+<tspan x="60" dy="0">Single-tenant application, multiple private users. One Place Aggregate and one PlaceView Projection.</tspan>
+</text>
+</g></svg>

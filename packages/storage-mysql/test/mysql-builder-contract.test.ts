@@ -24,6 +24,7 @@ import {
 import {
   EventIdSchema,
   EventSchema,
+  type Event,
   TenantIdSchema,
   UserIdSchema,
 } from "@spine-event-engine/proto";
@@ -80,6 +81,7 @@ import {
   type MysqlTableSpec,
 } from "../src/index.js";
 import { MysqlRecordStorage } from "../src/mysql/record-storage.js";
+import { mysqlRecordTableName } from "../src/mysql/testing.js";
 import { AgentHistoryIndexes } from "../src/mysql/agent-history.js";
 // prettier-ignore
 import {
@@ -91,6 +93,64 @@ vi.mock("mysql2/promise", () => ({ createPool: vi.fn() }));
 describe("MysqlStorageFactory builder contract", () => {
   beforeEach(() => {
     vi.mocked(createPool).mockReset();
+  });
+  it("reports the factory's ungrouped and context Event Store table names", async () => {
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/table_names" })
+      .build();
+    const context = { name: "Task_Catalog", multitenant: false } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    const ungrouped = factory.createRecordStorage(context, spec) as MysqlRecordStorage<
+      string,
+      import("@bufbuild/protobuf/wkt").StringValue
+    >;
+    const domainGroup = EventStoreGroups.forContext(context.name);
+    const domain = factory.createRecordStorage(
+      context,
+      eventStoreRecordSpec,
+      domainGroup,
+    ) as unknown as MysqlRecordStorage<import("@spine-event-engine/proto").EventId, Event>;
+    expect(mysqlRecordTableName(spec)).toBe(ungrouped.tableName);
+    expect(mysqlRecordTableName(eventStoreRecordSpec, domainGroup)).toBe(domain.tableName);
+    expect(createPool).not.toHaveBeenCalled();
+    ungrouped.close();
+    domain.close();
+    await factory.close();
+  });
+  it("does not inspect or create a table for skipped record access", async () => {
+    const query = vi.fn(mysqlQuery);
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(mysqlConnection(query))),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/skipped" })
+      .build();
+    const context = { name: "records", multitenant: false } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    const skipped = factory.createRecordStorage(context, spec, undefined, {
+      prepareOnAccess: false,
+    });
+    await skipped.read("missing");
+    await skipped.write(create(StringValueSchema, { value: "first" }));
+    expect(query.mock.calls.some(([sql]) => /information_schema|^CREATE/u.test(sql))).toBe(false);
+    const prepared = factory.createRecordStorage(context, spec);
+    await prepared.read("missing");
+    expect(query.mock.calls.some(([sql]) => sql.includes("information_schema"))).toBe(true);
+    query.mockClear();
+    await skipped.read("later");
+    expect(query.mock.calls.some(([sql]) => /information_schema|^CREATE/u.test(sql))).toBe(false);
+    skipped.close();
+    await prepared.read("open");
+    await factory.close();
   });
   it("checks Agent families without DDL and leaves a missing audit column retryable", async () => {
     let repaired = false;

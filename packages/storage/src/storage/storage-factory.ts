@@ -76,6 +76,7 @@ export abstract class StorageFactory {
    * @param context Supplies the bounded-context and tenant scope.
    * @param recordSpec Supplies the declarative physical record layout.
    * @param group Separates records that share one source type.
+   * @param options Selects preparation for this handle without changing other handles.
    * @returns The independently closeable record storage handle.
    * @typeParam I Entity identifier or record type.
    * @typeParam R Entity identifier or record type.
@@ -84,9 +85,35 @@ export abstract class StorageFactory {
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
     group?: StorageGroup,
+    options?: RecordStorageOptions,
   ): RecordStorage<I, R> {
     this.requireOpen();
+    if (options?.prepareOnAccess === false)
+      return this.onCreateUnprepared(context, recordSpec, group);
     return this.onCreateRecordStorage(context, recordSpec, group);
+  }
+
+  /**
+   * Creates a handle that never prepares its physical family on data access.
+   *
+   * Custom factories reject this option until they explicitly implement it.
+   *
+   * @param context The storage context.
+   * @param recordSpec The record specification.
+   * @param group Separates records sharing a source type.
+   * @returns The unprepared record handle.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   */
+  protected onCreateUnprepared<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): RecordStorage<I, R> {
+    void context;
+    void recordSpec;
+    void group;
+    throw new Error("StorageFactory does not support record handles without preparation.");
   }
 
   /**
@@ -113,4 +140,14 @@ export abstract class StorageFactory {
       throw new Error("StorageFactory is closed.");
     }
   }
+}
+
+/**
+ * Selects whether a record handle prepares its physical family during data access.
+ */
+export interface RecordStorageOptions {
+  /**
+   * Omitted or true retains provider preparation; false leaves physical setup explicit.
+   */
+  readonly prepareOnAccess?: boolean;
 }

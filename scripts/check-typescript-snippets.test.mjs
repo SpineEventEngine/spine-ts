@@ -98,6 +98,10 @@ describe("TypeScript documentation snippets", () => {
       "packages/storage-postgres/REFERENCE.md",
       "examples/orders/README.md",
       "examples/orders/REFERENCE.md",
+      "examples/orders/USER_GUIDE.md",
+      "examples/fieldnotes/README.md",
+      "examples/fieldnotes/REFERENCE.md",
+      "examples/fieldnotes/USER_GUIDE.md",
       "examples/projects/README.md",
       "examples/projects/REFERENCE.md",
       "examples/support/README.md",
@@ -300,7 +304,7 @@ describe("TypeScript documentation snippets", () => {
     expect(guide).toContain("TaskReassigned");
     expect(guide).toContain("zero, one, and two");
     expect(guide).toContain(
-      "replays a persisted projection Inbox target without rerouting after restart",
+      "delivers a persisted projection Inbox target without rerouting after restart",
     );
     expect(guide).toContain("catchUpReadSide()");
     expect(frameworkGuide).toMatch(/first registered\s+matching token/u);

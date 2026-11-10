@@ -196,6 +196,28 @@ export interface PostgresTableSpec<I, R extends Message> {
    * Lists primary-key column names in order.
    */
   readonly primaryKey: readonly string[];
+
+  /**
+   * Complete non-unique ascending secondary indexes required by this table.
+   */
+  readonly indexes?: readonly PostgresIndexSpec[];
+}
+
+/**
+ * Resolved PostgreSQL secondary index with a schema-scoped physical name.
+ */
+export interface PostgresIndexSpec {
+  // prettier-ignore
+
+  /**
+   * Names the physical index.
+   */
+  readonly name: string;
+
+  /**
+   * Lists complete physical columns in index order.
+   */
+  readonly columns: readonly string[];
 }
 
 /**
@@ -208,6 +230,11 @@ export interface PostgresColumnSpec {
    * Names the physical column.
    */
   readonly name: string;
+
+  /**
+   * Retains the exact framework byte width when declared for a BYTEA column.
+   */
+  readonly byteLength?: number;
 
   /**
    * Specifies the canonical native PostgreSQL type.
@@ -371,6 +398,8 @@ export class PostgresStorageFactory extends StorageFactory {
 
   readonly #bindingPending = new Map<string | symbol, Promise<PostgresBoundDatabase>>();
 
+  readonly #schemaPending = new Map<string | symbol, Promise<void>>();
+
   #sharedCheck: Promise<void> | undefined;
 
   readonly #catalog: TenantCatalog;
@@ -410,6 +439,7 @@ export class PostgresStorageFactory extends StorageFactory {
    */
   private registerPorts(): void {
     StoragePreparations.register(this, {
+      supportsRecordIndexes: true,
       prepareRecord: (context, spec, group, mode) => this.prepareRecord(context, spec, group, mode),
       prepareEntity: (input, mode) => this.prepareEntity(input, mode),
       prepareAgentHistory: (input, mode) => this.prepareAgentHistory(input, mode),
@@ -837,6 +867,24 @@ export class PostgresStorageFactory extends StorageFactory {
   }
 
   /**
+   * Opens a record handle that binds its destination without schema preparation.
+   *
+   * @param context The storage context.
+   * @param recordSpec The physical record declaration.
+   * @param group The optional physical family.
+   * @returns An independently closeable unprepared record handle.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   */
+  protected override onCreateUnprepared<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): RecordStorage<I, R> {
+    return this.createPostgresRecordStorage(context, recordSpec, group, true, true, false);
+  }
+
+  /**
    * Creates one PostgreSQL record handle and tracks it until closure.
    *
    * @typeParam I The storage identifier type.
@@ -847,6 +895,7 @@ export class PostgresStorageFactory extends StorageFactory {
    * @returns The live PostgreSQL record handle.
    * @param tracked Whether the factory tracks this public handle.
    * @param publicHandle Whether factory closure fences new work on this handle.
+   * @param prepareOnAccess Whether the handle prepares its schema and table.
    */
   private createPostgresRecordStorage<I, R extends Message>(
     context: StorageContext,
@@ -854,6 +903,7 @@ export class PostgresStorageFactory extends StorageFactory {
     group?: StorageGroup,
     tracked = true,
     publicHandle = false,
+    prepareOnAccess = true,
   ): PostgresRecordStorage<I, R> {
     const boundary = this.database(context);
     const table = this.resolver.resolve(
@@ -869,10 +919,11 @@ export class PostgresStorageFactory extends StorageFactory {
       recordSpec,
       table.tableName,
       (schema) => this.tableSpec(boundary, table.tableName, schema, recordSpec, group),
-      this.connections(boundary, publicHandle),
+      this.connections(boundary, publicHandle, prepareOnAccess),
       () => this.#handles.delete(handle),
       operation === undefined ? undefined : (resolved) => operation(resolved).sql,
       this.stringifiers,
+      prepareOnAccess,
     );
     if (tracked) this.#handles.add(handle);
     return handle;
@@ -905,6 +956,7 @@ export class PostgresStorageFactory extends StorageFactory {
       idType: recordSpec.idType,
       ...(group === undefined ? {} : { groupName: group.name }),
       declaredColumns: recordSpec.columns,
+      declaredIndexes: recordSpec.indexes,
     });
     this.assertFamily(boundary, tableName, schema);
     return table;
@@ -971,7 +1023,12 @@ export class PostgresStorageFactory extends StorageFactory {
     const errors: unknown[] = [];
     for (const result of await Promise.allSettled(commits))
       if (result.status === "rejected") errors.push(result.reason);
-    await Promise.allSettled([...this.#work, ...this.#pending.values(), this.#sharedCheck]);
+    await Promise.allSettled([
+      ...this.#work,
+      ...this.#pending.values(),
+      ...this.#schemaPending.values(),
+      this.#sharedCheck,
+    ]);
     for (const handle of [...this.#handles]) {
       try {
         handle.close();
@@ -993,17 +1050,17 @@ export class PostgresStorageFactory extends StorageFactory {
   }
 
   /**
-   * Opens one pool and proves its selected schema is usable.
+   * Opens one pool and selects its schema without checking schema existence.
    *
    * @param entry Supplies one database configuration.
    * @returns The connected database resource.
    */
-  private static async prove(entry: PostgresDatabaseConfig): Promise<PostgresDatabase> {
+  private static async openDatabase(entry: PostgresDatabaseConfig): Promise<PostgresDatabase> {
     const pool = new Pool(entry.poolOptions);
     try {
       const client = await pool.connect();
       try {
-        const schema = await PostgresSchemas.resolve(client, entry.schema);
+        const schema = entry.schema ?? (await PostgresSchemas.current(client));
         return {
           boundary: entry.boundary,
           pool,
@@ -1043,16 +1100,24 @@ export class PostgresStorageFactory extends StorageFactory {
    *
    * @param boundary Identifies the captured tenant scope.
    * @param publicHandle Whether the factory fence rejects new record calls.
+   * @param prepareOnAccess Whether access validates the selected schema.
    * @returns Its package-local record lifecycle.
    */
-  private connections(boundary: TenantBoundary, publicHandle: boolean): PostgresRecordLifecycle {
+  private connections(
+    boundary: TenantBoundary,
+    publicHandle: boolean,
+    prepareOnAccess = true,
+  ): PostgresRecordLifecycle {
     const database = (): PostgresDatabase => {
       const resolved = this.#databases.get(boundary.key);
       if (resolved === undefined) throw new Error("PostgreSQL database is not bound.");
       return resolved;
     };
     return {
-      resolve: () => this.resolveDatabase(boundary).then(() => undefined),
+      resolve: () =>
+        this.resolveDatabase(boundary).then(async (resolved) => {
+          if (prepareOnAccess) await this.ensureSchema(boundary, resolved);
+        }),
       track: (work) => this.track(work),
       prepare: (table, customCreate) => this.prepareTable(boundary, table, "create", customCreate),
       publicOpen: () => !publicHandle || this.isOpen(),
@@ -1166,11 +1231,13 @@ export class PostgresStorageFactory extends StorageFactory {
       typeof idType === "string" ? idType : idType.typeName,
       table.groupName ?? null,
       table.primaryKey,
+      table.indexes ?? [],
       [...table.columns]
         .sort((left, right) => left.name.localeCompare(right.name))
         .map((column) => [
           column.name,
           column.postgresType,
+          column.byteLength ?? null,
           column.nullable,
           column.defaultSql ?? null,
         ]),
@@ -1263,15 +1330,18 @@ export class PostgresStorageFactory extends StorageFactory {
   private resolveBinding(boundary: TenantBoundary): Promise<PostgresBoundDatabase> {
     const runtime = this.#databases.get(boundary.key);
     if (runtime !== undefined)
-      return Promise.resolve({ config: runtime.config, schema: runtime.schema });
+      return this.ensureSchema(boundary, runtime).then(() => ({
+        config: runtime.config,
+        schema: runtime.schema,
+      }));
     const bound = this.#bindings.get(boundary.key);
     if (bound !== undefined) return Promise.resolve(bound);
     const runtimePending = this.#pending.get(boundary.key);
     if (runtimePending !== undefined)
-      return runtimePending.then((database) => ({
-        config: database.config,
-        schema: database.schema,
-      }));
+      return runtimePending.then(async (database) => {
+        await this.ensureSchema(boundary, database);
+        return { config: database.config, schema: database.schema };
+      });
     const pending = this.#bindingPending.get(boundary.key);
     if (pending !== undefined) return pending;
     const attempt = this.bindTemporary(boundary)
@@ -1281,6 +1351,32 @@ export class PostgresStorageFactory extends StorageFactory {
       })
       .finally(() => this.#bindingPending.delete(boundary.key));
     this.#bindingPending.set(boundary.key, attempt);
+    return attempt;
+  }
+
+  /**
+   * Validates schema existence separately from destination binding.
+   *
+   * A skipped handle never waits for or populates this readiness state.
+   *
+   * @param boundary The selected tenant boundary.
+   * @param database The connected destination.
+   * @returns Completion after an existing schema is proven.
+   */
+  private ensureSchema(boundary: TenantBoundary, database: PostgresDatabase): Promise<void> {
+    if (this.#bindings.has(boundary.key)) return Promise.resolve();
+    const pending = this.#schemaPending.get(boundary.key);
+    if (pending !== undefined) return pending;
+    const attempt = (async () => {
+      const client = await database.pool.connect();
+      try {
+        await PostgresSchemas.resolve(client, database.schema);
+        this.#bindings.set(boundary.key, { config: database.config, schema: database.schema });
+      } finally {
+        client.release();
+      }
+    })().finally(() => this.#schemaPending.delete(boundary.key));
+    this.#schemaPending.set(boundary.key, attempt);
     return attempt;
   }
 
@@ -1328,8 +1424,7 @@ export class PostgresStorageFactory extends StorageFactory {
    * @returns The connected database resource.
    */
   private async bindDatabase(boundary: TenantBoundary): Promise<PostgresDatabase> {
-    const bound =
-      this.#bindings.get(boundary.key) ?? (await this.#bindingPending.get(boundary.key));
+    const bound = this.#bindings.get(boundary.key);
     if (bound !== undefined)
       return {
         boundary,
@@ -1342,9 +1437,15 @@ export class PostgresStorageFactory extends StorageFactory {
     const config = await this.configFor(boundary);
     const reserved = this.reserveTenantTarget(config);
     try {
-      const database = await PostgresStorageFactory.prove(config);
-      this.#bindings.set(boundary.key, { config, schema: database.schema });
-      return database;
+      if (config.schema === undefined) return await PostgresStorageFactory.openDatabase(config);
+      return {
+        boundary,
+        pool: new Pool(config.poolOptions),
+        schema: config.schema,
+        target: config.target,
+        databaseName: config.databaseName,
+        config,
+      };
     } catch (error) {
       if (reserved) this.#tenantTargets.delete(config.target);
       if (error instanceof PostgresStorageConfigurationError) throw error;

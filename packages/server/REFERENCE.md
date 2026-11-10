@@ -168,7 +168,7 @@ phase without implying that every Entity model has been prepared.
 awaits both model preparation and the first subscription reconciliation by
 default. Each option can be set to `false` independently. A deferred phase runs
 before the first valid Command, Event, query, subscription operation, or Inbox
-replay for the receiving context; lazy multitenant preparation selects only that
+delivery for the receiving context; lazy multitenant preparation selects only that
 input's currently registered tenant. A failed lazy attempt rejects its current
 input and can be retried by a later input. Monitoring requires the shared
 subscription registry, so `startSubscriptionMonitoring: true` prepares that
@@ -208,20 +208,33 @@ contexts share one in-memory factory, including in production. Local and test
 environments default storage in memory and use the core registry only as a
 fallback; those defaults are not production configuration.
 
-`tenantIndex` selects a live application membership directory. When omitted,
-the environment uses its storage factory's native catalog where available, or
-a transient in-memory index for a custom factory without a catalog. The
-transient index lasts only for this environment instance. `contains()` checks
-membership without preparing storage; `keep()` makes a registration visible to
-later reads and may reject for a read-only catalog. PostgreSQL and MySQL
-catalogs expose only configured tenant entries: `keep()` is idempotent for
-those entries and rejects unknown IDs. A dynamic SQL tenant resolver does not
-register or enumerate tenants. Single-tenant contexts do not insert a synthetic
-member into this directory.
+`tenantIndex` is optional and defaults to `SINGLE_TENANT`, a marker that creates
+no directory and never consults a provider catalog. The environment getter
+returns `TenantIndexSetting`, either that marker or an application-supplied
+`TenantIndex`. Narrow against the marker before calling `contains()`, `keep()`,
+`page()`, or `all()`. A multitenant Bounded Context requires a real environment
+index before business storage opens. A single-tenant Bounded Context always returns the
+marker, including inside a multitenant environment. Provider catalogs remain
+separate storage-provider APIs and do not select application membership.
+
+`PersistentTenantIndex.create({ storageFactory, group })` opens a separate,
+storage-backed registration directory without constructing a Bounded Context or
+`ServerEnvironment`. It creates and checks supported storage structures before
+returning. Set `createMissingStructures: false` to skip preparation on creation
+and on later reads or writes. A skipped directory needs structures prepared by
+the application before data access; missing structures cause provider errors.
+Memory storage remains process-local. The injected factory remains usable after the
+index closes. `keep()` registers a complete `TenantId` atomically and retains
+the first registration time; `contains()` reads its primary key. `page()` uses
+finite keyset traversal with an abort signal and a continuation accepted only
+by that index instance. `all()` traverses the complete current directory, so
+its result can be large. Traversal does not promise a snapshot while other
+writers register tenants. Registration does not provision tenant databases or
+authorize users. The environment defaults to the explicit `SINGLE_TENANT` marker.
 
 Multitenant receiving contexts check current index membership before Command,
 Event, query, direct repository/history, and subscription work. Inbox persistence
-and later replay check separately, so removing a tenant prevents saved work from
+and later delivery check separately, so removing a tenant prevents saved work from
 restoring it. Input does not call `keep()` implicitly. A confirmed missing member
 raises `TenantUnknownError` with the complete tenant ID and context name; native
 services return `NotFound` with a structured `spine.base.Error` detail whose type
@@ -249,8 +262,8 @@ Direct `repository.routeCommand()` and `repository.routeEvent()` calls return
 Promises and must be awaited. Commands select exactly one ID; Events and state
 updates may select any number of distinct IDs. After validation and stable
 deduplication, routes above 1,000 recipients emit one warning and retain every
-recipient. Inbox replay uses stored target IDs without rerouting. The legacy-named
-local `catchUpReadSide()` helper is unrelated to retry: it resets and replays
+recipient. Inbox delivery uses stored target IDs without rerouting. The local
+`catchUpReadSide()` helper is unrelated to retry: it resets and dispatches stored Events through
 the whole local read side, and is not Projection catch-up.
 
 ## Message-valued Entity IDs
@@ -282,7 +295,7 @@ const id: MessageId = create(CommandIdSchema, { uuid: "shipment-7" });
 ```
 
 Admission validates a message ID against the schema declared by the state
-field, including generated validation rules, before it is stored or replayed.
+field, including generated validation rules, before it is stored or delivered.
 When default routing finds a message but the Entity ID type is primitive, a
 custom route returns the intended primitive ID.
 
@@ -596,9 +609,9 @@ repeated declarations fail closed. It is not an alternative routing mechanism.
 Configure logging through `ServerEnvironment` when assembling the server. The
 server installs that logger into its runtime components, where warnings and
 failures carry operation context. Durable facts belong in events or storage.
-Ordinary Aggregate, Process Manager, and Projection Inbox replay sends persisted
-accepted work through the normal handler path, so those handler effects must be
-replay-safe. An accepted Agent interaction is recorded by its receipt and is
+Ordinary Aggregate, Process Manager, and Projection Inbox delivery sends persisted
+accepted work through the normal handler path. Handler effects must tolerate
+redelivery after an uncertain acknowledgement. An accepted Agent interaction is recorded by its receipt and is
 never re-executed after interruption.
 
 ## Context assembly and entities
@@ -607,9 +620,11 @@ Create a context with `BoundedContext.singleTenant(name)` or
 `BoundedContext.multitenant(name)`. Names are immutable. Use
 `ServerEnvironment.when(type).use({ storageFactory: factory })` before explicit
 environment setup to supply record/event storage to all contexts.
-`withTenantIndex(index)` selects a different live membership directory for one
-context; `context.tenantIndex` and `ServerEnvironment.instance().tenantIndex`
-return the configured objects. Closing a context does not close either index.
+`withTenantIndex(index)` selects a different live membership directory for a
+multitenant Bounded Context after its environment has a real index. The Bounded Context getter
+returns its captured selection; single-tenant Bounded Contexts return `SINGLE_TENANT`.
+Both getters have type `TenantIndexSetting` and require narrowing before index
+methods. Closing a Bounded Context does not close the configured directory.
 The application imports its generated `spine-bootstrap.js` before registering
 classes with `add(EntityClass)`; `build()` then selects passive descriptions
 by exact constructor and performs assembly, including
@@ -911,6 +926,12 @@ work to stop using dependencies, then closes contexts. Caller-managed `start()`
 does not close global process facilities; close `ServerEnvironment.instance()`
 separately when used. The final run-managed `run()` close closes its environment.
 
+Native QueryService accepts `BytesValue` equality and range operands for annotated scalar `bytes`
+columns and permits ascending or descending byte ordering. The shared evaluator uses unsigned
+lexicographic comparison, including shorter equal prefixes first. This TypeScript query capability
+does not assert JVM JDBC byte-range compatibility. `QUERY_SERVICE_MAX_RESULTS` from core is the
+current capacity of 1,000 returned and evaluated records for one native read, not a collection-size limit.
+
 `ServerOptions.appQueries` selects concrete generated `AppQueryHandler<Q, R>`
 instances by exact constructor metadata before listening. Duplicate Q routes
 or missing metadata fail startup. On direct app-node ingress,
@@ -1110,8 +1131,8 @@ export const scopedOnCreate =
 ```
 
 `Stand` registers entity state for point/list reads, updates current state, and
-offers in-process subscriptions. The legacy-named local reset/replay helper
-`catchUpReadSide(options?)` clears every registered Projection state and replays
+offers in-process subscriptions. The local read-side reset helper
+`catchUpReadSide(options?)` clears every registered Projection state and dispatches
 the whole stored event history through matching Projection subscribers; it does
 not append events. Single-tenant contexts reject a tenant option; multitenant
 contexts require one. It cannot target a Projection repository, entity IDs, or
@@ -1263,11 +1284,14 @@ transport responses independently.
 
 Configure app-node admission at `ServerOptions.services.readerAdmission`:
 
-- `direct.authenticate({ service, method, value, headers, peer })` authenticates
-  a direct native request. It returns verified `{ principal, authorityFacts }`,
-  an empty object for deliberate public access, or `undefined` to deny access.
+- `direct.authenticate({ service, method, value, headers, peer, signal })` authenticates
+  a direct native request. It returns `{ reader, invalidated? }` with verified
+  `{ principal, authorityFacts }` in `reader`, `{ reader: {} }` for deliberate
+  public access, or `undefined` to deny access. `signal` begins before
+  authentication and ends on terminal unary or complete stream exit.
   The request value contains canonical Proto bytes; `peer` is the Connect
-  `HandlerContext` for that invocation.
+  `HandlerContext` for that invocation. `invalidated` is a separate local
+  AbortSignal captured by the host; it never enters reader facts or proofs.
 - `forwarded.verify(bytes, proof, peer)` verifies an assertion from a trusted
   forwarding peer. It must authenticate that peer and validate the supplied
   proof over the exact bytes. `BrowserServerOptions.forwardingProof.issue(bytes)`
@@ -1294,6 +1318,69 @@ child Servers with their verifier as well. Each hop verifies its incoming
 assertion and issues a new proof for the actual outgoing operation and payload.
 Loopback placement alone does not authenticate a forwarding peer.
 
+A standard session strategy accepts the host signal during `resolve` and
+returns an invalidation signal for local logout, its captured session deadline,
+and strategy close. A custom direct authenticator may omit invalidation, but
+then the host cannot stop an active stream on local logout or expiry. A
+successful unary request releases its operation even while the transport peer
+stays connected. Subscribe releases its operation after definition creation;
+Activate authenticates again and holds its operation through ACK and every
+update. Normal completion, host handler iterator return, cancellation, and host
+close stop the operation. Raw Connect clients must abort an explicit
+`AbortSignal` or call `SubscriptionService.Cancel` to stop remote stream work;
+returning from the client iterator alone does not signal transport cancellation.
+An active stream in another process receives no local signal.
+
+```ts
+import type { SignedSessions } from "@spine-event-engine/auth";
+import { Server, type ReaderAdmissionResult, type ServerOptions } from "@spine-event-engine/server";
+
+/**
+ * Configures direct native bearer admission with the local session strategy.
+ *
+ * @param sessions Strategy also used by the application's logout action.
+ * @param contexts Application Bounded Contexts exposed by this Server.
+ * @returns Server configured for native authentication.
+ */
+function nativeServer(
+  sessions: SignedSessions,
+  contexts: NonNullable<ServerOptions["contexts"]>,
+): Server {
+  return new Server({
+    contexts,
+    services: {
+      readerAdmission: {
+        direct: {
+          /**
+           * Resolves the bearer credential within the host operation.
+           *
+           * @param request Native peer and lifetime facts.
+           * @returns Verified reader and invalidation, or denial.
+           */
+          async authenticate(request): Promise<ReaderAdmissionResult | undefined> {
+            const authorization = request.peer.requestHeader.get("authorization");
+            const token = /^Bearer ([^\s,]+)$/i.exec(authorization ?? "")?.[1];
+            if (token === undefined) return undefined;
+            const session = await sessions.resolve(
+              { kind: "bearer", value: token },
+              request.signal,
+            );
+            if (session?.invalidated === undefined) return undefined;
+            return { reader: { principal: session.principal }, invalidated: session.invalidated };
+          },
+        },
+      },
+    },
+  });
+}
+```
+
+The admitted logout action checks `await sessions.logout(credential)` on that
+same strategy. It reports durable success only for `revoked`; `unavailable`
+and `expiryOnly` remain distinct. Application shutdown closes both Server and
+strategy. A custom authenticator still enforces its own credential and policy
+checks; a token in a header alone does not establish authority.
+
 Authenticated forwarding now requires an issuer; configure both gateway and
 receiving node when updating an existing authenticated deployment. The native
 Server root still does not load the optional auth package. The forwarding ports
@@ -1305,6 +1392,11 @@ For `BrowserServer` from `@spine-event-engine/server/browser`, origins must be u
 fragment, or trailing slash. Requests without an allowed exact `Origin` receive
 403 before RPC handling. Allowed responses include credentialed exact-origin
 CORS, `Vary: Origin`, protocol request headers, and exposed gRPC status headers.
+RPC and auth-route preflight completes before credential extraction. The host
+allows configured CSRF headers alongside Connect and gRPC-Web protocol headers;
+actual responses, including permitted-origin terminal errors, retain exact-origin
+credentialed CORS. Callback responses cannot replace that host policy with a
+wildcard origin.
 
 Supplying `browser.backend.baseUrl` selects standalone mode. It is one canonical
 HTTP(S) origin for a Spine TS or JVM backend; the gateway never closes
@@ -1324,7 +1416,8 @@ re-query authoritative state after duplicate updates or generic loss notices.
 Each registration has one exact `GET` or `POST` canonical path, one method per
 path, exact canonical origins, finite request bytes, and a finite timeout. A
 missing Origin is rejected unless that route explicitly permits it for an OAuth
-callback. Unknown paths, method/origin failures, body overflow, timeout, and
+callback and validates the protocol state in its handler.
+Unknown paths, method/origin failures, body overflow, timeout, and
 handler failure return fixed 404, 405, 403, 413, 504, and 500 responses without
 calling application code on rejected input. The 404 unknown-path result applies
 only after framework Origin admission. Auth admission is bounded to 64 active
@@ -1335,10 +1428,18 @@ transfer. Response bodies use `writeMaxBytes`; overflow returns 413 before any
 application status or headers are committed. Listener close ultimately aborts
 an active request through its disconnect signal.
 
-With `cookies`, `OpaqueSessionCookies` performs strict bearer-first or
-CSRF-protected cookie extraction. A strict rejection becomes an unusable
-credential and never falls back to permissive header parsing. Without cookies,
-the host accepts exactly one non-whitespace bearer token. Credentials and raw
+Every credential reader and auth route declares CSRF header names, primary
+credential-cookie names, and supporting state-cookie names. The host snapshots
+these declarations before startup, rejects repeated raw Authorization, Origin,
+configured CSRF headers, and selected cookies, and checks simultaneous primary
+credentials only for the active reader or selected route. Legal split Cookie
+fields and repeated unrelated cookies remain available to the reader.
+`OpaqueSessionCookies` provides a strict reader for a sealed opaque session or
+bearer credential, including CSRF checks; a primary cookie and bearer field
+together are rejected. The legacy `cookies` option cannot be combined with
+`credentials`. Without either, the host reads one valid Bearer field. A reader
+returns a credential, absence, or terminal rejection; a thrown read is terminal
+unavailability. Credentials and raw
 transport metadata do not reach the private backend. The application-supplied
 context resolver replaces caller actor and tenant facts before forwarding.
 
@@ -1381,10 +1482,20 @@ delivery, global update ordering, nor cluster-complete notification delivery.
 local durable-row abstraction. Inbox and shard storage require a single-tenant
 Delivery storage context shared by all tenants; the packed signal supplies
 the dispatch tenant. Read limits are 1–1000; work leases are
-1000–2147483647 ms. Framework replay supports command handling, projection
-updates, and process-manager reactions. Callbacks are at-least-once/replay-safe:
+1000–2147483647 ms. Framework delivery supports command handling, projection
+updates, process-manager reactions, and Aggregate Event reactions. Callbacks must tolerate redelivery:
 lost renewal can prevent stale finalization but cannot undo a callback already
 run. The package exposes no general raw worker callback API.
+
+Repository-backed Command and Event routing awaits recipient Inbox writes and
+notifies Delivery immediately. A successful post through this routing means
+recipient Inbox writes completed; it does not wait for handler execution or row
+acknowledgement. Restart durability depends on the configured storage provider.
+Custom dispatchers define their own completion contract. After an Entity commit, the
+source delivery awaits one outgoing bus handoff attempt through recipient Inbox
+acceptance. A failed publication is reported and contained without re-executing
+a successful source Command. Entity storage, recipient Inbox writes, and source
+acknowledgement remain separate operations.
 
 Inbox reads return `InboxMessage` with a full-precision Protobuf `Timestamp` in
 `whenReceived`. `InboxMessageInput` requires a precise `Timestamp` for new
@@ -1441,7 +1552,8 @@ internally and persist their envelope in the target Entity Inbox before any
 handler runs. Projection input uses the same environment Delivery and shared
 Inbox, with its separate recipient identity.
 
-Local posting waits for the result of that signal's delivery attempt. For an
+Local repository-backed posting waits for recipient Inbox writes and scheduling,
+while handler execution and row acknowledgement continue through Delivery. For an
 Agent, successful acceptance and Inbox acknowledgement let posting finish while
 the live handler continues. If Agent execution capacity is unavailable, the input
 stays pending and the local call reports the existing command-posting error.
@@ -1487,9 +1599,9 @@ scan delivers nothing; it does not restart after each productive page.
 Delivery compares pending rows with delivered rows in the current page
 and a process-local cache of the 1,000 most recent deliveries, then removes
 duplicates. The 30-second Inbox deduplication window controls how long delivered
-rows remain available as duplicate evidence; it is not a replay-retention
+rows remain available as duplicate evidence; it is not a delivery-retention
 period. Persisted accepted rows follow their delivery lifecycle and may be
-replayed according to that lifecycle after the deduplication window has elapsed.
+redelivered according to that lifecycle after the deduplication window has elapsed.
 
 Direct delivery uses the configured Inbox storage clock for both retained-row
 duplicate checks and early cleanup filtering. Remote delivery uses local client
@@ -1510,8 +1622,8 @@ reception monitor. A custom reception action that completes normally completes
 delivery and the enclosing stage acknowledges the row. An action that rejects
 propagates its error and leaves the row `TO_DELIVER`. `markDelivered()` does not
 mean domain processing succeeded.
-Managed repository replay sends actual handler failures to the monitor while
-storage and replay infrastructure errors propagate. A direct `onMessage` callback
+Managed repository delivery sends actual handler failures to the monitor while
+storage and delivery infrastructure errors propagate. A direct `onMessage` callback
 is treated as the endpoint. Handler effects and acknowledgement are separate,
 so a crash between them may redeliver.
 The framework adds no persisted attempts, quarantine, dead-letter, receipt, or

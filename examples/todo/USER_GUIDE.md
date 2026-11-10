@@ -179,7 +179,7 @@ two assignee targets; `TaskAssigned` and `TaskUnassigned` use the token route
 and return one; an unrelated event can return zero from its selected route.
 
 Routing runs once when an accepted event is admitted. The framework stores the
-typed targets with that accepted work, so retry replays those stored targets
+typed targets with that accepted work, so retry delivers to those stored targets
 without calling the route again. Read-side catch-up intentionally rebuilds
 from events and may evaluate routing again to construct its view.
 
@@ -208,17 +208,17 @@ has **two** targets: Ada loses the task and Lin gains it. Unassign routes to
 Lin, leaving Lin with **zero** targets. The test waits for each observable
 Projection state; it is not an assertion about a synchronous command Ack.
 
-Run the durable replay proof separately:
+Run the durable stored-target delivery proof separately:
 
 ```bash
-pnpm vitest run examples/todo/test/black-box.test.ts -t "replays a persisted projection Inbox target without rerouting after restart"
+pnpm vitest run examples/todo/test/black-box.test.ts -t "delivers a persisted projection Inbox target without rerouting after restart"
 ```
 
 That test persists admitted work, restarts with a route callback that would
 produce a different target, and observes delivery to the originally stored
-typed target. The replacement callback is not called: retry replays the stored
+typed target. The replacement callback is not called: retry delivers to the stored
 Inbox target and does not reroute. This is intentionally different from
-`context.catchUpReadSide()`: this process-local reset/replay helper clears
+`context.catchUpReadSide()`: this process-local reset helper clears
 projection state and rebuilds it from stored events, rather than retrying one
 accepted Inbox item. It is not durable Projection catch-up and has no
 cross-context exchange, enrichment, or historical/live coordination.
@@ -231,7 +231,7 @@ The linked source is the complete executable proof:
 
 Server components receive framework logging through their configured logger;
 use it for operational context, never as a substitute for a stored event or a
-rejection. Durable storage replays accepted inbox work through the same handler
+rejection. Durable storage delivers accepted Inbox work through the same handler
 path after a restart, so handlers and downstream effects must tolerate
 at-least-once delivery. This local sample uses memory, so its state disappears
 when it stops.

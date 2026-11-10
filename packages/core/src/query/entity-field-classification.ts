@@ -23,6 +23,14 @@ type Classification =
       readonly messageType?: string;
     };
 
+const LONG_SCALARS: ReadonlySet<ScalarType> = new Set([
+  ScalarType.INT64,
+  ScalarType.UINT64,
+  ScalarType.FIXED64,
+  ScalarType.SFIXED64,
+  ScalarType.SINT64,
+]);
+
 /**
  * Classifies descriptor fields accepted by Entity columns.
  *
@@ -52,16 +60,8 @@ export const EntityFieldClassification: Readonly<{
     if (field.scalar === ScalarType.BOOL)
       return { supported: true, valueKind: "boolean", comparison: "equality" };
     if (field.scalar === ScalarType.BYTES)
-      return { supported: true, valueKind: "bytes", comparison: "equality" };
-    if (
-      [
-        ScalarType.INT64,
-        ScalarType.UINT64,
-        ScalarType.FIXED64,
-        ScalarType.SFIXED64,
-        ScalarType.SINT64,
-      ].includes(field.scalar)
-    )
+      return { supported: true, valueKind: "bytes", comparison: "ordering" };
+    if (LONG_SCALARS.has(field.scalar))
       return {
         supported: true,
         valueKind: field.longAsString ? "string" : "bigint",

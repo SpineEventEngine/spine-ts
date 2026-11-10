@@ -60,6 +60,11 @@ import {
   SignalEnvelopes,
 } from "../src/index.js";
 
+it("exports the current QueryService per-request capacity from browser-safe core", async () => {
+  const core: Record<string, unknown> = await import("../src/index.js");
+  expect(core.QUERY_SERVICE_MAX_RESULTS).toBe(1_000);
+});
+
 type SignalMessage = Message & {
   readonly $typeName: string;
 };

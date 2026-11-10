@@ -1,38 +1,110 @@
 [
   {
     "rule": "standalone-function",
-    "file": "examples/orders/src/orders-domain.ts",
-    "kind": "function-declaration",
-    "identity": "createDatastoreOrdersContext()#1",
-    "name": "createDatastoreOrdersContext",
-    "disposition": "necessity",
-    "reason": "TypeScript public composition boundary: createDatastoreOrdersContext assembles the application-visible bounded context."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/orders/src/orders-domain.ts",
-    "kind": "function-declaration",
-    "identity": "startDatastoreOrdersServer()#1",
-    "name": "startDatastoreOrdersServer",
-    "disposition": "necessity",
-    "reason": "TypeScript public server boundary: startDatastoreOrdersServer starts application-visible server composition."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/orders/src/orders-domain.ts",
-    "kind": "function-declaration",
-    "identity": "startOrdersDatastoreServer()#1",
-    "name": "startOrdersDatastoreServer",
-    "disposition": "necessity",
-    "reason": "TypeScript public convenience boundary: startOrdersDatastoreServer creates Datastore-backed server composition."
-  },
-  {
-    "rule": "standalone-function",
     "file": "examples/orders/src/load-runner.ts",
     "kind": "function-declaration",
-    "identity": "runDatastoreOrdersLoad()#1",
-    "name": "runDatastoreOrdersLoad",
+    "identity": "runOrdersLoad()#1",
+    "name": "runOrdersLoad",
     "disposition": "necessity",
-    "reason": "TypeScript public load boundary: runDatastoreOrdersLoad starts the application-visible load scenario."
+    "reason": "TypeScript runOrdersLoad is necessary as the public Orders load entry point that accepts a configured server URL and reports per-tenant command, query, and subscription outcomes."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/orders/src/orders-domain.ts",
+    "kind": "function-declaration",
+    "identity": "createOrdersContext()#1",
+    "name": "createOrdersContext",
+    "disposition": "necessity",
+    "reason": "TypeScript createOrdersContext is necessary as the public assembly entry point for the fixed Orders Bounded Context topology after the environment is configured."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/orders/src/orders-domain.ts",
+    "kind": "function-declaration",
+    "identity": "startOrdersServer()#1",
+    "name": "startOrdersServer",
+    "disposition": "necessity",
+    "reason": "TypeScript startOrdersServer is necessary as the public server entry point that prepares configured storage structures before binding the Orders listener."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/orders/src/orders-environment.ts",
+    "kind": "function-declaration",
+    "identity": "configureOrdersEnvironment()#1",
+    "name": "configureOrdersEnvironment",
+    "disposition": "necessity",
+    "reason": "TypeScript configureOrdersEnvironment is necessary as the public bootstrap boundary that supplies the persistent tenant directory and storage factory before context assembly."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/orders/src/orders-environment.ts",
+    "kind": "function-declaration",
+    "identity": "openTenantIndex()#1",
+    "name": "openTenantIndex",
+    "disposition": "necessity",
+    "reason": "TypeScript openTenantIndex is necessary as the setup step that closes the supplied storage factory if persistent directory creation fails before an environment exists."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/orders/src/orders-environment.ts",
+    "kind": "function-declaration",
+    "identity": "reconcileMembership()#1",
+    "name": "reconcileMembership",
+    "disposition": "necessity",
+    "reason": "TypeScript reconcileMembership is necessary as the compares persisted complete tenant identities with configured routing before optional registration and server startup."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/orders/src/orders-environment.ts",
+    "kind": "function-declaration",
+    "identity": "tenantKey()#1",
+    "name": "tenantKey",
+    "disposition": "necessity",
+    "reason": "TypeScript tenantKey is necessary as the encodes complete generated TenantId values for exact membership and routing set comparison."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/orders/src/orders-environment.ts",
+    "kind": "function-declaration",
+    "identity": "closeFailedSetup()#1",
+    "name": "closeFailedSetup",
+    "disposition": "necessity",
+    "reason": "TypeScript closeFailedSetup is necessary as the partial-startup cleanup that closes directory and environment resources while retaining the original setup failure."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/orders/src/orders-environment.ts",
+    "kind": "function-declaration",
+    "identity": "closeOrdersEnvironment()#1",
+    "name": "closeOrdersEnvironment",
+    "disposition": "necessity",
+    "reason": "TypeScript closeOrdersEnvironment is necessary as the shared shutdown step that closes the persistent directory before the environment and reports either close failure."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/orders/src/orders-postgres.ts",
+    "kind": "function-declaration",
+    "identity": "createOrdersPostgresFactory()#1",
+    "name": "createOrdersPostgresFactory",
+    "disposition": "necessity",
+    "reason": "TypeScript createOrdersPostgresFactory is necessary as the public PostgreSQL composition boundary for distinct shared, Northwind, and Contoso database routing."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/orders/src/orders-datastore.ts",
+    "kind": "function-declaration",
+    "identity": "createOrdersDatastoreFactory()#1",
+    "name": "createOrdersDatastoreFactory",
+    "disposition": "necessity",
+    "reason": "TypeScript createOrdersDatastoreFactory is necessary as the public Datastore composition boundary that configures the identifier registry required by Orders records."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/orders/src/orders-launch.ts",
+    "kind": "function-declaration",
+    "identity": "withOrdersServer()#1",
+    "name": "withOrdersServer",
+    "disposition": "necessity",
+    "reason": "TypeScript withOrdersServer is necessary as the shared launch boundary for all three Orders runners that closes a server before its storage facilities and retains startup or run failures."
   }
 ]

@@ -9,6 +9,8 @@ packageExtensions:
     dependencies:
       "@mobrowser/cli": 2.18.0
 overrides:
+  # Firebase bundles Firestore with a grpc-js range that excludes its security fixes.
+  "@firebase/firestore>@grpc/grpc-js": 1.14.5
   # Patched releases; minimatch's legacy callable/default consumers are bridged by the pinned package patch.
   minimatch: 11.0.1
   glob: 14.0.2
@@ -42,10 +44,13 @@ onlyBuiltDependencies:
 allowBuilds:
   "@ax-llm/ax": false
   "@bufbuild/buf": true
+  # Fieldnotes supplies Firebase configuration explicitly at runtime.
+  "@firebase/util": false
   "@mobrowser/sdk-darwin-arm64": true
   "@mobrowser/sdk-darwin-x64": true
   esbuild: false
   protobufjs: false
 patchedDependencies:
+  "@uiw/react-md-editor@4.2.3": patches/@uiw__react-md-editor@4.2.3.patch
   minimatch@11.0.1: patches/minimatch@11.0.1.patch
   typedoc@0.28.19: patches/typedoc@0.28.19.patch

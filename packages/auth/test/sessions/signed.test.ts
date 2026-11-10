@@ -13,7 +13,7 @@
  */
 
 import { generateKeyPairSync, sign, type KeyObject } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { SignedSessions, type AuthenticatedPrincipal } from "../../src/index.js";
 
@@ -49,6 +49,237 @@ function headerOf(credential: { readonly value: string }) {
 }
 
 describe("SignedSessions", () => {
+  it("rejects monitored admission if its trusted clock fails after revocation read", async () => {
+    const key = keys();
+    let afterRead = false;
+    let laterReads = 0;
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: { now: () => (afterRead && ++laterReads > 1 ? Number.NaN : 1_000_000) },
+      revocation: {
+        kind: "supported",
+        isRevoked: () => {
+          afterRead = true;
+          return Promise.resolve(false);
+        },
+        revoke: () => Promise.resolve(),
+      },
+    });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "issued") throw new Error("expected issuance");
+    const lifetime = new AbortController();
+    expect(await sessions.resolve(issued.credential, lifetime.signal)).toBeUndefined();
+    await sessions.close();
+  });
+
+  it("registers a scoped token lifetime before a paused revocation read", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    let revoked = false;
+    const key = keys();
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: clock(),
+      revocation: {
+        kind: "supported",
+        async isRevoked() {
+          const captured = revoked;
+          entered.resolve(undefined);
+          await release.promise;
+          return captured;
+        },
+        revoke() {
+          revoked = true;
+          return Promise.resolve();
+        },
+      },
+    });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "issued") throw new Error("expected issuance");
+    const lifetime = new AbortController();
+    const pending = sessions.resolve(issued.credential, lifetime.signal);
+    await entered.promise;
+    expect(await sessions.logout(issued.credential)).toEqual({ kind: "revoked" });
+    release.resolve(undefined);
+    expect(await pending).toBeUndefined();
+    await sessions.close();
+  });
+
+  it("reports unavailable durable revocation while stopping local output", async () => {
+    const key = keys();
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      revocation: {
+        kind: "supported",
+        isRevoked: () => Promise.resolve(false),
+        revoke: () => Promise.reject(new Error("revocation unavailable")),
+      },
+    });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "issued") throw new Error("expected issuance");
+    const operation = new AbortController();
+    const resolved = await sessions.resolve(issued.credential, operation.signal);
+    expect(await sessions.logout(issued.credential)).toEqual({ kind: "unavailable" });
+    expect(resolved?.invalidated?.aborted).toBe(true);
+    expect(await sessions.resolve(issued.credential)).toBeDefined();
+    await sessions.close();
+  });
+
+  it("expires monitored output at its session deadline without changing one-shot skew", async () => {
+    vi.useFakeTimers();
+    try {
+      const time = clock();
+      const key = keys();
+      const sessions = new SignedSessions({
+        issuer: "issuer",
+        audience: "aud",
+        activeKey: { kid: "key", privateKey: key.privateKey },
+        clock: time,
+        ttlSeconds: 1,
+        clockSkewSeconds: 1,
+      });
+      const issued = await sessions.issue({ id: "principal" });
+      if (issued.kind !== "issued") throw new Error("expected issuance");
+      const lifetime = new AbortController();
+      const resolved = await sessions.resolve(issued.credential, lifetime.signal);
+      expect(resolved?.invalidated?.aborted).toBe(false);
+      expect(vi.getTimerCount()).toBe(1);
+      time.advance(1_000);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(resolved?.invalidated?.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(await sessions.resolve(issued.credential)).toBeDefined();
+      await sessions.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retains logout through the full inclusive skew window", async () => {
+    const time = clock();
+    const key = keys();
+    let retained: { seconds: bigint; nanos: number } | undefined;
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: time,
+      ttlSeconds: 2,
+      clockSkewSeconds: 1,
+      revocation: {
+        kind: "supported",
+        isRevoked: () => Promise.resolve(false),
+        revoke: (_jti, expiresAt) => {
+          retained = expiresAt;
+          return Promise.resolve();
+        },
+      },
+    });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "issued") throw new Error("expected token");
+    time.advance(3_000);
+    expect(await sessions.resolve(issued.credential)).toBeDefined();
+    expect(await sessions.logout(issued.credential)).toEqual({ kind: "revoked" });
+    expect(retained).toMatchObject({ seconds: 1003n, nanos: 0 });
+    time.advance(1);
+    expect(await sessions.resolve(issued.credential)).toBeUndefined();
+  });
+
+  it("retains through the last representable clock millisecond when skew exceeds Timestamp", async () => {
+    const maxSeconds = 253_402_300_799;
+    let now = (maxSeconds - 2) * 1_000;
+    const key = keys();
+    let retained: { seconds: bigint; nanos: number } | undefined;
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: { now: () => now },
+      ttlSeconds: 1,
+      clockSkewSeconds: Number.MAX_SAFE_INTEGER,
+      revocation: {
+        kind: "supported",
+        isRevoked: () => Promise.resolve(false),
+        revoke: (_jti, expiresAt) => {
+          retained = expiresAt;
+          return Promise.resolve();
+        },
+      },
+    });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "issued") throw new Error("expected token");
+    now = maxSeconds * 1_000 + 999;
+    expect(await sessions.resolve(issued.credential)).toBeDefined();
+    expect(await sessions.logout(issued.credential)).toEqual({ kind: "revoked" });
+    expect(retained).toMatchObject({ seconds: BigInt(maxSeconds), nanos: 999_999_999 });
+    now += 1;
+    expect(await sessions.resolve(issued.credential)).toBeUndefined();
+  });
+
+  it("rejects issuance when the second clock fails or expiry exceeds Timestamp", async () => {
+    const key = keys();
+    let reads = 0;
+    const faulty = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: { now: () => (++reads === 2 ? Number.NaN : 1_000_000) },
+    });
+    expect(await faulty.issue({ id: "principal" })).toEqual({
+      kind: "rejected",
+      reason: "clock-failure",
+    });
+    const nearMax = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: { now: () => 253_402_300_799_000 },
+      ttlSeconds: 2,
+    });
+    expect(await nearMax.issue({ id: "principal" })).toEqual({
+      kind: "rejected",
+      reason: "clock-failure",
+    });
+    await faulty.close();
+    await nearMax.close();
+  });
+
+  it("withholds credentials after signing or verification crosses close or expiry", async () => {
+    const key = keys();
+    const time = clock();
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: time,
+      ttlSeconds: 1,
+      clockSkewSeconds: 0,
+    });
+    const late = sessions.issue({ id: "principal" });
+    time.advance(1_001);
+    expect(await late).toEqual({ kind: "rejected", reason: "clock-failure" });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "issued") throw new Error("expected token");
+    const resolving = sessions.resolve(issued.credential);
+    await sessions.close();
+    expect(await resolving).toBeUndefined();
+
+    const closing = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+    });
+    const pending = closing.issue({ id: "principal" });
+    await closing.close();
+    expect(await pending).toEqual({ kind: "rejected", reason: "closed" });
+  });
+
   it("issues an exact ES256 bearer JWT and resolves defensive principal copies", async () => {
     const time = clock();
     const key = keys();
@@ -458,6 +689,44 @@ describe("SignedSessions", () => {
     await expect(loggingOut.close()).resolves.toBeUndefined();
   });
 
+  it("rechecks expiry after a delayed revocation read before returning authority", async () => {
+    const time = clock();
+    const key = keys();
+    let release!: () => void;
+    let entered!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: time,
+      ttlSeconds: 2,
+      clockSkewSeconds: 1,
+      revocation: {
+        kind: "supported",
+        isRevoked: async () => {
+          entered();
+          await pending;
+          return false;
+        },
+        revoke: () => Promise.resolve(),
+      },
+    });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "issued") throw new Error("expected token");
+    const resolving = sessions.resolve(issued.credential);
+    await waiting;
+    time.advance(3_001);
+    release();
+    await expect(resolving).resolves.toBeUndefined();
+    await sessions.close();
+  });
+
   it("validates construction, principals, entropy, clocks, and issuance bounds", async () => {
     const key = keys();
     for (const options of [
@@ -755,6 +1024,45 @@ describe("SignedSessions", () => {
         sessions.resolve({ kind: "bearer", value: token(key.privateKey, header, claims) }),
       ).resolves.toBeDefined();
     }
+  });
+
+  it("keeps the exact old expiry endpoint while rejecting jose-permissive header and audience forms", async () => {
+    const key = keys();
+    const time = clock();
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: time,
+      ttlSeconds: 10,
+      clockSkewSeconds: 1,
+    });
+    const header = { alg: "ES256", typ: "JWT", kid: "key" };
+    const claims = {
+      iss: "issuer",
+      aud: "aud",
+      sub: "principal",
+      iat: 989,
+      nbf: 989,
+      exp: 999,
+      jti: "abcdefghijklmnopqrstuv",
+    };
+    const exact = token(key.privateKey, header, claims);
+    await expect(sessions.resolve({ kind: "bearer", value: exact })).resolves.toBeDefined();
+    await expect(
+      sessions.resolve({
+        kind: "bearer",
+        value: token(key.privateKey, { ...header, typ: "application/jwt" }, claims),
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      sessions.resolve({
+        kind: "bearer",
+        value: token(key.privateKey, header, { ...claims, aud: ["aud", "other"] }),
+      }),
+    ).resolves.toBeUndefined();
+    time.advance(1);
+    await expect(sessions.resolve({ kind: "bearer", value: exact })).resolves.toBeUndefined();
   });
 
   it("enforces token output size and exact skew boundaries", async () => {

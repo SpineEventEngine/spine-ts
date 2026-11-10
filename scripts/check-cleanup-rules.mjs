@@ -30,6 +30,7 @@ const structurePartitions = [
   "T-0080L",
   "T-0080M",
   "T-0080N",
+  "fieldnotes",
   "storage-postgres",
 ];
 const forbiddenEndUserServerApis = new Set([
@@ -2709,6 +2710,7 @@ function structurePartition(file) {
   if (/^examples\/todo\//.test(file)) return "T-0080L";
   if (/^examples\/projects\//.test(file)) return "T-0080M";
   if (/^examples\/orders\//.test(file)) return "T-0080N";
+  if (/^examples\/fieldnotes\//.test(file)) return "fieldnotes";
   throw new Error(`No TypeScript structure partition owns ${file}`);
 }
 
@@ -2748,7 +2750,13 @@ function readStructureLedger(repoRoot, directory, rule) {
         required.some((key) => typeof value?.[key] !== "string") ||
         value.rule !== rule ||
         !/^(packages|examples)\//.test(value.file) ||
-        value.file.includes("..") ||
+        value.file
+          .split("/")
+          .some(
+            (segment) =>
+              segment.includes("..") &&
+              !/^(?:\[\.\.\.[A-Za-z][\w]*\]|\[\[\.\.\.[A-Za-z][\w]*\]\])$/.test(segment),
+          ) ||
         value.file.includes("\\") ||
         structurePartition(value.file) !== filename.slice(0, -5)
       )

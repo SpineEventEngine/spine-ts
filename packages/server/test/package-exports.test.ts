@@ -75,8 +75,17 @@ describe("@spine-event-engine/server package exports", () => {
 
   it("emits a native root declaration with no auth or browser resolution path", () => {
     const declaration = readFileSync(new URL("../dist/index.d.ts", import.meta.url), "utf8");
+    const forbiddenModule =
+      /(?:from\s*|import\s*(?:\(\s*)?)["'][^"']*(?:\/auth(?:\/|["'])|\/browser(?:\/|["'])|connect-node|node:http)/iu;
 
-    expect(declaration).not.toMatch(/auth|browser|connect-node|node:http/iu);
+    expect('export { BrowserServer } from "./browser/index.js";').toMatch(forbiddenModule);
+    expect('export type Route = import("./browser/options.js").BrowserAuthRoute;').toMatch(
+      forbiddenModule,
+    );
+    expect('export type Host = import("node:http").Server;').toMatch(forbiddenModule);
+    expect("export type Authenticator = DirectReaderAuthenticator;").not.toMatch(forbiddenModule);
+
+    expect(declaration).not.toMatch(forbiddenModule);
   });
 
   it("keeps reset out of the root declaration and runtime export", () => {

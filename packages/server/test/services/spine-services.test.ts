@@ -36,6 +36,7 @@ import {
   type MessageSchema,
   TypeUrls,
   AnyPacker,
+  QUERY_SERVICE_MAX_RESULTS,
 } from "@spine-event-engine/core";
 import { ReaderForwarding } from "@spine-event-engine/core/spi/reader-forwarding";
 import {
@@ -102,7 +103,6 @@ import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/ser
 import {
   EventStore,
   InMemoryStorageFactory,
-  StorageFactory,
   type NormalizedQueryPlan,
 } from "@spine-event-engine/storage";
 import { StoragePreparations, TenantBoundary } from "@spine-event-engine/storage/provider";
@@ -125,7 +125,7 @@ import {
   type EventDispatcher,
   type RunningServer,
 } from "../../src/index.js";
-import { TenantIndexes } from "../../src/context/tenant-index.js";
+import { TestTenantIndex, requireTenantDirectory } from "../tenant-index-fixture.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { TransitionValidationError } from "../../src/repository/command-errors.js";
@@ -172,6 +172,8 @@ import { ReviewProjectStateSchema } from "../../test-fixtures/generated/validati
 
 beforeEach(async () => {
   const { ServerEnvironment } = await import("../../src/server/server-environment.js");
+  const { EnvironmentType } = await import("../../src/server/environment.js");
+  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: new TestTenantIndex() });
   await ServerEnvironment.instance().completeSetup();
 });
 
@@ -188,8 +190,27 @@ async function configureStorage(storageFactory: InMemoryStorageFactory): Promise
     await import("../../src/server/server-environment.js");
   const { EnvironmentType } = await import("../../src/server/environment.js");
   await ServerEnvironmentLifecycle.resetForTest();
-  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
+  ServerEnvironment.when(EnvironmentType.Local).use({
+    storageFactory,
+    tenantIndex: new TestTenantIndex(),
+  });
   await ServerEnvironment.instance().completeSetup();
+}
+
+/**
+ * Registers a test delegate that observes provider Entity preparation.
+ */
+function observeEntityPreparation(factory: InMemoryStorageFactory) {
+  const preparation = StoragePreparations.for(factory);
+  const prepareEntity = vi.fn(() => Promise.resolve());
+  StoragePreparations.register(factory, {
+    ...preparation,
+    async prepareEntity(input, mode) {
+      await prepareEntity();
+      await preparation.prepareEntity(input, mode);
+    },
+  });
+  return prepareEntity;
 }
 
 async function configureSubscriptionCapacity(capacity: number): Promise<void> {
@@ -197,7 +218,10 @@ async function configureSubscriptionCapacity(capacity: number): Promise<void> {
     await import("../../src/server/server-environment.js");
   const { EnvironmentType } = await import("../../src/server/environment.js");
   await ServerEnvironmentLifecycle.resetForTest();
-  ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: capacity });
+  ServerEnvironment.when(EnvironmentType.Local).use({
+    subscriptionQueueCapacity: capacity,
+    tenantIndex: new TestTenantIndex(),
+  });
   await ServerEnvironment.instance().completeSetup();
 }
 
@@ -335,7 +359,7 @@ describe("SpineServices", () => {
             seen.push(
               headers instanceof Headers ? (headers.get("x-reader") ?? "missing") : "not Headers",
             );
-            return { principal: { id: seen.at(-1) ?? "" } };
+            return { reader: { principal: { id: seen.at(-1) ?? "" } } };
           },
         },
       },
@@ -369,6 +393,12 @@ describe("SpineServices", () => {
     expect(() => {
       spineServicesAccess.clearLogger(foreign);
     }).toThrow("SpineServices logger requires a SpineServices instance.");
+  });
+
+  it("rejects foreign package-private native admission shutdown", () => {
+    expect(() => {
+      spineServicesAccess.stopAdmissions({} as SpineServices);
+    }).toThrow("Expected SpineServices instance.");
   });
 
   it("uses the current Todo descriptor type names in routing fixtures", () => {
@@ -952,12 +982,27 @@ describe("SpineServices", () => {
         sequence: 7n,
       }),
     );
-    await context
-      .stand()
-      .update(
-        CoreProjectOverviewStateSchema,
-        create(CoreProjectOverviewStateSchema, { id: "typed-other", title: "Other review" }),
-      );
+    await context.stand().update(
+      CoreProjectOverviewStateSchema,
+      create(CoreProjectOverviewStateSchema, {
+        id: "typed-2",
+        title: "Closed review",
+        status: ProjectStatus.CLOSED,
+        dueAt: create(TimestampSchema, { seconds: 98n }),
+        owner: create(ProjectLeadSchema, { value: "reviewer-b" }),
+        fingerprint: new Uint8Array([1, 3]),
+        active: false,
+        sequence: 8n,
+      }),
+    );
+    await context.stand().update(
+      CoreProjectOverviewStateSchema,
+      create(CoreProjectOverviewStateSchema, {
+        id: "typed-other",
+        title: "Other review",
+        fingerprint: new Uint8Array([1, 0]),
+      }),
+    );
     const server = await startServices(context);
     try {
       const client = createClient(QueryService, createGrpcTransport({ baseUrl: server.baseUrl }));
@@ -1007,9 +1052,57 @@ describe("SpineServices", () => {
         AnyPacker.unpack(dated.message[0]?.state ?? packMissing(), CoreProjectOverviewStateSchema)
           .id,
       ).toBe("typed-1");
-      for (const [column, packed] of checks.filter(
-        ([name]) => name === "fingerprint" || name === "active",
-      )) {
+      for (const [operator, bound, expected] of [
+        [Filter_Operator.GREATER_THAN, 2, ["typed-2"]],
+        [Filter_Operator.LESS_THAN, 3, ["typed-1", "typed-other"]],
+        [Filter_Operator.GREATER_OR_EQUAL, 3, ["typed-2"]],
+        [Filter_Operator.LESS_OR_EQUAL, 2, ["typed-1", "typed-other"]],
+      ] as const) {
+        const query = createColumnFilterQuery(
+          "fingerprint",
+          AnyPacker.pack(
+            BytesValueSchema,
+            create(BytesValueSchema, { value: new Uint8Array([1, bound]) }),
+          ),
+          { operator },
+        );
+        if (query.target === undefined) throw new Error("Expected byte range target.");
+        query.target.type = TypeUrls.derive(CoreProjectOverviewStateSchema);
+        const ranged = await client.read(query);
+        expect(
+          ranged.message.map(
+            (item) =>
+              AnyPacker.unpack(item.state ?? packMissing(), CoreProjectOverviewStateSchema).id,
+          ),
+        ).toEqual(expected);
+      }
+      for (const [direction, expected] of [
+        [OrderBy_Direction.ASCENDING, ["typed-1", "typed-2"]],
+        [OrderBy_Direction.DESCENDING, ["typed-2", "typed-1"]],
+      ] as const) {
+        const query = createColumnFilterQuery(
+          "fingerprint",
+          AnyPacker.pack(
+            BytesValueSchema,
+            create(BytesValueSchema, { value: new Uint8Array([1, 0]) }),
+          ),
+          { operator: Filter_Operator.GREATER_THAN },
+        );
+        if (query.target === undefined) throw new Error("Expected byte order target.");
+        query.target.type = TypeUrls.derive(CoreProjectOverviewStateSchema);
+        query.format = create(ResponseFormatSchema, {
+          orderBy: [create(OrderBySchema, { column: "fingerprint", direction })],
+          limit: 2,
+        });
+        const ordered = await client.read(query);
+        expect(
+          ordered.message.map(
+            (item) =>
+              AnyPacker.unpack(item.state ?? packMissing(), CoreProjectOverviewStateSchema).id,
+          ),
+        ).toEqual(expected);
+      }
+      for (const [column, packed] of checks.filter(([name]) => name === "active")) {
         const unsupported = createColumnFilterQuery(column, packed, {
           operator: Filter_Operator.GREATER_THAN,
         });
@@ -2008,7 +2101,7 @@ describe("SpineServices", () => {
       handlers.read(
         createFormattedIncludeAllQuery(
           create(ResponseFormatSchema, {
-            limit: 1_001,
+            limit: QUERY_SERVICE_MAX_RESULTS + 1,
             orderBy: [
               create(OrderBySchema, {
                 column: "name",
@@ -2036,7 +2129,7 @@ describe("SpineServices", () => {
       "QueryService.Read order_by may contain at most 8 entries.",
     );
     expect(responseErrorMessage(tooLargeLimit)).toBe(
-      "QueryService.Read limit may be at most 1000.",
+      `QueryService.Read limit may be at most ${String(QUERY_SERVICE_MAX_RESULTS)}.`,
     );
   });
 
@@ -2620,7 +2713,7 @@ describe("SpineServices", () => {
         createCommandDispatcher((command) => multitenantDispatches.push(command.id?.uuid ?? "")),
       )
       .build();
-    await multitenant.tenantIndex.keep(tenantEmail("tenant@example.test"));
+    await requireTenantDirectory(multitenant.tenantIndex).keep(tenantEmail("tenant@example.test"));
     const singleServer = await startServices(singleTenant);
 
     try {
@@ -2662,7 +2755,7 @@ describe("SpineServices", () => {
   });
 
   it("returns structured NotFound for an unknown tenant before command or query work", async () => {
-    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const index = new TestTenantIndex();
     const dispatched: string[] = [];
     const context = await BoundedContext.multitenant("Tasks")
       .withTenantIndex(index)
@@ -2698,7 +2791,7 @@ describe("SpineServices", () => {
   });
 
   it("checks live membership for subscription creation, activation, and cancellation", async () => {
-    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const index = new TestTenantIndex();
     const contains = index.contains.bind(index);
     let removed = false;
     const lookup = vi
@@ -2729,7 +2822,7 @@ describe("SpineServices", () => {
   });
 
   it("sends structured unknown-tenant details on native subscription transport", async () => {
-    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const index = new TestTenantIndex();
     const registry = new InMemorySubscriptionRegistry();
     const createSubscription = vi.spyOn(registry, "create");
     const context = await BoundedContext.multitenant("NativeSubscriptionTenants")
@@ -2759,7 +2852,7 @@ describe("SpineServices", () => {
   it("prepares a lazy context before creating a native subscription", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const prepareEntity = vi.spyOn(StoragePreparations.for(factory), "prepareEntity");
+    const prepareEntity = observeEntityPreparation(factory);
     const context = await BoundedContext.singleTenant("LazySubscription")
       .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
       .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
@@ -2775,7 +2868,7 @@ describe("SpineServices", () => {
   it("rejects new native subscription preparation after the context close fence", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const prepareEntity = vi.spyOn(StoragePreparations.for(factory), "prepareEntity");
+    const prepareEntity = observeEntityPreparation(factory);
     const context = await BoundedContext.singleTenant("ClosingLazySubscription")
       .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
       .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
@@ -2792,7 +2885,7 @@ describe("SpineServices", () => {
   it("drains an admitted subscription membership check and rejects fresh checks", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const index = TenantIndexes.fromFactory(factory);
+    const index = new TestTenantIndex();
     await index.keep(tenantValue("tenant-a"));
     const contains = index.contains.bind(index);
     const entered = Promise.withResolvers<undefined>();
@@ -2851,7 +2944,7 @@ describe("SpineServices", () => {
     const acceptedResult = expect(accepted).resolves.toBeDefined();
     await entered.promise;
     const failure = new Error("other eager model failed");
-    vi.spyOn(StoragePreparations.for(factory), "prepareEntity").mockRejectedValueOnce(failure);
+    observeEntityPreparation(factory).mockRejectedValueOnce(failure);
     const failing = BoundedContext.singleTenant("TriggersSubscriptionClose")
       .add(new Repository({ entityType: RejectingTaskAggregate, schema: ProjectStateSchema }))
       .build();
@@ -2999,7 +3092,7 @@ describe("SpineServices", () => {
         createCommandDispatcher((command) => multitenantDispatches.push(command.id?.uuid ?? "")),
       )
       .build();
-    await multitenant.tenantIndex.keep(tenantEmail("tenant@example.test"));
+    await requireTenantDirectory(multitenant.tenantIndex).keep(tenantEmail("tenant@example.test"));
     const singleServer = await startServices(singleTenant);
 
     try {
@@ -3149,7 +3242,7 @@ describe("SpineServices", () => {
     } finally {
       await single.close();
     }
-    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const index = new TestTenantIndex();
     const email = tenantEmail("tenant@example.test");
     const multitenant = await BoundedContext.multitenant("MultiTenantVariants")
       .withTenantIndex(index)
@@ -3513,8 +3606,10 @@ describe("SpineServices", () => {
       readerAdmission: {
         direct: {
           authenticate: () => ({
-            principal: { id: "reader/alice" },
-            authorityFacts: { roles: ["reader"] },
+            reader: {
+              principal: { id: "reader/alice" },
+              authorityFacts: { roles: ["reader"] },
+            },
           }),
         },
       },
@@ -3547,6 +3642,213 @@ describe("SpineServices", () => {
     await context.close();
   });
 
+  it("stops a native activation and removes its backend binding after reader invalidation", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("InvalidatedNativeReader")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const invalidation = new AbortController();
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: {
+        direct: {
+          authenticate: () => ({
+            reader: { principal: { id: "reader/alice" } },
+            invalidated: invalidation.signal,
+          }),
+        },
+      },
+    });
+    const peer = { requestHeader: new Headers() } as HandlerContext;
+    const subscription = await handlers.subscribe(createTopic(), peer);
+    const iterator = handlers.activate(subscription, peer)[Symbol.asyncIterator]();
+    await expectActivationAcknowledgement(iterator, subscription);
+    const pending = iterator.next();
+    await awaitSubscriptionAttachment(context, subscription);
+    invalidation.abort();
+    await expect(withTimeout(pending, "invalidated reader stream")).resolves.toMatchObject({
+      done: true,
+    });
+    expect(await registry.get(subscription.id ?? create(SubscriptionIdSchema))).toBeUndefined();
+    await context.close();
+  });
+
+  it("removes a native Subscribe committed just before reader invalidation", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const original = registry.create.bind(registry);
+    const invalidation = new AbortController();
+    let createdId: string | undefined;
+    registry.create = async (subscription, reader) => {
+      const outcome = await original(subscription, reader);
+      createdId = subscription.id?.value;
+      invalidation.abort();
+      return outcome;
+    };
+    const context = await BoundedContext.singleTenant("InvalidatedNativeSubscribe")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: {
+        direct: {
+          authenticate: () => ({
+            reader: { principal: { id: "reader/alice" } },
+            invalidated: invalidation.signal,
+          }),
+        },
+      },
+    });
+    const peer = { requestHeader: new Headers() } as HandlerContext;
+    await expect(handlers.subscribe(createTopic(), peer)).rejects.toMatchObject({
+      code: Code.Canceled,
+    });
+    if (createdId === undefined) throw new Error("Expected created native subscription ID.");
+    expect(await registry.get(create(SubscriptionIdSchema, { value: createdId }))).toBeUndefined();
+    await context.close();
+  });
+
+  it("reports cleanup failure after a committed native Subscribe is invalidated", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const createRecord = registry.create.bind(registry);
+    const invalidation = new AbortController();
+    let createdId: string | undefined;
+    registry.create = async (subscription, reader) => {
+      const outcome = await createRecord(subscription, reader);
+      createdId = subscription.id?.value;
+      invalidation.abort();
+      return outcome;
+    };
+    const failure = new Error("registry cleanup failed");
+    registry.delete = () => Promise.reject(failure);
+    const context = await BoundedContext.singleTenant("InvalidatedNativeCleanup")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: {
+        direct: {
+          authenticate: () => ({
+            reader: { principal: { id: "reader/alice" } },
+            invalidated: invalidation.signal,
+          }),
+        },
+      },
+    });
+    const peer = { requestHeader: new Headers() } as HandlerContext;
+    await expect(handlers.subscribe(createTopic(), peer)).rejects.toMatchObject({
+      errors: [expect.objectContaining({ code: Code.Canceled }), failure],
+    });
+    if (createdId === undefined) throw new Error("Expected created native subscription ID.");
+    expect(await registry.get(create(SubscriptionIdSchema, { value: createdId }))).toBeDefined();
+    await context.close();
+  });
+
+  it("checks native Subscribe completion before returning a committed definition", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const createRecord = registry.create.bind(registry);
+    const invalidation = new AbortController();
+    let operation: AbortSignal | undefined;
+    let liveAtInvalidation: boolean | undefined;
+    let createdId: string | undefined;
+    registry.create = async (subscription, reader) => {
+      const outcome = await createRecord(subscription, reader);
+      createdId = subscription.id?.value;
+      queueMicrotask(() => {
+        queueMicrotask(() => {
+          liveAtInvalidation = operation?.aborted === false;
+          invalidation.abort();
+        });
+      });
+      return outcome;
+    };
+    const context = await BoundedContext.singleTenant("NativeSubscribeCompletion")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: {
+        direct: {
+          authenticate: ({ signal }) => {
+            operation = signal;
+            return {
+              reader: { principal: { id: "reader/alice" } },
+              invalidated: invalidation.signal,
+            };
+          },
+        },
+      },
+    });
+    const peer = { requestHeader: new Headers() } as HandlerContext;
+    const outcome = await Promise.resolve(handlers.subscribe(createTopic(), peer)).then(
+      (value) => ({ kind: "created" as const, value }),
+      (error: unknown) => ({ kind: "failed" as const, error }),
+    );
+    expect(liveAtInvalidation).toBe(true);
+    if (createdId === undefined) throw new Error("Expected committed native subscription ID.");
+    if (liveAtInvalidation) {
+      expect(outcome).toMatchObject({ kind: "failed", error: { code: Code.Canceled } });
+      expect(
+        await registry.get(create(SubscriptionIdSchema, { value: createdId })),
+      ).toBeUndefined();
+    } else {
+      expect(outcome.kind).toBe("created");
+    }
+    await context.close();
+  });
+
+  it("releases a native activation after ACK when its handler iterator returns", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("NativeIteratorReturn")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    let activation: AbortSignal | undefined;
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: {
+        direct: {
+          authenticate: ({ method, signal }) => {
+            if (method === "Activate") activation = signal;
+            return { reader: { principal: { id: "reader/alice" } } };
+          },
+        },
+      },
+    });
+    const peer = new AbortController();
+    const native = { requestHeader: new Headers(), signal: peer.signal } as HandlerContext;
+    const subscription = await handlers.subscribe(createTopic(), native);
+    const iterator = handlers.activate(subscription, native)[Symbol.asyncIterator]();
+    await expectActivationAcknowledgement(iterator, subscription);
+    await iterator.return?.();
+    expect(activation?.aborted).toBe(true);
+    expect(peer.signal.aborted).toBe(false);
+    expect(await registry.get(subscription.id ?? create(SubscriptionIdSchema))).toBeUndefined();
+    await context.close();
+  });
+
+  it("ends a successful unary native lifetime while its peer stays connected", async () => {
+    const context = await BoundedContext.singleTenant("NativeUnaryLifetime")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    let operation: AbortSignal | undefined;
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: {
+        direct: {
+          authenticate: ({ signal }) => {
+            operation = signal;
+            return { reader: { principal: { id: "reader/alice" } } };
+          },
+        },
+      },
+    });
+    const peer = new AbortController();
+    const native = { requestHeader: new Headers(), signal: peer.signal } as HandlerContext;
+    const subscription = await handlers.subscribe(createTopic(), native);
+    expect(subscription.id?.value).toBeTruthy();
+    expect(operation?.aborted).toBe(true);
+    expect(peer.signal.aborted).toBe(false);
+    await context.close();
+  });
+
   it("lets a peer reader progress while another reader's policy waits", async () => {
     await import("../../test-fixtures/generated/proto-module.js");
     let enter!: () => void;
@@ -3575,7 +3877,9 @@ describe("SpineServices", () => {
       readerAdmission: {
         direct: {
           authenticate: ({ headers }) => ({
-            principal: { id: headers instanceof Headers ? (headers.get("x-reader") ?? "") : "" },
+            reader: {
+              principal: { id: headers instanceof Headers ? (headers.get("x-reader") ?? "") : "" },
+            },
           }),
         },
       },
@@ -4918,7 +5222,7 @@ describe("SpineServices", () => {
   });
 
   it("keeps returned subscription mutation from changing activation tenant or topic", async () => {
-    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const index = new TestTenantIndex();
     const context = await BoundedContext.multitenant("ClonedSubscriptionTenant")
       .withTenantIndex(index)
       .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
@@ -6598,7 +6902,9 @@ function tenantValue(value: string): TenantId {
 }
 
 async function admitTenants(context: BoundedContext, ...values: string[]): Promise<void> {
-  await Promise.all(values.map((value) => context.tenantIndex.keep(tenantValue(value))));
+  await Promise.all(
+    values.map((value) => requireTenantDirectory(context.tenantIndex).keep(tenantValue(value))),
+  );
 }
 
 function tenantDomain(value: string): TenantId {

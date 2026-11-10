@@ -46,6 +46,25 @@ sessions, policy, TLS, and deployment.
 Each package README teaches ordinary use. Its adjacent `REFERENCE.md` records
 detailed exports, lifecycle, trust, error, concurrency, and test constraints.
 
+## Tenant storage and authentication examples
+
+[Orders](examples/orders/REFERENCE.md) demonstrates tenant membership and
+storage routing with memory, PostgreSQL, or Datastore. Keep every Orders
+assembly multi-tenant, including its smaller composition and routing examples.
+The PostgreSQL launch uses distinct shared, Northwind, and Contoso databases;
+structure preparation does not provision those databases or register tenants
+from incoming requests.
+
+[Fieldnotes](examples/fieldnotes/REFERENCE.md) demonstrates private user data
+and authentication in a single-tenant Next.js application. Users are verified
+principals, not tenants. Keep one Place Aggregate, one PlaceView Projection,
+and one Markdown note per saved PlaceId. The direct Google and Firebase launch
+options share persistent opaque application sessions. Its Node host configures
+`ServerEnvironment`; the Next.js process serves the UI and same-origin proxy.
+
+The app references describe invariants and source layout. Their linked user
+guides describe provider setup, launch configuration, and visible behavior.
+
 ## Agent applications
 
 Start with [the warehouse support example](examples/support/README.md). Agent

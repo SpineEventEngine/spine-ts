@@ -27,6 +27,7 @@ const entries = [
   "examples/todo",
   "examples/projects",
   "examples/orders",
+  "examples/fieldnotes",
 ];
 const prohibited = /\b(?:T-\d{4}|wave\s+\d+|reviewer|remediation)\b/i;
 const failures = [];

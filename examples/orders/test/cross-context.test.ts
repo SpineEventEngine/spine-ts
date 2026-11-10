@@ -37,10 +37,16 @@ describe("cross-context Orders example", () => {
   it("copies the catalog name into an order review through a Process Manager query", async () => {
     const { OrderReviewContexts, OrderReview } = await import("../dist/src/cross-context.js");
     const reviewHandler = vi.spyOn(OrderReview.prototype, "onOrderCreated");
-    const { catalog, orders } = await OrderReviewContexts.create(new InMemoryStorageFactory());
+    const { configureOrdersEnvironment, ordersTenants } = await import("../dist/src/index.js");
+    const setup = await configureOrdersEnvironment({
+      storageFactory: new InMemoryStorageFactory(),
+      tenants: [ordersTenants.northwind, ordersTenants.contoso],
+    });
+    const { catalog, orders } = await OrderReviewContexts.create();
     const running = await Server.atPort(0).add(catalog).add(orders).start();
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "orders-reviewer" }),
+      tenantId: ordersTenants.northwind,
     });
 
     try {
@@ -55,7 +61,9 @@ describe("cross-context Orders example", () => {
         }),
       );
       await vi.waitFor(async () => {
-        const states = await catalog.stand().readAllVersioned(SkuCatalogSchema);
+        const states = await catalog
+          .stand()
+          .readAllVersioned(SkuCatalogSchema, { tenantId: ordersTenants.northwind });
         expect(states[0]?.state.value).toBe("Blue mug");
       });
       await orders.commandBus().post(
@@ -69,7 +77,9 @@ describe("cross-context Orders example", () => {
         }),
       );
       await vi.waitFor(async () => {
-        const states = await orders.stand().readAllVersioned(OrderSchema);
+        const states = await orders
+          .stand()
+          .readAllVersioned(OrderSchema, { tenantId: ordersTenants.northwind });
         expect(states[0]?.state.skuId).toBe("sku-1");
       });
       await vi.waitFor(() => {
@@ -81,24 +91,88 @@ describe("cross-context Orders example", () => {
         skuName: "Blue mug",
       });
       await vi.waitFor(async () => {
-        const states = await orders.stand().readAllVersioned(OrderReviewSchema);
+        const states = await orders
+          .stand()
+          .readAllVersioned(OrderReviewSchema, { tenantId: ordersTenants.northwind });
         expect(states[0]?.state).toMatchObject({
           id: "order-1",
           skuId: "sku-1",
           skuName: "Blue mug",
         });
       });
+      const contosoActor = metadata.actorContext({
+        actor: create(UserIdSchema, { value: "orders-reviewer" }),
+        tenantId: ordersTenants.contoso,
+      });
+      await catalog.commandBus().post(
+        create(CommandSchema, {
+          id: metadata.commandId(),
+          context: metadata.commandContext({ actorContext: contosoActor }),
+          message: AnyPacker.pack(
+            RegisterSkuSchema,
+            create(RegisterSkuSchema, {
+              id: "sku-1",
+              displayName: "Red mug",
+            }),
+          ),
+        }),
+      );
+      await vi.waitFor(async () => {
+        expect(
+          (
+            await catalog.stand().readAllVersioned(SkuCatalogSchema, {
+              tenantId: ordersTenants.contoso,
+            })
+          )[0]?.state.value,
+        ).toBe("Red mug");
+      });
+      await orders.commandBus().post(
+        create(CommandSchema, {
+          id: metadata.commandId(),
+          context: metadata.commandContext({ actorContext: contosoActor }),
+          message: AnyPacker.pack(
+            CreateOrderSchema,
+            create(CreateOrderSchema, {
+              id: "order-1",
+              skuId: "sku-1",
+            }),
+          ),
+        }),
+      );
+      await vi.waitFor(async () => {
+        expect(
+          (
+            await orders.stand().readAllVersioned(OrderReviewSchema, {
+              tenantId: ordersTenants.contoso,
+            })
+          )[0]?.state.skuName,
+        ).toBe("Red mug");
+      });
+      expect(
+        (
+          await orders.stand().readAllVersioned(OrderReviewSchema, {
+            tenantId: ordersTenants.northwind,
+          })
+        )[0]?.state.skuName,
+      ).toBe("Blue mug");
     } finally {
       await running.close();
+      await setup.close();
     }
   });
 
   it("captures an empty name when the SKU is absent from the eventual catalog", async () => {
     const { OrderReviewContexts } = await import("../dist/src/cross-context.js");
-    const { catalog, orders } = await OrderReviewContexts.create(new InMemoryStorageFactory());
+    const { configureOrdersEnvironment, ordersTenants } = await import("../dist/src/index.js");
+    const setup = await configureOrdersEnvironment({
+      storageFactory: new InMemoryStorageFactory(),
+      tenants: [ordersTenants.northwind, ordersTenants.contoso],
+    });
+    const { catalog, orders } = await OrderReviewContexts.create();
     const running = await Server.atPort(0).add(catalog).add(orders).start();
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "orders-reviewer" }),
+      tenantId: ordersTenants.northwind,
     });
 
     try {
@@ -113,7 +187,9 @@ describe("cross-context Orders example", () => {
         }),
       );
       await vi.waitFor(async () => {
-        const states = await orders.stand().readAllVersioned(OrderReviewSchema);
+        const states = await orders
+          .stand()
+          .readAllVersioned(OrderReviewSchema, { tenantId: ordersTenants.northwind });
         expect(states[0]?.state).toMatchObject({
           id: "order-missing",
           skuId: "sku-missing",
@@ -122,6 +198,7 @@ describe("cross-context Orders example", () => {
       });
     } finally {
       await running.close();
+      await setup.close();
     }
   });
 });

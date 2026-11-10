@@ -49,10 +49,14 @@ export const buildOutputPaths = Object.freeze([
   "examples/todo/dist",
   "examples/projects/dist",
   "examples/orders/dist",
+  "examples/fieldnotes/model/dist",
+  "examples/fieldnotes/server/dist",
   "examples/support/dist",
   "examples/release-notes/dist",
   "examples/message-board/model/dist",
-  ...handlerOnlyTargets.map((target) => `${target.packagePath}/dist`),
+  ...handlerOnlyTargets
+    .filter((target) => target.packagePath !== "examples/fieldnotes/server")
+    .map((target) => `${target.packagePath}/dist`),
   "examples/message-board/web/dist",
 ]);
 

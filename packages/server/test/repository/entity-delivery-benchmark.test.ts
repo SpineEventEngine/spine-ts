@@ -30,7 +30,8 @@ import {
   ProcessManager,
   Repository,
 } from "../../src/index.js";
-import { ServerEnvironment } from "../../src/server/server-environment.js";
+import { ServerEnvironment, serverEnvironmentAccess } from "../../src/server/server-environment.js";
+import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import {
   ProjectCreatedSchema,
   type ProjectCreated,
@@ -115,8 +116,9 @@ async function startCpuProfile(
 }
 
 async function measure(count: number, label: string): Promise<number> {
+  await resetServerEnvironmentForTest();
   await ServerEnvironment.instance().completeSetup();
-  const ids = Array.from({ length: count }, (_, index) => `queue-${String(index)}`);
+  const ids = Array.from({ length: count }, (_, index) => `queue-${label}-${String(index)}`);
   const handlers = EntityHandlers.define(RoutedQueue, ProjectQueueStateSchema, (builder) => [
     builder.react(ProjectCreatedSchema, "react"),
   ]);
@@ -126,11 +128,13 @@ async function measure(count: number, label: string): Promise<number> {
     handlers,
     eventRouting: EventRouting.create(RoutedQueue).route(ProjectCreatedSchema, () => ids),
   });
-  const context = await BoundedContext.singleTenant(`DeliveryBenchmark${String(count)}`)
+  const context = await BoundedContext.singleTenant(
+    `DeliveryBenchmark${String(count)}${label.replaceAll("-", "")}`,
+  )
     .add(repository)
     .build();
   const event = create(EventSchema, {
-    id: create(EventIdSchema, { value: "queue-created" }),
+    id: create(EventIdSchema, { value: `queue-created-${label}` }),
     context: create(EventContextSchema, {
       producerId: AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: "source" })),
       timestamp: create(TimestampSchema, { seconds: 1n }),
@@ -139,7 +143,7 @@ async function measure(count: number, label: string): Promise<number> {
     message: AnyPacker.pack(
       ProjectCreatedSchema,
       create(ProjectCreatedSchema, {
-        id: "source",
+        id: `source-${label}`,
         name: "routed",
         priority: 1,
       }),
@@ -155,6 +159,7 @@ async function measure(count: number, label: string): Promise<number> {
     const start = performance.now();
     try {
       await context.eventBus().post(event);
+      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
     } finally {
       const end = performance.now();
       elapsed = end - start;
@@ -165,7 +170,7 @@ async function measure(count: number, label: string): Promise<number> {
         id,
         queue: "routed",
       });
-      expect(RoutedQueue.calls.get(id)).toBe(1);
+      expect(RoutedQueue.calls.get(id), `${label}: ${id}`).toBe(1);
     }
     expect(RoutedQueue.calls.size).toBe(count);
     return elapsed;

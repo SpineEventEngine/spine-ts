@@ -36,7 +36,7 @@ interface PhysicalReceipt {
 }
 
 /**
- * Counts one live invocation without durable replay or unacknowledged writes.
+ * Counts one live invocation without durable restart or unacknowledged writes.
  */
 export class AgentLiveBudget {
   readonly #tickets = new Map<symbol, PhysicalReceipt>();

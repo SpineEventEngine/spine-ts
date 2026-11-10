@@ -130,6 +130,8 @@ describe("time read bypass check", () => {
     ])
       expect(timeReadPolicy(path)).toBe("platform");
     expect(timeReadPolicy("packages/core/test/time.test.ts")).toBe("test");
+    expect(timeReadPolicy("examples/orders/test/postgres-interruption-child.mjs")).toBe("test");
+    expect(timeReadPolicy("examples/orders/test/other-tool.mjs")).toBe("platform");
   });
 
   it("rejects Time imports in tooling and TSX without flagging fixture text", () => {

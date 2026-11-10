@@ -19,7 +19,12 @@ import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
-import { ActorContextSchema, CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
+import {
+  ActorContextSchema,
+  CommandSchema,
+  UserIdSchema,
+  type TenantId,
+} from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
 import { TargetFiltersSchema, TargetSchema } from "@spine-event-engine/proto/client";
 import { QueryIdSchema, type QueryResponse, QuerySchema } from "@spine-event-engine/proto/client";
@@ -39,19 +44,19 @@ import { LatencyDistribution, type LatencyPercentiles } from "./internal/latency
 export type { LatencyPercentiles } from "./internal/latency-distribution.js";
 
 /**
- * Supported independent-user levels for the local datastore-orders scenario.
+ * Supported independent-user levels for an Orders load scenario.
  */
-export const datastoreOrdersLoadLevels = [10, 100, 1000] as const;
+export const ordersLoadLevels = [10, 100, 1000] as const;
 
 /**
  * A supported count of independent users for a load run.
  */
-export type DatastoreOrdersLoadLevel = (typeof datastoreOrdersLoadLevels)[number];
+export type OrdersLoadLevel = (typeof ordersLoadLevels)[number];
 
 /**
- * Configures a datastore-orders load run.
+ * Configures an Orders load run.
  */
-export interface DatastoreOrdersLoadOptions {
+export interface OrdersLoadOptions {
   // prettier-ignore
 
   /**
@@ -62,7 +67,12 @@ export interface DatastoreOrdersLoadOptions {
   /**
    * Number of independent users to execute.
    */
-  readonly users: DatastoreOrdersLoadLevel;
+  readonly users: OrdersLoadLevel;
+
+  /**
+   * Distributes users across these configured tenants.
+   */
+  readonly tenants: readonly TenantId[];
 
   /**
    * Maximum duration for each visibility operation, in milliseconds.
@@ -71,15 +81,20 @@ export interface DatastoreOrdersLoadOptions {
 }
 
 /**
- * Summarizes a completed datastore-orders load run.
+ * Summarizes a completed Orders load run.
  */
-export interface DatastoreOrdersLoadResult {
+export interface OrdersLoadResult {
   // prettier-ignore
 
   /**
    * Number of requested independent users.
    */
   readonly users: number;
+
+  /**
+   * Groups outcomes by selected tenant value.
+   */
+  readonly perTenant: Readonly<Record<string, OrdersTenantLoadResult>>;
 
   /**
    * Number of users whose command-query-subscription flow rejected.
@@ -127,6 +142,36 @@ export interface DatastoreOrdersLoadResult {
   readonly failureMessages: Readonly<Record<string, number>>;
 }
 
+/**
+ * Counts selected users, failed flows, and independently completed phases for one tenant.
+ */
+export interface OrdersTenantLoadResult {
+  /**
+   * Counts selected users.
+   */
+  readonly users: number;
+
+  /**
+   * Counts rejected user flows.
+   */
+  readonly failedUsers: number;
+
+  /**
+   * Counts acknowledged CreateOrder commands.
+   */
+  readonly commandAcknowledgements: number;
+
+  /**
+   * Counts visible OrderSummary queries.
+   */
+  readonly queryVisibilities: number;
+
+  /**
+   * Counts delivered OrderSummary subscription updates.
+   */
+  readonly subscriptionDeliveries: number;
+}
+
 const metadata = new SignalMetadata();
 const maximumSharedSessions = 16;
 const maximumConcurrentUsers = 10;
@@ -137,10 +182,8 @@ const maximumConcurrentUsers = 10;
  * @param options Server and user-count settings for the run.
  * @returns Aggregate successes, failures, latency percentiles, and throughput.
  */
-export async function runDatastoreOrdersLoad(
-  options: DatastoreOrdersLoadOptions,
-): Promise<DatastoreOrdersLoadResult> {
-  return await new DatastoreOrdersLoadRun(options).execute();
+export async function runOrdersLoad(options: OrdersLoadOptions): Promise<OrdersLoadResult> {
+  return await new OrdersLoadRun(options).execute();
 }
 
 /**
@@ -153,19 +196,30 @@ interface UserResult {
 }
 
 /**
- * Runs datastore order users in bounded waves over shared HTTP/2 sessions.
+ * Retains each completed user milestone even when a later phase rejects.
  */
-class DatastoreOrdersLoadRun {
+interface UserProgress {
+  readonly commandAcknowledgementMs?: number;
+  readonly queryVisibilityMs?: number;
+  readonly subscriptionDeliveryMs?: number;
+}
+
+/**
+ * Runs Orders users in bounded waves over shared HTTP/2 sessions.
+ */
+class OrdersLoadRun {
   private readonly timeoutMs: number;
 
   private readonly sessions: Http2SessionManager[];
+
+  private readonly progress: UserProgress[] = [];
 
   /**
    * Creates shared sessions and resolves the per-user visibility limit.
    *
    * @param options Server, user count, and optional visibility deadline.
    */
-  constructor(private readonly options: DatastoreOrdersLoadOptions) {
+  constructor(private readonly options: OrdersLoadOptions) {
     this.timeoutMs = options.visibilityTimeoutMs ?? 5_000;
     this.sessions = Array.from(
       { length: Math.min(options.users, maximumSharedSessions) },
@@ -178,7 +232,7 @@ class DatastoreOrdersLoadRun {
    *
    * @returns Aggregate load results and classified failures.
    */
-  async execute(): Promise<DatastoreOrdersLoadResult> {
+  async execute(): Promise<OrdersLoadResult> {
     const startedAt = performance.now();
     try {
       const settled = await this.settleUsers();
@@ -213,13 +267,12 @@ class DatastoreOrdersLoadRun {
    */
   private runUser(index: number): Promise<UserResult> {
     const session = this.sessions[index % this.sessions.length];
+    const tenantId = this.options.tenants[index % this.options.tenants.length];
+    if (tenantId === undefined) throw new Error("Orders load requires a configured tenant.");
     if (session === undefined) throw new Error("Load runner did not allocate an HTTP/2 session.");
-    return new DatastoreOrdersUserRun(
-      this.options.baseUrl,
-      index,
-      this.timeoutMs,
-      session,
-    ).execute();
+    const user = new OrdersUserRun(this.options.baseUrl, index, this.timeoutMs, session, tenantId);
+    this.progress[index] = user.progress;
+    return user.execute();
   }
 
   /**
@@ -232,28 +285,78 @@ class DatastoreOrdersLoadRun {
   private summarize(
     settled: readonly PromiseSettledResult<UserResult>[],
     elapsedMs: number,
-  ): DatastoreOrdersLoadResult {
+  ): OrdersLoadResult {
     const results = settled.flatMap((result) =>
       result.status === "fulfilled" ? [result.value] : [],
     );
     return {
       users: this.options.users,
+      perTenant: this.perTenant(settled),
       failedUsers: settled.length - results.length,
-      commandAcknowledgements: results.length,
-      queryVisibilities: results.length,
-      subscriptionDeliveries: results.length,
+      commandAcknowledgements: this.phaseValues("commandAcknowledgementMs").length,
+      queryVisibilities: this.phaseValues("queryVisibilityMs").length,
+      subscriptionDeliveries: this.phaseValues("subscriptionDeliveryMs").length,
       commandAcknowledgementLatency: LatencyDistribution.from(
-        results.map((result) => result.commandAcknowledgementMs),
+        this.phaseValues("commandAcknowledgementMs"),
       ).percentiles(),
       queryVisibilityLatency: LatencyDistribution.from(
-        results.map((result) => result.queryVisibilityMs),
+        this.phaseValues("queryVisibilityMs"),
       ).percentiles(),
       subscriptionDeliveryLatency: LatencyDistribution.from(
-        results.map((result) => result.subscriptionDeliveryMs),
+        this.phaseValues("subscriptionDeliveryMs"),
       ).percentiles(),
       throughputPerSecond: elapsedMs === 0 ? 0 : (results.length * 1_000) / elapsedMs,
       failureMessages: this.classifyFailures(settled),
     };
+  }
+
+  /**
+   * Reads completed latencies for one independently reported phase.
+   *
+   * @param phase The completed milestone to summarize.
+   * @returns Latencies from users who reached that milestone.
+   */
+  private phaseValues(phase: keyof UserProgress): number[] {
+    return this.progress.flatMap((user) => (user[phase] === undefined ? [] : [user[phase]]));
+  }
+
+  /**
+   * Groups outcomes for each selected tenant.
+   *
+   * @param settled User outcomes in submission order.
+   * @returns Counts grouped by the configured tenant values.
+   */
+  private perTenant(
+    settled: readonly PromiseSettledResult<UserResult>[],
+  ): OrdersLoadResult["perTenant"] {
+    const counts: Record<string, OrdersTenantLoadResult> = {};
+    for (let index = 0; index < settled.length; index += 1) {
+      const tenantId = this.options.tenants[index % this.options.tenants.length];
+      if (tenantId?.kind.case !== "value")
+        throw new Error("Orders load requires value tenant IDs.");
+      const tenant = tenantId.kind.value;
+      const current = counts[tenant] ?? {
+        users: 0,
+        failedUsers: 0,
+        commandAcknowledgements: 0,
+        queryVisibilities: 0,
+        subscriptionDeliveries: 0,
+      };
+      const success = settled[index]?.status === "fulfilled" ? 1 : 0;
+      const progress = this.progress[index];
+      counts[tenant] = {
+        users: current.users + 1,
+        failedUsers: current.failedUsers + (1 - success),
+        commandAcknowledgements:
+          current.commandAcknowledgements +
+          (progress?.commandAcknowledgementMs === undefined ? 0 : 1),
+        queryVisibilities:
+          current.queryVisibilities + (progress?.queryVisibilityMs === undefined ? 0 : 1),
+        subscriptionDeliveries:
+          current.subscriptionDeliveries + (progress?.subscriptionDeliveryMs === undefined ? 0 : 1),
+      };
+    }
+    return counts;
   }
 
   /**
@@ -287,7 +390,16 @@ interface SubscriptionRead {
 /**
  * Executes one correlated order command, query, and subscription flow.
  */
-class DatastoreOrdersUserRun {
+class OrdersUserRun {
+  /**
+   * Records each milestone as soon as it completes.
+   */
+  readonly progress: {
+    commandAcknowledgementMs?: number;
+    queryVisibilityMs?: number;
+    subscriptionDeliveryMs?: number;
+  } = {};
+
   private readonly id: string;
 
   private readonly actorContext;
@@ -307,12 +419,14 @@ class DatastoreOrdersUserRun {
    * @param index Zero-based user position in the load run.
    * @param timeoutMs Maximum wait for each visibility operation.
    * @param session Shared HTTP/2 session used by this user.
+   * @param tenantId Complete tenant identity carried by this user's signals.
    */
   constructor(
     baseUrl: string,
     private readonly index: number,
     private readonly timeoutMs: number,
     session: Http2SessionManager,
+    private readonly tenantId: TenantId,
   ) {
     const transport = createGrpcTransport({ baseUrl, sessionManager: session });
     this.commands = createClient(CommandService, transport);
@@ -322,6 +436,7 @@ class DatastoreOrdersUserRun {
     this.actorContext = create(ActorContextSchema, {
       ...metadata.actorContext({
         actor: create(UserIdSchema, { value: `load-user-${String(index)}` }),
+        tenantId,
       }),
       timestamp: metadata.timestamp(),
     });
@@ -338,8 +453,11 @@ class DatastoreOrdersUserRun {
       read = await this.startSubscription();
       const submittedAt = performance.now();
       const commandAcknowledgementMs = await this.postCommand(submittedAt);
+      this.progress.commandAcknowledgementMs = commandAcknowledgementMs;
       const queryVisibilityMs = await this.waitForVisibility(submittedAt);
+      this.progress.queryVisibilityMs = queryVisibilityMs;
       const subscriptionDeliveryMs = await this.readSubscription(read.firstUpdate);
+      this.progress.subscriptionDeliveryMs = subscriptionDeliveryMs;
       return { commandAcknowledgementMs, queryVisibilityMs, subscriptionDeliveryMs };
     } finally {
       await this.cleanup(read?.iterator);

@@ -125,19 +125,25 @@ export const BoardAdmission: Readonly<{
         },
       },
       direct: {
-        authenticate: async ({ headers }) => {
+        authenticate: async ({ headers, signal }) => {
           const authorization =
             "get" in headers && typeof headers.get === "function"
               ? headers.get("authorization")
               : (headers as Readonly<Record<string, string>>).authorization;
           if (!authorization?.startsWith("Bearer ")) return undefined;
-          const session = await sessions.resolve({ kind: "bearer", value: authorization.slice(7) });
-          if (session === undefined) return undefined;
+          const session = await sessions.resolve(
+            { kind: "bearer", value: authorization.slice(7) },
+            signal,
+          );
+          if (session?.invalidated === undefined) return undefined;
           return {
-            principal: session.principal,
-            authorityFacts: {
-              canReadRestricted: session.principal.attributes?.canReadRestricted === "true",
+            reader: {
+              principal: session.principal,
+              authorityFacts: {
+                canReadRestricted: session.principal.attributes?.canReadRestricted === "true",
+              },
             },
+            invalidated: session.invalidated,
           };
         },
       },

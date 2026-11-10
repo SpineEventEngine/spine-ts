@@ -35,8 +35,16 @@ and required audit indexes without DDL or custom creation SQL. A successful
 compatible preparation is reused by later handles and operations in this
 factory. Explicit preparation uses and releases a temporary pool when no runtime
 pool exists; otherwise it reuses the retained runtime pool. Failed requirements
-can be retried without discarding
-earlier compatible families.
+can be retried without discarding earlier compatible families.
+
+Each `RecordSpec.indexes` requirement likewise checks a complete non-unique,
+ascending B-tree index with default operator class and column collation, no
+partial predicate, expression, or included column. Create mode adds missing
+indexes under the family preparation lock; incompatible existing indexes reject
+without alteration. Fixed byte columns use `BYTEA` and exact-width stored and
+query validation. Non-null fixed-byte equality uses native `=` for indexable
+queries. A record handle with `prepareOnAccess: false` performs no index
+metadata probe or DDL on ordinary data operations.
 
 The default shared registry converts message-valued IDs and columns using
 generated descriptors registered on module import. A registry supplied with

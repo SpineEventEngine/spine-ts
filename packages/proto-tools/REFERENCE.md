@@ -64,6 +64,9 @@ same-directory `_query.ts` companion. Either companion imports core at runtime,
 so the model must declare `@spine-event-engine/core` in its direct runtime
 `package.json` dependencies when either is generated. Models with neither
 companion do not need this dependency for generation.
+The generated Entity query companion exposes equality, range, and order accessors for annotated
+scalar `bytes` columns. Their values are `Uint8Array` and use unsigned lexicographic byte order;
+`bool`, enum, and ordinary message columns remain equality-only.
 
 For a cross-model Proto import, declare the other model in both `package.json`
 and `spine-proto.json`; import the other model's canonical package path. The

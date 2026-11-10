@@ -17,6 +17,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 
 import * as http from "node:http";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { AddressInfo } from "node:net";
 
 import {
@@ -30,10 +31,19 @@ import {
   type Clock,
   type ContextResolver,
   type SessionResolver,
+  type RequestCredential,
   type SubscriptionBindings,
   UnaryGateway,
 } from "@spine-event-engine/auth";
-import type { ConnectRouter } from "@connectrpc/connect";
+import {
+  Code,
+  ConnectError,
+  cors as connectCors,
+  createContextKey,
+  type ConnectRouter,
+  type ContextValues,
+  type Interceptor,
+} from "@connectrpc/connect";
 import {
   connectNodeAdapter,
   createGrpcTransport,
@@ -51,9 +61,11 @@ import type { RunningServer } from "../server/server.js";
 import { Server, serverBuilderAccess } from "../server/server.js";
 import type {
   BrowserAuthRoute,
+  BrowserCredentialReader,
   BrowserServerOptions,
   StandaloneBrowserServerOptions,
 } from "./options.js";
+import { BrowserAdmissionPolicy } from "./browser-admission.js";
 import {
   attachDurableSubscriptionCleanup,
   isDurableSubscriptionBindings,
@@ -65,6 +77,34 @@ import { ServerEnvironment } from "../server/server-environment.js";
 
 const gracefulBrowserDrainMs = 100;
 const reservedPathSet = new Set(reservedSpineRpcPaths);
+
+/**
+ * Raw credential facts carried to the Connect interceptor for one request.
+ */
+interface BrowserCredentialContext {
+  readonly facts?: Parameters<BrowserCredentialReader["read"]>[0];
+}
+const credentialContext = new AsyncLocalStorage<BrowserCredentialContext>();
+const admittedCredential = createContextKey<RequestCredential | undefined>(undefined, {
+  description: "Browser credential admitted for one Connect request",
+});
+const emptyAdmission = Object.freeze({
+  csrfHeaderNames: Object.freeze([]),
+  credentialCookieNames: Object.freeze([]),
+  stateCookieNames: Object.freeze([]),
+});
+const bearerCredentials: BrowserCredentialReader = Object.freeze({
+  admission: emptyAdmission,
+  read: async ({ headers }: Parameters<BrowserCredentialReader["read"]>[0]) => {
+    const supplied = headers.authorization;
+    if (supplied === undefined) return undefined;
+    if (typeof supplied !== "string") return { kind: "rejected" as const };
+    const match = /^Bearer ([\x21-\x7e]+)$/.exec(supplied);
+    return match === null
+      ? { kind: "rejected" as const }
+      : { kind: "bearer" as const, value: match[1] ?? "" };
+  },
+});
 
 /**
  * Browser admission inputs before session and access requirements are normalized.
@@ -88,8 +128,21 @@ type BrowserHostOptions = BrowserServerOptions & {
   readonly readMaxBytes: number;
   readonly writeMaxBytes: number;
   readonly production: boolean;
+  readonly credentialReader: BrowserCredentialReader;
+  readonly admissionPolicy: BrowserAdmissionPolicy;
+  readonly authRouteMap: ReadonlyMap<string, BrowserAuthRoute>;
   readonly dynamicManagerFactory?: (node: ApplicationNode) => Http2SessionManager;
 };
+
+/**
+ * Captured reader, route and raw admission policy from one startup preflight.
+ */
+interface BrowserAdmissionSnapshot {
+  readonly credentialReader: BrowserCredentialReader;
+  readonly admissionPolicy: BrowserAdmissionPolicy;
+  readonly authRouteMap: ReadonlyMap<string, BrowserAuthRoute>;
+  readonly authRoutes: readonly BrowserAuthRoute[];
+}
 
 /**
  * Accepts options used only through the browser-server white-box seam.
@@ -186,12 +239,12 @@ export const browserServerImplementation: Readonly<{
    */
   requests(options: BrowserServerOptions): {
     /**
-     * Reads a configured cookie credential or a Bearer authorization value.
+     * Reads the credential admitted into this Connect call's context values.
      *
-     * @param context Incoming request headers; these do not establish authenticated identity.
-     * @returns The extracted credential, an empty bearer value for rejected cookies, or no credential.
+     * @param context Connect context values carrying the reader's result.
+     * @returns The admitted credential, or undefined when the reader found none.
      */
-    credential(context: { readonly requestHeader: Headers }):
+    credential(context: { readonly requestHeader: Headers; readonly values?: ContextValues }):
       | {
           readonly kind: "bearer" | "cookie";
           readonly value: string;
@@ -344,16 +397,14 @@ export const browserServerImplementation: Readonly<{
     suppliedOptions?: BrowserServerOptions,
   ): Promise<RunningServer> {
     const options = suppliedOptions ?? (nativeOrOptions as BrowserServerOptions);
-    if (nativeOrOptions instanceof Server) {
+    const combined = nativeOrOptions instanceof Server;
+    if (combined) {
       if (!serverBuilderAccess.isLoopback(nativeOrOptions))
         throw new Error("Combined browser server requires a loopback native listener.");
-      BrowserServer.preflight("combined", options);
-    } else BrowserServer.preflight("standalone", options);
-    const native = nativeOrOptions instanceof Server ? await nativeOrOptions.start() : undefined;
-    const running =
-      native === undefined
-        ? await BrowserServer.open(undefined, options as StandaloneBrowserServerOptions)
-        : await BrowserServer.open(native, options);
+    }
+    const prepared = BrowserServer.preflight(combined ? "combined" : "standalone", options);
+    const native = combined ? await nativeOrOptions.start() : undefined;
+    const running = await BrowserServerValues.openWithOptions(native, native, prepared);
     return ProcessServerCoordinator.add(
       running,
       native === undefined ? undefined : ServerEnvironment.instance(),
@@ -370,13 +421,18 @@ export const browserServerImplementation: Readonly<{
    * @returns Normalized listener options after all preflight checks pass.
    */
   preflight(mode, input): BrowserHostOptions {
+    const admission = BrowserServerValues.snapshotAdmission(input);
+    const production = Environment.instance().type === EnvironmentType.Production;
+    BrowserServer.requireDurableBindings(input, production);
     const options: BrowserHostOptions = {
       ...input,
+      origins: Object.freeze([...input.origins]),
+      ...admission,
       host: input.host ?? "127.0.0.1",
       port: input.port ?? 0,
       readMaxBytes: input.readMaxBytes ?? 4_194_304,
       writeMaxBytes: input.writeMaxBytes ?? 4_194_304,
-      production: Environment.instance().type === EnvironmentType.Production,
+      production,
     };
     if (!options.host.trim()) throw new Error("Browser server host must not be blank.");
     if (!Number.isInteger(options.port) || options.port < 0 || options.port > 65_535)
@@ -387,9 +443,7 @@ export const browserServerImplementation: Readonly<{
       throw new Error("Browser server writeMaxBytes must be a positive integer.");
     if (mode === "standalone" && options.backend === undefined && options.discovery === undefined)
       throw new Error("Standalone browser server requires a backend or discovery.");
-    BrowserServer.requireDurableBindings(options, options.production);
     BrowserServer.origins(options.origins);
-    BrowserServer.authRoutes(options.authRoutes);
     const capacity = options.maxActiveAuthRequests ?? 64;
     if (!Number.isSafeInteger(capacity) || capacity < 1)
       throw new Error("Browser maxActiveAuthRequests must be a positive safe integer.");
@@ -403,18 +457,10 @@ export const browserServerImplementation: Readonly<{
    * @returns Adapters that the gateway uses to admit each incoming request.
    */
   requests(options: BrowserServerOptions) {
+    void options;
     return {
-      credential: (context: { readonly requestHeader: Headers }) => {
-        const headers = Object.fromEntries(context.requestHeader.entries());
-        const extracted = options.cookies?.extract(headers);
-        if (extracted !== undefined) {
-          return extracted.kind === "rejected" ? { kind: "bearer" as const, value: "" } : extracted;
-        }
-        const authorization = context.requestHeader.get("authorization") ?? "";
-        return /^Bearer [^\s]+$/.test(authorization)
-          ? { kind: "bearer" as const, value: authorization.slice("Bearer ".length) }
-          : undefined;
-      },
+      credential: (context: { readonly requestHeader: Headers; readonly values?: ContextValues }) =>
+        context.values?.get(admittedCredential),
       transport: (context: { readonly requestHeader: Headers }) => {
         const origin = context.requestHeader.get("origin");
         return TransportFacts.from({
@@ -628,58 +674,11 @@ export const browserServerImplementation: Readonly<{
     active: Set<AbortController>,
     writeMaxBytes: number,
   ): Promise<void> {
-    const origin = request.headers.origin;
-    if (
-      (origin === undefined && route.allowMissingOrigin !== true) ||
-      (origin !== undefined && !route.origins.includes(origin))
-    ) {
-      response.statusCode = 403;
-      response.end();
-      return;
-    }
-    const length = request.headers["content-length"];
-    if (length !== undefined && (!/^\d+$/.test(length) || Number(length) > route.maxRequestBytes)) {
-      response.statusCode = 413;
-      response.end();
-      return;
-    }
-    const controller = new AbortController();
-    active.add(controller);
-    const timer = setTimeout(() => {
-      controller.abort();
-      request.resume();
-    }, route.timeoutMs);
-    const abort = () => {
-      controller.abort();
-    };
-    request.once("aborted", abort);
-    response.once("close", abort);
-    let rejectAbort!: (reason: unknown) => void;
-    const aborted = new Promise<never>((_resolve, reject) => {
-      rejectAbort = reject;
-    });
-    let responseReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-    const onAbort = () => {
-      rejectAbort(new Error("browser auth request aborted"));
-      void responseReader?.cancel().catch(() => undefined);
-    };
-    controller.signal.addEventListener("abort", onAbort, { once: true });
+    if (!AuthRouteScope.admit(request, response, route)) return;
+    const scope = new AuthRouteScope(request, response, route.timeoutMs, active);
     try {
-      const requestChunks: Uint8Array[] = [];
-      let size = 0;
-      const requestBody = request[Symbol.asyncIterator]();
-      for (;;) {
-        const next = await Promise.race([requestBody.next(), aborted]);
-        if (next.done) break;
-        const bytes = Buffer.from(next.value as Uint8Array);
-        size += bytes.byteLength;
-        if (size > route.maxRequestBytes) {
-          response.statusCode = 413;
-          response.end();
-          return;
-        }
-        requestChunks.push(bytes);
-      }
+      const body = await scope.body(route.maxRequestBytes);
+      if (body === undefined) return;
       const url = new URL(
         request.url ?? route.path,
         `http://${request.headers.host ?? "localhost"}`,
@@ -687,52 +686,15 @@ export const browserServerImplementation: Readonly<{
       const input = new Request(url, {
         method: route.method,
         headers: request.headers as HeadersInit,
-        ...(size === 0 ? {} : { body: Buffer.concat(requestChunks) }),
-        signal: controller.signal,
+        ...(body.byteLength === 0 ? {} : { body: new Uint8Array(body) }),
+        signal: scope.signal,
       });
-      const result = await Promise.race([route.onRequest(input, controller.signal), aborted]);
-      if (controller.signal.aborted) {
-        if (!response.writableEnded) {
-          response.statusCode = 504;
-          response.end();
-        }
-        return;
-      }
-      responseReader = result.body?.getReader();
-      const responseChunks: Uint8Array[] = [];
-      let responseBytes = 0;
-      if (responseReader !== undefined) {
-        for (;;) {
-          const next = await Promise.race([responseReader.read(), aborted]);
-          if (next.done) break;
-          responseBytes += next.value.byteLength;
-          if (responseBytes > writeMaxBytes) {
-            await responseReader.cancel().catch(() => undefined);
-            response.statusCode = 413;
-            response.end();
-            return;
-          }
-          responseChunks.push(next.value);
-        }
-      }
-      response.statusCode = result.status;
-      result.headers.forEach((value, key) => response.setHeader(key, value));
-      response.end(Buffer.concat(responseChunks));
+      const result = await scope.wait(Promise.resolve(route.onRequest(input, scope.signal)));
+      await scope.send(result, writeMaxBytes);
     } catch {
-      if (!response.writableEnded) {
-        if (controller.signal.aborted) {
-          response.shouldKeepAlive = false;
-          response.setHeader("connection", "close");
-        }
-        response.statusCode = controller.signal.aborted ? 504 : 500;
-        response.end();
-      }
+      scope.fail();
     } finally {
-      clearTimeout(timer);
-      request.off("aborted", abort);
-      response.off("close", abort);
-      controller.signal.removeEventListener("abort", onAbort);
-      active.delete(controller);
+      scope.close();
     }
   },
 
@@ -828,13 +790,14 @@ type BrowserServerTestAccess = Omit<
    */
   requests(options: BrowserServerTestOptions): {
     /**
-     * Reads a configured cookie credential or a Bearer authorization value.
+     * Reads the credential admitted into this Connect call's context values.
      *
-     * @param context Incoming request headers; these do not establish authenticated identity.
-     * @returns The extracted credential, an empty bearer value for rejected cookies, or no credential.
+     * @param context Connect context values carrying the reader's result.
+     * @returns The admitted credential, or undefined when the reader found none.
      */
     credential(context: {
       readonly requestHeader: Headers;
+      readonly values?: ContextValues;
     }): { readonly kind: "bearer" | "cookie"; readonly value: string } | undefined;
 
     /**
@@ -875,7 +838,385 @@ export const browserServerTestAccess: BrowserServerTestAccess = Object.freeze({
 
 const BrowserServer = browserServerImplementation;
 
+/**
+ * Tracks one bounded authentication request through body and response streaming.
+ */
+class AuthRouteScope {
+  /**
+   * Checks route origin and declared body length before allocating request state.
+   * @param request Incoming HTTP request.
+   * @param response Response for rejected input.
+   * @param route Selected authentication route.
+   * @returns Whether the request may enter the route callback.
+   */
+  static admit(
+    request: http.IncomingMessage,
+    response: http.ServerResponse,
+    route: BrowserAuthRoute,
+  ): boolean {
+    const origin = request.headers.origin;
+    if (
+      (origin === undefined && route.allowMissingOrigin !== true) ||
+      (origin !== undefined && !route.origins.includes(origin))
+    ) {
+      response.statusCode = 403;
+      response.end();
+      return false;
+    }
+    const length = request.headers["content-length"];
+    if (length !== undefined && (!/^\d+$/.test(length) || Number(length) > route.maxRequestBytes)) {
+      response.statusCode = 413;
+      response.end();
+      return false;
+    }
+    return true;
+  }
+
+  readonly #controller = new AbortController();
+
+  readonly #aborted: Promise<never>;
+
+  readonly #timer: ReturnType<typeof setTimeout>;
+
+  #responseReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+
+  readonly #abort = () => {
+    this.#controller.abort();
+  };
+
+  readonly #onAbort: () => void;
+
+  /**
+   * Starts the route deadline and disconnect fences.
+   * @param request Incoming HTTP request.
+   * @param response Response to complete or abort.
+   * @param timeoutMs Configured route deadline in milliseconds.
+   * @param active Controllers drained when the host closes.
+   */
+  constructor(
+    readonly request: http.IncomingMessage,
+    readonly response: http.ServerResponse,
+    timeoutMs: number,
+    readonly active: Set<AbortController>,
+  ) {
+    let rejectAbort!: (reason: unknown) => void;
+    this.#aborted = new Promise<never>((_resolve, reject) => {
+      rejectAbort = reject;
+    });
+    this.#onAbort = () => {
+      rejectAbort(new Error("browser auth request aborted"));
+      void this.#responseReader?.cancel().catch(() => undefined);
+    };
+    active.add(this.#controller);
+    this.#timer = setTimeout(() => {
+      this.#controller.abort();
+      request.resume();
+    }, timeoutMs);
+    request.once("aborted", this.#abort);
+    response.once("close", this.#abort);
+    this.#controller.signal.addEventListener("abort", this.#onAbort, { once: true });
+  }
+
+  /**
+   * Exposes the signal passed to the configured route callback.
+   * @returns Signal that aborts on deadline, disconnect or host drain.
+   */
+  get signal(): AbortSignal {
+    return this.#controller.signal;
+  }
+
+  /**
+   * Awaits one route step while allowing deadline and disconnect to stop it.
+   * @typeParam T Result returned by the pending route step.
+   * @param pending Body, callback, or response-read step.
+   * @returns The step's result when the request remains active.
+   */
+  async wait<T>(pending: Promise<T>): Promise<T> {
+    const result = await Promise.race([pending, this.#aborted]);
+    if (this.signal.aborted) throw new Error("browser auth request aborted");
+    return result;
+  }
+
+  /**
+   * Reads the bounded route body before constructing a WHATWG request.
+   * @param limit Configured maximum request bytes.
+   * @returns Complete body, or undefined after a 413 response.
+   */
+  async body(limit: number): Promise<Buffer | undefined> {
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    const body = this.request[Symbol.asyncIterator]();
+    for (;;) {
+      const next = await this.wait(body.next());
+      if (next.done) return Buffer.concat(chunks);
+      const bytes = Buffer.from(next.value as Uint8Array);
+      size += bytes.byteLength;
+      if (size > limit) {
+        this.response.statusCode = 413;
+        this.response.end();
+        return undefined;
+      }
+      chunks.push(bytes);
+    }
+  }
+
+  /**
+   * Streams a bounded route response and preserves separate Set-Cookie fields.
+   * @param result Configured route callback result.
+   * @param limit Existing response-size transport bound.
+   * @returns Completion after the response is sent or rejected for size.
+   */
+  async send(result: Response, limit: number): Promise<void> {
+    this.#requireActive();
+    this.#responseReader = result.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    if (this.#responseReader !== undefined) {
+      for (;;) {
+        const next = await this.wait(this.#responseReader.read());
+        if (next.done) break;
+        size += next.value.byteLength;
+        if (size > limit) {
+          await this.wait(this.#responseReader.cancel().catch(() => undefined));
+          this.#requireActive();
+          this.response.statusCode = 413;
+          this.response.end();
+          return;
+        }
+        chunks.push(next.value);
+      }
+    }
+    this.#requireActive();
+    this.response.statusCode = result.status;
+    this.#forwardHeaders(result.headers);
+    this.response.end(Buffer.concat(chunks));
+  }
+
+  /**
+   * Copies callback headers while retaining host CORS and separate cookie values.
+   * @param headers Callback response headers.
+   */
+  #forwardHeaders(headers: Headers): void {
+    headers.forEach((value, key) => {
+      if (key === "vary") {
+        const values = value
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean);
+        this.response.setHeader("vary", [...new Set(["Origin", ...values])].join(", "));
+      } else if (key !== "set-cookie" && !key.startsWith("access-control-"))
+        this.response.setHeader(key, value);
+    });
+    const cookies = headers.getSetCookie();
+    if (cookies.length > 0) this.response.setHeader("set-cookie", cookies);
+  }
+
+  /**
+   * Rejects output after a deadline or disconnect aborts the route.
+   */
+  #requireActive(): void {
+    if (this.signal.aborted) throw new Error("browser auth request aborted");
+  }
+
+  /**
+   * Completes a failed route without exposing partial callback output.
+   */
+  fail(): void {
+    if (this.response.writableEnded) return;
+    if (this.signal.aborted) {
+      this.response.shouldKeepAlive = false;
+      this.response.setHeader("connection", "close");
+    }
+    this.response.statusCode = this.signal.aborted ? 504 : 500;
+    this.response.end();
+  }
+
+  /**
+   * Removes the deadline and active-request membership.
+   */
+  close(): void {
+    clearTimeout(this.#timer);
+    this.request.off("aborted", this.#abort);
+    this.response.off("close", this.#abort);
+    this.signal.removeEventListener("abort", this.#onAbort);
+    this.active.delete(this.#controller);
+  }
+}
+
 const BrowserServerValues = Object.freeze({
+  /**
+   * Gets one unambiguous original Origin field for credentialed CORS.
+   * @param request Incoming Node request before header normalization.
+   * @returns The sole raw Origin value, when present exactly once.
+   */
+  rawOrigin(request: http.IncomingMessage): string | undefined {
+    let origin: string | undefined;
+    for (let index = 0; index < request.rawHeaders.length; index += 2) {
+      if (request.rawHeaders[index]?.toLowerCase() !== "origin") continue;
+      if (origin !== undefined) return undefined;
+      origin = request.rawHeaders[index + 1];
+    }
+    return origin;
+  },
+
+  /**
+   * Applies the host's exact-origin credentialed CORS policy to every admitted response.
+   * @param response Node response receiving policy headers.
+   * @param origin Validated exact origin from the raw request.
+   * @param csrfNames Frozen active reader or route CSRF header names.
+   * @param method Configured route method or RPC POST method.
+   * @param rpc Whether gRPC status headers must be exposed.
+   */
+  cors(
+    response: http.ServerResponse,
+    origin: string,
+    csrfNames: readonly string[],
+    method: "GET" | "POST",
+    rpc: boolean,
+  ): void {
+    response.setHeader("access-control-allow-origin", origin);
+    response.setHeader("access-control-allow-credentials", "true");
+    response.setHeader("access-control-allow-methods", `${method},OPTIONS`);
+    response.setHeader(
+      "access-control-allow-headers",
+      [
+        ...new Set(
+          ["authorization", "x-csrf-token", ...connectCors.allowedHeaders, ...csrfNames].map(
+            (name) => name.toLowerCase(),
+          ),
+        ),
+      ].join(","),
+    );
+    if (rpc)
+      response.setHeader(
+        "access-control-expose-headers",
+        connectCors.exposedHeaders.map((name) => name.toLowerCase()).join(","),
+      );
+    response.setHeader("access-control-max-age", "600");
+    response.setHeader("vary", "Origin");
+  },
+
+  /**
+   * Reads request-local raw facts inside Connect's deadline and disconnect signal.
+   * @param reader Configured browser credential reader.
+   * @returns Connect interceptor that transfers only the admitted credential to the Gateway.
+   */
+  credentialInterceptor(reader: BrowserCredentialReader): Interceptor {
+    return (next) => async (request) => {
+      const facts = credentialContext.getStore()?.facts;
+      if (facts === undefined)
+        throw new ConnectError("Browser credential facts are absent.", Code.Internal);
+      const credential = await BrowserServerValues.readCredential(reader, facts, request.signal);
+      request.contextValues.set(admittedCredential, credential);
+      return next(request);
+    };
+  },
+
+  /**
+   * Reads a credential under Connect cancellation and classifies terminal outcomes.
+   * @param reader Configured browser credential reader.
+   * @param facts Immutable raw headers, method, and request-local URL.
+   * @param signal Connect request signal including its protocol deadline.
+   * @returns Credential or absence before application handling.
+   */
+  async readCredential(
+    reader: BrowserCredentialReader,
+    facts: Parameters<BrowserCredentialReader["read"]>[0],
+    signal: AbortSignal,
+  ): Promise<RequestCredential | undefined> {
+    const result = await BrowserServerValues.awaitReader(reader, facts, signal);
+    if (signal.aborted) throw BrowserServerValues.abortReason(signal);
+    if (result?.kind === "rejected")
+      throw new ConnectError("Browser credential rejected.", Code.Unauthenticated);
+    return result;
+  },
+
+  /**
+   * Awaits a reader until Connect aborts or reaches its deadline.
+   * @param reader Configured browser credential reader.
+   * @param facts Immutable raw request facts.
+   * @param signal Connect request signal.
+   * @returns Reader result before terminal classification.
+   */
+  async awaitReader(
+    reader: BrowserCredentialReader,
+    facts: Parameters<BrowserCredentialReader["read"]>[0],
+    signal: AbortSignal,
+  ): ReturnType<BrowserCredentialReader["read"]> {
+    if (signal.aborted) throw BrowserServerValues.abortReason(signal);
+    const cancelled = new Error("browser request cancelled");
+    let onAbort!: () => void;
+    const cancellation = new Promise<never>((_resolve, reject) => {
+      onAbort = () => {
+        reject(cancelled);
+      };
+    });
+    signal.addEventListener("abort", onAbort, { once: true });
+    try {
+      return await Promise.race([
+        Promise.resolve().then(() => {
+          if (signal.aborted) throw cancelled;
+          return reader.read(facts);
+        }),
+        cancellation,
+      ]);
+    } catch (error) {
+      if (error === cancelled) throw BrowserServerValues.abortReason(signal);
+      throw new ConnectError(
+        "Browser credential reader unavailable.",
+        Code.Unavailable,
+        undefined,
+        undefined,
+        error,
+      );
+    } finally {
+      signal.removeEventListener("abort", onAbort);
+    }
+  },
+
+  /**
+   * Returns Connect's deadline reason or a classified request cancellation.
+   * @param signal Aborted Connect request signal.
+   * @returns Deadline or cancellation error for the current call.
+   */
+  abortReason(signal: AbortSignal): ConnectError {
+    return signal.reason instanceof ConnectError
+      ? signal.reason
+      : new ConnectError("Browser request cancelled.", Code.Canceled);
+  },
+
+  /**
+   * Validates and copies reader and route declarations before any startup await.
+   * @param input Untrusted browser configuration at the startup boundary.
+   * @returns One frozen route and admission snapshot.
+   */
+  snapshotAdmission(input: BrowserServerOptions): BrowserAdmissionSnapshot {
+    if (input.credentials !== undefined && input.cookies !== undefined)
+      throw new Error("Browser credentials and legacy cookies cannot both be configured.");
+    const reader = input.credentials ?? input.cookies ?? bearerCredentials;
+    const routes = BrowserServer.authRoutes(input.authRoutes);
+    const policy = BrowserAdmissionPolicy.create(reader.admission, routes);
+    const copied = new Map<string, BrowserAuthRoute>();
+    for (const [path, route] of routes) {
+      const admission = policy.routes.get(path);
+      if (admission === undefined) throw new Error("Browser route admission snapshot is absent.");
+      copied.set(
+        path,
+        Object.freeze({
+          ...route,
+          origins: Object.freeze([...route.origins]),
+          admission,
+        }),
+      );
+    }
+    return {
+      credentialReader: reader,
+      admissionPolicy: policy,
+      authRouteMap: copied,
+      authRoutes: Object.freeze([...copied.values()]),
+    };
+  },
+
   /**
    * Builds the admitted browser listener from normalized options.
    *
@@ -966,7 +1307,7 @@ const BrowserServerValues = Object.freeze({
     return BrowserServerValues.createListener({
       options,
       origins: BrowserServer.origins(options.origins),
-      authRoutes: BrowserServer.authRoutes(options.authRoutes),
+      authRoutes: options.authRouteMap,
       activeAuth,
       maxActiveAuthRequests,
       draining,
@@ -1304,6 +1645,7 @@ const BrowserServerValues = Object.freeze({
       requests: input.requests,
     });
     const handler = connectNodeAdapter({
+      interceptors: [BrowserServerValues.credentialInterceptor(input.options.credentialReader)],
       routes: (router: ConnectRouter) => {
         router.service(AuthenticationService, services.authentication);
         router.service(CommandService, services.command);
@@ -1315,7 +1657,12 @@ const BrowserServerValues = Object.freeze({
     });
     const context: BrowserRouteContext = { ...input, handler };
     return http.createServer((request, response) => {
-      BrowserServerValues.routeRequest(request, response, context);
+      void BrowserServerValues.routeRequest(request, response, context).catch(() => {
+        if (!response.writableEnded) {
+          response.statusCode = 500;
+          response.end();
+        }
+      });
     });
   },
 
@@ -1325,23 +1672,115 @@ const BrowserServerValues = Object.freeze({
    * @param request The incoming HTTP request.
    * @param response The HTTP response to complete with the route outcome.
    * @param context Listener admission policy, active requests, and the RPC routing callback.
+   * @returns Completion after admission or dispatch to the selected route.
    */
-  routeRequest(
+  async routeRequest(
     request: http.IncomingMessage,
     response: http.ServerResponse,
     context: BrowserRouteContext,
-  ): void {
+  ): Promise<void> {
     if (context.draining()) {
       response.statusCode = 503;
       response.end();
       return;
     }
-    const auth = context.authRoutes.get(request.url ?? "");
+    const url = BrowserServerValues.requestUrl(request);
+    if (url === undefined) {
+      response.statusCode = 400;
+      response.end();
+      return;
+    }
+    const auth = context.authRoutes.get(url.pathname);
+    const active = auth?.admission ?? context.options.admissionPolicy.reader;
+    BrowserServerValues.requestCors(request, response, context, auth, active.csrfHeaderNames);
+    const inspected = context.options.admissionPolicy.inspect(request, active);
+    if (inspected.kind === "rejected") {
+      response.statusCode = 400;
+      response.end();
+      return;
+    }
     if (auth !== undefined) {
       BrowserServerValues.authRequest(request, response, auth, context);
       return;
     }
-    BrowserServerValues.rpcRequest(request, response, context);
+    BrowserServerValues.readRpc(request, response, context, inspected.headers, url);
+  },
+
+  /**
+   * Applies CORS only for one allowed raw Origin and the selected route or reader.
+   * @param request Incoming request before normalization.
+   * @param response Response receiving host policy.
+   * @param context Listener origins and active reader.
+   * @param auth Selected authentication route, if any.
+   * @param csrfNames Frozen CSRF names from the active declaration.
+   */
+  requestCors(
+    request: http.IncomingMessage,
+    response: http.ServerResponse,
+    context: BrowserRouteContext,
+    auth: BrowserAuthRoute | undefined,
+    csrfNames: readonly string[],
+  ): void {
+    const origin = BrowserServerValues.rawOrigin(request);
+    if (
+      origin === undefined ||
+      (auth === undefined ? !context.origins.has(origin) : !auth.origins.includes(origin))
+    )
+      return;
+    BrowserServerValues.cors(
+      response,
+      origin,
+      csrfNames,
+      auth?.method ?? "POST",
+      auth === undefined,
+    );
+  },
+
+  /**
+   * Parses one request target before route selection and reader invocation.
+   * @param request Incoming HTTP request.
+   * @returns Request-local URL, or undefined for an invalid target.
+   */
+  requestUrl(request: http.IncomingMessage): URL | undefined {
+    try {
+      return new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+    } catch {
+      return undefined;
+    }
+  },
+
+  /**
+   * Dispatches immutable raw facts to Connect for deadline-bound credential admission.
+   * @param request Incoming HTTP request.
+   * @param response Response for terminal rejection or forwarding.
+   * @param context Frozen host policy and gateway handler.
+   * @param headers Immutable duplicate-preserving raw fields.
+   * @param url Selected request URL before the reader receives its copy.
+   */
+  readRpc(
+    request: http.IncomingMessage,
+    response: http.ServerResponse,
+    context: BrowserRouteContext,
+    headers: Readonly<Record<string, string | readonly string[] | undefined>>,
+    url: URL,
+  ): void {
+    if (!context.origins.has(request.headers.origin ?? "")) {
+      response.statusCode = 403;
+      response.end();
+      return;
+    }
+    credentialContext.run(
+      {
+        facts: {
+          headers,
+          method: request.method ?? "GET",
+          url: new URL(url),
+        },
+      },
+      () => {
+        BrowserServerValues.rpcRequest(request, response, context);
+      },
+    );
   },
 
   /**
@@ -1375,8 +1814,6 @@ const BrowserServerValues = Object.freeze({
     }
     const origin = request.headers.origin;
     if (request.method === "OPTIONS" && origin !== undefined && auth.origins.includes(origin)) {
-      response.setHeader("access-control-allow-origin", origin);
-      response.setHeader("access-control-allow-methods", `${auth.method},OPTIONS`);
       response.statusCode = 204;
     } else response.statusCode = request.method === "OPTIONS" ? 403 : 405;
     response.end();
@@ -1400,17 +1837,14 @@ const BrowserServerValues = Object.freeze({
       response.end();
       return;
     }
-    response.setHeader("access-control-allow-origin", origin);
-    response.setHeader("access-control-allow-credentials", "true");
-    response.setHeader("access-control-expose-headers", "grpc-status,grpc-message");
-    response.setHeader("vary", "Origin");
+    BrowserServerValues.cors(
+      response,
+      origin,
+      context.options.admissionPolicy.reader.csrfHeaderNames,
+      "POST",
+      true,
+    );
     if (request.method === "OPTIONS") {
-      response.setHeader("access-control-allow-methods", "POST,OPTIONS");
-      response.setHeader(
-        "access-control-allow-headers",
-        "authorization,content-type,connect-protocol-version,x-csrf-token",
-      );
-      response.setHeader("access-control-max-age", "600");
       response.statusCode = 204;
       response.end();
       return;

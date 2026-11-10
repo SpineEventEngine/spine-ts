@@ -1,0 +1,208 @@
+diff --git a/esm/Types.d.ts b/esm/Types.d.ts
+index cf248673a28a344e64716662c24a06a12f1815d3..32aa8becc86638f16e9a72b8ba9276d75c53e664 100644
+--- a/esm/Types.d.ts
++++ b/esm/Types.d.ts
+@@ -5,7 +5,7 @@ import type { ICommand, TextState } from './commands';
+ import type { ContextStore, PreviewType } from './Context';
+ export interface IProps {
+     prefixCls?: string;
+-    className?: string;
++    className?: React.HTMLAttributes<HTMLDivElement>['className'];
+ }
+ export interface Statistics extends TextState {
+     /** total length of the document */
+diff --git a/esm/components/DragBar/index.d.ts b/esm/components/DragBar/index.d.ts
+index eb41730c9e3303206da8b123dc1f28b7c1eb2a53..e77245d144919217574ddeb1ce305e7460ac25b6 100644
+--- a/esm/components/DragBar/index.d.ts
++++ b/esm/components/DragBar/index.d.ts
+@@ -1,6 +1,5 @@
+ import React from 'react';
+ import { type IProps } from '../../Types';
+-import './index.less';
+ export interface IDragBarProps extends IProps {
+     height: number;
+     maxHeight: number;
+diff --git a/esm/components/TextArea/Textarea.d.ts b/esm/components/TextArea/Textarea.d.ts
+index 1169ac13ffa5ef36a80b087153e9a260621121d1..86780613a1365eea5e33f32bc732a3126cdd9ad2 100644
+--- a/esm/components/TextArea/Textarea.d.ts
++++ b/esm/components/TextArea/Textarea.d.ts
+@@ -1,6 +1,5 @@
+ import React from 'react';
+ import { type IProps } from '../../Types';
+-import './index.less';
+ export interface TextAreaProps extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'value'>, IProps {
+ }
+ export default function Textarea(props: TextAreaProps): import("react/jsx-runtime").JSX.Element;
+diff --git a/esm/components/TextArea/factory.d.ts b/esm/components/TextArea/factory.d.ts
+index 6813c7a4f9401902aabb4dd5414202c61a173308..e5211220b650330e0f30edbf4bce64e27b393431 100644
+--- a/esm/components/TextArea/factory.d.ts
++++ b/esm/components/TextArea/factory.d.ts
+@@ -3,7 +3,6 @@ import { type ContextStore, type ExecuteCommandState } from '../../Context';
+ import { type TextAreaProps } from './Textarea';
+ import { type IProps } from '../../Types';
+ import { TextAreaCommandOrchestrator, type ICommand } from '../../commands/';
+-import './index.less';
+ export type RenderTextareaHandle = {
+     dispatch: ContextStore['dispatch'];
+     onChange?: TextAreaProps['onChange'];
+diff --git a/esm/components/Toolbar/Child.d.ts b/esm/components/Toolbar/Child.d.ts
+index 95051496448b247d28fa80d72fa187e1b5233601..f22991aa39133ce74720e16e21ad3e52d256bbf3 100644
+--- a/esm/components/Toolbar/Child.d.ts
++++ b/esm/components/Toolbar/Child.d.ts
+@@ -1,5 +1,4 @@
+ import { type JSX } from 'react';
+-import './Child.less';
+ import { type IToolbarProps } from './';
+ export type ChildProps = IToolbarProps & {
+     children?: JSX.Element;
+diff --git a/esm/components/Toolbar/index.d.ts b/esm/components/Toolbar/index.d.ts
+index fc97411af39bdb8121c8ba76786717cbfd87b713..6a6f3b4ef28351a2472385046a69d8105cf7907e 100644
+--- a/esm/components/Toolbar/index.d.ts
++++ b/esm/components/Toolbar/index.d.ts
+@@ -1,6 +1,5 @@
+ import { type IProps } from '../../Types';
+ import { ICommand } from '../../commands/';
+-import './index.less';
+ export interface IToolbarProps extends IProps {
+     overflow?: boolean;
+     onCommand?: (command: ICommand<string>, groupName?: string) => void;
+diff --git a/esm/index.common.d.ts b/esm/index.common.d.ts
+index a391c9244ff9b0ced5ba5786ae74112fa91dd872..d641955c4271fadc0f0253bb25e99233c192cbdf 100644
+--- a/esm/index.common.d.ts
++++ b/esm/index.common.d.ts
+@@ -1,7 +1,6 @@
+ import MDEditor from './Editor.common';
+ import * as commands from './commands/';
+ import * as MarkdownUtil from './utils/markdownUtils';
+-import './index.less';
+ export { headingExecute } from './commands/title';
+ export * from './commands/';
+ export * from './commands/group';
+diff --git a/esm/index.d.ts b/esm/index.d.ts
+index 26fb830aac4741a067e2b22a51ee94534d77f361..0bfb7c3ff337810eb18285352046a16366c38391 100644
+--- a/esm/index.d.ts
++++ b/esm/index.d.ts
+@@ -1,7 +1,6 @@
+ import MDEditor from './Editor';
+ import * as commands from './commands/';
+ import * as MarkdownUtil from './utils/markdownUtils';
+-import './index.less';
+ export { headingExecute } from './commands/title';
+ export * from './commands/';
+ export * from './commands/group';
+diff --git a/esm/index.nohighlight.d.ts b/esm/index.nohighlight.d.ts
+index fcedbdabfb05973d4ba019696e96cea3e6624449..940de1d84853b7b250885fa03022620606b4d17e 100644
+--- a/esm/index.nohighlight.d.ts
++++ b/esm/index.nohighlight.d.ts
+@@ -1,7 +1,6 @@
+ import MDEditor from './Editor.nohighlight';
+ import * as commands from './commands/';
+ import * as MarkdownUtil from './utils/markdownUtils';
+-import './index.less';
+ export { headingExecute } from './commands/title';
+ export * from './commands/';
+ export * from './commands/group';
+diff --git a/lib/Types.d.ts b/lib/Types.d.ts
+index cf248673a28a344e64716662c24a06a12f1815d3..32aa8becc86638f16e9a72b8ba9276d75c53e664 100644
+--- a/lib/Types.d.ts
++++ b/lib/Types.d.ts
+@@ -5,7 +5,7 @@ import type { ICommand, TextState } from './commands';
+ import type { ContextStore, PreviewType } from './Context';
+ export interface IProps {
+     prefixCls?: string;
+-    className?: string;
++    className?: React.HTMLAttributes<HTMLDivElement>['className'];
+ }
+ export interface Statistics extends TextState {
+     /** total length of the document */
+diff --git a/lib/components/DragBar/index.d.ts b/lib/components/DragBar/index.d.ts
+index eb41730c9e3303206da8b123dc1f28b7c1eb2a53..e77245d144919217574ddeb1ce305e7460ac25b6 100644
+--- a/lib/components/DragBar/index.d.ts
++++ b/lib/components/DragBar/index.d.ts
+@@ -1,6 +1,5 @@
+ import React from 'react';
+ import { type IProps } from '../../Types';
+-import './index.less';
+ export interface IDragBarProps extends IProps {
+     height: number;
+     maxHeight: number;
+diff --git a/lib/components/TextArea/Textarea.d.ts b/lib/components/TextArea/Textarea.d.ts
+index 1169ac13ffa5ef36a80b087153e9a260621121d1..86780613a1365eea5e33f32bc732a3126cdd9ad2 100644
+--- a/lib/components/TextArea/Textarea.d.ts
++++ b/lib/components/TextArea/Textarea.d.ts
+@@ -1,6 +1,5 @@
+ import React from 'react';
+ import { type IProps } from '../../Types';
+-import './index.less';
+ export interface TextAreaProps extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'value'>, IProps {
+ }
+ export default function Textarea(props: TextAreaProps): import("react/jsx-runtime").JSX.Element;
+diff --git a/lib/components/TextArea/factory.d.ts b/lib/components/TextArea/factory.d.ts
+index 6813c7a4f9401902aabb4dd5414202c61a173308..e5211220b650330e0f30edbf4bce64e27b393431 100644
+--- a/lib/components/TextArea/factory.d.ts
++++ b/lib/components/TextArea/factory.d.ts
+@@ -3,7 +3,6 @@ import { type ContextStore, type ExecuteCommandState } from '../../Context';
+ import { type TextAreaProps } from './Textarea';
+ import { type IProps } from '../../Types';
+ import { TextAreaCommandOrchestrator, type ICommand } from '../../commands/';
+-import './index.less';
+ export type RenderTextareaHandle = {
+     dispatch: ContextStore['dispatch'];
+     onChange?: TextAreaProps['onChange'];
+diff --git a/lib/components/Toolbar/Child.d.ts b/lib/components/Toolbar/Child.d.ts
+index 95051496448b247d28fa80d72fa187e1b5233601..f22991aa39133ce74720e16e21ad3e52d256bbf3 100644
+--- a/lib/components/Toolbar/Child.d.ts
++++ b/lib/components/Toolbar/Child.d.ts
+@@ -1,5 +1,4 @@
+ import { type JSX } from 'react';
+-import './Child.less';
+ import { type IToolbarProps } from './';
+ export type ChildProps = IToolbarProps & {
+     children?: JSX.Element;
+diff --git a/lib/components/Toolbar/index.d.ts b/lib/components/Toolbar/index.d.ts
+index fc97411af39bdb8121c8ba76786717cbfd87b713..6a6f3b4ef28351a2472385046a69d8105cf7907e 100644
+--- a/lib/components/Toolbar/index.d.ts
++++ b/lib/components/Toolbar/index.d.ts
+@@ -1,6 +1,5 @@
+ import { type IProps } from '../../Types';
+ import { ICommand } from '../../commands/';
+-import './index.less';
+ export interface IToolbarProps extends IProps {
+     overflow?: boolean;
+     onCommand?: (command: ICommand<string>, groupName?: string) => void;
+diff --git a/lib/index.common.d.ts b/lib/index.common.d.ts
+index a391c9244ff9b0ced5ba5786ae74112fa91dd872..d641955c4271fadc0f0253bb25e99233c192cbdf 100644
+--- a/lib/index.common.d.ts
++++ b/lib/index.common.d.ts
+@@ -1,7 +1,6 @@
+ import MDEditor from './Editor.common';
+ import * as commands from './commands/';
+ import * as MarkdownUtil from './utils/markdownUtils';
+-import './index.less';
+ export { headingExecute } from './commands/title';
+ export * from './commands/';
+ export * from './commands/group';
+diff --git a/lib/index.d.ts b/lib/index.d.ts
+index 26fb830aac4741a067e2b22a51ee94534d77f361..0bfb7c3ff337810eb18285352046a16366c38391 100644
+--- a/lib/index.d.ts
++++ b/lib/index.d.ts
+@@ -1,7 +1,6 @@
+ import MDEditor from './Editor';
+ import * as commands from './commands/';
+ import * as MarkdownUtil from './utils/markdownUtils';
+-import './index.less';
+ export { headingExecute } from './commands/title';
+ export * from './commands/';
+ export * from './commands/group';
+diff --git a/lib/index.nohighlight.d.ts b/lib/index.nohighlight.d.ts
+index fcedbdabfb05973d4ba019696e96cea3e6624449..940de1d84853b7b250885fa03022620606b4d17e 100644
+--- a/lib/index.nohighlight.d.ts
++++ b/lib/index.nohighlight.d.ts
+@@ -1,7 +1,6 @@
+ import MDEditor from './Editor.nohighlight';
+ import * as commands from './commands/';
+ import * as MarkdownUtil from './utils/markdownUtils';
+-import './index.less';
+ export { headingExecute } from './commands/title';
+ export * from './commands/';
+ export * from './commands/group';

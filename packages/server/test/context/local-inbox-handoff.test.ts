@@ -59,8 +59,8 @@ describe("DeliveryReadiness", () => {
         delivery,
         received: message,
         node: "AgentReceipts",
-        onReplay: () => undefined,
-        replayFailureMessage: "replay failed",
+        onDispatch: () => undefined,
+        deliveryFailureMessage: "delivery failed",
         skippedMessage: "skipped",
         unfinishedMessage: "unfinished",
       }),
@@ -101,8 +101,8 @@ describe("DeliveryReadiness", () => {
         delivery,
         received,
         node: "Tasks",
-        onReplay: () => undefined,
-        replayFailureMessage: "replay failed",
+        onDispatch: () => undefined,
+        deliveryFailureMessage: "delivery failed",
         skippedMessage: "skipped",
         unfinishedMessage: "unfinished",
       }),
@@ -149,8 +149,8 @@ describe("DeliveryReadiness", () => {
       delivery,
       received,
       node: "Tasks",
-      onReplay: () => undefined,
-      replayFailureMessage: "replay failed",
+      onDispatch: () => undefined,
+      deliveryFailureMessage: "delivery failed",
       skippedMessage: "skipped",
       unfinishedMessage: "unfinished",
     });
@@ -178,8 +178,8 @@ describe("DeliveryReadiness", () => {
       delivery,
       received,
       node: "Tasks",
-      onReplay: () => undefined,
-      replayFailureMessage: "replay failed",
+      onDispatch: () => undefined,
+      deliveryFailureMessage: "delivery failed",
       skippedMessage: "skipped",
       unfinishedMessage: "unfinished",
     });
@@ -193,7 +193,7 @@ describe("DeliveryReadiness", () => {
     const readiness = new DeliveryReadiness();
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
-    const failure = new Error("direct replay failed");
+    const failure = new Error("direct delivery failed");
     const draining = readiness.claim(ready()).complete(async () => {
       entered.resolve(undefined);
       await release.promise;
@@ -211,6 +211,36 @@ describe("DeliveryReadiness", () => {
     await expect(draining).rejects.toBe(failure);
     await closing;
     expect(settled).toBe(true);
+  });
+
+  it("waits for a second admitted handoff started during close drainage", async () => {
+    const readiness = new DeliveryReadiness();
+    const firstEntered = Promise.withResolvers<undefined>();
+    const releaseFirst = Promise.withResolvers<undefined>();
+    const secondEntered = Promise.withResolvers<undefined>();
+    const releaseSecond = Promise.withResolvers<undefined>();
+    const first = readiness.claim(ready()).complete(async () => {
+      firstEntered.resolve(undefined);
+      await releaseFirst.promise;
+      void readiness.claim(ready()).complete(async () => {
+        secondEntered.resolve(undefined);
+        await releaseSecond.promise;
+      });
+    });
+    await firstEntered.promise;
+    const closing = readiness.close();
+    releaseFirst.resolve(undefined);
+    await secondEntered.promise;
+    await first;
+    let closed = false;
+    void closing.then(() => {
+      closed = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(closed).toBe(false);
+    releaseSecond.resolve(undefined);
+    await closing;
+    expect(closed).toBe(true);
   });
 
   it("keeps deferred routes until capacity is available and discards them on close", async () => {

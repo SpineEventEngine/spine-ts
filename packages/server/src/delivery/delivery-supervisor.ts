@@ -218,6 +218,11 @@ export class DeliverySupervisor {
   readonly #pending = new Map<string, { shard: ShardIndex; observed: boolean }>();
 
   /**
+   * Repeat requests for active shards; bounded by the active run count.
+   */
+  readonly #activeRepeats = new Map<string, { shard: ShardIndex; observed: boolean }>();
+
+  /**
    * Shards whose failed runs await the next periodic recovery before another observation.
    */
   readonly #failedObserved = new Set<string>();
@@ -390,7 +395,9 @@ export class DeliverySupervisor {
     const key = DeliverySupervisor.#shardKey(shard);
     if (this.#active.has(key)) {
       this.#runs.wake(shard);
-      this.#queue(key, shard, observed);
+      const repeat = this.#activeRepeats.get(key);
+      if (repeat === undefined || (repeat.observed && !observed))
+        this.#activeRepeats.set(key, { shard, observed });
       return;
     }
     if (this.#active.size >= this.#concurrency) {
@@ -433,6 +440,7 @@ export class DeliverySupervisor {
     DeliverySupervisor.#requireGrace(options.graceMs ?? 30_000);
     this.#closing = true;
     this.#pending.clear();
+    this.#activeRepeats.clear();
     this.#cancelTimers();
     this.#sourceController.abort(new Error("Delivery supervisor source activity is closed."));
     const attempt = this.#closeNow(options.graceMs ?? 30_000).finally(() => {
@@ -520,6 +528,7 @@ export class DeliverySupervisor {
         signal: this.#controller.signal,
       });
       failed ||= result.status === "FAILED";
+      if (failed) this.#reportTerminalRunFailure();
     } catch (error) {
       this.#reportTerminalRunFailure();
       throw error;
@@ -681,9 +690,9 @@ export class DeliverySupervisor {
    */
   #startNext(completed: string): void {
     if (this.#closing || this.#closed) return;
-    const repeat = this.#pending.get(completed);
+    const repeat = this.#activeRepeats.get(completed);
     if (repeat !== undefined) {
-      this.#pending.delete(completed);
+      this.#activeRepeats.delete(completed);
       if (!repeat.observed || !this.#failedObserved.has(completed))
         this.#admit(repeat.shard, repeat.observed);
     }

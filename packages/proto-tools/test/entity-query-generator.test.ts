@@ -138,7 +138,7 @@ describe("EntityQueryGenerator", () => {
       '"status": { field: ProjectOverviewStateSchema.field["status"], comparison: "equality" }',
     );
     expect(source).toContain(
-      '"fingerprint": { field: ProjectOverviewStateSchema.field["fingerprint"], comparison: "equality" }',
+      '"fingerprint": { field: ProjectOverviewStateSchema.field["fingerprint"], comparison: "ordering" }',
     );
     expect(source).toContain(
       '"active": { field: ProjectOverviewStateSchema.field["active"], comparison: "equality" }',

@@ -32,7 +32,7 @@ import {
  * Calculates target Entity IDs for one Event admission.
  *
  * The route must be deterministic and side-effect-free. It runs once for an
- * accepted admission; durable replay uses stored targets instead.
+ * accepted admission; durable Inbox delivery uses stored targets instead.
  *
  * @typeParam Id Entity ID type used by the receiving repository.
  * @typeParam Schema Generated Event message schema.
@@ -166,7 +166,7 @@ export class EventRouting<Id, EntityType extends RepositoryEntityType = Reposito
    *
    * Copied or malformed tokens fail during declaration. Every token member must
    * be registered by the repository, or construction fails. The selected route
-   * runs once for an accepted admission; durable replay uses stored targets and
+   * runs once for an accepted admission; durable Inbox delivery uses stored targets and
    * does not run routing again.
    *
    * @param schemaOrToken Generated Event schema or nominal message-interface token.

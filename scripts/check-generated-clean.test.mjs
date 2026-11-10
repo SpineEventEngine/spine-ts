@@ -253,6 +253,7 @@ describe("check-generated-clean", () => {
       "examples/todo/generated",
       "examples/projects/generated",
       "examples/orders/generated",
+      "examples/fieldnotes/model/generated",
       "examples/support/generated",
       "examples/release-notes/generated",
       "examples/message-board/model/generated",
@@ -260,6 +261,7 @@ describe("check-generated-clean", () => {
       "examples/message-board/view-handlers/generated",
       "examples/message-board/composed-app/generated",
       "examples/message-board/app/generated",
+      "examples/fieldnotes/server/generated",
     ]);
   });
 
