@@ -917,6 +917,7 @@ describe("LocalEntityInbox", () => {
     let publicationCommits = 0;
     let recipientCommits = 0;
     const validate = vi.spyOn(ShardedWorkRegistry.prototype, "validateOwnership");
+    const pickUp = vi.spyOn(ShardedWorkRegistry.prototype, "pickUp");
     inbox.register({
       targetTypeUrl: commandTypeUrl,
       labels: ["HANDLE_COMMAND"],
@@ -974,6 +975,9 @@ describe("LocalEntityInbox", () => {
     }).run();
     let idle: Promise<void> | undefined;
     let followUpSettled = false;
+    let assertionFailure: unknown;
+    let assertionFailed = false;
+    let cleanup: PromiseSettledResult<unknown>[] = [];
     try {
       await Promise.race([
         publicationAttempted.promise,
@@ -992,6 +996,7 @@ describe("LocalEntityInbox", () => {
         followUpSettled = true;
       });
       expect(seen).toEqual(["signal-recovered", "event-from-recovered-command"]);
+      expect(pickUp).toHaveBeenCalledOnce();
       expect(recipientCommits).toBe(1);
       await expect(delivery.inbox.readMessage(source.message.id)).resolves.toMatchObject({
         signalId: "signal-recovered",
@@ -1001,11 +1006,21 @@ describe("LocalEntityInbox", () => {
         [{ signalId: "event-from-recovered-command" }],
       );
       expect(followUpSettled).toBe(false);
+    } catch (error) {
+      assertionFailure = error;
+      assertionFailed = true;
     } finally {
       recipientReleased.resolve(undefined);
-      await Promise.allSettled([loop, idle ?? delivery.whenIdle()]);
+      cleanup = await Promise.allSettled([loop, idle ?? delivery.whenIdle()]);
       validate.mockRestore();
+      pickUp.mockRestore();
     }
+    const failures: unknown[] = [];
+    for (const result of cleanup)
+      if (result.status === "rejected") failures.push(result.reason as unknown);
+    if (assertionFailed) failures.unshift(assertionFailure);
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, "Delivery regression failed.");
     expect(followUpSettled).toBe(true);
     await delivery.whenIdle();
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);

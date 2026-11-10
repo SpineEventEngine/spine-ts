@@ -1058,7 +1058,7 @@ describe("Delivery fencing", () => {
     }
   });
 
-  it("keeps a public custom callback separate from an active shared shard run", async () => {
+  it("skips a public custom callback while a shared shard run is active", async () => {
     const message = createMessage("shared-versus-custom", "signal", 1n);
     const acknowledged = new Set<string>();
     const delivery = agentDelivery(
@@ -1091,7 +1091,7 @@ describe("Delivery fencing", () => {
     release.resolve(undefined);
     await expect(explicit).resolves.toMatchObject({ status: "SKIPPED" });
     await delivery.whenIdle();
-    expect(pickups).toBe(2);
+    expect(pickups).toBe(1);
     expect(delivered).toBe(1);
     expect(custom).toBe(0);
     await delivery.close();

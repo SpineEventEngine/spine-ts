@@ -399,12 +399,14 @@ export class Delivery {
    * @param shard Delivery shard identifier.
    */
   wake(shard: ShardIndex): void {
-    if (this.#closing || (this.#startupDraining && !this.#hasPending(shard.key()))) return;
-    const drain = this.#directDrains.get(shard.key());
+    const key = shard.key();
+    if (this.#closing || (this.#startupDraining && !this.#hasPending(key))) return;
+    const drain = this.#directDrains.get(key);
     if (drain !== undefined) {
-      if (!drain.wake()) this.#pendingDirectWake.add(shard.key());
+      if (!drain.wake()) this.#pendingDirectWake.add(key);
       return;
     }
+    if (this.#dispatcher === undefined && !this.#hasPending(key)) return;
     if (this.#dispatcher !== undefined) this.#observeBackground(this.#startDirect(shard), shard);
   }
 
@@ -614,10 +616,11 @@ export class Delivery {
   }
 
   /**
-   * Starts or joins the one retained shard run used by local posts and supervision.
-   * @param shard Shard selected by the accepted message or supervisor.
+   * Starts or joins the one retained shard run used by local posts and direct callers.
+   *
+   * @param shard Shard selected by the accepted message or direct caller.
    * @param options Complete drain callbacks for a newly admitted run.
-   * @returns The terminal run shared by both entry paths.
+   * @returns The terminal run shared by compatible entry paths.
    */
   #startShared(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
     const key = shard.key();
@@ -627,24 +630,30 @@ export class Delivery {
       active.wake();
       return active.completed;
     }
-    const completed = this.#trackDrain(shard, options, true);
+    const reservation = Promise.withResolvers<DeliveryRun>();
     this.#activeDirect.set(key, {
-      completed,
+      completed: reservation.promise,
       wake: () => {
         const drain = this.#directDrains.get(key);
         if (drain === undefined) this.#pendingDirectWake.add(key);
         else if (!drain.wake()) this.#pendingDirectWake.add(key);
       },
     });
-    void completed
+    const completed = this.#trackDrain(shard, options, true);
+    void completed.then(reservation.resolve, reservation.reject);
+    void reservation.promise
       .finally(() => {
         this.#activeDirect.delete(key);
         this.#directDrains.delete(key);
-        if (this.#pendingDirectWake.delete(key) && !this.#closing)
+        if (
+          this.#pendingDirectWake.delete(key) &&
+          !this.#closing &&
+          (this.#dispatcher !== undefined || this.#hasPending(key))
+        )
           this.#observeBackground(this.#startDirect(shard), shard);
       })
       .catch(() => undefined);
-    return completed;
+    return reservation.promise;
   }
 
   /**
@@ -702,14 +711,53 @@ export class Delivery {
   }
 
   /**
-   * Executes one owned shard drain while containing monitor and endpoint failures.
+   * Executes one shard drain while containing monitor and endpoint failures.
+   * A competing direct caller receives `SKIPPED` without replacing the active callback.
    *
    * @param shard The shard to acquire and drain.
    * @param options The endpoint and optional operation signal.
    * @returns The terminal direct-delivery result.
    */
   drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
-    return this.#trackDrain(shard, options, false);
+    if (this.#closing || this.#startupDraining || options.operation?.signal?.aborted === true)
+      return Promise.resolve(result("STOPPED"));
+    if (this.#activeDirect.has(shard.key())) return Promise.resolve(result("SKIPPED"));
+    const sharedOptions = this.#directOptionsWithFallback(options);
+    const onMessageSettled = controlledMessageSettlers.get(options);
+    if (onMessageSettled !== undefined)
+      controlledMessageSettlers.set(sharedOptions, onMessageSettled);
+    return this.#startShared(shard, sharedOptions);
+  }
+
+  /**
+   * Keeps a direct caller's callback while exact local handoffs join its shard run.
+   *
+   * @param fallback Original direct callbacks and operation.
+   * @returns Callbacks that select an exact handoff before the direct fallback.
+   */
+  #directOptionsWithFallback(fallback: DeliveryDrainOptions): DeliveryDrainOptions {
+    const selected = this.#directOptions();
+    const pending = (message: InboxMessage) =>
+      this.#directPending.has(Delivery.#messageKey(message));
+    return {
+      onMessage: (message) =>
+        pending(message) ? selected.onMessage(message) : fallback.onMessage(message),
+      acceptMessage: (message) =>
+        pending(message)
+          ? (selected.acceptMessage?.(message) ?? true)
+          : (fallback.acceptMessage?.(message) ?? true),
+      onDelivered: (message) =>
+        pending(message) ? selected.onDelivered?.(message) : fallback.onDelivered?.(message),
+      onDuplicateRemoved: (message) =>
+        pending(message)
+          ? selected.onDuplicateRemoved?.(message)
+          : fallback.onDuplicateRemoved?.(message),
+      onMessageOutcome: (message, outcome) =>
+        pending(message)
+          ? selected.onMessageOutcome?.(message, outcome)
+          : fallback.onMessageOutcome?.(message, outcome),
+      ...(fallback.operation === undefined ? {} : { operation: fallback.operation }),
+    };
   }
 
   /**
