@@ -900,7 +900,7 @@ describe("DeliverySupervisor", () => {
     empty.resume.resolve(undefined);
     await supervisor.whenIdle();
 
-    expect(fixture.inbox.admissions).toBe(4);
+    expect(fixture.inbox.admissions).toBe(5);
     expect(fixture.registry.pickups).toHaveLength(2);
     expect(fixture.registry.releases).toHaveLength(2);
     expect(fixture.delivered).toEqual(["first", "during-empty-admission"]);
@@ -1042,7 +1042,7 @@ describe("DeliverySupervisor", () => {
       supervisor.notify(newShard(0));
       first.resolve(undefined);
       await supervisor.whenIdle();
-      expect(seen).toEqual([0, 0, 1]);
+      expect(seen).toEqual([0, 0, 0, 1]);
     } finally {
       first.resolve(undefined);
       await supervisor.close();
@@ -1095,7 +1095,7 @@ describe("DeliverySupervisor", () => {
 
       first.resolve(undefined);
       await supervisor.whenIdle();
-      expect(seen).toEqual([0, 1, 2, 0]);
+      expect(seen).toEqual([0, 1, 2, 0, 0]);
       expect(overlapping).toEqual([]);
     } finally {
       first.resolve(undefined);

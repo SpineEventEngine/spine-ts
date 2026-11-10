@@ -39,6 +39,165 @@ import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/exa
 import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 describe("Delivery direct worker", () => {
+  it("wakes an active direct drain for a durable row arriving during its empty read", async () => {
+    const shard = ShardIndex.single();
+    const row = message("late-direct", "target", shard);
+    const rows: DeliveryEndpointMessage[] = [];
+    const entered = Promise.withResolvers<undefined>();
+    const resume = Promise.withResolvers<undefined>();
+    const seen: string[] = [];
+    let reads = 0;
+    const delivery = createDelivery({
+      rows,
+      read: async () => {
+        if (++reads === 1) {
+          entered.resolve(undefined);
+          await resume.promise;
+          return [];
+        }
+        return [...rows];
+      },
+      mark: async (candidate) => {
+        remove(rows, candidate);
+        return candidate;
+      },
+    });
+    const run = delivery.drain(shard, { onMessage: (candidate) => seen.push(candidate.signalId) });
+    await entered.promise;
+    rows.push(row);
+    delivery.wake(shard);
+    resume.resolve(undefined);
+
+    await expect(run).resolves.toMatchObject({ status: "DRAINED", delivered: 1 });
+    expect(seen).toEqual([row.signalId]);
+  });
+
+  it("retains an exact handoff when its controlled direct drain is cancelled", async () => {
+    const shard = ShardIndex.single();
+    const row = message("cancelled-handoff", "target", shard);
+    const rows = [row];
+    const entered = Promise.withResolvers<undefined>();
+    const resume = Promise.withResolvers<undefined>();
+    const controller = new AbortController();
+    let reads = 0;
+    let dispatched = 0;
+    const delivery = createDelivery({
+      rows,
+      read: async () => {
+        if (++reads === 1) {
+          entered.resolve(undefined);
+          await resume.promise;
+        }
+        return [...rows];
+      },
+      mark: async (candidate) => {
+        remove(rows, candidate);
+        return candidate;
+      },
+    });
+    const run = delivery.runControlled({
+      shard,
+      signal: controller.signal,
+      onMessage: () => {
+        dispatched++;
+      },
+    });
+    await entered.promise;
+    const exact = delivery.drainMessage(row, () => {
+      dispatched++;
+    });
+    controller.abort();
+    resume.resolve(undefined);
+
+    await expect(run).resolves.toMatchObject({ status: "STOPPED" });
+    await expect(exact).resolves.toMatchObject({
+      acknowledged: false,
+      outcome: { kind: "unresolved", run: { status: "STOPPED" } },
+    });
+    expect(rows).toEqual([row]);
+    expect(dispatched).toBe(0);
+    await expect(
+      delivery.drainMessage(row, () => {
+        dispatched++;
+      }),
+    ).resolves.toMatchObject({ acknowledged: true });
+    expect(dispatched).toBe(1);
+    expect(rows).toEqual([]);
+  });
+
+  it("records shard admission before a registry pickup reenters delivery", async () => {
+    const shard = ShardIndex.single();
+    let pickups = 0;
+    let nested: ReturnType<Delivery["drain"]> | undefined;
+    const delivery = createDelivery({
+      registry: {
+        pickUp: async () => {
+          pickups++;
+          if (pickups === 1) nested = delivery.drain(shard, { onMessage: () => undefined });
+          return session(shard);
+        },
+        release: async () => true,
+      },
+    });
+
+    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
+      status: "DRAINED",
+    });
+    await expect(nested).resolves.toMatchObject({ status: "SKIPPED" });
+    expect(pickups).toBe(1);
+  });
+
+  it("delivers an exact follow-up through an active controlled shard run", async () => {
+    const shard = ShardIndex.single();
+    const source = message("controlled-source", "source", shard);
+    const followUp = message("controlled-follow-up", "recipient", shard);
+    const rows = [source];
+    const settled: string[] = [];
+    const dispatched: string[] = [];
+    let pickups = 0;
+    let releases = 0;
+    let exact: Promise<import("../../src/delivery/delivery.js").DeliveryDirectRun> | undefined;
+    const delivery = createDelivery({
+      rows,
+      mark: async (row) => {
+        remove(rows, row);
+        return row;
+      },
+      registry: {
+        pickUp: async () => {
+          pickups++;
+          return session(shard);
+        },
+        release: async () => {
+          releases++;
+          return true;
+        },
+      },
+    });
+
+    const run = delivery.runControlled({
+      shard,
+      signal: new AbortController().signal,
+      onMessage: (row) => {
+        dispatched.push(row.signalId);
+        if (row.signalId === source.signalId) {
+          rows.push(followUp);
+          exact = delivery.drainMessage(followUp, (next) => {
+            dispatched.push(next.signalId);
+          });
+        }
+      },
+      onMessageSettled: (row) => settled.push(row.signalId),
+    });
+
+    await expect(run).resolves.toMatchObject({ status: "COMPLETED" });
+    await expect(exact).resolves.toMatchObject({ acknowledged: true });
+    expect(dispatched).toEqual([source.signalId, followUp.signalId]);
+    expect(settled).toEqual([source.signalId, followUp.signalId]);
+    expect(pickups).toBe(1);
+    expect(releases).toBe(1);
+  });
+
   it("preserves microsecond receive time in a retained delivery failure", async () => {
     const shard = ShardIndex.single();
     const whenReceived = create(TimestampSchema, { seconds: 1n, nanos: 123_456_000 });
