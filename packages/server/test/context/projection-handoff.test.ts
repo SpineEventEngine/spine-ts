@@ -26,6 +26,8 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
+import { Inbox } from "../../src/delivery/inbox.js";
+import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import type { ProjectionInbox, ProjectionInboxTarget } from "../../src/repository/repository.js";
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
@@ -369,10 +371,19 @@ describe("LocalProjectionInbox", () => {
     expectTypeOf<DeliveryMessage["status"]>().toEqualTypeOf<"TO_DELIVER">();
   });
 
-  it("delivers and cleans eligible durable subscriber rows through a delivery loop endpoint", async () => {
+  it("retains a delivered subscriber until cleanup reaches its deadline", async () => {
+    let now = new Date(10_000);
+    const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new InMemoryStorageFactory(),
+      storageFactory,
+      inbox: new Inbox(
+        new InboxStorage({
+          context: { name: "Tasks", multitenant: false },
+          storageFactory,
+          now: () => now,
+        }),
+      ),
     });
     const inbox = new LocalProjectionInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.Projection";
@@ -415,9 +426,20 @@ describe("LocalProjectionInbox", () => {
       delivered: 1,
       failed: 0,
     });
+    const completed = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
+    expect(completed).toMatchObject([{ signalId: "event-1", status: "DELIVERED" }]);
+    expect(completed[0]?.keepUntil).toEqual(new Date(15_000));
+
+    now = new Date(15_000);
+    await new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      onMessage: (message) => inbox.deliver(message),
+    }).run();
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
     ).resolves.toEqual([]);
+    expect(seen).toHaveLength(1);
   });
 
   it("delivers an UPDATE_SUBSCRIBER event row and clears pending work", async () => {
@@ -812,7 +834,9 @@ describe("LocalProjectionInbox", () => {
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
     });
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+    const completed = await delivery.inbox.read(shard, { statuses: ["DELIVERED"] });
+    expect(completed).toMatchObject([{ signalId: "event-1", status: "DELIVERED" }]);
+    expect(completed[0]?.keepUntil).toBeInstanceOf(Date);
   });
 });
 
