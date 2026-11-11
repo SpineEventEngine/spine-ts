@@ -12233,18 +12233,19 @@ describe("repository signal routing", () => {
       await context.commandBus().post(createAggregateCommand("seed-lifecycle", "lifecycle-id"));
       await waitForCondition(() => changes.length === 2);
       changes.splice(0);
-      for (const name of [
-        "archive-lifecycle",
-        "archive-lifecycle",
-        "unarchive-lifecycle",
-        "delete-lifecycle",
-        "restore-lifecycle",
-      ]) {
+      for (const [name, expectedChanges] of [
+        ["archive-lifecycle", 1],
+        ["archive-lifecycle", 1],
+        ["unarchive-lifecycle", 2],
+        ["delete-lifecycle", 3],
+        ["restore-lifecycle", 4],
+      ] as const) {
         await context
           .commandBus()
           .post(createAggregateCommand(name, "lifecycle-id", `${name}-${String(changes.length)}`));
+        await waitForCondition(() => changes.length >= expectedChanges);
       }
-      await waitForCondition(() => changes.length === 4);
+      expect(changes).toHaveLength(4);
       expect(changes.map((event) => event.message?.typeUrl)).toEqual([
         TypeUrls.derive(EntityArchivedSchema),
         TypeUrls.derive(EntityUnarchivedSchema),
