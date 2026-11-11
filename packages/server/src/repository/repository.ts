@@ -183,7 +183,6 @@ import type { AgentAcceptanceReceipts } from "../agent/agent-acceptance-receipts
 import { AgentModelSelection } from "../agent/agent-model-selection.js";
 import { AgentAiBindings } from "../agent/agent-ai-binding.js";
 import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../delivery/inbox.js";
-import { ShardIndex } from "../delivery/shard-index.js";
 import {
   Aggregate,
   Agent,
@@ -1709,9 +1708,9 @@ type ProjectionInboxMessage = InboxMessage & {
 };
 
 /**
- * Input for a new projection update; storage supplies receipt time and version.
+ * Input for a new projection update; the Projection Inbox selects its shard.
  */
-type ProjectionInboxInput = Omit<InboxMessageInput, "whenReceived" | "version"> & {
+type ProjectionInboxInput = Omit<InboxMessageInput, "whenReceived" | "version" | "shard"> & {
   readonly label: "UPDATE_SUBSCRIBER";
   readonly status: "TO_DELIVER";
 };
@@ -12833,7 +12832,6 @@ const InboxHandoff = {
         signal: AnyPacker.pack(EventSchema, event),
         label: "UPDATE_SUBSCRIBER",
         status: "TO_DELIVER",
-        shard: ShardIndex.single(),
         keepUntil,
       },
       deliveryTenantId,

@@ -6419,9 +6419,17 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("delivers a same-shard Process Manager Command through Aggregate Event back to that Process Manager", async () => {
+  it("delivers a nonzero same-shard Process Manager Command through an Aggregate Event", async () => {
     SameShardChainProcessManager.reset();
     SameShardChainAggregate.assignments = 0;
+    const shard = new ShardIndex(2, 3);
+    await ServerEnvironmentLifecycle.resetForTest();
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: new InMemoryStorageFactory(),
+      tenantIndex: new TestTenantIndex(),
+      deliveryStrategy: { shardCount: 3, shardFor: () => shard },
+    });
+    await ServerEnvironment.instance().completeSetup();
     const processManager = new Repository({
       entityType: SameShardChainProcessManager,
       schema: ProjectQueueStateSchema,
@@ -6494,7 +6502,7 @@ describe("repository signal routing", () => {
       await expect(context.stand().read(ProjectStateSchema, "chain-target")).resolves.toEqual(
         create(ProjectStateSchema, { id: "chain-target", name: "B" }),
       );
-      const rows = await delivery.inbox.read(ShardIndex.single(), {
+      const rows = await delivery.inbox.read(shard, {
         statuses: ["DELIVERED"],
         limit: 100,
       });
@@ -13630,6 +13638,100 @@ describe("repository signal routing", () => {
     }
   });
 
+  it("routes a Projection Event to its configured receiver shard", async () => {
+    ExecutingTaskProjection.reset();
+    const factory = new InMemoryStorageFactory();
+    const targetTypeUrl = TypeUrls.derive(ProjectOverviewStateSchema);
+    const decisions: { id: string; type: string }[] = [];
+    const strategy: import("../../src/delivery/delivery-builder.js").DeliveryStrategy = {
+      shardCount: 8,
+      shardFor(id, type) {
+        const unpacked = Identifiers.unpack("string", id);
+        if (unpacked === undefined) throw new Error("Expected a routed string ID.");
+        decisions.push({ id: unpacked, type });
+        return new ShardIndex(6, 8);
+      },
+    };
+    await ServerEnvironmentLifecycle.resetForTest();
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: factory,
+      tenantIndex: new TestTenantIndex(),
+      deliveryStrategy: strategy,
+    });
+    await ServerEnvironment.instance().completeSetup();
+    const routing = EventRouting.create<string>().route(ProjectCreatedSchema, () => [
+      "routed-projection",
+      "other-projection",
+    ]);
+    const repository = createExecutingProjectionRepository(routing);
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+
+    try {
+      await context.eventBus().post(
+        createProjectCreated("event-routed-shard", "source-project", {
+          producerId: "source-project",
+        }),
+      );
+      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+
+      expect(decisions).toContainEqual({ id: "routed-projection", type: targetTypeUrl });
+      expect(decisions).toContainEqual({ id: "other-projection", type: targetTypeUrl });
+      const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+      const rows = await delivery.inbox.read(new ShardIndex(6, 8));
+      expect(rows).toHaveLength(2);
+      expect(
+        rows.map((row) => Identifiers.unpack("string", row.inboxId.targetId)).toSorted(),
+      ).toEqual(["other-projection", "routed-projection"]);
+      await expect(delivery.inbox.read(ShardIndex.single())).resolves.toEqual([]);
+      expect(ExecutingTaskProjection.subscriberCalls).toBe(2);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("delivers a pending Projection row on a nonzero shard during startup", async () => {
+    ExecutingTaskProjection.reset();
+    const factory = new InMemoryStorageFactory();
+    const shard = new ShardIndex(6, 8);
+    await ServerEnvironmentLifecycle.resetForTest();
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: factory,
+      tenantIndex: new TestTenantIndex(),
+      deliveryStrategy: { shardCount: 8, shardFor: () => shard },
+    });
+    await ServerEnvironment.instance().completeSetup();
+    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const event = createProjectCreated("pending-projection-event", "pending-projection");
+    const written = await delivery.inbox.receive({
+      inboxId: {
+        targetId: Identifiers.pack("string", "pending-projection"),
+        targetTypeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
+      },
+      signalId: "pending-projection-event",
+      signal: AnyPacker.pack(EventSchema, event),
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: timestampFromDate(new Date("2026-08-11T04:56:00.000Z")),
+      version: 1n,
+    });
+    expect(written.outcome).toBe("WRITTEN");
+    const context = await BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .build();
+
+    try {
+      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+      await expect(
+        context.stand().read(ProjectOverviewStateSchema, "pending-projection"),
+      ).resolves.toMatchObject({ name: "Task (projected)" });
+      await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("suppresses duplicate live projection messages during retained delivery", async () => {
     ExecutingTaskProjection.reset();
     const factory = new InMemoryStorageFactory();
@@ -18527,6 +18629,56 @@ describe("Projection state-update routing", () => {
       await expect(storage.readStates("target")).resolves.toEqual([]);
     } finally {
       StateObservingProjection.reset();
+      await context.close();
+    }
+  });
+
+  it("routes a Projection state subscription through the configured strategy", async () => {
+    StateObservingProjection.reset();
+    const factory = new InMemoryStorageFactory();
+    const targetTypeUrl = TypeUrls.derive(ProjectOverviewStateSchema);
+    const decisions: { id: string; type: string }[] = [];
+    await ServerEnvironmentLifecycle.resetForTest();
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: factory,
+      tenantIndex: new TestTenantIndex(),
+      deliveryStrategy: {
+        shardCount: 3,
+        shardFor(id, type) {
+          const unpacked = Identifiers.unpack("string", id);
+          if (unpacked === undefined) throw new Error("Expected a routed string ID.");
+          decisions.push({ id: unpacked, type });
+          return new ShardIndex(2, 3);
+        },
+      },
+    });
+    await ServerEnvironment.instance().completeSetup();
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
+    );
+    const repository = new Repository({
+      entityType: StateObservingProjection,
+      schema: ProjectOverviewStateSchema,
+      handlers,
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectStateSchema, () => [
+        "routed-state",
+      ]),
+    });
+    const context = await BoundedContext.singleTenant("State updates").add(repository).build();
+
+    try {
+      await boundedContextAccess.postSystemEvent(context, createStateChangedEvent("source-state"));
+      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      expect(decisions).toContainEqual({ id: "routed-state", type: targetTypeUrl });
+      expect(StateObservingProjection.subscriberCalls).toBe(1);
+      const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+      await expect(delivery.inbox.read(new ShardIndex(2, 3))).resolves.toMatchObject([
+        { signalId: "state-change-source-state", label: "UPDATE_SUBSCRIBER" },
+      ]);
+      await expect(delivery.inbox.read(ShardIndex.single())).resolves.toEqual([]);
+    } finally {
       await context.close();
     }
   });
