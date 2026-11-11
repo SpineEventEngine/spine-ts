@@ -1513,7 +1513,14 @@ the Entity transaction commit, and before acknowledgement. These checks stop a w
 after it detects that another worker has taken the shard. They do not make
 delivery and handler storage part of one distributed transaction.
 
-`keepUntil` is the optional deduplication-protection deadline, not a second
+The first successful local acknowledgement stores `DELIVERED` and a deadline
+five seconds after that transition in one compare-and-set, replacing any deadline
+supplied at reception. A repeated acknowledgement returns the first stored
+deadline. The worker passes that stored completion to delivery observers. This
+timing applies to Aggregate, Process Manager, and Projection delivery through
+the local Inbox.
+
+`keepUntil` is the deduplication-protection deadline on a delivered row, not a second
 retention setting. A delivered row is cleanup-eligible when that deadline is
 absent or elapsed (`keepUntil <= now`). Delivery skips per-record mutation checks
 and deletion attempts for rows whose deadline is still in the future. Cleanup

@@ -30,15 +30,18 @@ import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Inbox", () => {
   it("deletes an eligible delivered ID without a session or exact row snapshot", async () => {
+    let now = new Date(10_000);
     const inbox = new Inbox(
       new InboxStorage({
         context: { name: "DirectDeleteById", multitenant: false },
         storageFactory: new InMemoryStorageFactory(),
+        now: () => now,
       }),
     );
     const pending = createMessage("direct", "direct-signal", 1n);
     await inbox.storage.write(pending);
     const delivered = required(await inbox.markDelivered(pending), "delivered");
+    now = new Date(15_000);
     await expect(
       inbox.removeDelivered({ ...delivered, version: delivered.version + 1n }),
     ).resolves.toBe(true);
@@ -108,7 +111,7 @@ describe("Inbox", () => {
   });
 
   it("deletes only eligible delivered IDs and reports an absent ID", async () => {
-    const now = new Date(2_000);
+    let now = new Date(2_000);
     const inbox = new Inbox(
       new InboxStorage({
         context: { name: "DeliveredEligibility", multitenant: false },
@@ -117,14 +120,13 @@ describe("Inbox", () => {
       }),
     );
     const pending = createMessage("pending", "pending", 1n);
-    const expired = { ...createMessage("expired", "expired", 2n), keepUntil: new Date(2_000) };
-    const protectedRow = {
-      ...createMessage("protected", "protected", 3n),
-      keepUntil: new Date(2_001),
-    };
+    const expired = createMessage("expired", "expired", 2n);
+    const protectedRow = createMessage("protected", "protected", 3n);
     for (const row of [pending, expired, protectedRow]) await inbox.storage.write(row);
     const expiredDelivered = required(await inbox.markDelivered(expired), "expired");
+    now = new Date(2_001);
     const protectedDelivered = required(await inbox.markDelivered(protectedRow), "protected");
+    now = new Date(7_000);
     await expect(inbox.removeDelivered(pending)).resolves.toBe(false);
     await expect(inbox.removeDelivered(protectedDelivered)).resolves.toBe(false);
     await expect(inbox.removeDelivered(expiredDelivered)).resolves.toBe(true);
@@ -136,15 +138,18 @@ describe("Inbox", () => {
   });
 
   it("deletes an eligible ID without serializing unrelated signal data", async () => {
+    let now = new Date(10_000);
     const inbox = new Inbox(
       new InboxStorage({
         context: { name: "DirectCleanupPayload", multitenant: false },
         storageFactory: new InMemoryStorageFactory(),
+        now: () => now,
       }),
     );
     const pending = createMessage("direct-id", "signal", 1n);
     await inbox.storage.write(pending);
     const delivered = required(await inbox.markDelivered(pending), "direct-id");
+    now = new Date(15_000);
     const idOnly = {
       ...delivered,
       signal: undefined as unknown as NonNullable<typeof delivered.signal>,
@@ -182,7 +187,7 @@ describe("Inbox", () => {
       new InboxStorage({
         context: { name: "DeadlineBeforeDelete", multitenant: false },
         storageFactory: new InMemoryStorageFactory(),
-        now: () => new Date(clockReads++ < 2 ? 0 : 10),
+        now: () => new Date([0, 5_000, 5_000, 5_010][clockReads++] ?? 5_010),
       }),
     );
     const pending = createMessage("deadline", "deadline-signal", 1n);
@@ -190,7 +195,7 @@ describe("Inbox", () => {
     const delivered = required(await inbox.markDelivered(pending), "delivered");
 
     await expect(inbox.removeDelivered(delivered, { timeoutMs: 10 })).resolves.toBe(false);
-    expect(clockReads).toBe(3);
+    expect(clockReads).toBe(4);
     await expect(inbox.readMessage(pending.id)).resolves.toMatchObject({ status: "DELIVERED" });
   });
 

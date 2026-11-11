@@ -1574,19 +1574,19 @@ class DeliveryDrain {
   }
 
   /**
-   * Marks a message delivered and updates local counts and callbacks.
+   * Marks a message delivered and uses the stored completion for local observers.
    *
    * @param message Supplies the inbox message to acknowledge.
    * @returns Completion after durable acknowledgement.
    */
   async #markDelivered(message: InboxMessage): Promise<void> {
-    if ((await this.input.inbox.markDelivered(message, this.input.options.operation)) === undefined)
-      throw new Error("Inbox message was not marked delivered.");
-    this.#deduplication.recordDelivered(message);
+    const completed = await this.input.inbox.markDelivered(message, this.input.options.operation);
+    if (completed === undefined) throw new Error("Inbox message was not marked delivered.");
+    this.#deduplication.recordDelivered(completed);
     this.#statistics.delivered += 1;
     this.#messageOutcomes.set(message, { kind: "acknowledged", agent: false });
     try {
-      this.input.options.onDelivered?.(message);
+      this.input.options.onDelivered?.(completed);
     } catch {
       // A post-ack observer cannot undo durable delivery or repeat processing.
     }
