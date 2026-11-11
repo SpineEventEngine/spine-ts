@@ -1,8 +1,8 @@
 # Delivered Inbox retention
 
-Status: implemented on `receiver-shard-strategy`, awaiting independent review
-and release verification. Remote completion uses the existing gRPC service
-contract and the application's delivery clock.
+Status: implemented and independently reviewed on `receiver-shard-strategy`.
+Local release verification passed. Remote completion uses the existing gRPC
+service contract and the application's delivery clock.
 
 ## Human-Imposed Requirements Ledger
 
@@ -49,10 +49,13 @@ Independent maintainability, documentation, API, and reliability reviews cover
 the complete retention diff. The prior receiver-sharding review remains valid
 unless retention changes affect its verified behavior.
 
-## Remaining Work
+## Verification
 
-Focused tests, PostgreSQL/MySQL/Datastore checks, and type/documentation checks
-pass. Remaining work is independent review, release verification, package
-preparation/trial, and feature-branch synchronization. GitHub CI requires a
-human-created pull request. Cross-page duplicate detection and additional
-Entity protection are outside this task.
+The release profile passes 7,175 Vitest tests and 44 Node tests, with all global
+coverage thresholds above 90%. Twenty live PostgreSQL, MySQL, and Datastore
+checks pass. Independent maintainability, documentation, API, and reliability
+reviews have no unresolved blocking findings. Remote completion documentation
+now states the existing read/upsert guarantees precisely.
+
+GitHub CI requires a human-created pull request. Cross-page duplicate detection
+and additional Entity protection remain outside this task.
