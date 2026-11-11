@@ -18,6 +18,11 @@ Delivery adapters import `conditionalPickUp` from
 conditional-pickup capability for a `DeliveryWorkRegistry`; it is not part of
 the server root API and does not independently create delivery work.
 
+The same SPI exports `InboxRetention.deadline(nowMs)`. Delivery adapters use it
+when marking a row delivered; it returns a `Date` five seconds after the supplied
+application time in milliseconds. Local storage and remote delivery use this
+one deadline policy without adding a public retention setting.
+
 ## Generated handler-registry SPI
 
 Generated model modules import only their registry data types from
