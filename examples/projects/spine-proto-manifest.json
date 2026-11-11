@@ -1,8 +1,8 @@
 {
   "formatVersion": 2,
-  "generationId": "c767388f-570b-42a8-b3e2-326a1bc5421b",
+  "generationId": "ebb14c5f-ec00-4296-a039-d98a89ccd4b6",
   "packageName": "@spine-event-engine/example-project-management",
-  "packageVersion": "2.0.0-snapshot.28",
+  "packageVersion": "2.0.0-snapshot.29",
   "protoFiles": [
     "spine/examples/projects/commands.proto",
     "spine/examples/projects/entities.proto",
