@@ -23,6 +23,17 @@ a Command, treats a Command as an Event, or substitutes one identifier type for
 another is invalid because it hides contract mistakes and teaches the wrong
 API.
 
+## Behavioral Differences Between Entity Types
+
+When working on a mechanism shared by Aggregates, Process Managers, and
+Projections, always ask the human whether a discovered or proposed behavioral
+difference between those Entity types is intentional. Before asking, compare
+the behavior with the latest Spine JVM implementation. Explain the shared
+mechanism, the differing behavior, the JVM behavior, and the practical effect
+with enough context for the human to decide. Do not silently retain or introduce
+an unexplained difference. An explicit human decision already recorded for the
+same difference answers this question; apply it without asking again.
+
 ## Timestamp Field Names
 
 Every Protobuf field of type `google.protobuf.Timestamp` must start with
