@@ -653,6 +653,14 @@ records help diagnose lifecycle, warnings, and failures; they are not a durable
 record of a domain fact. Put business facts in events or storage, and keep
 secrets and credential values out of application logs.
 
+The environment's `deliveryStrategy` selects the shard for each receiving
+Aggregate, Process Manager, Agent, or Projection. The default is one shard. A
+custom strategy can distribute recipients or reserve shard ranges for selected
+receiver state types. Configure it before resolving `ServerEnvironment` and
+building Bounded Contexts; use the same mapping in processes sharing delivery
+storage. See [receiver-specific shard policies](../packages/server/REFERENCE.md#receiver-specific-shard-policies)
+for a complete example using the Orders Projections.
+
 All Bounded Contexts use the Delivery configured in `ServerEnvironment`. With
 local Delivery, posting waits for the signal's delivery result. An Agent's input
 can be accepted before its live handler finishes. With remote Delivery and its
