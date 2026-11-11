@@ -19,6 +19,7 @@ import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-s
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { Time } from "@spine-event-engine/core/time";
 import { DeliveryBuilder, ShardIndex, type InboxMessage } from "@spine-event-engine/server";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
 import { DeliveryClient, DeliveryOutcomeUnknownError, RemoteWorkRegistry } from "../src/index.js";
@@ -26,6 +27,35 @@ import { RemoteInbox } from "../src/remote/adapters.js";
 import { domainMessage } from "./shared-fixtures.js";
 
 describe("in-memory delivery core response loss", () => {
+  it("persists an application-clock completion through the existing Inbox gRPC service", async () => {
+    const core = InMemoryDelivery.create();
+    const client = DeliveryClient.usingTransport(
+      createRouterTransport((router) => {
+        router.service(InboxService, core.inbox);
+      }),
+    );
+    const inbox = new RemoteInbox(client);
+    const pending = domainMessage("completion-wire");
+    let now = 120_000;
+    const previous = Time.setProvider({
+      currentTime: () => timestampFromDate(new Date(now)),
+    });
+    try {
+      const received = await inbox.receive(pending);
+      expect((await client.findOne(received.message.id))?.keepUntil).toBeUndefined();
+
+      const completed = await inbox.markDelivered(received.message);
+      expect(completed?.keepUntil).toEqual(new Date(125_000));
+      expect((await client.findOne(received.message.id))?.keepUntil).toEqual(new Date(125_000));
+
+      now = 130_000;
+      expect(await inbox.markDelivered(received.message)).toEqual(completed);
+      expect((await client.findOne(received.message.id))?.keepUntil).toEqual(new Date(125_000));
+    } finally {
+      Time.setProvider(previous);
+    }
+  });
+
   it("removes a retained duplicate through shared delivery policy and the remote adapter", async () => {
     const core = InMemoryDelivery.create();
     const client = DeliveryClient.usingTransport(
@@ -80,8 +110,7 @@ describe("in-memory delivery core response loss", () => {
       keepUntil: new Date(Date.now() - 60_000),
     };
     const pending = { ...domainMessage("pending"), signalId: expired.signalId };
-    await client.writeOne(expired);
-    await expect(inbox.markDelivered(expired)).resolves.toMatchObject({ status: "DELIVERED" });
+    await client.writeOne({ ...expired, status: "DELIVERED" });
     await client.writeOne(pending);
     expect((await client.findOne(expired.id))?.keepUntil?.getTime()).toBeLessThan(Date.now());
     const shard = ShardIndex.single();
@@ -129,8 +158,7 @@ describe("in-memory delivery core response loss", () => {
       whenReceived: timestampFromDate(new Date(2_000)),
     };
     await client.writeOne(first);
-    await client.writeOne(expired);
-    await inbox.markDelivered(expired);
+    await client.writeOne({ ...expired, status: "DELIVERED" });
     await client.writeOne(later);
     const shard = ShardIndex.single();
     const session = { kind: "EXCLUSIVE" as const, shard };

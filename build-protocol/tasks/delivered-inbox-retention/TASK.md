@@ -1,62 +1,58 @@
 # Delivered Inbox retention
 
-Status: approved, local acknowledgement checkpoint implemented on
-`receiver-shard-strategy`. Remote protocol scope awaits a human decision.
+Status: implemented on `receiver-shard-strategy`, awaiting independent review
+and release verification. Remote completion uses the existing gRPC service
+contract and the application's delivery clock.
 
 ## Human-Imposed Requirements Ledger
 
 - Newly received Inbox messages have no `keepUntil`.
-- The first transition to `DELIVERED` establishes `keepUntil` at that transition
-  time plus five seconds. Repeated or concurrent acknowledgement preserves the
-  first stored deadline and returns the authoritative completed record.
-- Apply this rule to the delivery mechanism uniformly. The additional protection
-  for Aggregates and Process Managers is completely separate and must not change.
+- Marking a message `DELIVERED` sets its deadline to that time plus five seconds.
+  A repeated acknowledgement of a matching stored completion preserves its
+  deadline. Local conditional updates preserve the first concurrent completion.
+- Remote delivery sets both fields in the application and writes them through
+  the existing gRPC operation. Do not impose server-clock timestamping, add RPCs,
+  alter frozen Proto, or require new behavior from either Delivery server.
+- Apply the rule uniformly to Inbox delivery. The additional protection for
+  Aggregates and Process Managers is completely separate and must not change.
+- Duplicate detection across storage pages is explicitly deferred by the human.
+  Do not add lookup APIs, indexes, caches, or provider changes for that issue.
 - Pending messages remain ineligible for delivered-record cleanup. Expiry permits
   cleanup rather than scheduling an exact-time deletion.
-- Preserve the current acknowledgement boundaries, asynchronous follow-up delivery,
+- Preserve current acknowledgement boundaries, asynchronous follow-up delivery,
   receiver shard strategy, and separate delivery records for separate receivers.
-- Correct retained duplicate detection across storage pages and process restart
-  without backlog-sized working memory or a full-Inbox scan per pending message.
-- Remote completion must establish and preserve the authoritative deadline. Do not
-  claim server-side semantics that the supported server/protocol cannot provide.
+- Use existing shard coordination and remote unknown-outcome handling. Do not
+  claim conditional remote writes or stronger concurrency guarantees than the
+  current gRPC contract provides.
 - No migrations, arbitrary limits, cross-receiver transactions, or speculative
-  Entity protection changes. Preserve frozen external contracts; raise conflicts.
-- Use genuine domain fixtures, documented declarations, and `when_` names for
-  authored Timestamp fields. Questions use the final reply's Questions section.
+  Entity protection changes. Genuine domain fixtures and documented declarations
+  remain required. Authored Timestamp fields use `when_` names.
 - Keep this work in the existing branch and worktree. Push each semantic commit
-  immediately. Do not modify GitHub pull requests or issues.
+  immediately. Do not modify GitHub pull requests or issues. Questions use only
+  the final reply's Questions section, never popup tools.
 
 ## Approach
 
-This is high-risk persistence and acknowledgement work. Test slow delivery,
-repeated and concurrent completion, cleanup boundaries, receiver-specific
-retention, page boundaries, restart, and supported remote acknowledgement.
-Use the existing storage and delivery abstractions. Review remote protocol and
-lookup requirements before extending their contracts.
+This is high-risk persistence and acknowledgement work. Remove reception-time
+initialization for Commands, Events, batch reception, and Projections. Set the
+local deadline in its existing conditional completion update. Set the remote
+deadline when the application prepares the delivered record, preserving stored
+completion on acknowledged retries. The worker uses the returned completed row.
 
-The implementation must update reception, acknowledgement, downstream completion
-snapshots, retained-evidence lookup, API documentation, and maintained custom
-ports together. Local tests use controlled time rather than five-second waits.
-The final verification profile is `verify:release` because delivery is shared
-runtime. Independent maintainability, documentation, API, and reliability
-reviews cover the final behavior.
+Tests cover delayed delivery, completion retries, local concurrent completion,
+cleanup boundaries, separate receivers, and remote application-clock completion
+through the unchanged wire contract. Use controlled time rather than real waits.
+Update maintained input types, custom ports, fixtures, and human/API documentation.
+
+The final profile is `verify:release` because delivery is shared runtime.
+Independent maintainability, documentation, API, and reliability reviews cover
+the complete retention diff. The prior receiver-sharding review remains valid
+unless retention changes affect its verified behavior.
 
 ## Remaining Work
 
-The local first completion now establishes its five-second deadline, preserves
-that deadline on matching repeated/concurrent acknowledgement, and supplies the
-stored completed record to delivery observers. Focused Inbox, worker, Entity
-Inbox, and repository tests pass, along with server typechecking and documentation
-and cleanup checks. Full release verification and final independent review remain.
-
-Reception-time deadlines remain temporarily because removing them before the
-remote acknowledgement correction would eliminate remote retention. The existing
-JVM RPCs provide unconditional writes, UUID reads, and timestamp shard paging;
-they cannot guarantee server-authoritative acknowledgement or efficient retained
-identity lookup. Resolve whether the complete remote behavior requires an
-extended server, or whether corresponding JVM server work enters the scope.
-Frozen Proto and additional Entity guards remain unchanged.
-
-After that decision, complete reception cleanup, indexed retained-delivery
-lookup, remote integration, custom-port contracts, documentation, independent
-review, and release verification. GitHub CI requires a human-created pull request.
+Focused tests, PostgreSQL/MySQL/Datastore checks, and type/documentation checks
+pass. Remaining work is independent review, release verification, package
+preparation/trial, and feature-branch synchronization. GitHub CI requires a
+human-created pull request. Cross-page duplicate detection and additional
+Entity protection are outside this task.

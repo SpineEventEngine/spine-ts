@@ -29,6 +29,14 @@ import { InboxMessageError, ShardIndex } from "../../src/index.js";
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Inbox", () => {
+  it("stores a new pending receipt without a completion deadline", async () => {
+    const inbox = open("PendingWithoutDeadline");
+    const received = await inbox.receive(input(createMessage("pending-deadline", "signal", 1n)));
+
+    expect(received.message.keepUntil).toBeUndefined();
+    expect((await inbox.readMessage(received.message.id))?.keepUntil).toBeUndefined();
+  });
+
   it("deletes an eligible delivered ID without a session or exact row snapshot", async () => {
     let now = new Date(10_000);
     const inbox = new Inbox(

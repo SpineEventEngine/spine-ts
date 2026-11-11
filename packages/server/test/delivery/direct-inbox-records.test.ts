@@ -225,11 +225,36 @@ describe("direct InboxMessage storage", () => {
     await storage.write(pending);
     expect((await storage.readMessage(pending.id))?.keepUntil).toBeUndefined();
 
+    now = new Date(240_000);
+    expect((await storage.readMessage(pending.id))?.status).toBe("TO_DELIVER");
+    expect((await storage.readMessage(pending.id))?.keepUntil).toBeUndefined();
+    await expect(storage.removeDelivered(pending)).resolves.toBe(false);
+
     const first = await storage.markDelivered(pending);
-    expect(first?.keepUntil).toEqual(new Date(125_000));
-    now = new Date(130_000);
+    expect(first?.keepUntil).toEqual(new Date(245_000));
+    now = new Date(250_000);
     expect(await storage.markDelivered(pending)).toEqual(first);
     expect(await storage.readMessage(pending.id)).toEqual(first);
+  });
+
+  it("starts separate deadlines when one Event reaches two recipients", async () => {
+    let now = new Date(10_000);
+    const storage = new InboxStorage({
+      context: { name: "SeparateRecipientRetention", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => now,
+    });
+    const first = createMessage("event-first", "shared-event", 1n, undefined, "list-first");
+    const second = createMessage("event-second", "shared-event", 2n, undefined, "list-second");
+    await storage.write(first);
+    await storage.write(second);
+
+    const firstCompletion = await storage.markDelivered(first);
+    now = new Date(12_000);
+    const secondCompletion = await storage.markDelivered(second);
+
+    expect(firstCompletion?.keepUntil).toEqual(new Date(15_000));
+    expect(secondCompletion?.keepUntil).toEqual(new Date(17_000));
   });
 
   it("converges concurrent acknowledgements on one stored completion deadline", async () => {

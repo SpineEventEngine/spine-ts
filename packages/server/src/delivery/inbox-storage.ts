@@ -32,11 +32,11 @@ import {
   type InboxWriteResult,
 } from "./inbox.js";
 import { InboxRecords, inboxRecordSpec } from "./inbox-records.js";
+import { InboxRetention } from "./inbox-retention.js";
 import { ShardIndex } from "./shard-index.js";
 
 const defaultReadLimit = 100;
 const maxReadLimit = 1_000;
-const deliveredRetentionMs = 5_000;
 const storageClocks = new WeakMap<InboxStorage, () => Date>();
 
 /**
@@ -187,7 +187,7 @@ export class InboxStorage {
       const delivered = InboxRecords.write({
         ...decoded,
         status: "DELIVERED",
-        keepUntil: new Date(Values.now(this.#now) + deliveredRetentionMs),
+        keepUntil: InboxRetention.deadline(Values.now(this.#now)),
       });
       if (await storage.compareAndSet(id, current, delivered))
         return InboxRecords.read(delivered, id);

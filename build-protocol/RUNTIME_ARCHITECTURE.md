@@ -269,10 +269,12 @@ and transport-backed worker supervision:
 - pending and delivered `InboxMessage` rows are stored directly; delivered rows
   are the deduplication fact, with no per-message claim or separate dedup
   record;
-- `keepUntil` is the optional
-  deduplication-protection deadline, not a second
-  retention setting. A delivered row becomes cleanup-eligible when the deadline
-  is absent or has elapsed. Cleanup runs one bounded page under current shard
+- pending Inbox rows have no `keepUntil`. The first delivered transition sets
+  the deduplication deadline five seconds after acknowledgement. Local storage
+  writes status and deadline in one conditional update; remote delivery uses
+  the application's clock and the existing Inbox write operation. A delivered
+  row becomes cleanup-eligible when the deadline has elapsed. Cleanup runs one
+  bounded page under current shard
   ownership, plus at most one continuation only after a full protected page
   makes no removal. Each exact delete validates the fence in one
   provider-atomic operation, and

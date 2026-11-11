@@ -49,7 +49,7 @@ export class Inbox {
   }
 
   /**
-   * Stores one message in durable inbox storage.
+   * Stores one pending message without a completion deadline.
    *
    * @param input Describes the message to make durable.
    * @returns The write or deduplication outcome.
@@ -58,8 +58,6 @@ export class Inbox {
     const messageInput = this.#inputObject(input, "Inbox message input");
     const shard = this.#readInput(messageInput, "shard", "Inbox message shard") as ShardIndex;
     const signal = this.#readInput(messageInput, "signal", "Inbox signal") as Any | undefined;
-    const keepUntil = this.#readInput(messageInput, "keepUntil", "Inbox keep-until time") as
-      Date | undefined;
 
     return this.storage.write({
       inboxId: this.#readInput(messageInput, "inboxId", "Inbox target identity") as InboxId,
@@ -74,7 +72,6 @@ export class Inbox {
       ) as Timestamp,
       version: this.#readInput(messageInput, "version", "Inbox version") as bigint,
       ...(signal === undefined ? {} : { signal }),
-      ...(keepUntil === undefined ? {} : { keepUntil }),
       id: {
         value: randomUUID(),
         shard,
@@ -107,9 +104,9 @@ export class Inbox {
    * Updates one pending message to delivered when its snapshot still matches.
    *
    * @param message Supplies the pending message snapshot.
-   * @returns The delivered message, or `undefined` when the durable row is missing,
-   * not pending, or no longer matches the snapshot. Matching delivered rows return
-   * idempotently so concurrent workers converge without re-dispatching.
+   * @returns The first stored completion and deadline, or `undefined` when the
+   * durable row is missing or its immutable content differs. Matching delivered
+   * rows return idempotently so concurrent workers converge without re-dispatching.
    */
   markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
     return this.storage.markDelivered(message);
@@ -307,7 +304,7 @@ export interface InboxMessage {
   readonly version: bigint;
 
   /**
-   * Optional deduplication retention deadline.
+   * Deadline recorded when this message is delivered.
    */
   readonly keepUntil?: Date;
 }
@@ -357,11 +354,6 @@ export interface InboxMessageInput {
    * Ordering tie-breaker for equal receive times.
    */
   readonly version: bigint;
-
-  /**
-   * Optional deduplication retention deadline.
-   */
-  readonly keepUntil?: Date;
 }
 
 /**

@@ -32,7 +32,7 @@ import type {
 import { ShardIndex } from "@spine-event-engine/server";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 
-import { conditionalPickUp } from "@spine-event-engine/server/spi/delivery";
+import { conditionalPickUp, InboxRetention } from "@spine-event-engine/server/spi/delivery";
 import { DeliveryClient, deliveryClientAccess } from "../client/client.js";
 import {
   DeliveryPagingError,
@@ -71,7 +71,7 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Writes a new inbox message.
+   * Writes a new inbox message without a completion deadline.
    *
    * @param input Supplies the message fields excluding its generated identity.
    * @param options Bounds or cancels the remote mutation.
@@ -250,25 +250,28 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Persists one exact authoritative pending row as a delivered fact.
+   * Reads the current row and writes its completed form through the existing service.
    *
    * @param message Supplies the expected pending message snapshot.
    * @param options Bounds or cancels the remote read and delivered upsert.
-   * @returns The delivered acknowledgement, including an exact retained
-   * acknowledgement after a committed response loss, or `undefined` when the
-   * row is absent or no longer matches.
+   * @returns The delivered row with its first stored deadline after a known
+   * completion, or `undefined` when the row is absent or its content differs.
+   * A write with an unknown outcome continues to raise its transport error.
    */
   async markDelivered(
     message: InboxMessage,
     options?: DeliveryOperationOptions,
   ): Promise<InboxMessage | undefined> {
     const current = await this.client.findOne(message.id, options);
-    const expected = DeliveryMessageCodec.snapshot({ ...message, status: "DELIVERED" });
-    if (current?.status === "DELIVERED" && RemoteValues.sameMessage(current, expected))
+    if (current?.status === "DELIVERED" && RemoteValues.sameCompletion(current, message))
       return current;
     if (current?.status !== "TO_DELIVER" || !RemoteValues.sameMessage(current, message))
       return undefined;
-    const delivered = DeliveryMessageCodec.snapshot({ ...current, status: "DELIVERED" });
+    const delivered = DeliveryMessageCodec.snapshot({
+      ...current,
+      status: "DELIVERED",
+      keepUntil: InboxRetention.deadline(Time.currentTimeMillis()),
+    });
     await this.client.writeOne(delivered, options);
     return delivered;
   }
@@ -578,7 +581,13 @@ const RemoteValues = Object.freeze({
    */
   receiveMessage(input: InboxMessageInput): InboxMessage {
     const message = DeliveryMessageCodec.snapshot({
-      ...input,
+      inboxId: input.inboxId,
+      signalId: input.signalId,
+      ...(input.signal === undefined ? {} : { signal: input.signal }),
+      label: input.label,
+      status: input.status,
+      whenReceived: input.whenReceived,
+      version: input.version,
       id: RemoteValues.freeze({
         value: randomUUID(),
         shard: DeliveryShardCodec.snapshot(input.shard),
@@ -692,6 +701,24 @@ const RemoteValues = Object.freeze({
       left.version === right.version &&
       RemoteValues.sameTime(left.whenReceived, right.whenReceived) &&
       RemoteValues.sameDate(left.keepUntil, right.keepUntil)
+    );
+  },
+
+  /**
+   * Compares stored completion with a pending snapshot, excluding transition fields.
+   *
+   * @param completed Supplies the persisted delivered row.
+   * @param pending Supplies the expected pending row.
+   * @returns Whether immutable delivery fields match.
+   */
+  sameCompletion(completed: InboxMessage, pending: InboxMessage): boolean {
+    const { keepUntil: completedDeadline, ...completedContent } = completed;
+    const { keepUntil: pendingDeadline, ...pendingContent } = pending;
+    void completedDeadline;
+    void pendingDeadline;
+    return RemoteValues.sameMessage(
+      { ...completedContent, status: "TO_DELIVER" },
+      { ...pendingContent, status: "TO_DELIVER" },
     );
   },
 

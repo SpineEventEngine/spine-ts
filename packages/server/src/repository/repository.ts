@@ -2546,8 +2546,6 @@ type RepositoryCommandReactions = ReadonlyMap<
  */
 type RepositoryStateSubscriptionMap = ReadonlyMap<string, RepositoryStateSubscribers>;
 
-const inboxDedupMs = 30_000;
-
 /**
  * Aggregate reconstructed from persisted state and event history.
  */
@@ -12780,7 +12778,6 @@ const InboxHandoff = {
   ): Promise<void> {
     const route = acceptedRoute ?? (await repository.routeCommand(command));
     const commandId = RepositorySignals.requireCommandId(command);
-    const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requireCommandTenant(runtime.context, command);
     const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
 
@@ -12795,14 +12792,13 @@ const InboxHandoff = {
         signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
-        keepUntil,
       },
       deliveryTenantId,
     );
   },
 
   /**
-   * Delivers an Event to one Projection target with the duplicate-retention deadline.
+   * Delivers an Event to one Projection target through its Inbox.
    *
    * @param repository Repository supplying the Projection type and ID descriptor.
    * @param runtime Projection Inbox, storage, and tenant mode.
@@ -12817,7 +12813,6 @@ const InboxHandoff = {
     entityId: unknown,
   ): Promise<void> {
     const eventId = RepositorySignals.requireEventId(event);
-    const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requireProjectionTenant(runtime.context, event);
     const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
 
@@ -12832,7 +12827,6 @@ const InboxHandoff = {
         signal: AnyPacker.pack(EventSchema, event),
         label: "UPDATE_SUBSCRIBER",
         status: "TO_DELIVER",
-        keepUntil,
       },
       deliveryTenantId,
     );
@@ -12854,13 +12848,12 @@ const InboxHandoff = {
     entityId: unknown,
   ): Promise<void> {
     const eventId = RepositorySignals.requireEventId(event);
-    const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requireEntityEventTenant(runtime.context, event);
     const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
 
     await runtime.entityInbox.receive(
       delivery,
-      InboxHandoff.entityEventInboxInput(repository, eventId.value, event, entityId, keepUntil),
+      InboxHandoff.entityEventInboxInput(repository, eventId.value, event, entityId),
       deliveryTenantId,
     );
   },
@@ -12881,14 +12874,13 @@ const InboxHandoff = {
     entityIds: readonly unknown[],
   ): Promise<void> {
     const eventId = RepositorySignals.requireEventId(event);
-    const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requireEntityEventTenant(runtime.context, event);
     const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
     for (let start = 0; start < entityIds.length; start += 1_000) {
       const inputs = entityIds
         .slice(start, start + 1_000)
         .map((entityId) =>
-          InboxHandoff.entityEventInboxInput(repository, eventId.value, event, entityId, keepUntil),
+          InboxHandoff.entityEventInboxInput(repository, eventId.value, event, entityId),
         );
       await runtime.entityInbox.receiveAll(delivery, inputs, deliveryTenantId);
     }
@@ -12901,7 +12893,6 @@ const InboxHandoff = {
    * @param signalId Identifier of the original Event.
    * @param event Event envelope to pack without repeating validation.
    * @param entityId Routed Entity identifier.
-   * @param keepUntil Duplicate-retention deadline for this receipt.
    * @returns Input for Entity Inbox receipt.
    */
   entityEventInboxInput(
@@ -12909,7 +12900,6 @@ const InboxHandoff = {
     signalId: string,
     event: Event,
     entityId: unknown,
-    keepUntil: Date,
   ): EntityInboxInput {
     return {
       inboxId: {
@@ -12920,7 +12910,6 @@ const InboxHandoff = {
       signal: AnyPacker.pack(EventSchema, event),
       label: "REACT_UPON_EVENT",
       status: "TO_DELIVER",
-      keepUntil,
     };
   },
 };

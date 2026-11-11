@@ -16,3 +16,4 @@
  * Exports the delivery capability negotiated between the server and delivery adapters.
  */
 export { conditionalPickUp } from "../delivery/conditional-pickup.js";
+export { InboxRetention } from "../delivery/inbox-retention.js";

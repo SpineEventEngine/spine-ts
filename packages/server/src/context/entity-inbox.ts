@@ -375,7 +375,6 @@ export class LocalEntityInbox implements EntityInbox {
       whenReceived,
       version: this.#takeVersion(),
       ...(input.signal === undefined ? {} : { signal: input.signal }),
-      ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),
     });
 
     const endpoint =

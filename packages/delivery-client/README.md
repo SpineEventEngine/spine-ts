@@ -92,6 +92,11 @@ delivered row in that page or a recent delivery in the bounded process-local
 cache. A different target or a newly generated signal ID remains independently
 deliverable, even when its payload is equal.
 
+Remote reception writes a pending row without a completion deadline. The
+application sets a five-second deadline when it acknowledges delivery, using
+its clock and the existing Inbox write operation. A matching repeated
+acknowledgement returns the stored deadline.
+
 <!-- docs-snippet-path: packages/delivery-client/src/remote/adapters.ts -->
 
 ```ts

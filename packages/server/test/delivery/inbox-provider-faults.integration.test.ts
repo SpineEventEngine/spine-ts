@@ -102,6 +102,7 @@ describe("live SQL Inbox delivery faults", () => {
       };
       await inbox.storage.write(failed);
       await inbox.storage.write(unrelated);
+      const beforeCompletion = Date.now();
       const entries: string[] = [];
       let statistics: DeliveryStatistics | undefined;
       const monitor = new (class extends DeliveryMonitor {
@@ -118,15 +119,18 @@ describe("live SQL Inbox delivery faults", () => {
       expect(result.status).toBe("COMPLETED");
       expect(entries).toEqual([failed.id.value, unrelated.id.value]);
       expect(statistics).toMatchObject({ processed: 2, delivered: 2, failed: 1 });
-      expect(await inbox.readMessage(failed.id)).toBeUndefined();
-      expect(await inbox.readMessage(unrelated.id)).toBeUndefined();
+      for (const row of [failed, unrelated]) {
+        const completed = await inbox.readMessage(row.id);
+        expect(completed?.status).toBe("DELIVERED");
+        expect(completed?.keepUntil?.getTime()).toBeGreaterThanOrEqual(beforeCompletion + 5_000);
+      }
     });
   });
 
   it.each([
     { policy: "throwing-monitor", expectedEntries: 1, expectedStatus: "TO_DELIVER" },
-    { policy: "failed-repeat", expectedEntries: 2, expectedStatus: undefined },
-    { policy: "successful-repeat", expectedEntries: 2, expectedStatus: undefined },
+    { policy: "failed-repeat", expectedEntries: 2, expectedStatus: "DELIVERED" },
+    { policy: "successful-repeat", expectedEntries: 2, expectedStatus: "DELIVERED" },
   ] as const)(
     "applies $policy without falling back from the selected monitor action",
     async ({ policy, expectedEntries, expectedStatus }) => {
@@ -160,12 +164,13 @@ describe("live SQL Inbox delivery faults", () => {
         );
         const remaining = await inbox.readMessage(message.id);
         expect(remaining?.status).toBe(expectedStatus);
+        if (expectedStatus === "DELIVERED") expect(remaining?.keepUntil).toBeInstanceOf(Date);
       });
     },
   );
 
   it.each([
-    { failures: 2, expectedStatus: undefined },
+    { failures: 2, expectedStatus: "DELIVERED" },
     { failures: 9, expectedStatus: "TO_DELIVER" },
   ] as const)(
     "does not rerun successful processing when SQL acknowledgement rejects $failures attempts",
@@ -194,7 +199,9 @@ describe("live SQL Inbox delivery faults", () => {
         // MySQL retries a deadlock-class CAS three times inside each of the
         // Delivery worker's three acknowledgement attempts.
         expect(await ackAttempts(sql, postgres)).toBe(!postgres && failures === 9 ? 9 : 3);
-        expect((await inbox.readMessage(message.id))?.status).toBe(expectedStatus);
+        const remaining = await inbox.readMessage(message.id);
+        expect(remaining?.status).toBe(expectedStatus);
+        if (expectedStatus === "DELIVERED") expect(remaining?.keepUntil).toBeInstanceOf(Date);
       });
     },
   );

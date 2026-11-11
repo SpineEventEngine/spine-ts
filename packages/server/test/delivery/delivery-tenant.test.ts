@@ -79,7 +79,10 @@ describe("shared Delivery tenant identity", () => {
     delivery.wake(ShardIndex.single());
     await delivery.whenIdle();
     expect(seen).toEqual([written.message.id.value]);
-    expect(await delivery.inbox.readMessage(written.message.id)).toBeUndefined();
+    await expect(delivery.inbox.readMessage(written.message.id)).resolves.toMatchObject({
+      status: "DELIVERED",
+      keepUntil: expect.any(Date),
+    });
     await delivery.close();
   });
 });

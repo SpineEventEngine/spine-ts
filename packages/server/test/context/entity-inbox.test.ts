@@ -965,7 +965,6 @@ describe("LocalEntityInbox", () => {
       shard,
       whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
       version: 1n,
-      keepUntil: new Date("2100-01-01T00:00:00.000Z"),
     });
 
     const loop = new DeliveryLoop({
@@ -1121,7 +1120,6 @@ describe("LocalEntityInbox", () => {
     const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const receivedAt = Date.now();
-    const keepUntil = new Date(receivedAt + 30_000);
 
     inbox.register({
       targetTypeUrl,
@@ -1135,7 +1133,6 @@ describe("LocalEntityInbox", () => {
       signal: commandSignal(),
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
-      keepUntil,
     });
 
     await delivery.whenIdle();
@@ -1143,7 +1140,7 @@ describe("LocalEntityInbox", () => {
     const completed = await delivery.inbox.readMessage(received.id);
     expect(completed?.status).toBe("DELIVERED");
     expect(completed?.keepUntil?.getTime()).toBeGreaterThanOrEqual(receivedAt + 5_000);
-    expect(completed?.keepUntil?.getTime()).toBeLessThan(keepUntil.getTime());
+    expect(completed?.keepUntil?.getTime()).toBeLessThan(receivedAt + 30_000);
   });
 
   it("delivers an event reactor row to the registered Entity Inbox target", async () => {

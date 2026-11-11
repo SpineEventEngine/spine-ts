@@ -180,7 +180,6 @@ export class LocalProjectionInbox implements ProjectionInbox {
       whenReceived: Time.currentTime(),
       version: this.#takeVersion(),
       ...(input.signal === undefined ? {} : { signal: input.signal }),
-      ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),
     });
   }
 

@@ -28,6 +28,10 @@ after eligibility and optional `keepUntil` deduplication protection are checked.
 A completed deletion is not rolled back if a lease or deadline later changes.
 `keepUntil` is not a retention setting: Wave 12 adds no second retention
 configuration, timer, or scheduler.
+New Inbox rows have no deadline. The first delivered transition sets
+`keepUntil` five seconds after acknowledgement. Local storage writes the status
+and deadline together; remote delivery sends both fields through the existing
+Inbox service using the application clock.
 
 ## Corrected Implementation Order
 

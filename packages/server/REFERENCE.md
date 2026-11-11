@@ -1513,9 +1513,9 @@ the Entity transaction commit, and before acknowledgement. These checks stop a w
 after it detects that another worker has taken the shard. They do not make
 delivery and handler storage part of one distributed transaction.
 
-The first successful local acknowledgement stores `DELIVERED` and a deadline
-five seconds after that transition in one compare-and-set, replacing any deadline
-supplied at reception. A repeated acknowledgement returns the first stored
+New Inbox receipts have no `keepUntil`. The first successful local acknowledgement
+stores `DELIVERED` and a deadline five seconds after that transition in one
+compare-and-set. A repeated acknowledgement returns the first stored
 deadline. The worker passes that stored completion to delivery observers. This
 timing applies to Aggregate, Process Manager, and Projection delivery through
 the local Inbox.
