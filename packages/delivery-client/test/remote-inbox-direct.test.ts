@@ -58,7 +58,7 @@ describe("RemoteInbox direct behavior", () => {
       client.findOne.mockResolvedValueOnce(pending);
       const completed = await inbox.markDelivered(pending);
       if (completed === undefined) throw new Error("Expected remote completion.");
-      expect(completed?.keepUntil).toEqual(new Date(125_000));
+      expect(completed.keepUntil).toEqual(new Date(125_000));
       expect(client.writeOne.mock.calls[0]?.[0].keepUntil).toEqual(new Date(125_000));
 
       now = 130_000;
