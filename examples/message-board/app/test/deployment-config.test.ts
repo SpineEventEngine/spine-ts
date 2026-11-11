@@ -12,7 +12,11 @@
  * the License.
  */
 
-import { EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
+import {
+  EnvironmentType,
+  ServerEnvironment,
+  type ServerEnvironmentSettings,
+} from "@spine-event-engine/server";
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
 import type { Datastore } from "@google-cloud/datastore";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -59,6 +63,27 @@ describe("MessageBoard deployment configuration", () => {
       ),
     ).toThrow("DELIVERY_SERVER_URL");
   });
+
+  it("configures the managed replica shard count in Production", () => {
+    const use = vi.fn<(settings: ServerEnvironmentSettings) => void>();
+    const when = vi.spyOn(ServerEnvironment, "when").mockReturnValue({ use });
+    const config = {
+      host: "127.0.0.1",
+      port: 8080,
+      projectId: "message-board-test",
+      processCount: 3,
+      deliveryShardCount: 5,
+    };
+    try {
+      MessageBoardDeployment.configureManagedServer(config, client, completeEnvironment);
+
+      expect(when).toHaveBeenCalledWith(EnvironmentType.Production);
+      expect(use.mock.lastCall?.[0].deliveryStrategy?.shardCount).toBe(5);
+    } finally {
+      when.mockRestore();
+    }
+  });
+
   it("uses console logging in the local Datastore emulator and Cloud Logging elsewhere", () => {
     expect(
       MessageBoardDeployment.logger("message-board-test", {

@@ -21,6 +21,7 @@ import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import {
   EnvironmentType,
   ServerEnvironment,
+  UniformAcrossAllShards,
   type ServerEnvironmentDelivery,
 } from "@spine-event-engine/server";
 import type { StorageFactory } from "@spine-event-engine/storage";
@@ -155,7 +156,7 @@ interface DeploymentContract {
   ): void;
 
   /**
-   * Sets managed server storage and remote delivery.
+   * Sets managed server storage, remote delivery, and configured shards.
    * @param config Deployment settings.
    * @param client Datastore client.
    * @param environment Process environment.
@@ -324,7 +325,7 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
   },
 
   /**
-   * Configures managed server storage and remote delivery.
+   * Configures managed server storage, remote delivery, and configured shards.
    *
    * @param config Deployment settings.
    * @param client Datastore client.
@@ -347,6 +348,9 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
       ...(logger === undefined ? {} : { logger }),
       typeRegistry,
       delivery,
+      ...("deliveryShardCount" in config && typeof config.deliveryShardCount === "number"
+        ? { deliveryStrategy: UniformAcrossAllShards.forNumber(config.deliveryShardCount) }
+        : {}),
     });
     return { storageFactory, delivery };
   },

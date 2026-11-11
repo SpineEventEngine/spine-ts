@@ -91,6 +91,7 @@ describe("To-Do multi-process replica", () => {
       storageFactory: calls.storageFactory,
       typeRegistry: calls.typeRegistry,
       delivery: calls.delivery,
+      deliveryStrategy: calls.shardStrategy,
     });
     expect(calls.createContext).toHaveBeenCalledWith({
       storageFactory: calls.storageFactory,
