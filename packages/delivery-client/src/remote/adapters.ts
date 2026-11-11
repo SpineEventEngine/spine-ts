@@ -254,9 +254,10 @@ export class RemoteInbox implements DeliveryInbox {
    *
    * @param message Supplies the expected pending message snapshot.
    * @param options Bounds or cancels the remote read and delivered upsert.
-   * @returns The delivered row with its first stored deadline after a known
-   * completion, or `undefined` when the row is absent or its content differs.
-   * A write with an unknown outcome continues to raise its transport error.
+   * @returns The completed row written by this attempt, or a matching completed
+   * row already found with its stored deadline. Returns `undefined` when the row
+   * is absent or its content differs. A write with an unknown outcome raises its
+   * transport error.
    */
   async markDelivered(
     message: InboxMessage,
