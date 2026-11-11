@@ -13,6 +13,17 @@ workflow. `build-protocol/PROJECT_COMPLETION_PLAN.md` is the current completion
 sequence. Preserve all accepted DDD, Protobuf, public API, testing,
 documentation, logging, review, and worktree requirements in those files.
 
+## Human Questions
+
+Ask all questions to the human in a dedicated **Questions** section at the end
+of the agent's final reply for that turn. This applies to clarification,
+preferences, decisions, and approval requests. Never use popup-style question
+interfaces, including `request_user_input` and `request_user_input_async`, and
+never ask questions in progress commentary. Give enough context, concrete
+examples, options, and a recommendation for the human to make an informed
+decision. Follow the build protocol's blocking-question rules when an answer
+is required before work can continue.
+
 ## Domain-Correct Protobuf Fixtures
 
 Do not reuse a logically different Protobuf message merely because its fields
