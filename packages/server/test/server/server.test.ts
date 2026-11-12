@@ -18,7 +18,7 @@ import * as http2 from "node:http2";
 import * as http from "node:http";
 import * as net from "node:net";
 
-import { create, type Message } from "@bufbuild/protobuf";
+import { create, toBinary, type Message } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import {
   connectNodeAdapter,
@@ -1360,20 +1360,26 @@ describe("Server", () => {
     async (protocol, mode) => {
       let childActivations = 0;
       let childCancellations = 0;
-      const childHeaders = new Map<string, Headers>();
+      const childRequests = new Map<string, { headers: Headers; bytes: Uint8Array }>();
       const backend = http2.createServer(
         connectNodeAdapter({
           routes: (router) =>
             router.service(SubscriptionService, {
               subscribe: (topic, context) => {
-                childHeaders.set("Subscribe", new Headers(context.requestHeader));
+                childRequests.set("Subscribe", {
+                  headers: new Headers(context.requestHeader),
+                  bytes: toBinary(TopicSchema, topic),
+                });
                 return create(SubscriptionSchema, {
                   id: create(SubscriptionIdSchema, { value: `native-${protocol}` }),
                   topic,
                 });
               },
               activate: async function* (subscription, context) {
-                childHeaders.set("Activate", new Headers(context.requestHeader));
+                childRequests.set("Activate", {
+                  headers: new Headers(context.requestHeader),
+                  bytes: toBinary(SubscriptionSchema, subscription),
+                });
                 childActivations++;
                 yield create(SubscriptionUpdateSchema, {
                   subscription,
@@ -1393,8 +1399,11 @@ describe("Server", () => {
                     );
                 });
               },
-              cancel: (_subscription, context) => {
-                childHeaders.set("Cancel", new Headers(context.requestHeader));
+              cancel: (subscription, context) => {
+                childRequests.set("Cancel", {
+                  headers: new Headers(context.requestHeader),
+                  bytes: toBinary(SubscriptionSchema, subscription),
+                });
                 childCancellations++;
                 return create(ResponseSchema);
               },
@@ -1475,21 +1484,34 @@ describe("Server", () => {
         await iterator.return?.();
         await expect.poll(() => childCancellations).toBe(1);
         for (const method of ["Subscribe", "Activate", "Cancel"]) {
-          const received = childHeaders.get(method);
+          const received = childRequests.get(method);
           expect(received).toBeDefined();
           if (received === undefined) continue;
           if (mode === "trusted-network") {
-            expect(received.has("spine-internal-reader-proof")).toBe(false);
+            expect(received.headers.has("spine-internal-reader-proof")).toBe(false);
             expect(
               ReaderForwarding.decode(
-                received,
+                received.headers,
                 "spine.client.SubscriptionService",
                 method,
                 4_194_304,
               ).principal?.id,
             ).toBe("ada");
           } else {
-            expect(received.get("spine-internal-reader-proof")).toBe("path-probe-peer-proof");
+            expect(received.headers.get("spine-internal-reader-proof")).toBe(
+              "path-probe-peer-proof",
+            );
+            await expect(
+              ReaderForwarding.open(
+                received.headers,
+                "spine.client.SubscriptionService",
+                method,
+                received.bytes,
+                { verify: (_bytes, proof) => proof === "path-probe-peer-proof" },
+                {},
+                4_194_304,
+              ),
+            ).resolves.toMatchObject({ principal: { id: "ada" } });
           }
         }
         expect(
