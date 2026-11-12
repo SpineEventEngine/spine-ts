@@ -120,6 +120,11 @@ handler-produced domain Commands and Events. A failed attempt is reported withou
 rerunning successful source handling. Internal diagnostic publication remains
 best effort.
 
+New Inbox rows have no completion deadline. After a recipient is handled, the
+first acknowledgement marks its row delivered and keeps that row for five
+seconds as duplicate evidence. A pending row does not expire during a slow
+handler. Cleanup can remove a delivered row once its deadline has passed.
+
 Handler return declarations can use native unions for one of several results,
 or fixed tuples for several ordered results. For example,
 `CreateAccessGrant | ExtendAccessGrant` selects one Command, while

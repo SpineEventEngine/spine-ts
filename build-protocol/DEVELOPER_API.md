@@ -447,17 +447,18 @@ handoffs: process-manager command assignees with
 live projection event subscribers with `UPDATE_SUBSCRIBER`. Process-manager
 event and projection subscriber rows store the original `Event` envelope as the
 signal payload, the original event ID as `signalId`, the target state type URL
-plus routed entity ID as `inboxId`, `TO_DELIVER` status, `ShardIndex.single()`,
-and optional row retention. The context drains the local
+plus routed entity ID as `inboxId`, `TO_DELIVER` status, and `ShardIndex.single()`.
+The pending row has no completion deadline. The context drains the local
 shard immediately and replays only the exact row target before running the
 process-manager or projection transaction and `Stand` update. Before handler
 code runs, replay validates the row label, pending `TO_DELIVER` status, tenant,
 payload/schema, target type URL, and routed target ID.
-At the lower-level Inbox boundary, `keepUntil` is optional: a delivered row
-suppresses a matching duplicate until that deadline, or indefinitely when it is
-absent. Built-context repository handoffs deliberately set `keepUntil` to 30
-seconds after `whenReceived`; this is their retention choice, not a separate
-dedup authority or a universal Inbox rule.
+At the lower-level Inbox boundary, the first acknowledgement stores a
+`keepUntil` deadline five seconds after delivery. Local storage persists the
+status and deadline in one conditional update. Remote delivery sends the same
+fields through the existing Inbox write operation using the application clock.
+A matching repeated acknowledgement returns the first stored deadline. Cleanup
+can remove a delivered row at or after that deadline.
 
 Built contexts replay through validated framework endpoints. A public delivery
 callback is an integration boundary; it does not bypass row validation or

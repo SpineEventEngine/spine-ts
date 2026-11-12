@@ -52,7 +52,7 @@ export interface DeliveryInbox {
   readonly sessionKind: DeliveryWorkSession["kind"];
 
   /**
-   * Persists one incoming message before any worker observes it.
+   * Persists one incoming message without a completion deadline before any worker observes it.
    *
    * @param input Describes the message to make durable.
    * @param options Propagates cancellation and a delivery deadline.
@@ -85,7 +85,7 @@ export interface DeliveryInbox {
   ): Promise<InboxMessage | undefined>;
 
   /**
-   * Marks one exact pending Inbox row delivered.
+   * Marks one exact pending Inbox row delivered with a five-second deadline.
    *
    * @param message Supplies the expected pending row snapshot.
    * @param options Propagates cancellation and a delivery deadline.

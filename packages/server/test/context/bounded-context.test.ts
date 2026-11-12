@@ -1453,12 +1453,13 @@ describe("BoundedContext assembly", () => {
             ).every((state) => state !== undefined),
           "fresh multi-shard descriptor recovery",
         );
+        await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
         for (const row of rows) {
-          await expect(
-            serverEnvironmentAccess
-              .coreDelivery(ServerEnvironment.instance())
-              .inbox.readMessage(row.id),
-          ).resolves.toBeUndefined();
+          const completed = await serverEnvironmentAccess
+            .coreDelivery(ServerEnvironment.instance())
+            .inbox.readMessage(row.id);
+          expect(completed?.status).toBe("DELIVERED");
+          expect(completed?.keepUntil).toBeInstanceOf(Date);
         }
       }
     } finally {

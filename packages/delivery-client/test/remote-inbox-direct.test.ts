@@ -16,6 +16,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ShardIndex } from "@spine-event-engine/server";
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { Time } from "@spine-event-engine/core/time";
 
 import { DeliveryPagingError, DeliveryProtocolError } from "../src/client/types.js";
 import type { DeliveryClient } from "../src/client/client.js";
@@ -34,6 +35,44 @@ class Client {
 }
 
 describe("RemoteInbox direct behavior", () => {
+  it("receives a pending message without a supplied completion deadline", async () => {
+    const client = new Client();
+    const inbox = new RemoteInbox(client as never);
+    const pending = { ...domainMessage("new"), keepUntil: new Date(30_000) };
+
+    const received = await inbox.receive(pending);
+
+    expect(received.message.keepUntil).toBeUndefined();
+    expect(client.writeOne.mock.calls[0]?.[0].keepUntil).toBeUndefined();
+  });
+
+  it("sets the remote completion deadline from the application clock and preserves it on retry", async () => {
+    const client = new Client();
+    const inbox = new RemoteInbox(client as never);
+    const pending = domainMessage("completed");
+    let now = 120_000;
+    const previous = Time.setProvider({
+      currentTime: () => timestampFromDate(new Date(now)),
+    });
+    try {
+      client.findOne.mockResolvedValueOnce(pending);
+      const completed = await inbox.markDelivered(pending);
+      if (completed === undefined) throw new Error("Expected remote completion.");
+      expect(completed.keepUntil).toEqual(new Date(125_000));
+      expect(client.writeOne.mock.calls[0]?.[0].keepUntil).toEqual(new Date(125_000));
+
+      now = 130_000;
+      client.findOne.mockResolvedValueOnce(completed);
+      expect(await inbox.markDelivered(pending)).toEqual(completed);
+      expect(client.writeOne).toHaveBeenCalledTimes(1);
+
+      client.findOne.mockResolvedValueOnce({ ...completed, signalId: "other" });
+      await expect(inbox.markDelivered(pending)).resolves.toBeUndefined();
+    } finally {
+      Time.setProvider(previous);
+    }
+  });
+
   it("returns complete tied-time pages without requiring another timestamp page", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);

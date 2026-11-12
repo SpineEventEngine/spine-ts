@@ -631,6 +631,32 @@ describe("Delivery direct worker", () => {
     expect(acknowledged).toEqual([firstWrite.message.id.value]);
   });
 
+  it("reports the authoritative completed row from acknowledgement", async () => {
+    const shard = ShardIndex.single();
+    const pending = message("completed", "target", shard);
+    const rows = [pending];
+    const completed = {
+      ...pending,
+      status: "DELIVERED" as const,
+      keepUntil: new Date(25_000),
+    };
+    const observed: InboxMessage[] = [];
+    const delivery = createDelivery({
+      rows,
+      mark: async (candidate) => {
+        remove(rows, candidate);
+        return completed;
+      },
+    });
+
+    await delivery.drain(shard, {
+      onMessage: () => undefined,
+      onDelivered: (row) => observed.push(row),
+    });
+
+    expect(observed).toEqual([completed]);
+  });
+
   it("reports exact acknowledgement through the callback shorthand", async () => {
     const shard = ShardIndex.single();
     const target = message("target", "target", shard);

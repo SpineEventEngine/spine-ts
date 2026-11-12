@@ -20,6 +20,7 @@ import { Delivery } from "../delivery/delivery.js";
 import { receptionObservation } from "../delivery/reception-observation.js";
 import type { InboxMessage, InboxWriteResult } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
+import { UniformAcrossAllShards, type DeliveryStrategy } from "../delivery/delivery-builder.js";
 import type { ProjectionInbox, ProjectionInboxTarget } from "../repository/repository.js";
 import {
   type DeliveryEndpoint,
@@ -45,6 +46,11 @@ export class LocalProjectionInbox implements ProjectionInbox {
 
   readonly #onAdmit: (tenantId?: TenantId) => Promise<void>;
 
+  /**
+   * Selects a shard for each routed Projection target.
+   */
+  readonly #strategy: DeliveryStrategy;
+
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
 
   readonly #inFlightMessageIds = new Set<string>();
@@ -55,19 +61,22 @@ export class LocalProjectionInbox implements ProjectionInbox {
 
   /**
    * Creates a local projection inbox.
-   * @param contextName Names the bounded context that owns this inbox.
+   * @param contextName Names the Bounded Context using this inbox.
    * @param readiness Coordinates delivery readiness after persistence.
    * @param onAdmit Checks current tenant membership before persistence or delivery.
+   * @param strategy Selects a shard for each routed Projection target.
    */
   constructor(
     contextName: string,
     readiness: DeliveryReadiness | OnDeliveryReady = new DeliveryReadiness(),
     onAdmit: (tenantId?: TenantId) => Promise<void> = () => Promise.resolve(),
+    strategy: DeliveryStrategy = UniformAcrossAllShards.singleShard(),
   ) {
     this.#contextName = contextName;
     this.#readiness =
       readiness instanceof DeliveryReadiness ? readiness : new DeliveryReadiness(readiness);
     this.#onAdmit = onAdmit;
+    this.#strategy = strategy;
   }
 
   /**
@@ -78,13 +87,15 @@ export class LocalProjectionInbox implements ProjectionInbox {
     this.#targets.set(target.targetTypeUrl, target);
     this.#endpoints.set(
       target.targetTypeUrl,
-      Object.freeze([
-        InboxHandoff.endpoint({
-          label: projectionLabels[0],
-          inboxId: { targetTypeUrl: target.targetTypeUrl },
-          shard: ShardIndex.single(),
-        }),
-      ]),
+      Object.freeze(
+        Array.from({ length: this.#strategy.shardCount }, (_, index) =>
+          InboxHandoff.endpoint({
+            label: projectionLabels[0],
+            inboxId: { targetTypeUrl: target.targetTypeUrl },
+            shard: new ShardIndex(index, this.#strategy.shardCount),
+          }),
+        ),
+      ),
     );
   }
 
@@ -118,11 +129,12 @@ export class LocalProjectionInbox implements ProjectionInbox {
     input: ProjectionInput,
     deliveryTenantId?: TenantId,
   ): Promise<InboxMessage> {
+    const routedInput = this.#route(input);
     const routed = this.#readiness.route(delivery);
     return await InboxHandoff.coordinate({
       handoffs: this.#inFlightHandoffs,
-      key: InboxHandoff.key(input, deliveryTenantId),
-      onHandoff: () => this.#receiveAndSchedule(routed, input, deliveryTenantId),
+      key: InboxHandoff.key(routedInput, deliveryTenantId),
+      onHandoff: () => this.#receiveAndSchedule(routed, routedInput, deliveryTenantId),
     });
   }
 
@@ -136,7 +148,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
    */
   async #receiveAndSchedule(
     delivery: Delivery,
-    input: ProjectionInput,
+    input: RoutedProjectionInput,
     deliveryTenantId?: TenantId,
   ): Promise<InboxMessage> {
     await this.#onAdmit(deliveryTenantId);
@@ -151,7 +163,14 @@ export class LocalProjectionInbox implements ProjectionInbox {
     return written.message;
   }
 
-  #writeInboxRow(delivery: Delivery, input: ProjectionInput): Promise<InboxWriteResult> {
+  /**
+   * Persists a routed Projection row with its selected shard.
+   *
+   * @param delivery Delivery containing the Inbox storage.
+   * @param input Projection input with its selected shard.
+   * @returns The stored Inbox receipt.
+   */
+  #writeInboxRow(delivery: Delivery, input: RoutedProjectionInput): Promise<InboxWriteResult> {
     return delivery.inbox.receive({
       inboxId: input.inboxId,
       signalId: input.signalId,
@@ -161,7 +180,6 @@ export class LocalProjectionInbox implements ProjectionInbox {
       whenReceived: Time.currentTime(),
       version: this.#takeVersion(),
       ...(input.signal === undefined ? {} : { signal: input.signal }),
-      ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),
     });
   }
 
@@ -231,6 +249,25 @@ export class LocalProjectionInbox implements ProjectionInbox {
     return this.#nextVersion;
   }
 
+  /**
+   * Selects a shard from the routed Projection ID and state type.
+   *
+   * @param input Projection update before shard selection.
+   * @returns The update with its configured shard.
+   */
+  #route(input: ProjectionInput): RoutedProjectionInput {
+    return Object.freeze({
+      ...input,
+      shard: this.#strategy.shardFor(input.inboxId.targetId, input.inboxId.targetTypeUrl),
+    });
+  }
+
+  /**
+   * Validates a stored row against the current shard policy before dispatch.
+   *
+   * @param message Stored Projection row.
+   * @param deliveryTenantId Tenant selected for delivery when present.
+   */
   async #deliver(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void> {
     receptionObservation.markManaged();
     LocalProjectionInbox.#assert(message);
@@ -242,6 +279,17 @@ export class LocalProjectionInbox implements ProjectionInbox {
       throw new Error(
         `BoundedContext delivery has no projection subscriber target for "${message.inboxId.targetTypeUrl}".`,
       );
+    }
+
+    const expectedShard = this.#strategy.shardFor(
+      message.inboxId.targetId,
+      message.inboxId.targetTypeUrl,
+    );
+    if (
+      message.shard.index !== expectedShard.index ||
+      message.shard.ofTotal !== expectedShard.ofTotal
+    ) {
+      throw new Error("Projection Inbox delivery stored shard does not match the routed target.");
     }
 
     await target.deliver(message, deliveryTenantId);
@@ -260,4 +308,10 @@ export class LocalProjectionInbox implements ProjectionInbox {
 }
 
 type ProjectionInput = Parameters<ProjectionInbox["receive"]>[1];
+
+/**
+ * Projection update after the configured strategy has selected its shard.
+ */
+type RoutedProjectionInput = ProjectionInput & { readonly shard: ShardIndex };
+
 type ProjectionMessage = Parameters<ProjectionInboxTarget["deliver"]>[0];

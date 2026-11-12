@@ -91,7 +91,7 @@ export const deliveryControls: DeliveryControls = Object.freeze({
 });
 
 /**
- * Assigns inbox targets to durable delivery shards.
+ * Assigns Aggregate, Process Manager, and Projection receivers to delivery shards.
  */
 export interface DeliveryStrategy {
   // prettier-ignore
@@ -102,13 +102,14 @@ export interface DeliveryStrategy {
   readonly shardCount: number;
 
   /**
-   * Returns the shard for one canonical packed Entity ID and target type.
+   * Returns the shard for one routed receiver ID and its Entity state type.
    *
    * The supplied `Any` contains the typed ID's type URL and bytes. Treat it as
-   * immutable typed identity, not as a display string.
+   * immutable typed identity, not as a display string. `targetType` is the
+   * receiver state message's type URL, rather than the incoming signal type.
    *
-   * @param targetId The target identity.
-   * @param targetType The target type URL.
+   * @param targetId The routed receiver identity.
+   * @param targetType The receiver Entity state type URL.
    * @returns The durable shard for the target.
    */
   shardFor(targetId: Any, targetType: string): ShardIndex;
@@ -160,8 +161,8 @@ export class UniformAcrossAllShards implements DeliveryStrategy {
   /**
    * Determines a stable shard from a target identity.
    *
-   * @param targetId The target identity.
-   * @param targetType The target type URL.
+   * @param targetId The routed receiver identity.
+   * @param targetType The receiver Entity state type URL.
    * @returns The stable shard for the target.
    */
   shardFor(targetId: Any, targetType: string): ShardIndex {

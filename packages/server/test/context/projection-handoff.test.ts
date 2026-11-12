@@ -17,19 +17,145 @@ import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, Identifiers, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import { CommandSchema, EventContextSchema, EventSchema } from "@spine-event-engine/proto";
 import { ProjectCreatedSchema } from "../../test-fixtures/generated/entity-metadata/project_events_pb.js";
-import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import {
+  ProjectOverviewStateSchema,
+  PublishedProjectStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
+import { Inbox } from "../../src/delivery/inbox.js";
+import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import type { ProjectionInbox, ProjectionInboxTarget } from "../../src/repository/repository.js";
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { LocalProjectionInbox } from "../../src/context/projection-handoff.js";
+import type { DeliveryStrategy } from "../../src/delivery/delivery-builder.js";
 import { tenant } from "../tenant-fixture.js";
 
 describe("LocalProjectionInbox", () => {
+  it("stores and advertises a routed Projection on its configured shard", async () => {
+    const delivery = new Delivery({
+      context: { name: "Projects", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = TypeUrls.derive(ProjectOverviewStateSchema);
+    const targetId = Identifiers.pack("string", "project-routed");
+    const strategy: DeliveryStrategy = {
+      shardCount: 3,
+      shardFor(id, type) {
+        expect(id).toEqual(targetId);
+        expect(type).toBe(targetTypeUrl);
+        return new ShardIndex(2, 3);
+      },
+    };
+    const ready: unknown[] = [];
+    const inbox = new LocalProjectionInbox(
+      "Projects",
+      (scope) => ready.push(scope),
+      undefined,
+      strategy,
+    );
+    inbox.register({ targetTypeUrl, deliver: () => Promise.resolve() });
+
+    const message = await inbox.receive(delivery, {
+      inboxId: { targetId, targetTypeUrl },
+      signalId: "project-routed-event",
+      signal: eventSignal(),
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+    });
+
+    expect(message.shard).toEqual(new ShardIndex(2, 3));
+    expect(inbox.endpoints()).toEqual(
+      [0, 1, 2].map((index) => ({
+        label: "UPDATE_SUBSCRIBER",
+        targetTypeUrl,
+        shard: { index, ofTotal: 3 },
+      })),
+    );
+    expect(ready).toEqual([
+      { label: "UPDATE_SUBSCRIBER", targetTypeUrl, shard: { index: 2, ofTotal: 3 } },
+    ]);
+  });
+
+  it("rejects a saved Projection row whose shard differs from its routed target", async () => {
+    const targetTypeUrl = TypeUrls.derive(ProjectOverviewStateSchema);
+    const targetId = Identifiers.pack("string", "project-mismatch");
+    const strategy: DeliveryStrategy = {
+      shardCount: 3,
+      shardFor: () => new ShardIndex(2, 3),
+    };
+    const deliverTarget = vi.fn(() => Promise.resolve());
+    const inbox = new LocalProjectionInbox("Projects", undefined, undefined, strategy);
+    inbox.register({ targetTypeUrl, deliver: deliverTarget });
+    const saved: InboxMessage = {
+      id: { value: "row-mismatch", shard: new ShardIndex(1, 3) },
+      inboxId: { targetId, targetTypeUrl },
+      signalId: "project-mismatch-event",
+      signal: eventSignal(),
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard: new ShardIndex(1, 3),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
+      version: 1n,
+    };
+
+    for (const shard of [new ShardIndex(1, 3), new ShardIndex(2, 4)]) {
+      await expect(inbox.deliver({ ...saved, id: { ...saved.id, shard }, shard })).rejects.toThrow(
+        "Projection Inbox delivery stored shard does not match the routed target.",
+      );
+    }
+    expect(deliverTarget).not.toHaveBeenCalled();
+
+    const matchingShard = new ShardIndex(2, 3);
+    await inbox.deliver({
+      ...saved,
+      id: { ...saved.id, shard: matchingShard },
+      shard: matchingShard,
+    });
+    expect(deliverTarget).toHaveBeenCalledOnce();
+  });
+
+  it("selects different configured shards for two Projection state types", async () => {
+    const delivery = new Delivery({
+      context: { name: "Projects", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const overviewType = TypeUrls.derive(ProjectOverviewStateSchema);
+    const publishedType = TypeUrls.derive(PublishedProjectStateSchema);
+    const strategy: DeliveryStrategy = {
+      shardCount: 8,
+      shardFor(_id, type) {
+        return new ShardIndex(type === overviewType ? 6 : 7, 8);
+      },
+    };
+    const inbox = new LocalProjectionInbox("Projects", undefined, undefined, strategy);
+    inbox.register({ targetTypeUrl: overviewType, deliver: () => Promise.resolve() });
+    inbox.register({ targetTypeUrl: publishedType, deliver: () => Promise.resolve() });
+    const event = SignalEnvelopes.event({
+      context: create(EventContextSchema),
+      schema: ProjectCreatedSchema,
+      message: create(ProjectCreatedSchema, { id: "project-types", name: "Types" }),
+    });
+
+    const rows = await Promise.all(
+      [overviewType, publishedType].map((targetTypeUrl) =>
+        inbox.receive(delivery, {
+          inboxId: { targetId: Identifiers.pack("string", "project-types"), targetTypeUrl },
+          signalId: event.id?.value ?? "",
+          signal: AnyPacker.pack(EventSchema, event),
+          label: "UPDATE_SUBSCRIBER",
+          status: "TO_DELIVER",
+        }),
+      ),
+    );
+
+    expect(rows.map((row) => row.shard)).toEqual([new ShardIndex(6, 8), new ShardIndex(7, 8)]);
+  });
+
   it("checks a multitenant descriptor tenant before inbox persistence", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -69,6 +195,7 @@ describe("LocalProjectionInbox", () => {
     const saved: InboxMessage = {
       ...projectionInput(targetTypeUrl, "saved"),
       id: { value: "row-saved", shard: ShardIndex.single() },
+      shard: ShardIndex.single(),
       whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
       version: 1n,
     };
@@ -86,7 +213,11 @@ describe("LocalProjectionInbox", () => {
     });
     const wake = vi.fn();
     const readiness = new DeliveryReadiness(undefined, delivery, wake, true);
-    const inbox = new LocalProjectionInbox("ExternalProjects", readiness);
+    const strategy: DeliveryStrategy = {
+      shardCount: 3,
+      shardFor: () => new ShardIndex(2, 3),
+    };
+    const inbox = new LocalProjectionInbox("ExternalProjects", readiness, undefined, strategy);
     const deliverTarget = vi.fn(() => Promise.resolve());
     const targetTypeUrl = TypeUrls.derive(ProjectOverviewStateSchema);
     inbox.register({ targetTypeUrl, deliver: deliverTarget });
@@ -102,14 +233,13 @@ describe("LocalProjectionInbox", () => {
       signal: AnyPacker.pack(EventSchema, event),
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
-      shard: ShardIndex.single(),
     });
 
     expect(message.status).toBe("TO_DELIVER");
-    expect(wake).toHaveBeenCalledExactlyOnceWith(ShardIndex.single());
+    expect(wake).toHaveBeenCalledExactlyOnceWith(new ShardIndex(2, 3));
     expect(deliverTarget).not.toHaveBeenCalled();
     await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+      delivery.inbox.read(new ShardIndex(2, 3), { statuses: ["TO_DELIVER"] }),
     ).resolves.toHaveLength(1);
   });
 
@@ -143,7 +273,6 @@ describe("LocalProjectionInbox", () => {
         signal: AnyPacker.pack(EventSchema, event),
         label: "UPDATE_SUBSCRIBER",
         status: "TO_DELIVER",
-        shard: ShardIndex.single(),
       });
       await entered.promise;
 
@@ -186,7 +315,6 @@ describe("LocalProjectionInbox", () => {
         signal: eventSignal(),
         label: "UPDATE_SUBSCRIBER",
         status: "TO_DELIVER",
-        shard: ShardIndex.single(),
       },
       tenant("tenant-a"),
     );
@@ -227,7 +355,6 @@ describe("LocalProjectionInbox", () => {
       signal: eventSignal(),
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
-      shard: ShardIndex.single(),
     });
 
     expect(accepted.signalId).toBe("event-ready");
@@ -244,10 +371,19 @@ describe("LocalProjectionInbox", () => {
     expectTypeOf<DeliveryMessage["status"]>().toEqualTypeOf<"TO_DELIVER">();
   });
 
-  it("delivers and cleans eligible durable subscriber rows through a delivery loop endpoint", async () => {
+  it("retains a delivered subscriber until cleanup reaches its deadline", async () => {
+    let now = new Date(10_000);
+    const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new InMemoryStorageFactory(),
+      storageFactory,
+      inbox: new Inbox(
+        new InboxStorage({
+          context: { name: "Tasks", multitenant: false },
+          storageFactory,
+          now: () => now,
+        }),
+      ),
     });
     const inbox = new LocalProjectionInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.Projection";
@@ -290,9 +426,20 @@ describe("LocalProjectionInbox", () => {
       delivered: 1,
       failed: 0,
     });
+    const completed = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
+    expect(completed).toMatchObject([{ signalId: "event-1", status: "DELIVERED" }]);
+    expect(completed[0]?.keepUntil).toEqual(new Date(15_000));
+
+    now = new Date(15_000);
+    await new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      onMessage: (message) => inbox.deliver(message),
+    }).run();
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
     ).resolves.toEqual([]);
+    expect(seen).toHaveLength(1);
   });
 
   it("delivers an UPDATE_SUBSCRIBER event row and clears pending work", async () => {
@@ -319,7 +466,6 @@ describe("LocalProjectionInbox", () => {
       signal,
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
-      shard: ShardIndex.single(),
     });
 
     await delivery.whenIdle();
@@ -398,7 +544,6 @@ describe("LocalProjectionInbox", () => {
       signal: eventSignal(),
       label: "UPDATE_SUBSCRIBER" as const,
       status: "TO_DELIVER" as const,
-      shard,
     };
 
     inbox.register({
@@ -452,7 +597,6 @@ describe("LocalProjectionInbox", () => {
       signal: eventSignal(),
       label: "UPDATE_SUBSCRIBER" as const,
       status: "TO_DELIVER" as const,
-      shard,
     };
 
     inbox.register({
@@ -507,7 +651,6 @@ describe("LocalProjectionInbox", () => {
           signal: commandSignal(),
           label: "HANDLE_COMMAND",
           status: "TO_DELIVER",
-          shard: ShardIndex.single(),
         }),
       ),
     ).resolves.toMatchObject({ signalId: "event-2" });
@@ -539,7 +682,6 @@ describe("LocalProjectionInbox", () => {
           signal: eventSignal(),
           label: "UPDATE_SUBSCRIBER",
           status: "SCHEDULED",
-          shard: ShardIndex.single(),
         }),
       ),
     ).resolves.toMatchObject({ signalId: "event-scheduled", status: "SCHEDULED" });
@@ -571,7 +713,6 @@ describe("LocalProjectionInbox", () => {
         signal: eventSignal(),
         label: "UPDATE_SUBSCRIBER",
         status: "TO_DELIVER",
-        shard: ShardIndex.single(),
       }),
     ).resolves.toMatchObject({ signalId: "event-missing" });
     await expect(
@@ -580,23 +721,31 @@ describe("LocalProjectionInbox", () => {
     expect(ready).toEqual([]);
   });
 
-  it("emits no readiness for a persisted shard outside the configured endpoint", async () => {
+  it("selects the configured shard despite a caller-supplied shard", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
     const ready: unknown[] = [];
     const targetTypeUrl = "type.example.dev/Tasks.Projection";
-    const shard = new ShardIndex(0, 2);
-    const deliveryFailure = new Error("non-configured shard should preserve drain failure");
-    const inbox = new LocalProjectionInbox("Tasks", (scope) => ready.push(scope));
+    const strategy: DeliveryStrategy = {
+      shardCount: 2,
+      shardFor: () => new ShardIndex(1, 2),
+    };
+    const inbox = new LocalProjectionInbox(
+      "Tasks",
+      (scope) => ready.push(scope),
+      undefined,
+      strategy,
+    );
     inbox.register({
       targetTypeUrl,
-      deliver: () => Promise.reject(deliveryFailure),
+      deliver: () => Promise.resolve(),
     });
 
-    await expect(
-      inbox.receive(delivery, {
+    const accepted = await inbox.receive(
+      delivery,
+      asRuntimeInvalidProjectionInput({
         inboxId: {
           targetId: Identifiers.pack("string", "projection-shard-mismatch"),
           targetTypeUrl,
@@ -605,13 +754,19 @@ describe("LocalProjectionInbox", () => {
         signal: eventSignal(),
         label: "UPDATE_SUBSCRIBER",
         status: "TO_DELIVER",
-        shard,
+        shard: new ShardIndex(0, 2),
       }),
-    ).resolves.toMatchObject({ signalId: "event-shard-mismatch" });
-    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
-      { signalId: "event-shard-mismatch", status: "TO_DELIVER" },
+    );
+
+    expect(accepted.shard).toEqual(new ShardIndex(1, 2));
+    expect(ready).toEqual([
+      {
+        label: "UPDATE_SUBSCRIBER",
+        targetTypeUrl,
+        shard: { index: 1, ofTotal: 2 },
+      },
     ]);
-    expect(ready).toEqual([]);
+    await expect(delivery.inbox.read(new ShardIndex(0, 2))).resolves.toEqual([]);
   });
 
   it("delivers only the received row when unrelated backlog is pending first", async () => {
@@ -665,7 +820,6 @@ describe("LocalProjectionInbox", () => {
       signal: eventSignal(),
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
-      shard,
     });
 
     await delivery.whenIdle();
@@ -680,7 +834,9 @@ describe("LocalProjectionInbox", () => {
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
     });
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+    const completed = await delivery.inbox.read(shard, { statuses: ["DELIVERED"] });
+    expect(completed).toMatchObject([{ signalId: "event-1", status: "DELIVERED" }]);
+    expect(completed[0]?.keepUntil).toBeInstanceOf(Date);
   });
 });
 
@@ -691,7 +847,6 @@ function projectionInput(targetTypeUrl: string, targetId: string) {
     signal: eventSignal(),
     label: "UPDATE_SUBSCRIBER" as const,
     status: "TO_DELIVER" as const,
-    shard: ShardIndex.single(),
   };
 }
 

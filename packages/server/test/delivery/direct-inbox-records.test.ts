@@ -213,6 +213,69 @@ describe("direct InboxMessage storage", () => {
     await expect(storage.markDelivered(pending)).resolves.toMatchObject({ status: "DELIVERED" });
   });
 
+  it("starts retention at the first durable acknowledgement and keeps that deadline on retries", async () => {
+    let now = new Date(120_000);
+    const factory = new InMemoryStorageFactory();
+    const storage = new InboxStorage({
+      context: { name: "CompletionRetention", multitenant: false },
+      storageFactory: factory,
+      now: () => now,
+    });
+    const pending = createMessage("delayed", "signal", 1n);
+    await storage.write(pending);
+    expect((await storage.readMessage(pending.id))?.keepUntil).toBeUndefined();
+
+    now = new Date(240_000);
+    expect((await storage.readMessage(pending.id))?.status).toBe("TO_DELIVER");
+    expect((await storage.readMessage(pending.id))?.keepUntil).toBeUndefined();
+    await expect(storage.removeDelivered(pending)).resolves.toBe(false);
+
+    const first = await storage.markDelivered(pending);
+    expect(first?.keepUntil).toEqual(new Date(245_000));
+    now = new Date(250_000);
+    expect(await storage.markDelivered(pending)).toEqual(first);
+    expect(await storage.readMessage(pending.id)).toEqual(first);
+  });
+
+  it("starts separate deadlines when one Event reaches two recipients", async () => {
+    let now = new Date(10_000);
+    const storage = new InboxStorage({
+      context: { name: "SeparateRecipientRetention", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => now,
+    });
+    const first = createMessage("event-first", "shared-event", 1n, undefined, "list-first");
+    const second = createMessage("event-second", "shared-event", 2n, undefined, "list-second");
+    await storage.write(first);
+    await storage.write(second);
+
+    const firstCompletion = await storage.markDelivered(first);
+    now = new Date(12_000);
+    const secondCompletion = await storage.markDelivered(second);
+
+    expect(firstCompletion?.keepUntil).toEqual(new Date(15_000));
+    expect(secondCompletion?.keepUntil).toEqual(new Date(17_000));
+  });
+
+  it("converges concurrent acknowledgements on one stored completion deadline", async () => {
+    let clockReads = 0;
+    const storage = new InboxStorage({
+      context: { name: "ConcurrentCompletionRetention", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => new Date(20_000 + clockReads++),
+    });
+    const pending = createMessage("concurrent", "signal", 1n);
+    await storage.write(pending);
+
+    const results = await Promise.all([
+      storage.markDelivered(pending),
+      storage.markDelivered(pending),
+    ]);
+    expect(results[0]).toEqual(results[1]);
+    expect(results[0]?.keepUntil?.getTime()).toBeGreaterThanOrEqual(25_000);
+    expect(await storage.readMessage(pending.id)).toEqual(results[0]);
+  });
+
   it("rereads only the exact delivered successor after a contested completion CAS", async () => {
     for (const outcome of ["delivered", "different"] as const) {
       const factory = new InMemoryStorageFactory();

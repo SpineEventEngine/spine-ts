@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
-import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, Identifiers, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   AdminService,
   InboxService,
@@ -42,10 +42,9 @@ import {
 import { CreateProjectSchema } from "@spine-event-engine/server-test-fixtures/entity/project_commands_pb.js";
 import { ProjectOverviewStateSchema } from "@spine-event-engine/server-test-fixtures/entity/project_states_pb.js";
 import { DeliveryAssembly } from "@spine-event-engine/delivery-server/testing";
-import { SignalMetadata } from "@spine-event-engine/server";
+import { SignalMetadata, UniformAcrossAllShards } from "@spine-event-engine/server";
 import { afterEach, expect, it } from "vitest";
 import { RemoteDelivery } from "../src/index.js";
-import { ShardIndex } from "@spine-event-engine/server";
 
 const childPath = fileURLToPath(
   new URL("../test-fixtures/managed-external-events-application.mjs", import.meta.url),
@@ -145,8 +144,12 @@ it(
 
     const holder = RemoteDelivery.connectTo({ endpoint: delivery.baseUrl });
     await holder.open();
+    const shard = UniformAcrossAllShards.forNumber(2).shardFor(
+      Identifiers.pack("string", "t0210-third-party"),
+      TypeUrls.derive(ProjectOverviewStateSchema),
+    );
     const held = await holder.workRegistry.pickUp(
-      ShardIndex.single(),
+      shard,
       create(WorkerIdSchema, { nodeId: { value: "test-process" }, value: "third-party-held" }),
     );
     if (held === undefined) throw new Error("Expected the remote shard to be available.");
@@ -154,8 +157,9 @@ it(
       const completed = fileAppears(directory, "third-party-complete");
       await writeFile(join(directory, "third-party-request"), "");
       await bounded(completed, "remote ThirdParty reception completion");
-      const pending = await holder.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] });
+      const pending = await holder.inbox.read(shard, { statuses: ["TO_DELIVER"] });
       expect(pending).toHaveLength(1);
+      expect(pending[0]?.shard).toEqual(shard);
       expect(typeof pending[0]?.signalId).toBe("string");
     } finally {
       await holder.workRegistry.release(held);

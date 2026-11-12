@@ -1401,6 +1401,7 @@ export class BoundedContext {
       this.#snapshot.name.value,
       deliveryReadiness,
       onAdmit,
+      this.#environment.delivery.strategy,
     );
     deliveryReadiness.configureDirect((message, tenantId) =>
       message.label === "UPDATE_SUBSCRIBER"

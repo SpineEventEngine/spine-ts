@@ -841,7 +841,7 @@ describe("LocalEntityInbox", () => {
     expect(ready).toHaveLength(2);
     await expect(delivery.whenIdle()).rejects.toBe(drainFailure);
   });
-  it("delivers and cleans eligible durable command and event rows through a delivery loop endpoint", async () => {
+  it("delivers and retains durable command and event rows through a delivery loop endpoint", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -898,7 +898,7 @@ describe("LocalEntityInbox", () => {
     ).resolves.toEqual([]);
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toEqual([]);
+    ).resolves.toHaveLength(2);
   });
 
   it("acknowledges a recovered command before its same-shard event recipient completes", async () => {
@@ -965,7 +965,6 @@ describe("LocalEntityInbox", () => {
       shard,
       whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
       version: 1n,
-      keepUntil: new Date("2100-01-01T00:00:00.000Z"),
     });
 
     const loop = new DeliveryLoop({
@@ -1072,10 +1071,10 @@ describe("LocalEntityInbox", () => {
     await delivery.whenIdle();
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toEqual([]);
+    ).resolves.toHaveLength(1);
   });
 
-  it("completes local handoff while cleanup removes exact unprotected rows", async () => {
+  it("completes local handoff while retaining exact acknowledged rows", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -1105,8 +1104,12 @@ describe("LocalEntityInbox", () => {
       status: "TO_DELIVER",
     });
     await delivery.whenIdle();
-    await expect(delivery.inbox.readMessage(first.id)).resolves.toBeUndefined();
-    await expect(delivery.inbox.readMessage(second.id)).resolves.toBeUndefined();
+    await expect(delivery.inbox.readMessage(first.id)).resolves.toMatchObject({
+      status: "DELIVERED",
+    });
+    await expect(delivery.inbox.readMessage(second.id)).resolves.toMatchObject({
+      status: "DELIVERED",
+    });
   });
 
   it("retains an acknowledged row until its deduplication boundary", async () => {
@@ -1116,7 +1119,7 @@ describe("LocalEntityInbox", () => {
     });
     const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
-    const keepUntil = new Date(Date.now() + 30_000);
+    const receivedAt = Date.now();
 
     inbox.register({
       targetTypeUrl,
@@ -1130,15 +1133,14 @@ describe("LocalEntityInbox", () => {
       signal: commandSignal(),
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
-      keepUntil,
     });
 
     await delivery.whenIdle();
 
-    await expect(delivery.inbox.readMessage(received.id)).resolves.toMatchObject({
-      status: "DELIVERED",
-      keepUntil,
-    });
+    const completed = await delivery.inbox.readMessage(received.id);
+    expect(completed?.status).toBe("DELIVERED");
+    expect(completed?.keepUntil?.getTime()).toBeGreaterThanOrEqual(receivedAt + 5_000);
+    expect(completed?.keepUntil?.getTime()).toBeLessThan(receivedAt + 30_000);
   });
 
   it("delivers an event reactor row to the registered Entity Inbox target", async () => {
@@ -1178,7 +1180,7 @@ describe("LocalEntityInbox", () => {
     await delivery.whenIdle();
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toEqual([]);
+    ).resolves.toHaveLength(1);
   });
 
   it("accepts a concurrent duplicate while its Command handler remains active", async () => {
@@ -1228,7 +1230,7 @@ describe("LocalEntityInbox", () => {
     await delivery.whenIdle();
     expect(seen).toHaveLength(1);
     expect(followUps).toBe(1);
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toHaveLength(1);
   });
 
   it("accepts a duplicate multi-target Event batch while a handler remains active", async () => {
@@ -1297,7 +1299,7 @@ describe("LocalEntityInbox", () => {
     }
     await delivery.whenIdle();
     expect(seen.map(targetValue)).toEqual(["pm-first", "pm-second"]);
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toHaveLength(2);
   });
 
   it("accepts a duplicate single row while its batch handler remains active", async () => {
@@ -1364,7 +1366,7 @@ describe("LocalEntityInbox", () => {
     }
     await delivery.whenIdle();
     expect(seen.map(targetValue)).toEqual(["pm-first", "pm-second"]);
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toHaveLength(2);
   });
 
   it("accepts a duplicate batch row while its single-row handler remains active", async () => {
@@ -1433,10 +1435,10 @@ describe("LocalEntityInbox", () => {
     }
     await delivery.whenIdle();
     expect(seen.map(targetValue)).toEqual(["pm-first", "pm-second"]);
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toHaveLength(2);
   });
 
-  it("stores optional signal and keepUntil while scheduled rows do not delivery", async () => {
+  it("stores optional signal while scheduled rows do not deliver", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -1449,7 +1451,6 @@ describe("LocalEntityInbox", () => {
     const seen: InboxMessage[] = [];
     const earlierSignal = commandSignal();
     const laterSignal = commandSignal();
-    const keepUntil = new Date("2026-07-08T10:00:00.000Z");
 
     inbox.register({
       targetTypeUrl,
@@ -1481,7 +1482,6 @@ describe("LocalEntityInbox", () => {
           label: "HANDLE_COMMAND",
           status: "SCHEDULED",
           shard,
-          keepUntil,
         }),
       ),
     ).resolves.toMatchObject({ signalId: "signal-1", status: "SCHEDULED" });
@@ -1499,7 +1499,6 @@ describe("LocalEntityInbox", () => {
         signalId: "signal-1",
         label: "HANDLE_COMMAND",
         status: "SCHEDULED",
-        keepUntil,
       },
     ]);
     expect(scheduled[0]?.signal?.typeUrl).toBe(laterSignal.typeUrl);
@@ -1568,7 +1567,7 @@ describe("LocalEntityInbox", () => {
       status: "TO_DELIVER",
     });
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toHaveLength(2);
   });
 
   it("publishes a recovered direct-backlog command to a same-shard recipient", async () => {

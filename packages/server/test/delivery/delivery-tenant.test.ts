@@ -79,7 +79,9 @@ describe("shared Delivery tenant identity", () => {
     delivery.wake(ShardIndex.single());
     await delivery.whenIdle();
     expect(seen).toEqual([written.message.id.value]);
-    expect(await delivery.inbox.readMessage(written.message.id)).toBeUndefined();
+    const completed = await delivery.inbox.readMessage(written.message.id);
+    expect(completed?.status).toBe("DELIVERED");
+    expect(completed?.keepUntil).toBeInstanceOf(Date);
     await delivery.close();
   });
 });

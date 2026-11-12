@@ -68,16 +68,18 @@ export async function createTodoReplica(
     .setClient(new Datastore({ projectId: settings.projectId }))
     .build();
   const delivery = RemoteDelivery.connectTo({ endpoint: settings.deliveryServerUrl });
+  const deliveryStrategy = UniformAcrossAllShards.forNumber(settings.deliveryShardCount);
   ServerEnvironment.when(EnvironmentType.Production).use({
     storageFactory,
     typeRegistry,
     delivery,
+    deliveryStrategy,
   });
   const server = await Server.atPort(endpoint.port, { host: endpoint.host })
     .add(
       await createTodoContext({
         storageFactory,
-        deliveryStrategy: UniformAcrossAllShards.forNumber(settings.deliveryShardCount),
+        deliveryStrategy,
         subscriptionRegistry: new InMemorySubscriptionRegistry(),
       }),
     )

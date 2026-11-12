@@ -81,6 +81,13 @@ duplicate recognition and cleanup eligibility. It skips cleanup requests for
 rows whose retention deadline is still in the future. This does not synchronize
 client and server clocks or change the remote server's mutation checks.
 
+Remote reception writes a pending row without `keep_until`. After delivery, the
+application reads the row, sets `DELIVERED` and `keep_until` to its current time
+plus five seconds, and sends the existing Inbox write request. A repeated
+acknowledgement of a matching delivered row returns its stored deadline. The
+service write is an upsert, so the read and write do not form a conditional
+transition. A write with an unknown outcome keeps its existing error behavior.
+
 ## Remote delivery in an environment
 
 `RemoteDelivery.connectTo({ endpoint, clientOptions? })` creates one lazy
@@ -109,6 +116,6 @@ close calls share work; a failed phase is the only phase retried. This adds no
 health route, provider selector, worker, or
 delivery-server mode.
 
-Retained rows suppress the same signal ID at the same typed Inbox target until
-`keep_until`. Remote pagination uses the JVM timestamp query and remains a
-bounded live scan; it does not provide arbitrary-depth indexed lookup.
+Retained rows in the current page or recent-delivery cache suppress the same
+signal ID at the same typed Inbox target until `keep_until`. Remote pagination
+uses the JVM timestamp query and remains a bounded live scan.

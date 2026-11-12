@@ -32,6 +32,7 @@ import {
   type InboxWriteResult,
 } from "./inbox.js";
 import { InboxRecords, inboxRecordSpec } from "./inbox-records.js";
+import { InboxRetention } from "./inbox-retention.js";
 import { ShardIndex } from "./shard-index.js";
 
 const defaultReadLimit = 100;
@@ -165,10 +166,10 @@ export class InboxStorage {
   }
 
   /**
-   * Marks one exact pending row delivered.
+   * Marks one exact pending row delivered and starts its retention period.
    *
    * @param message Supplies the expected pending snapshot.
-   * @returns The delivered row, or `undefined` when the snapshot no longer matches.
+   * @returns The first stored completion, or `undefined` when immutable content differs.
    */
   async markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
     const expected = InboxRecords.write(message);
@@ -180,21 +181,48 @@ export class InboxStorage {
       if (current === undefined) return undefined;
       const decoded = InboxRecords.read(current, id);
       if (decoded.status === "DELIVERED") {
-        return Values.same(current, InboxRecords.write({ ...message, status: "DELIVERED" }))
-          ? decoded
-          : undefined;
+        return this.#sameCompletion(current, message, decoded) ? decoded : undefined;
       }
       if (decoded.status !== "TO_DELIVER" || !Values.same(current, expected)) return undefined;
-      const delivered = InboxRecords.write({ ...decoded, status: "DELIVERED" });
+      const delivered = InboxRecords.write({
+        ...decoded,
+        status: "DELIVERED",
+        keepUntil: InboxRetention.deadline(Values.now(this.#now)),
+      });
       if (await storage.compareAndSet(id, current, delivered))
         return InboxRecords.read(delivered, id);
       const successor = await storage.read(id);
-      return successor !== undefined && Values.same(successor, delivered)
-        ? InboxRecords.read(successor, id)
+      if (successor === undefined) return undefined;
+      const completed = InboxRecords.read(successor, id);
+      return completed.status === "DELIVERED" && this.#sameCompletion(successor, message, completed)
+        ? completed
         : undefined;
     } finally {
       this.#finish();
     }
+  }
+
+  /**
+   * Compares a completed row with the expected immutable pending content.
+   *
+   * @param current Supplies the persisted completed wire row.
+   * @param message Supplies the caller's pending snapshot.
+   * @param completed Supplies the decoded persisted completion.
+   * @returns Whether the persisted row only differs by status and completion deadline.
+   */
+  #sameCompletion(
+    current: WireInboxMessage,
+    message: InboxMessage,
+    completed: InboxMessage,
+  ): boolean {
+    const { keepUntil: previousDeadline, ...pending } = message;
+    void previousDeadline;
+    const expected = InboxRecords.write({
+      ...pending,
+      status: "DELIVERED",
+      ...(completed.keepUntil === undefined ? {} : { keepUntil: completed.keepUntil }),
+    });
+    return Values.same(current, expected);
   }
 
   /**

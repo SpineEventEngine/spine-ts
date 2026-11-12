@@ -697,6 +697,12 @@ Durable-delivery exports include the `Delivery` interface created by the builder
 `InboxReadContinuation`, `InboxReadOptions`, `InboxWriteResult`, `InboxStorage`,
 `InboxStorageOptions`, `DeliveryLabel`, `DeliveryStatus`, `ShardIndex`,
 `ShardSession`, `ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`.
+`ServerEnvironmentSettings.deliveryStrategy` maps routed receiver IDs and Entity
+state type URLs to shards for Aggregates, Process Managers, Agents, and
+Projections. Projection Events and Entity-state subscriptions use the same
+configured strategy, endpoint enumeration, and stored-shard validation. Configure
+it before environment resolution and retain the same mapping while rows remain
+pending. See [receiver-specific policies](../../packages/server/REFERENCE.md#receiver-specific-shard-policies).
 `DeliveryBuilder` snapshots storage, node, shard strategy, monitor, and bounded
 read options. A run takes one shard, checks the complete `WorkerId`, and
 reads direct pending rows in bounded, stable order. It neither exposes pages or

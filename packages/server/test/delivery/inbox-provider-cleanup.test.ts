@@ -154,7 +154,8 @@ describe.skipIf(!providerEnabled(inboxProvider, "mysql", mysqlUrl !== undefined)
           if (session === undefined) throw new Error("Expected a shard session.");
           await expect(registry.release(session)).resolves.toBe(true);
 
-          const inbox = open(factory, context);
+          let now = new Date("2026-07-01T00:00:00.000Z");
+          const inbox = open(factory, context, () => now);
           const expired = createMessage(
             `${context.name}-expired`,
             "expired",
@@ -169,6 +170,7 @@ describe.skipIf(!providerEnabled(inboxProvider, "mysql", mysqlUrl !== undefined)
           );
           await inbox.storage.write(expired);
           await inbox.markDelivered(expired);
+          now = new Date(now.getTime() + 5_000);
           await inbox.storage.write(pending);
           const seen: string[] = [];
           const delivery = new Delivery({
@@ -297,23 +299,21 @@ async function removeExact(
   factory: Parameters<typeof open>[0],
   context: { readonly name: string; readonly multitenant: false },
 ): Promise<void> {
-  const now = Date.now() + 7_200_000;
-  const inbox = open(factory, context, () => new Date(now));
+  let now = new Date(Date.now() + 7_200_000);
+  const inbox = open(factory, context, () => now);
   const seed = `${context.name}-${randomUUID()}`;
   const message = createMessage(`${seed}-delivered`, "direct", 1n);
   await inbox.storage.write(message);
   const delivered = await inbox.markDelivered(message);
   if (delivered === undefined) throw new Error("Expected delivered provider row.");
+  now = new Date(now.getTime() + 5_000);
   await expect(
     inbox.removeDelivered({ ...delivered, version: delivered.version + 1n }),
   ).resolves.toBe(true);
   await expect(inbox.readMessage(message.id)).resolves.toBeUndefined();
   await expect(inbox.removeDelivered(delivered)).resolves.toBe(false);
 
-  const protectedMessage = {
-    ...createMessage(`${seed}-protected`, "protected", 2n),
-    keepUntil: new Date(now + 1),
-  };
+  const protectedMessage = createMessage(`${seed}-protected`, "protected", 2n);
   await inbox.storage.write(protectedMessage);
   const protectedDelivered = await inbox.markDelivered(protectedMessage);
   if (protectedDelivered === undefined) throw new Error("Expected protected provider row.");
@@ -329,12 +329,14 @@ async function removeAcrossFactories(
   context: { readonly name: string; readonly multitenant: false },
   count?: (message: Parameters<Inbox["removeDelivered"]>[0]) => Promise<number>,
 ): Promise<void> {
-  const firstInbox = open(firstFactory, context);
-  const secondInbox = open(secondFactory, context);
+  let now = new Date(Date.now());
+  const firstInbox = open(firstFactory, context, () => now);
+  const secondInbox = open(secondFactory, context, () => now);
   const message = createMessage(`${context.name}-row`, "shared", 1n);
   await firstInbox.storage.write(message);
   const delivered = await firstInbox.markDelivered(message);
   if (delivered === undefined) throw new Error("Expected delivered provider row.");
+  now = new Date(now.getTime() + 5_000);
   if (count !== undefined) await expect(count(delivered)).resolves.toBe(1);
   await expect(secondInbox.removeDelivered(delivered)).resolves.toBe(true);
   if (count !== undefined) await expect(count(delivered)).resolves.toBe(0);

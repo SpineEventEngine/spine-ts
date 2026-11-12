@@ -18,6 +18,11 @@ Delivery adapters import `conditionalPickUp` from
 conditional-pickup capability for a `DeliveryWorkRegistry`; it is not part of
 the server root API and does not independently create delivery work.
 
+The same SPI exports `InboxRetention.deadline(nowMs)`. Delivery adapters use it
+when marking a row delivered; it returns a `Date` five seconds after the supplied
+application time in milliseconds. Local storage and remote delivery use this
+one deadline policy without adding a public retention setting.
+
 ## Generated handler-registry SPI
 
 Generated model modules import only their registry data types from
@@ -1513,7 +1518,14 @@ the Entity transaction commit, and before acknowledgement. These checks stop a w
 after it detects that another worker has taken the shard. They do not make
 delivery and handler storage part of one distributed transaction.
 
-`keepUntil` is the optional deduplication-protection deadline, not a second
+New Inbox receipts have no `keepUntil`. The first successful local acknowledgement
+stores `DELIVERED` and a deadline five seconds after that transition in one
+compare-and-set. A repeated acknowledgement returns the first stored
+deadline. The worker passes that stored completion to delivery observers. This
+timing applies to Aggregate, Process Manager, and Projection delivery through
+the local Inbox.
+
+`keepUntil` is the deduplication-protection deadline on a delivered row, not a second
 retention setting. A delivered row is cleanup-eligible when that deadline is
 absent or elapsed (`keepUntil <= now`). Delivery skips per-record mutation checks
 and deletion attempts for rows whose deadline is still in the future. Cleanup
@@ -1530,7 +1542,7 @@ retryable, non-delivered, and still-protected rows are skipped by cleanup. There
 is no additional retention configuration, timer, or scheduler.
 
 Configure one Delivery strategy for the environment before setup. It maps
-targets to shards across all contexts; the default is one shard. For example:
+targets to shards across all Bounded Contexts; the default is one shard. For example:
 
 ```ts
 import {
@@ -1547,10 +1559,108 @@ await ServerEnvironment.instance().completeSetup();
 const context = await BoundedContext.singleTenant("Tasks").build();
 ```
 
-Aggregate commands and Process Manager or Agent commands/events derive their target shard
-internally and persist their envelope in the target Entity Inbox before any
-handler runs. Projection input uses the same environment Delivery and shared
-Inbox, with its separate recipient identity.
+Aggregates, Process Managers, Agents, and Projections derive their Inbox shard
+from this same strategy. Projection Events and Entity-state subscriptions use
+the routed Projection ID and Projection state type, just as other receivers use
+their receiving Entity identity. The framework stores the envelope before
+invoking the handler. Startup notifications cover every configured shard, and
+stored rows are checked against the current strategy before dispatch.
+
+### Receiver-specific shard policies
+
+`DeliveryStrategy.shardFor(targetId, targetType)` receives the packed receiver
+ID and the type URL of its Entity state. `targetType` is neither the signal type
+nor the TypeScript class name. Routing selects recipients first; the strategy
+then selects a shard for each routed recipient.
+
+For example, the Orders application can reserve two of eight shards for its
+`OrderSummary` and `SalesSummary` Projections. Other receiver types use the first
+six shards. Place this strategy in the Orders source directory:
+
+<!-- docs-snippet-path: examples/orders/src/orders-environment.ts -->
+
+```ts
+import type { Any } from "@bufbuild/protobuf/wkt";
+import { TypeUrls } from "@spine-event-engine/core";
+import {
+  ShardIndex,
+  UniformAcrossAllShards,
+  type DeliveryStrategy,
+} from "@spine-event-engine/server";
+import {
+  OrderSummarySchema,
+  SalesSummarySchema,
+} from "../generated/spine/examples/orders/read_models_pb.js";
+
+/**
+ * Reserves two of eight shards for the selected Orders Projections.
+ */
+class OrdersDeliveryStrategy implements DeliveryStrategy {
+  /**
+   * Number of shards in the shared set.
+   */
+  readonly shardCount = 8;
+
+  readonly #business = UniformAcrossAllShards.forNumber(6);
+
+  readonly #views = UniformAcrossAllShards.forNumber(2);
+
+  readonly #viewTypes = new Set([
+    TypeUrls.derive(OrderSummarySchema),
+    TypeUrls.derive(SalesSummarySchema),
+  ]);
+
+  /**
+   * Selects a shard in the receiver's configured range.
+   *
+   * @param targetId Packed receiving Entity identifier.
+   * @param targetType Receiving Entity state type URL.
+   * @returns A shard in the common eight-shard set.
+   */
+  shardFor(targetId: Any, targetType: string): ShardIndex {
+    if (this.#viewTypes.has(targetType)) {
+      const local = this.#views.shardFor(targetId, targetType);
+      return new ShardIndex(6 + local.index, this.shardCount);
+    }
+    const local = this.#business.shardFor(targetId, targetType);
+    return new ShardIndex(local.index, this.shardCount);
+  }
+}
+```
+
+Set `deliveryStrategy: new OrdersDeliveryStrategy()` in the existing
+`ServerEnvironment.when(...).use({...})` call before resolving the environment.
+For Orders, that call is in `configureOrdersEnvironment()`. Preserve its storage
+and tenant settings. Select the profile actually used by the process: configuring
+`Local` does not configure a process whose `NODE_ENV` is `production`.
+
+The resulting shard sets are:
+
+```text
+Other receivers                 -> 0/8, 1/8, 2/8, 3/8, 4/8, 5/8
+OrderSummary and SalesSummary   -> 6/8, 7/8
+```
+
+Only the listed state types use the second range. Add other Projection state
+types explicitly if they should use it. To place all instances of one receiver
+type on one shard instead, return a fixed value such as `new ShardIndex(6, 8)`
+for that state type. All returned totals must equal `shardCount`: `0/1` and `0/8`
+are distinct shard identities, not aliases.
+
+Keep the mapping deterministic and identical across application processes
+sharing delivery storage. Configure it in processes hosting the receivers,
+before Bounded Context assembly. Shard count is not process count and does not
+assign a receiver to a particular process. Do not change the policy underneath
+pending rows, whose stored shard must agree with the configured strategy.
+
+The built-in uniform strategy hashes the typed ID together with the receiver
+state type. Equal IDs in different receiver types therefore do not guarantee
+co-location. A custom strategy can normalize related receiver types to the same
+hash input when their domain identifier has the same meaning. This does not make
+their separate signal deliveries transactional. The callback has no tenant ID
+or Bounded Context name parameter.
+
+### Reception and processing
 
 Local repository-backed posting waits for recipient Inbox writes and scheduling,
 while handler execution and row acknowledgement continue through Delivery. For an

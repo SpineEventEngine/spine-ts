@@ -577,6 +577,16 @@ docs claim that text as active behavior.
 
 ## Human Questions
 
+All questions addressed to the human must appear in a dedicated **Questions**
+section at the end of the agent's final reply for that turn. This includes
+clarification, preferences, decisions, and approval requests. Never use
+ChatGPT/Codex popup-style question interfaces, including `request_user_input`
+and `request_user_input_async`. Do not ask questions in progress commentary.
+Explain the relevant context and practical consequences, with concrete
+examples, options, and a recommendation sufficient for an informed decision.
+When a question concerns differing behavior between Entity types, include the
+latest Spine JVM comparison required by `AGENTS.md`.
+
 Blocking questions:
 
 - Stop work.
