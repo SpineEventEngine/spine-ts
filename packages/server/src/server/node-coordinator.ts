@@ -233,18 +233,30 @@ export interface NodeCoordinatorOptions {
   readonly writeMaxBytes?: number;
 
   /**
-   * Configured native reader admission at the managed listener.
+   * Selects network trust or native authentication ports at the managed listener.
    */
-  readonly readerAdmission?: Readonly<{
-    forwarded?: ReaderProofVerifier<HandlerContext>;
-    direct?: DirectReaderAuthenticator<HandlerContext>;
-  }>;
+  readonly readerAdmission?:
+    | "trusted-network"
+    | Readonly<{
+        forwarded?: ReaderProofVerifier<HandlerContext>;
+        direct?: DirectReaderAuthenticator<HandlerContext>;
+      }>;
 
   /**
    * Configured proof issuer for each Coordinator-to-child request.
    */
   readonly forwardingProof?: ReaderProofIssuer;
+
+  /**
+   * Sends unsigned reader facts to restricted child listeners.
+   */
+  readonly forwarding?: "trusted-network";
 }
+
+/**
+ * Selects the managed child reader forwarding mode.
+ */
+type OutgoingReaderForwarding = ReaderProofIssuer | "trusted-network" | undefined;
 
 /**
  * Hosts generated unary services in front of managed complete replicas.
@@ -258,7 +270,7 @@ export class NodeCoordinator {
 
   readonly #readerAdmission: NodeCoordinatorOptions["readerAdmission"];
 
-  readonly #forwardingProof: ReaderProofIssuer | undefined;
+  readonly #forwarding: OutgoingReaderForwarding;
 
   readonly #readers = new Map<string, TrustedReaderContext>();
 
@@ -343,13 +355,13 @@ export class NodeCoordinator {
   ) {
     this.#members = options.members;
     this.#readerAdmission = options.readerAdmission;
-    this.#forwardingProof = options.forwardingProof;
+    this.#forwarding = options.forwarding ?? options.forwardingProof;
     this.#readMaxBytes = options.readMaxBytes ?? defaultMessageMaxBytes;
     this.#subscriptionQueueCapacity = subscriptionQueueCapacity;
     this.#unaryKernel = new BackendMembershipKernel(
       NodeCoordinatorValues.unaryKernelOptions(
         undefined,
-        this.#forwardingProof,
+        this.#forwarding,
         this.#readMaxBytes,
         (bytes) => this.#readerFor(bytes),
       ),
@@ -379,7 +391,7 @@ export class NodeCoordinator {
     return new BackendMembershipKernel(
       NodeCoordinatorValues.unaryKernelOptions(
         members,
-        this.#forwardingProof,
+        this.#forwarding,
         this.#readMaxBytes,
         (bytes) => this.#readerFor(bytes),
         (definition, child) => {
@@ -408,6 +420,7 @@ export class NodeCoordinator {
    * @returns The running private Coordinator.
    */
   static async open(options: NodeCoordinatorOptions): Promise<NodeCoordinator> {
+    NodeCoordinatorValues.validateReaderModes(options);
     const subscriptionQueueCapacity = ServerEnvironment.instance().subscriptionQueueCapacity;
     const { host, port, readMaxBytes, writeMaxBytes } = this.#listenerOptions(options);
     // eslint-disable-next-line prefer-const -- routes capture the Coordinator before the listener exists.
@@ -638,7 +651,9 @@ export class NodeCoordinator {
       peer: context,
       signal,
       maxBytes: this.#readMaxBytes,
-      ...this.#readerAdmission,
+      ...(this.#readerAdmission === "trusted-network"
+        ? { trustedNetwork: true }
+        : this.#readerAdmission),
     });
   }
 
@@ -1367,6 +1382,26 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
 
 const NodeCoordinatorValues = Object.freeze({
   /**
+   * Rejects invalid or conflicting trust choices before opening a listener.
+   *
+   * @param options Managed listener and child forwarding choices.
+   */
+  validateReaderModes(options: NodeCoordinatorOptions): void {
+    const admission: unknown = options.readerAdmission;
+    const forwarding: unknown = options.forwarding;
+    if (
+      admission !== undefined &&
+      admission !== "trusted-network" &&
+      (admission === null || typeof admission !== "object" || Array.isArray(admission))
+    )
+      throw new Error("Invalid managed reader admission mode.");
+    if (forwarding !== undefined && forwarding !== "trusted-network")
+      throw new Error("Invalid managed reader forwarding mode.");
+    if (forwarding !== undefined && options.forwardingProof !== undefined)
+      throw new Error("Choose one managed reader forwarding mode.");
+  },
+
+  /**
    * Builds membership options for native unary forwarding.
    *
    * @param members The ready member source when available.
@@ -1378,7 +1413,7 @@ const NodeCoordinatorValues = Object.freeze({
    */
   unaryKernelOptions(
     members?: ReadyMemberSource,
-    issuer?: ReaderProofIssuer,
+    issuer?: OutgoingReaderForwarding,
     maxBytes = defaultMessageMaxBytes,
     readerFor?: (definition: Uint8Array) => TrustedReaderContext | undefined,
     onRememberChild?: (definition: Uint8Array, child: Uint8Array) => void,
@@ -1492,7 +1527,7 @@ const NodeCoordinatorValues = Object.freeze({
   client(
     member: ReadyCoordinatorMember,
     members: ReadyMemberSource | undefined,
-    issuer?: ReaderProofIssuer,
+    issuer?: OutgoingReaderForwarding,
     maxBytes = defaultMessageMaxBytes,
     readerFor?: (definition: Uint8Array) => TrustedReaderContext | undefined,
     onRememberChild?: (definition: Uint8Array, child: Uint8Array) => void,
@@ -1549,7 +1584,7 @@ const NodeCoordinatorValues = Object.freeze({
     transport: ReturnType<typeof createGrpcTransport>,
     member: ReadyCoordinatorMember,
     members: ReadyMemberSource | undefined,
-    issuer: ReaderProofIssuer | undefined,
+    issuer: OutgoingReaderForwarding,
     maxBytes: number,
     readerFor?: (definition: Uint8Array) => TrustedReaderContext | undefined,
   ) {
@@ -1591,7 +1626,7 @@ const NodeCoordinatorValues = Object.freeze({
     transport: ReturnType<typeof createGrpcTransport>,
     member: ReadyCoordinatorMember,
     members: ReadyMemberSource | undefined,
-    issuer: ReaderProofIssuer | undefined,
+    issuer: OutgoingReaderForwarding,
     maxBytes: number,
     readerFor?: (definition: Uint8Array) => TrustedReaderContext | undefined,
   ) {
@@ -1630,7 +1665,7 @@ const NodeCoordinatorValues = Object.freeze({
     definition: Uint8Array,
     signal: AbortSignal,
     reader: TrustedReaderContext | undefined,
-    issuer: ReaderProofIssuer | undefined,
+    issuer: OutgoingReaderForwarding,
     maxBytes: number,
     onRememberChild?: (definition: Uint8Array, child: Uint8Array) => void,
   ): Promise<Uint8Array> {
@@ -1676,7 +1711,7 @@ const NodeCoordinatorValues = Object.freeze({
     child: Uint8Array,
     signal: AbortSignal,
     reader: TrustedReaderContext | undefined,
-    issuer: ReaderProofIssuer | undefined,
+    issuer: OutgoingReaderForwarding,
     maxBytes: number,
   ): Promise<void> {
     const subscription = fromBinary(SubscriptionSchema, child);
@@ -1707,7 +1742,7 @@ const NodeCoordinatorValues = Object.freeze({
   async forward(
     transport: ReturnType<typeof createGrpcTransport>,
     request: CoordinatorRequest,
-    issuer?: ReaderProofIssuer,
+    issuer?: OutgoingReaderForwarding,
     maxBytes = defaultMessageMaxBytes,
   ): Promise<Uint8Array> {
     const headers = await NodeCoordinatorValues.forwardHeaders(request, issuer, maxBytes);
@@ -1773,7 +1808,7 @@ const NodeCoordinatorValues = Object.freeze({
    */
   async forwardHeaders(
     request: CoordinatorRequest,
-    issuer: ReaderProofIssuer | undefined,
+    issuer: OutgoingReaderForwarding,
     maxBytes: number,
   ): Promise<Headers> {
     const service =
@@ -1794,7 +1829,9 @@ const NodeCoordinatorValues = Object.freeze({
       throw new ConnectError("Managed reader forwarding is unavailable.", Code.Internal);
     if (issuer !== undefined)
       for (const [name, entry] of Object.entries(
-        await ReaderForwarding.seal(service, method, value, request.reader, issuer, maxBytes),
+        issuer === "trusted-network"
+          ? ReaderForwarding.encode(service, method, request.reader, maxBytes)
+          : await ReaderForwarding.seal(service, method, value, request.reader, issuer, maxBytes),
       ))
         headers.set(name, entry);
     return headers;
@@ -1822,7 +1859,7 @@ const NodeCoordinatorValues = Object.freeze({
     updates: (update: Uint8Array) => Promise<void>,
     signal: AbortSignal,
     reader?: TrustedReaderContext,
-    issuer?: ReaderProofIssuer,
+    issuer?: OutgoingReaderForwarding,
     maxBytes = defaultMessageMaxBytes,
   ): Promise<void> {
     const subscription = fromBinary(SubscriptionSchema, child);
@@ -1876,7 +1913,7 @@ const NodeCoordinatorValues = Object.freeze({
     method: string,
     value: Uint8Array,
     reader: TrustedReaderContext | undefined,
-    issuer: ReaderProofIssuer | undefined,
+    issuer: OutgoingReaderForwarding,
     maxBytes: number,
   ): Promise<Headers | undefined> {
     if (reader === undefined) return undefined;
@@ -1886,14 +1923,16 @@ const NodeCoordinatorValues = Object.freeze({
       return undefined;
     }
     return new Headers(
-      await ReaderForwarding.seal(
-        "spine.client.SubscriptionService",
-        method,
-        value,
-        reader,
-        issuer,
-        maxBytes,
-      ),
+      issuer === "trusted-network"
+        ? ReaderForwarding.encode("spine.client.SubscriptionService", method, reader, maxBytes)
+        : await ReaderForwarding.seal(
+            "spine.client.SubscriptionService",
+            method,
+            value,
+            reader,
+            issuer,
+            maxBytes,
+          ),
     );
   },
 

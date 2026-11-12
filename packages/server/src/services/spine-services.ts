@@ -255,6 +255,13 @@ export class SpineServices {
    * @param options Configures contexts and subscription bounds.
    */
   constructor(options: SpineServicesOptions) {
+    const admission: unknown = options.readerAdmission;
+    if (
+      admission !== undefined &&
+      admission !== "trusted-network" &&
+      (admission === null || typeof admission !== "object" || Array.isArray(admission))
+    )
+      throw new Error("Invalid native reader admission mode.");
     serviceInstances.add(this);
     serviceAdmissions.set(this, this.#admissionShutdown);
     this.#contexts = Object.freeze([...options.contexts]);
@@ -517,7 +524,9 @@ export class SpineServices {
       peer: context,
       signal,
       maxBytes: this.#readMaxBytes,
-      ...this.#readerAdmission,
+      ...(this.#readerAdmission === "trusted-network"
+        ? { trustedNetwork: true }
+        : this.#readerAdmission),
     });
   }
 
@@ -1489,12 +1498,15 @@ export interface SpineServicesOptions {
   readonly readMaxBytes?: number;
 
   /**
-   * Configured direct and trusted-peer authentication ports.
+   * Selects a restricted listener that accepts unsigned reader facts, or
+   * configures direct and signed peer authentication ports.
    */
-  readonly readerAdmission?: Readonly<{
-    forwarded?: ReaderProofVerifier<HandlerContext>;
-    direct?: DirectReaderAuthenticator<HandlerContext>;
-  }>;
+  readonly readerAdmission?:
+    | "trusted-network"
+    | Readonly<{
+        forwarded?: ReaderProofVerifier<HandlerContext>;
+        direct?: DirectReaderAuthenticator<HandlerContext>;
+      }>;
 
   /**
    * Maximum concurrent unknown-ID cancellation operations for this

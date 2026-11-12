@@ -421,6 +421,11 @@ export const browserServerImplementation: Readonly<{
    * @returns Normalized listener options after all preflight checks pass.
    */
   preflight(mode, input): BrowserHostOptions {
+    const forwarding: unknown = input.forwarding;
+    if (forwarding !== undefined && forwarding !== "trusted-network")
+      throw new Error("Invalid browser reader forwarding mode.");
+    if (input.forwarding !== undefined && input.forwardingProof !== undefined)
+      throw new Error("Choose one browser reader forwarding mode.");
     const admission = BrowserServerValues.snapshotAdmission(input);
     const production = Environment.instance().type === EnvironmentType.Production;
     BrowserServer.requireDurableBindings(input, production);
@@ -1468,12 +1473,11 @@ const BrowserServerValues = Object.freeze({
         ...BrowserServer.dynamicTransportOptions(node),
         sessionManager: manager,
       }),
-      options.forwardingProof === undefined
-        ? undefined
-        : {
-            issuer: options.forwardingProof,
-            maxBytes: options.readMaxBytes,
-          },
+      options.forwarding === "trusted-network"
+        ? { forwarding: "trusted-network", maxBytes: options.readMaxBytes }
+        : options.forwardingProof === undefined
+          ? undefined
+          : { issuer: options.forwardingProof, maxBytes: options.readMaxBytes },
     );
     return {
       forward: client.forward.bind(client),

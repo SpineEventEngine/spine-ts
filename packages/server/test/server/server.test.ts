@@ -32,7 +32,7 @@ import {
   SubscriptionGateway,
 } from "@spine-event-engine/auth";
 import type { RequestCredential, SessionResolver } from "@spine-event-engine/auth";
-import { AnyPacker, spineCoreRegistry, TypeRegistry } from "@spine-event-engine/core";
+import { AnyPacker, spineCoreRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
 import { ApplicationNode } from "@spine-event-engine/deployment";
 import { AuthenticationService, ResolveContextRequestSchema } from "@spine-event-engine/proto/auth";
 import {
@@ -56,7 +56,8 @@ import {
   SubscriptionUpdateSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { TargetFiltersSchema, TargetSchema } from "@spine-event-engine/proto/client";
 import {
   InMemoryStorageFactory,
   type RecordSpec,
@@ -68,12 +69,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   BoundedContext,
+  Projection,
+  Repository,
   EnvironmentType,
   Server,
   ServerEnvironment,
   type RunningServer,
   type ServerEnvironmentCloseable,
 } from "../../src/index.js";
+import { ReadSideFilter, type ReadSideContext } from "../../src/stand/read-side-filter.js";
+import {
+  ProjectOverviewStateSchema,
+  type ProjectOverviewState,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import {
   BrowserServer as BrowserHost,
   DurableSubscriptionBindings,
@@ -1104,103 +1112,242 @@ describe("Server", () => {
     }
   });
 
-  it("keeps ResolveContext local while the standalone gateway selects every backend descriptor", async () => {
-    const paths: string[] = [];
-    const backend = http2.createServer();
-    backend.on("stream", (stream, headers) => {
-      paths.push(String(headers[":path"]));
-      stream.respond({ ":status": 200, "content-type": "application/grpc", "grpc-status": "0" });
-      stream.end(Buffer.from([0, 0, 0, 0, 0]));
-    });
-    await new Promise<void>((resolve) => backend.listen(0, "127.0.0.1", resolve));
-    const address = backend.address();
-    if (address === null || typeof address === "string") throw new Error("backend address missing");
-    const actor = create(UserIdSchema, { value: "ada" });
-    const server = await openStandalone({
-      port: 0,
+  it("passes a Gateway reader to a real Server read filter without a proof", async () => {
+    await import("../../test-fixtures/generated/proto-module.js");
+    const seen: ReadSideContext[] = [];
+    class NetworkProjection extends Projection<string, typeof ProjectOverviewStateSchema> {}
+    class NetworkFilter extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(state: ProjectOverviewState, facts: ReadSideContext): ProjectOverviewState {
+        seen.push(facts);
+        return state;
+      }
+    }
+    const context = await BoundedContext.singleTenant("GatewayNetworkReader")
+      .add(new Repository({ entityType: NetworkProjection, schema: ProjectOverviewStateSchema }))
+      .addReadSideFilter(new NetworkFilter())
+      .build();
+    await context
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "project-1", name: "Visible" }),
+      );
+    const app = await new Server({
+      contexts: [context],
+      services: {
+        readerAdmission: "trusted-network",
+      },
+    }).start();
+    const gateway = await openStandalone({
       ...browserGateway(),
-      forwardingProof: { issue: async () => "path-probe-peer-proof" },
-      backend: { baseUrl: `http://127.0.0.1:${address.port.toString()}` },
+      backend: { baseUrl: app.baseUrl },
       bindings: inMemoryBindings(),
+      forwarding: "trusted-network",
       sessions: {
         resolve: () =>
           Promise.resolve({
-            principal: { id: "ada" },
+            principal: { id: "reader/alice" },
             expiresAt: create(TimestampSchema, { seconds: 100n }),
           }),
       },
       authorize: () => Promise.resolve(true),
       contexts: {
-        resolve: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
-        resolveContext: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
+        resolve: () =>
+          Promise.resolve({
+            actor: create(UserIdSchema, { value: "actor/bob" }),
+            timestamp: create(TimestampSchema, { seconds: 1n }),
+            authorityFacts: { team: "ops" },
+          }),
+        resolveContext: () =>
+          Promise.resolve({
+            actor: create(UserIdSchema, { value: "actor/bob" }),
+            timestamp: create(TimestampSchema, { seconds: 1n }),
+          }),
       },
     });
-    const transport = createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" });
-    const headers = { origin: "http://127.0.0.1:5173", authorization: "Bearer token" };
+    const query = create(QuerySchema, {
+      id: create(QueryIdSchema, { value: "read-1" }),
+      target: create(TargetSchema, {
+        type: TypeUrls.derive(ProjectOverviewStateSchema),
+        criterion: {
+          case: "filters",
+          value: create(TargetFiltersSchema, {
+            idFilter: {
+              id: [
+                AnyPacker.pack(
+                  StringValueSchema,
+                  create(StringValueSchema, { value: "project-1" }),
+                ),
+              ],
+            },
+          }),
+        },
+      }),
+      context: create(ActorContextSchema, {
+        actor: create(UserIdSchema, { value: "actor/bob" }),
+        timestamp: create(TimestampSchema, { seconds: 1n }),
+      }),
+    });
     try {
-      await expect(
-        createClient(AuthenticationService, transport).resolveContext(
-          create(ResolveContextRequestSchema),
-          { headers },
-        ),
-      ).resolves.toMatchObject({ actor });
-      await createClient(CommandService, transport)
-        .post(
-          create(CommandSchema, {
-            context: create(CommandContextSchema, {
-              actorContext: create(ActorContextSchema, { actor }),
-            }),
-          }),
-          { headers },
-        )
-        .catch(() => undefined);
-      await createClient(QueryService, transport)
-        .read(create(QuerySchema, { context: create(ActorContextSchema, { actor }) }), { headers })
-        .catch(() => undefined);
-      await createClient(QueryService, transport)
-        .execute(
-          create(AppQuerySchema, {
-            id: create(QueryIdSchema, { value: "browser-path-query" }),
-            context: create(ActorContextSchema, { actor }),
-            message: AnyPacker.pack(
-              GetProjectOverview_QuerySchema,
-              create(GetProjectOverview_QuerySchema, {
-                project: create(ProjectIdSchema, { value: "project-1" }),
-              }),
-            ),
-          }),
-          { headers },
-        )
-        .catch(() => undefined);
-      const subscriptions = createClient(SubscriptionService, transport);
-      const subscription = await subscriptions.subscribe(
-        create(TopicSchema, { context: create(ActorContextSchema, { actor }) }),
-        { headers },
-      );
-      // This raw path probe returns an empty backend stream; the protocol ACK is covered below.
-      await subscriptions
-        .activate(subscription, { headers })
-        [Symbol.asyncIterator]()
-        .next()
-        .catch(() => undefined);
-      await subscriptions.cancel(subscription, { headers });
-      expect(paths).toEqual([
-        "/spine.client.CommandService/Post",
-        "/spine.client.QueryService/Read",
-        "/spine.client.QueryService/Execute",
-        "/spine.client.SubscriptionService/Subscribe",
-        "/spine.client.SubscriptionService/Activate",
-        "/spine.client.SubscriptionService/Cancel",
-      ]);
-    } finally {
-      await server.close();
-      await new Promise<void>((resolve) =>
-        backend.close(() => {
-          resolve();
+      await createClient(
+        QueryService,
+        createConnectTransport({
+          baseUrl: gateway.baseUrl,
+          httpVersion: "1.1",
         }),
-      );
+      ).read(query, {
+        headers: { origin: "http://127.0.0.1:5173", authorization: "Bearer token" },
+      });
+      expect(seen).toHaveLength(1);
+      expect(seen[0]?.principal?.id).toBe("reader/alice");
+      expect(seen[0]?.authorityFacts).toEqual({ team: "ops" });
+      expect(seen[0]?.actorContext?.actor?.value).toBe("actor/bob");
+      await createClient(QueryService, createGrpcTransport({ baseUrl: app.baseUrl })).read(query);
+      expect(seen[1]?.principal).toBeUndefined();
+      expect(seen[1]?.authorityFacts).toBeUndefined();
+    } finally {
+      await gateway.close();
+      await app.close();
     }
   });
+
+  it("rejects conflicting browser forwarding choices before opening a listener", () => {
+    expect(() =>
+      BrowserServer.preflight("standalone", {
+        ...browserGateway(),
+        backend: { baseUrl: "http://127.0.0.1:9000" },
+        forwarding: "trusted-network",
+        forwardingProof: { issue: () => "proof" },
+      }),
+    ).toThrow("Choose one browser reader forwarding mode.");
+  });
+
+  it("rejects an unknown browser forwarding mode before opening a listener", () => {
+    expect(() =>
+      BrowserServer.preflight("standalone", {
+        ...browserGateway(),
+        backend: { baseUrl: "http://127.0.0.1:9000" },
+        forwarding: "unspecified",
+      } as never),
+    ).toThrow("Invalid browser reader forwarding mode.");
+  });
+
+  it.each(["proof", "trusted-network"] as const)(
+    "keeps ResolveContext local and routes every backend descriptor with %s",
+    async (mode) => {
+      const paths: string[] = [];
+      const proofs: unknown[] = [];
+      const readers: unknown[] = [];
+      const backend = http2.createServer();
+      backend.on("stream", (stream, headers) => {
+        paths.push(String(headers[":path"]));
+        proofs.push(headers["spine-internal-reader-proof"]);
+        readers.push(headers["spine-internal-reader"]);
+        stream.respond({ ":status": 200, "content-type": "application/grpc", "grpc-status": "0" });
+        stream.end(Buffer.from([0, 0, 0, 0, 0]));
+      });
+      await new Promise<void>((resolve) => backend.listen(0, "127.0.0.1", resolve));
+      const address = backend.address();
+      if (address === null || typeof address === "string")
+        throw new Error("backend address missing");
+      const actor = create(UserIdSchema, { value: "ada" });
+      const server = await openStandalone({
+        port: 0,
+        ...browserGateway(),
+        ...(mode === "trusted-network"
+          ? { forwarding: "trusted-network" as const }
+          : { forwardingProof: { issue: async () => "path-probe-peer-proof" } }),
+        backend: { baseUrl: `http://127.0.0.1:${address.port.toString()}` },
+        bindings: inMemoryBindings(),
+        sessions: {
+          resolve: () =>
+            Promise.resolve({
+              principal: { id: "ada" },
+              expiresAt: create(TimestampSchema, { seconds: 100n }),
+            }),
+        },
+        authorize: () => Promise.resolve(true),
+        contexts: {
+          resolve: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
+          resolveContext: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
+        },
+      });
+      const transport = createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" });
+      const headers = { origin: "http://127.0.0.1:5173", authorization: "Bearer token" };
+      try {
+        await expect(
+          createClient(AuthenticationService, transport).resolveContext(
+            create(ResolveContextRequestSchema),
+            { headers },
+          ),
+        ).resolves.toMatchObject({ actor });
+        await createClient(CommandService, transport)
+          .post(
+            create(CommandSchema, {
+              context: create(CommandContextSchema, {
+                actorContext: create(ActorContextSchema, { actor }),
+              }),
+            }),
+            { headers },
+          )
+          .catch(() => undefined);
+        await createClient(QueryService, transport)
+          .read(create(QuerySchema, { context: create(ActorContextSchema, { actor }) }), {
+            headers,
+          })
+          .catch(() => undefined);
+        await createClient(QueryService, transport)
+          .execute(
+            create(AppQuerySchema, {
+              id: create(QueryIdSchema, { value: "browser-path-query" }),
+              context: create(ActorContextSchema, { actor }),
+              message: AnyPacker.pack(
+                GetProjectOverview_QuerySchema,
+                create(GetProjectOverview_QuerySchema, {
+                  project: create(ProjectIdSchema, { value: "project-1" }),
+                }),
+              ),
+            }),
+            { headers },
+          )
+          .catch(() => undefined);
+        const subscriptions = createClient(SubscriptionService, transport);
+        const subscription = await subscriptions.subscribe(
+          create(TopicSchema, { context: create(ActorContextSchema, { actor }) }),
+          { headers },
+        );
+        // This raw path probe returns an empty backend stream; the protocol ACK is covered below.
+        await subscriptions
+          .activate(subscription, { headers })
+          [Symbol.asyncIterator]()
+          .next()
+          .catch(() => undefined);
+        await subscriptions.cancel(subscription, { headers });
+        expect(paths).toEqual([
+          "/spine.client.CommandService/Post",
+          "/spine.client.QueryService/Read",
+          "/spine.client.QueryService/Execute",
+          "/spine.client.SubscriptionService/Subscribe",
+          "/spine.client.SubscriptionService/Activate",
+          "/spine.client.SubscriptionService/Cancel",
+        ]);
+        expect(readers.slice(0, 4).map((entry) => typeof entry)).toEqual(Array(4).fill("string"));
+        expect(proofs.slice(0, 4)).toEqual(
+          Array(4).fill(mode === "proof" ? "path-probe-peer-proof" : undefined),
+        );
+      } finally {
+        await server.close();
+        await new Promise<void>((resolve) =>
+          backend.close(() => {
+            resolve();
+          }),
+        );
+      }
+    },
+  );
 
   it.each(["connect", "grpc-web"] as const)(
     "forwards one logical idle activation ACK over %s and cancels its native child",

@@ -384,6 +384,52 @@ describe("SpineServices", () => {
     expect(await registry.get(subscription.id ?? create(SubscriptionIdSchema))).toBeUndefined();
     await context.close();
   });
+
+  it("keeps a trusted-network reader across Subscribe, Activate, and Cancel", async () => {
+    const context = await BoundedContext.singleTenant("NetworkReaderSubscription")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: "trusted-network",
+    });
+    const peer = (method: string, value: Uint8Array, id: string) =>
+      ({
+        requestHeader: new Headers(
+          ReaderForwarding.encode(
+            "spine.client.SubscriptionService",
+            method,
+            { principal: { id }, authorityFacts: { team: "ops" } },
+            4_194_304,
+          ),
+        ),
+      }) as HandlerContext;
+    try {
+      const topic = createTopic();
+      const subscription = await handlers.subscribe(
+        topic,
+        peer("Subscribe", toBinary(TopicSchema, topic), "reader/alice"),
+      );
+      const bytes = toBinary(SubscriptionSchema, subscription);
+      await expect(
+        handlers.cancel(subscription, peer("Cancel", bytes, "reader/bob")),
+      ).rejects.toMatchObject({
+        code: Code.PermissionDenied,
+      });
+      const iterator = handlers
+        .activate(subscription, peer("Activate", bytes, "reader/alice"))
+        [Symbol.asyncIterator]();
+      await expectActivationAcknowledgement(iterator, subscription);
+      await handlers.cancel(subscription, peer("Cancel", bytes, "reader/alice"));
+      await iterator.return?.();
+    } finally {
+      await context.close();
+    }
+  });
+  it("rejects invalid native admission before building service routes", () => {
+    expect(() => new SpineServices({ contexts: [], readerAdmission: 1 } as never)).toThrow(
+      "Invalid native reader admission mode.",
+    );
+  });
   it("rejects foreign package-private logger access", () => {
     const foreign = {} as SpineServices;
 
