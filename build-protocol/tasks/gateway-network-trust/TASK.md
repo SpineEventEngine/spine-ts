@@ -1,6 +1,7 @@
 # Gateway network trust
 
-Status: approved for implementation on `gateway-network-trust`.
+Status: implemented, independently reviewed, and locally release-verified on
+`gateway-network-trust`. GitHub CI awaits a human-created PR.
 Baseline: official `origin/master` at `3844fd369`.
 
 ## Human-Imposed Requirements Ledger
@@ -52,3 +53,24 @@ independent API, reliability, maintainability, and documentation review.
 Run `verify:release` after convergence because native admission and forwarding
 are shared runtime. Prepare and trial the final release archives locally.
 Exact-commit GitHub CI follows a human-created PR.
+
+## Remaining work
+
+A human creates the PR, then GitHub CI verifies its final commit. Local package
+archive preparation and trial use the final branch commit before handoff.
+
+## Review outcome
+
+Independent API, reliability, maintainability, and documentation review findings
+are addressed. The corrections isolate public admission options from internal
+trust flags, verify reader identity through subscription cleanup, avoid unused
+request serialization, and explain configuration separately for each process.
+Targeted re-review and regression checks confirmed the corrections.
+
+## Local verification
+
+The release profile passed with 7,202 Vitest tests and 44 Node tests. Branch
+coverage is 90.10%; all coverage thresholds passed. Workspace and web builds,
+tooling, lint, documentation snippets, and generated-output checks passed.
+No new dependency was added. Both dependency-audit scopes reported no known
+vulnerabilities. Detailed execution evidence remains outside Git.

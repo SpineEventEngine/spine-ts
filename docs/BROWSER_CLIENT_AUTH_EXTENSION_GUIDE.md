@@ -170,33 +170,49 @@ keep the underlying work alive.
 ## Forwarding a reader to an application container
 
 The browser Gateway authenticates the request and resolves a principal and
-authority facts before it forwards a native operation. In a two-container
-deployment, configure the sending Gateway and receiving application Server
-explicitly. For a private application listener that only trusted components can
-reach, use these settings:
+authority facts before it forwards a native operation. A two-container deployment
+configures the application listener and Gateway separately. In the application
+container, make the native listener reachable only by trusted components:
+
+<!-- docs-snippet-path: packages/server/src/server/server.ts -->
+
+```ts
+import { Server, type ServerOptions } from "@spine-event-engine/server";
+
+declare const contexts: NonNullable<ServerOptions["contexts"]>;
+declare const privateHost: string;
+
+const app = await new Server({
+  host: privateHost,
+  contexts,
+  services: { readerAdmission: "trusted-network" },
+}).start();
+```
+
+In the Gateway container, use the deployed private URL for that listener.
+The application supplies the other Gateway settings, including sessions,
+authorization, context resolution, and the public listener:
 
 <!-- docs-snippet-path: packages/server/src/browser/index.ts -->
 
 ```ts
-import { Server } from "@spine-event-engine/server";
+import type { SessionResolver } from "@spine-event-engine/auth";
 import {
   BrowserServer,
   type StandaloneBrowserServerOptions,
 } from "@spine-event-engine/server/browser";
 
-const app = await new Server({
-  services: { readerAdmission: "trusted-network" },
-}).start();
+declare const applicationGrpcUrl: string;
+declare const gatewayOptions: Omit<
+  Extract<StandaloneBrowserServerOptions, { readonly sessions: SessionResolver }>,
+  "backend" | "discovery" | "forwarding" | "forwardingProof"
+>;
 
-declare const gatewayOptions: StandaloneBrowserServerOptions;
 const gateway = await BrowserServer.run({
   ...gatewayOptions,
-  backend: { baseUrl: app.baseUrl },
+  backend: { baseUrl: applicationGrpcUrl },
   forwarding: "trusted-network",
 });
-
-await gateway.close();
-await app.close();
 ```
 
 The application listener checks the reader envelope and operation, then trusts
@@ -219,9 +235,34 @@ Activate, Cancel, and cleanup retain the reader identity from the admitted
 operation. In managed deployments, configure Gateway-to-Coordinator admission,
 Coordinator-to-child forwarding, and each child's admission independently.
 
-For a managed application, the Coordinator receives the Gateway's unsigned
-reader facts. It then emits a fresh unsigned envelope for each child operation.
-The child listener makes its own admission choice:
+For a managed application, the Gateway targets the Coordinator's private
+listener. In the Gateway container, configure that outgoing hop:
+
+<!-- docs-snippet-path: packages/server/src/browser/index.ts -->
+
+```ts
+import type { SessionResolver } from "@spine-event-engine/auth";
+import {
+  BrowserServer,
+  type StandaloneBrowserServerOptions,
+} from "@spine-event-engine/server/browser";
+
+declare const coordinatorGrpcUrl: string;
+declare const gatewayOptions: Omit<
+  Extract<StandaloneBrowserServerOptions, { readonly sessions: SessionResolver }>,
+  "backend" | "discovery" | "forwarding" | "forwardingProof"
+>;
+
+const gateway = await BrowserServer.run({
+  ...gatewayOptions,
+  backend: { baseUrl: coordinatorGrpcUrl },
+  forwarding: "trusted-network",
+});
+```
+
+The managed application configures the Coordinator's incoming policy and its
+outgoing hop to each child. Each child Server independently admits that new
+envelope:
 
 <!-- docs-snippet-path: packages/server/src/server/managed-server-application.ts -->
 
@@ -235,7 +276,7 @@ import {
 
 declare const managedOptions: Omit<
   ManagedServerApplicationOptions,
-  "createServer" | "readerAdmission" | "forwarding"
+  "createServer" | "readerAdmission" | "forwarding" | "forwardingProof"
 >;
 declare const contexts: NonNullable<ServerOptions["contexts"]>;
 
@@ -251,8 +292,6 @@ const managed = await ManagedServerApplication.run({
       services: { readerAdmission: "trusted-network" }, // Child listener
     }).start(),
 });
-
-await managed.close();
 ```
 
 ## Gateway contracts and request facts
