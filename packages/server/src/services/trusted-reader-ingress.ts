@@ -109,14 +109,19 @@ export interface TrustedReaderAdmission<Peer> {
   readonly forwarded?: ReaderProofVerifier<Peer>;
 
   /**
+   * Trusts structurally valid unsigned reader facts from this restricted listener.
+   */
+  readonly trustedNetwork?: boolean;
+
+  /**
    * Configured direct native authenticator.
    */
   readonly direct?: DirectReaderAuthenticator<Peer>;
 }
 
 /**
- * Resolves one reader from verified forwarding or direct authentication.
- * Internal headers never become identity merely by being present.
+ * Resolves one reader from signed forwarding, direct authentication, or
+ * explicit trusted-network admission. Internal headers are rejected by default.
  */
 export const TrustedReaderIngress: Readonly<{
   /**
@@ -156,15 +161,18 @@ export const TrustedReaderIngress: Readonly<{
     input.signal.throwIfAborted();
     if (ReaderForwarding.hasAssertion(input.headers)) {
       try {
-        const reader = await ReaderForwarding.open(
-          input.headers,
-          input.service,
-          input.method,
-          input.request,
-          input.forwarded,
-          input.peer,
-          input.maxBytes,
-        );
+        const reader =
+          input.trustedNetwork === true
+            ? ReaderForwarding.decode(input.headers, input.service, input.method, input.maxBytes)
+            : await ReaderForwarding.open(
+                input.headers,
+                input.service,
+                input.method,
+                input.request,
+                input.forwarded,
+                input.peer,
+                input.maxBytes,
+              );
         input.signal.throwIfAborted();
         return Object.freeze({ reader: snapshotTrustedReader(reader) });
       } catch (error) {

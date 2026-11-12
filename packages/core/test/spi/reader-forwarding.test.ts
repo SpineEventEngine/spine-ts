@@ -28,6 +28,47 @@ describe("verified reader forwarding", () => {
       peer === "gateway" && proof === Array.from(bytes).join("-"),
   };
 
+  it("round-trips a detached reader without a proof on a trusted network", () => {
+    const headers = ReaderForwarding.encode("QueryService", "Read", reader, 1024);
+    expect(headers).not.toHaveProperty("spine-internal-reader-proof");
+    expect(ReaderForwarding.decode(headers, "QueryService", "Read", 1024)).toEqual(reader);
+    expect(() => ReaderForwarding.decode(headers, "QueryService", "Execute", 1024)).toThrow();
+  });
+
+  it("rejects malformed reader shapes in unsigned envelopes", () => {
+    for (const malformed of [
+      null,
+      1,
+      [],
+      { principal: null },
+      { authorityFacts: "admin" },
+      { principal: { id: " " } },
+      { principal: { id: "alice", attributes: "admin" } },
+    ]) {
+      const encoded = Buffer.from(
+        JSON.stringify({
+          service: "QueryService",
+          method: "Read",
+          reader: malformed,
+        }),
+      ).toString("base64");
+      expect(() =>
+        ReaderForwarding.decode({ "spine-internal-reader": encoded }, "QueryService", "Read", 1024),
+      ).toThrow("Invalid forwarding proof.");
+    }
+  });
+
+  it("rejects a proof header without a reader envelope on a trusted listener", () => {
+    expect(() =>
+      ReaderForwarding.decode(
+        { "spine-internal-reader-proof": "unexpected" },
+        "QueryService",
+        "Read",
+        1024,
+      ),
+    ).toThrow("Invalid forwarding proof.");
+  });
+
   it("rejects malformed null authority facts returned by a port", () => {
     const malformed = {
       principal: { id: "reader-1" },

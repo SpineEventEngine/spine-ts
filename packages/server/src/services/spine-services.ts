@@ -255,6 +255,16 @@ export class SpineServices {
    * @param options Configures contexts and subscription bounds.
    */
   constructor(options: SpineServicesOptions) {
+    const admission: unknown = options.readerAdmission;
+    if (
+      admission !== undefined &&
+      admission !== "trusted-network" &&
+      (admission === null ||
+        typeof admission !== "object" ||
+        Array.isArray(admission) ||
+        "trustedNetwork" in admission)
+    )
+      throw new Error("Invalid native reader admission mode.");
     serviceInstances.add(this);
     serviceAdmissions.set(this, this.#admissionShutdown);
     this.#contexts = Object.freeze([...options.contexts]);
@@ -509,6 +519,7 @@ export class SpineServices {
     context: HandlerContext,
     signal: AbortSignal,
   ): Promise<ReaderAdmissionResult> {
+    const policy = this.#readerAdmission;
     return TrustedReaderIngress.admit({
       service,
       method,
@@ -517,7 +528,12 @@ export class SpineServices {
       peer: context,
       signal,
       maxBytes: this.#readMaxBytes,
-      ...this.#readerAdmission,
+      ...(policy === "trusted-network"
+        ? { trustedNetwork: true }
+        : {
+            ...(policy?.direct === undefined ? {} : { direct: policy.direct }),
+            ...(policy?.forwarded === undefined ? {} : { forwarded: policy.forwarded }),
+          }),
     });
   }
 
@@ -1489,12 +1505,15 @@ export interface SpineServicesOptions {
   readonly readMaxBytes?: number;
 
   /**
-   * Configured direct and trusted-peer authentication ports.
+   * Selects a restricted listener that accepts unsigned reader facts, or
+   * configures direct and signed peer authentication ports.
    */
-  readonly readerAdmission?: Readonly<{
-    forwarded?: ReaderProofVerifier<HandlerContext>;
-    direct?: DirectReaderAuthenticator<HandlerContext>;
-  }>;
+  readonly readerAdmission?:
+    | "trusted-network"
+    | Readonly<{
+        forwarded?: ReaderProofVerifier<HandlerContext>;
+        direct?: DirectReaderAuthenticator<HandlerContext>;
+      }>;
 
   /**
    * Maximum concurrent unknown-ID cancellation operations for this

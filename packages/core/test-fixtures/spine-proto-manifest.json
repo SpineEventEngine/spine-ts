@@ -1,8 +1,8 @@
 {
   "formatVersion": 2,
-  "generationId": "405eb03e-9e1b-4f69-8baf-8682c415011c",
+  "generationId": "1d2ddda5-ef23-4976-9895-b797f04c73dc",
   "packageName": "@spine-event-engine/core-test-fixtures",
-  "packageVersion": "2.0.0-snapshot.29",
+  "packageVersion": "2.0.0-snapshot.30",
   "protoFiles": [
     "criteria_types.proto",
     "project_commands.proto",

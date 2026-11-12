@@ -189,6 +189,18 @@ const acknowledgeFakeChildClose = (child: ChildProcess, incarnation: string, slo
 };
 
 describe("ManagedServerApplication", () => {
+  it("rejects conflicting child forwarding choices before starting managed children", () => {
+    expect(
+      () =>
+        new ManagedServerCoordinator({
+          processCount: 1,
+          moduleUrl: import.meta.url,
+          createServer: () => Promise.reject(new Error("unused")),
+          forwarding: "trusted-network",
+          forwardingProof: { issue: () => "proof" },
+        }),
+    ).toThrow("Choose one managed reader forwarding mode.");
+  });
   it("keeps private Coordinator membership facts absent for opaque managed handles", () => {
     const opaque = {
       ready: false,
@@ -2223,6 +2235,24 @@ describe("ManagedServerApplication", () => {
       }),
     ).rejects.toThrow("restart");
   });
+
+  it("starts a managed Coordinator with independent trusted-network hop choices", async () => {
+    const managed = await ManagedServerApplication.run({
+      processCount: 1,
+      port: 0,
+      moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
+      createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
+      readerAdmission: "trusted-network",
+      forwarding: "trusted-network",
+    });
+    try {
+      expect(managedServerApplicationAccess.coordinatorEndpoint(managed)).toMatch(
+        /^http:\/\/127\.0\.0\.1:\d+$/,
+      );
+    } finally {
+      await managed.close();
+    }
+  }, 20_000);
 
   it("does not restart a child that the managed cohort closes", async () => {
     const managed = await ManagedServerApplication.run({

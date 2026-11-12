@@ -103,6 +103,126 @@ import {
 type RecordSpec<I, R> = StorageRecordSpec<I, R extends Message ? R : Message>;
 
 describe("NodeCoordinator", () => {
+  it.each(["trusted-network", "proof"] as const)(
+    "accepts %s ingress and forwards reader facts to a trusted child",
+    async (incoming) => {
+      const observed: unknown[] = [];
+      const replica = await backend("trusted-network-read", {
+        read: (context) => {
+          observed.push(
+            ReaderForwarding.decode(
+              context.requestHeader,
+              "spine.client.QueryService",
+              "Read",
+              4_194_304,
+            ),
+          );
+          return Promise.resolve(create(QueryResponseSchema));
+        },
+      });
+      closeables.push(replica.close);
+      const coordinator = await NodeCoordinator.open({
+        members: new TestReadyMembers([replica.member]),
+        port: 0,
+        readerAdmission:
+          incoming === "trusted-network"
+            ? "trusted-network"
+            : { forwarded: { verify: (_bytes, proof) => proof === "incoming-proof" } },
+        forwarding: "trusted-network",
+      });
+      closeables.push(() => coordinator.close());
+      const query = coordinatorQuery();
+      const reader = { principal: { id: "reader-a" }, authorityFacts: { team: "ops" } };
+      const headers =
+        incoming === "trusted-network"
+          ? ReaderForwarding.encode("spine.client.QueryService", "Read", reader, 4_194_304)
+          : await ReaderForwarding.seal(
+              "spine.client.QueryService",
+              "Read",
+              toBinary(QuerySchema, query),
+              reader,
+              { issue: () => "incoming-proof" },
+              4_194_304,
+            );
+      await createClient(QueryService, createGrpcTransport({ baseUrl: coordinator.baseUrl })).read(
+        query,
+        { headers },
+      );
+      expect(observed).toEqual([
+        { principal: { id: "reader-a" }, authorityFacts: { team: "ops" } },
+      ]);
+    },
+  );
+
+  it("signs a managed Command with its actual request bytes", async () => {
+    let proof: string | null = null;
+    const replica = await backend("signed-command", {
+      post: (context) => {
+        proof = context.requestHeader.get("spine-internal-reader-proof");
+        return create(AckSchema);
+      },
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: {
+        direct: {
+          authenticate: () => ({
+            reader: {
+              principal: { id: "reader-a" },
+            },
+          }),
+        },
+      },
+      forwardingProof: {
+        issue: (bytes) => {
+          expect(bytes.byteLength).toBeGreaterThan(0);
+          return "signed-command-proof";
+        },
+      },
+    });
+    closeables.push(() => coordinator.close());
+    await createClient(CommandService, createGrpcTransport({ baseUrl: coordinator.baseUrl })).post(
+      create(CommandService.method.post.input),
+    );
+    expect(proof).toBe("signed-command-proof");
+  });
+
+  it("rejects conflicting managed forwarding choices before listening", async () => {
+    await expect(
+      NodeCoordinator.open({
+        members: new TestReadyMembers([]),
+        port: 0,
+        forwarding: "trusted-network",
+        forwardingProof: { issue: () => "proof" },
+      }),
+    ).rejects.toThrow("Choose one managed reader forwarding mode.");
+  });
+
+  it("rejects invalid managed admission and forwarding modes before listening", async () => {
+    for (const options of [{ readerAdmission: 1 }, { forwarding: "unspecified" }]) {
+      await expect(
+        NodeCoordinator.open({
+          members: new TestReadyMembers([]),
+          port: 0,
+          ...options,
+        } as never),
+      ).rejects.toThrow(/Invalid managed reader/);
+    }
+  });
+
+  it("rejects an internal network marker mixed with signed Coordinator admission", async () => {
+    const mixed = { forwarded: { verify: () => true }, trustedNetwork: true };
+    await expect(
+      NodeCoordinator.open({
+        members: new TestReadyMembers([]),
+        port: 0,
+        readerAdmission: mixed,
+      }),
+    ).rejects.toThrow("Invalid managed reader admission mode.");
+  });
+
   it("reissues a verified reader proof for the managed child Read operation", async () => {
     const observed: string[] = [];
     const replica = await backend("proved-read", {
@@ -190,46 +310,59 @@ describe("NodeCoordinator", () => {
     expect(reads).toBe(1);
     expect(replica.subscriptions()).toBe(1);
   });
-  it("reissues distinct Subscribe, Activate and Cancel proofs for managed children", async () => {
-    const observed: string[] = [];
-    const replica = await backend("proved-subscriptions", {
-      holdActivation: true,
-      verifyReader: async (method, bytes, context) => {
-        const reader = await ReaderForwarding.open(
-          context.requestHeader,
-          "spine.client.SubscriptionService",
-          method,
-          bytes,
-          { verify: (_bytes, proof) => proof === "coordinator-signed" },
-          context,
-          4_194_304,
-        );
-        observed.push(`${method}:${reader.principal?.id ?? "missing"}`);
-      },
-    });
-    closeables.push(replica.close);
-    const coordinator = await NodeCoordinator.open({
-      members: new TestReadyMembers([replica.member]),
-      port: 0,
-      readerAdmission: {
-        direct: { authenticate: () => ({ reader: { principal: { id: "reader-a" } } }) },
-      },
-      forwardingProof: { issue: () => "coordinator-signed" },
-    });
-    closeables.push(() => coordinator.close());
-    const client = createClient(
-      SubscriptionService,
-      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
-    );
-    const subscription = await client.subscribe(coordinatorTopic());
-    expect(observed).toEqual(["Subscribe:reader-a"]);
-    const updates = client.activate(subscription)[Symbol.asyncIterator]();
-    await updates.next();
-    expect(observed).toEqual(["Subscribe:reader-a", "Activate:reader-a"]);
-    await client.cancel(subscription);
-    await updates.return?.();
-    expect(observed).toEqual(["Subscribe:reader-a", "Activate:reader-a", "Cancel:reader-a"]);
-  });
+  it.each(["proof", "trusted-network"] as const)(
+    "retains reader facts on managed Subscribe, Activate and Cancel with %s forwarding",
+    async (mode) => {
+      const observed: string[] = [];
+      const replica = await backend("proved-subscriptions", {
+        holdActivation: true,
+        verifyReader: async (method, bytes, context) => {
+          const reader =
+            mode === "trusted-network"
+              ? ReaderForwarding.decode(
+                  context.requestHeader,
+                  "spine.client.SubscriptionService",
+                  method,
+                  4_194_304,
+                )
+              : await ReaderForwarding.open(
+                  context.requestHeader,
+                  "spine.client.SubscriptionService",
+                  method,
+                  bytes,
+                  { verify: (_bytes, proof) => proof === "coordinator-signed" },
+                  context,
+                  4_194_304,
+                );
+          observed.push(`${method}:${reader.principal?.id ?? "missing"}`);
+        },
+      });
+      closeables.push(replica.close);
+      const coordinator = await NodeCoordinator.open({
+        members: new TestReadyMembers([replica.member]),
+        port: 0,
+        readerAdmission: {
+          direct: { authenticate: () => ({ reader: { principal: { id: "reader-a" } } }) },
+        },
+        ...(mode === "trusted-network"
+          ? { forwarding: "trusted-network" as const }
+          : { forwardingProof: { issue: () => "coordinator-signed" } }),
+      });
+      closeables.push(() => coordinator.close());
+      const client = createClient(
+        SubscriptionService,
+        createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+      );
+      const subscription = await client.subscribe(coordinatorTopic());
+      expect(observed).toEqual(["Subscribe:reader-a"]);
+      const updates = client.activate(subscription)[Symbol.asyncIterator]();
+      await updates.next();
+      expect(observed).toEqual(["Subscribe:reader-a", "Activate:reader-a"]);
+      await client.cancel(subscription);
+      await updates.return?.();
+      expect(observed).toEqual(["Subscribe:reader-a", "Activate:reader-a", "Cancel:reader-a"]);
+    },
+  );
   it("keeps a managed pending subscription after a foreign reader cancels", async () => {
     const replica = await backend("foreign-managed", { holdActivation: true });
     closeables.push(replica.close);

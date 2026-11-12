@@ -7414,3 +7414,25 @@ cancellation behavior. The supplied runtime log filter omits request URI and
 headers because disabling access logs alone does not remove callback credentials
 from upstream-failure logs. Browser acceptance includes negotiated HTTP/2 and
 closing an active tab without logout, separately from session revocation.
+
+## Explicit network trust for reader forwarding (2026-11-12)
+
+A Gateway and application Server may use a restricted private network as their
+trust boundary. The sender selects `forwarding: "trusted-network"`; the
+receiving listener independently selects `readerAdmission: "trusted-network"`.
+This admits structurally valid unsigned reader facts and identity-free internal
+calls. Empty readers gain no service or administrator privileges. Application
+read filters and subscription identity checks continue to apply.
+
+Existing proof-based forwarding and defaults remain unchanged. Mixed sending
+configuration is rejected. Network-trusting listeners reject malformed or
+proof-bearing metadata instead of falling back to anonymous admission. The
+network mode provides no cryptographic authentication or request-body integrity;
+any caller able to reach that listener can assert a principal.
+
+Managed deployments configure each hop separately: Coordinator admission,
+Coordinator-to-child forwarding, and each child Server's admission. No trust is
+inferred from loopback or inherited across processes. Existing reader envelopes
+and native gRPC services suffice, so no new dependency or protocol message is
+needed. The accepted contract and scope are recorded in
+[tasks/gateway-network-trust/TASK.md](tasks/gateway-network-trust/TASK.md).

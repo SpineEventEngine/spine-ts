@@ -70,6 +70,32 @@ export interface ReaderProofVerifier<Peer> {
  */
 const ReaderForwardingWire = Object.freeze({
   /**
+   * Encodes and bounds the reader envelope shared by both forwarding modes.
+   *
+   * @param service Canonical RPC service.
+   * @param method Canonical RPC method.
+   * @param reader Detached reader facts.
+   * @param maxBytes Existing native request-size bound.
+   * @returns Bounded UTF-8 envelope bytes.
+   */
+  encodeEnvelope(
+    service: string,
+    method: string,
+    reader: TrustedReaderContext,
+    maxBytes: number,
+  ): Uint8Array {
+    const payload = getTextEncoding().encodeUtf8(
+      JSON.stringify({
+        service,
+        method,
+        reader: snapshotTrustedReader(reader),
+      }),
+    );
+    ReaderForwardingWire.assertBound(payload.byteLength, maxBytes);
+    return payload;
+  },
+
+  /**
    * Decodes bounded assertion metadata and rejects malformed JSON shapes.
    *
    * @param encoded Base64 assertion envelope.
@@ -94,6 +120,54 @@ const ReaderForwardingWire = Object.freeze({
         throw error;
       throw new Error("Invalid forwarding proof.");
     }
+  },
+
+  /**
+   * Validates one parsed operation and its reader facts.
+   *
+   * @param decoded Parsed assertion record.
+   * @param service Expected RPC service.
+   * @param method Expected RPC method.
+   * @returns Detached reader facts.
+   */
+  reader(decoded: object, service: string, method: string): TrustedReaderContext {
+    if (
+      !("service" in decoded) ||
+      decoded.service !== service ||
+      !("method" in decoded) ||
+      decoded.method !== method ||
+      !("reader" in decoded) ||
+      !ReaderForwardingWire.record(decoded.reader)
+    )
+      throw new Error("Invalid forwarding proof.");
+    const reader = decoded.reader;
+    if (
+      ("principal" in reader && !ReaderForwardingWire.record(reader.principal)) ||
+      ("authorityFacts" in reader && !ReaderForwardingWire.record(reader.authorityFacts))
+    )
+      throw new Error("Invalid forwarding proof.");
+    const principal = reader.principal;
+    if (
+      ReaderForwardingWire.record(principal) &&
+      "attributes" in principal &&
+      !ReaderForwardingWire.record(principal.attributes)
+    )
+      throw new Error("Invalid forwarding proof.");
+    try {
+      return snapshotTrustedReader(reader);
+    } catch {
+      throw new Error("Invalid forwarding proof.");
+    }
+  },
+
+  /**
+   * Checks whether a parsed value is a JSON object rather than null or an array.
+   *
+   * @param value Parsed value.
+   * @returns Whether the value is an object record.
+   */
+  record(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
   },
 
   /**
@@ -136,10 +210,9 @@ const ReaderForwardingWire = Object.freeze({
 });
 
 /**
- * Package-internal wire conversion for per-request verified reader assertions.
- * It does not copy the incoming transport credential or track session expiry.
- * Application ports remain responsible for the facts they supply, and no
- * assertion is accepted without a configured peer verifier.
+ * Package-internal wire conversion for signed and explicitly trusted-network
+ * reader assertions. It does not copy credentials or track session expiry.
+ * Receiving listeners choose their trust policy before opening an assertion.
  *
  * @internal
  */
@@ -151,6 +224,38 @@ export const ReaderForwarding: Readonly<{
    * @returns Whether either reserved header is present.
    */
   hasAssertion(headers: ReaderHeaders): boolean;
+
+  /**
+   * Encodes unsigned reader facts for a restricted native listener.
+   *
+   * @param service Canonical RPC service.
+   * @param method Canonical RPC method.
+   * @param reader Detached reader facts.
+   * @param maxBytes Existing native request-size bound.
+   * @returns Internal reader metadata without a proof.
+   */
+  encode(
+    service: string,
+    method: string,
+    reader: TrustedReaderContext,
+    maxBytes: number,
+  ): Readonly<Record<string, string>>;
+
+  /**
+   * Decodes unsigned facts for an explicitly trusted listener.
+   *
+   * @param headers Incoming native metadata.
+   * @param service Canonical RPC service.
+   * @param method Canonical RPC method.
+   * @param maxBytes Existing native request-size bound.
+   * @returns Detached reader facts.
+   */
+  decode(
+    headers: ReaderHeaders,
+    service: string,
+    method: string,
+    maxBytes: number,
+  ): TrustedReaderContext;
 
   /**
    * Encodes detached reader facts for one canonical operation and request.
@@ -209,6 +314,38 @@ export const ReaderForwarding: Readonly<{
   },
 
   /**
+   * Encodes an operation-scoped unsigned reader envelope.
+   */
+  encode(
+    service: string,
+    method: string,
+    reader: TrustedReaderContext,
+    maxBytes: number,
+  ): Readonly<Record<string, string>> {
+    const payload = ReaderForwardingWire.encodeEnvelope(service, method, reader, maxBytes);
+    return Object.freeze({ [envelopeHeader]: base64Encode(payload) });
+  },
+
+  /**
+   * Decodes an envelope only when no proof accompanies it.
+   */
+  decode(
+    headers: ReaderHeaders,
+    service: string,
+    method: string,
+    maxBytes: number,
+  ): TrustedReaderContext {
+    const encoded = ReaderForwardingWire.headerValue(headers, envelopeHeader);
+    if (
+      encoded === undefined ||
+      ReaderForwardingWire.headerValue(headers, proofHeader) !== undefined
+    )
+      throw new Error("Invalid forwarding proof.");
+    const { decoded } = ReaderForwardingWire.decodeEnvelope(encoded, "", maxBytes);
+    return ReaderForwardingWire.reader(decoded, service, method);
+  },
+
+  /**
    * Encodes detached reader data against one canonical operation and message.
    *
    * @param service Canonical RPC service name.
@@ -227,14 +364,7 @@ export const ReaderForwarding: Readonly<{
     issuer: ReaderProofIssuer,
     maxBytes: number,
   ): Promise<Readonly<Record<string, string>>> {
-    const payload = getTextEncoding().encodeUtf8(
-      JSON.stringify({
-        service,
-        method,
-        reader: snapshotTrustedReader(reader),
-      }),
-    );
-    ReaderForwardingWire.assertBound(payload.byteLength, maxBytes);
+    const payload = ReaderForwardingWire.encodeEnvelope(service, method, reader, maxBytes);
     const proof = await issuer.issue(ReaderForwardingWire.proofBytes(payload, value));
     if (typeof proof !== "string" || !proof) throw new Error("Invalid forwarding proof.");
     ReaderForwardingWire.assertBound(proof.length, maxBytes);
@@ -268,21 +398,9 @@ export const ReaderForwarding: Readonly<{
     if (verifier === undefined || encoded === undefined || proof === undefined || !proof)
       throw new Error("Invalid forwarding proof.");
     const { payload, decoded } = ReaderForwardingWire.decodeEnvelope(encoded, proof, maxBytes);
-    if (
-      !("service" in decoded) ||
-      decoded.service !== service ||
-      !("method" in decoded) ||
-      decoded.method !== method ||
-      !("reader" in decoded) ||
-      decoded.reader === undefined
-    )
-      throw new Error("Invalid forwarding proof.");
+    const reader = ReaderForwardingWire.reader(decoded, service, method);
     if (!(await verifier.verify(ReaderForwardingWire.proofBytes(payload, value), proof, peer)))
       throw new Error("Invalid forwarding proof.");
-    try {
-      return snapshotTrustedReader(decoded.reader as TrustedReaderContext);
-    } catch {
-      throw new Error("Invalid forwarding proof.");
-    }
+    return reader;
   },
 });

@@ -26,6 +26,50 @@ describe("trusted native reader ingress", () => {
     signal: new AbortController().signal,
   };
 
+  it("admits unsigned reader facts and identity-free calls on a trusted listener", async () => {
+    const headers = new Headers(
+      ReaderForwarding.encode(
+        operation.service,
+        operation.method,
+        { principal: { id: "alice" }, authorityFacts: { enabled: true } },
+        1024,
+      ),
+    );
+    await expect(
+      TrustedReaderIngress.admit({
+        ...operation,
+        headers,
+        peer: {},
+        maxBytes: 1024,
+        trustedNetwork: true,
+      }),
+    ).resolves.toEqual({
+      reader: {
+        principal: { id: "alice" },
+        authorityFacts: { enabled: true },
+      },
+    });
+    await expect(
+      TrustedReaderIngress.admit({
+        ...operation,
+        headers: new Headers(),
+        peer: {},
+        maxBytes: 1024,
+        trustedNetwork: true,
+      }),
+    ).resolves.toEqual({ reader: {} });
+    headers.set("spine-internal-reader-proof", "unexpected");
+    await expect(
+      TrustedReaderIngress.admit({
+        ...operation,
+        headers,
+        peer: {},
+        maxBytes: 1024,
+        trustedNetwork: true,
+      }),
+    ).rejects.toMatchObject({ code: Code.Unauthenticated });
+  });
+
   it("requires a configured peer verifier for internal assertions", async () => {
     const headers = new Headers(
       await ReaderForwarding.seal(

@@ -169,6 +169,11 @@ export interface BrowserServerCollaborators {
   readonly forwardingProof?: ReaderProofIssuer;
 
   /**
+   * Sends unsigned reader facts to an application listener restricted to trusted callers.
+   */
+  readonly forwarding?: "trusted-network";
+
+  /**
    * Maximum emitted response or auth callback bytes; defaults to 4 MiB.
    */
   readonly writeMaxBytes?: number;
