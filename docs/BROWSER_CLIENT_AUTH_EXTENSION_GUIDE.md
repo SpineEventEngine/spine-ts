@@ -167,6 +167,94 @@ external state managers. A late result or update from a retired generation is
 ignored. Cancellation is cooperative: a factory that ignores its signal can
 keep the underlying work alive.
 
+## Forwarding a reader to an application container
+
+The browser Gateway authenticates the request and resolves a principal and
+authority facts before it forwards a native operation. In a two-container
+deployment, configure the sending Gateway and receiving application Server
+explicitly. For a private application listener that only trusted components can
+reach, use these settings:
+
+<!-- docs-snippet-path: packages/server/src/browser/index.ts -->
+
+```ts
+import { Server } from "@spine-event-engine/server";
+import {
+  BrowserServer,
+  type StandaloneBrowserServerOptions,
+} from "@spine-event-engine/server/browser";
+
+const app = await new Server({
+  services: { readerAdmission: "trusted-network" },
+}).start();
+
+declare const gatewayOptions: StandaloneBrowserServerOptions;
+const gateway = await BrowserServer.run({
+  ...gatewayOptions,
+  backend: { baseUrl: app.baseUrl },
+  forwarding: "trusted-network",
+});
+
+await gateway.close();
+await app.close();
+```
+
+The application listener checks the reader envelope and operation, then trusts
+the supplied principal and authority facts. It does not verify a proof or bind
+the request body cryptographically. Anyone who can reach that listener can
+assert another principal, so restrict its network access. ActorContext carries
+request facts separately and cannot establish the reader's principal.
+
+For proof-based forwarding, configure `BrowserServerOptions.forwardingProof`
+and the receiving Server's `services.readerAdmission.forwarded` verifier. The
+issuer signs the exact request bytes and reader envelope; the verifier checks
+the proof and peer. These are alternatives for one hop. If no forwarding mode is
+configured, authenticated reader facts cannot be silently dropped. A native
+listener without admission configuration rejects forwarded identity metadata.
+
+A trusted-network listener also admits a native call without reader metadata
+as an empty reader. This permits internal reads that application policy makes
+public; it does not grant a service identity or bypass read filters. Subscribe,
+Activate, Cancel, and cleanup retain the reader identity from the admitted
+operation. In managed deployments, configure Gateway-to-Coordinator admission,
+Coordinator-to-child forwarding, and each child's admission independently.
+
+For a managed application, the Coordinator receives the Gateway's unsigned
+reader facts. It then emits a fresh unsigned envelope for each child operation.
+The child listener makes its own admission choice:
+
+<!-- docs-snippet-path: packages/server/src/server/managed-server-application.ts -->
+
+```ts
+import {
+  ManagedServerApplication,
+  Server,
+  type ManagedServerApplicationOptions,
+  type ServerOptions,
+} from "@spine-event-engine/server";
+
+declare const managedOptions: Omit<
+  ManagedServerApplicationOptions,
+  "createServer" | "readerAdmission" | "forwarding"
+>;
+declare const contexts: NonNullable<ServerOptions["contexts"]>;
+
+const managed = await ManagedServerApplication.run({
+  ...managedOptions,
+  readerAdmission: "trusted-network", // Gateway to Coordinator
+  forwarding: "trusted-network", // Coordinator to child
+  createServer: async ({ host, port }) =>
+    new Server({
+      host,
+      port,
+      contexts,
+      services: { readerAdmission: "trusted-network" }, // Child listener
+    }).start(),
+});
+
+await managed.close();
+```
+
 ## Gateway contracts and request facts
 
 One standalone Gateway dynamically discovers application nodes on GKE or GCE.
