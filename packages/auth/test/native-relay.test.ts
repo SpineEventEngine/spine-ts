@@ -232,6 +232,63 @@ describe("SubscriptionUpdateRelay", () => {
 });
 
 describe("NativeSubscriptionCreator", () => {
+  it("forwards an authenticated reader without proof in trusted-network mode", async () => {
+    let headers = new Headers();
+    const transport = {
+      unary: (_method: unknown, _signal: unknown, _timeout: unknown, received: Headers) => {
+        headers = received;
+        return Promise.resolve({
+          stream: false,
+          header: new Headers(),
+          trailer: new Headers(),
+          message: create(QueryService.method.read.output),
+        });
+      },
+    } as unknown as Transport;
+    const value = toBinary(QueryService.method.read.input, create(QueryService.method.read.input));
+    const native = new NativeSubscriptionCreator(transport, {
+      forwarding: "trusted-network",
+      maxBytes: 4_194_304,
+    });
+    await native.forward({
+      service: "spine.client.QueryService",
+      method: "Read",
+      value,
+      reader: { principal: { id: "reader/one" }, authorityFacts: { roles: ["reader"] } },
+    });
+    expect(new Headers(headers).has("spine-internal-reader-proof")).toBe(false);
+    expect(
+      ReaderForwarding.decode(headers, "spine.client.QueryService", "Read", 4_194_304),
+    ).toEqual({ principal: { id: "reader/one" }, authorityFacts: { roles: ["reader"] } });
+  });
+
+  it("rejects conflicting native forwarding choices before issuing a call", () => {
+    expect(
+      () =>
+        new NativeSubscriptionCreator(
+          {} as Transport,
+          {
+            forwarding: "trusted-network",
+            issuer: { issue: () => "proof" },
+            maxBytes: 1024,
+          } as never,
+        ),
+    ).toThrow("Choose one native reader forwarding mode.");
+  });
+
+  it("rejects an unknown native forwarding mode before issuing a call", () => {
+    expect(
+      () =>
+        new NativeSubscriptionCreator(
+          {} as Transport,
+          {
+            forwarding: "unspecified",
+            maxBytes: 1024,
+          } as never,
+        ),
+    ).toThrow("Invalid native reader forwarding mode.");
+  });
+
   it("attaches an operation-bound proof for an authenticated unary reader", async () => {
     let headers: Headers | undefined;
     const transport = {
