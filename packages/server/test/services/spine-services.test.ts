@@ -430,6 +430,42 @@ describe("SpineServices", () => {
       "Invalid native reader admission mode.",
     );
   });
+
+  it("rejects an internal network marker mixed with signed native admission", () => {
+    const mixed = { forwarded: { verify: () => true }, trustedNetwork: true };
+    expect(
+      () =>
+        new SpineServices({
+          contexts: [],
+          readerAdmission: mixed,
+        }),
+    ).toThrow("Invalid native reader admission mode.");
+  });
+  it("retains signed forwarding admission with an object policy", async () => {
+    const context = await BoundedContext.singleTenant("SignedReaderAdmission")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: { forwarded: { verify: (_bytes, proof) => proof === "signed" } },
+    });
+    try {
+      const topic = createTopic();
+      const headers = await ReaderForwarding.seal(
+        "spine.client.SubscriptionService",
+        "Subscribe",
+        toBinary(TopicSchema, topic),
+        { principal: { id: "reader/alice" } },
+        { issue: () => "signed" },
+        4_194_304,
+      );
+      const subscription = await handlers.subscribe(topic, {
+        requestHeader: new Headers(headers),
+      } as HandlerContext);
+      expect(subscription.id?.value).toBeTruthy();
+    } finally {
+      await context.close();
+    }
+  });
   it("rejects foreign package-private logger access", () => {
     const foreign = {} as SpineServices;
 

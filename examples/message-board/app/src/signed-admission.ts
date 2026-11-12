@@ -34,7 +34,7 @@ export interface SignedBoardAdmission {
   /**
    * Verifies direct and forwarded native readers.
    */
-  readonly readerAdmission: Required<NonNullable<SpineServicesOptions["readerAdmission"]>>;
+  readonly readerAdmission: Required<Extract<SpineServicesOptions["readerAdmission"], object>>;
 }
 
 /**

@@ -259,7 +259,10 @@ export class SpineServices {
     if (
       admission !== undefined &&
       admission !== "trusted-network" &&
-      (admission === null || typeof admission !== "object" || Array.isArray(admission))
+      (admission === null ||
+        typeof admission !== "object" ||
+        Array.isArray(admission) ||
+        "trustedNetwork" in admission)
     )
       throw new Error("Invalid native reader admission mode.");
     serviceInstances.add(this);
@@ -516,6 +519,7 @@ export class SpineServices {
     context: HandlerContext,
     signal: AbortSignal,
   ): Promise<ReaderAdmissionResult> {
+    const policy = this.#readerAdmission;
     return TrustedReaderIngress.admit({
       service,
       method,
@@ -524,9 +528,12 @@ export class SpineServices {
       peer: context,
       signal,
       maxBytes: this.#readMaxBytes,
-      ...(this.#readerAdmission === "trusted-network"
+      ...(policy === "trusted-network"
         ? { trustedNetwork: true }
-        : this.#readerAdmission),
+        : {
+            ...(policy?.direct === undefined ? {} : { direct: policy.direct }),
+            ...(policy?.forwarded === undefined ? {} : { forwarded: policy.forwarded }),
+          }),
     });
   }
 

@@ -103,40 +103,90 @@ import {
 type RecordSpec<I, R> = StorageRecordSpec<I, R extends Message ? R : Message>;
 
 describe("NodeCoordinator", () => {
-  it("accepts unsigned ingress and forwards reader facts to a trusted child", async () => {
-    const observed: unknown[] = [];
-    const replica = await backend("trusted-network-read", {
-      read: (context) => {
-        observed.push(
-          ReaderForwarding.decode(
-            context.requestHeader,
-            "spine.client.QueryService",
-            "Read",
-            4_194_304,
-          ),
-        );
-        return Promise.resolve(create(QueryResponseSchema));
+  it.each(["trusted-network", "proof"] as const)(
+    "accepts %s ingress and forwards reader facts to a trusted child",
+    async (incoming) => {
+      const observed: unknown[] = [];
+      const replica = await backend("trusted-network-read", {
+        read: (context) => {
+          observed.push(
+            ReaderForwarding.decode(
+              context.requestHeader,
+              "spine.client.QueryService",
+              "Read",
+              4_194_304,
+            ),
+          );
+          return Promise.resolve(create(QueryResponseSchema));
+        },
+      });
+      closeables.push(replica.close);
+      const coordinator = await NodeCoordinator.open({
+        members: new TestReadyMembers([replica.member]),
+        port: 0,
+        readerAdmission:
+          incoming === "trusted-network"
+            ? "trusted-network"
+            : { forwarded: { verify: (_bytes, proof) => proof === "incoming-proof" } },
+        forwarding: "trusted-network",
+      });
+      closeables.push(() => coordinator.close());
+      const query = coordinatorQuery();
+      const reader = { principal: { id: "reader-a" }, authorityFacts: { team: "ops" } };
+      const headers =
+        incoming === "trusted-network"
+          ? ReaderForwarding.encode("spine.client.QueryService", "Read", reader, 4_194_304)
+          : await ReaderForwarding.seal(
+              "spine.client.QueryService",
+              "Read",
+              toBinary(QuerySchema, query),
+              reader,
+              { issue: () => "incoming-proof" },
+              4_194_304,
+            );
+      await createClient(QueryService, createGrpcTransport({ baseUrl: coordinator.baseUrl })).read(
+        query,
+        { headers },
+      );
+      expect(observed).toEqual([
+        { principal: { id: "reader-a" }, authorityFacts: { team: "ops" } },
+      ]);
+    },
+  );
+
+  it("signs a managed Command with its actual request bytes", async () => {
+    let proof: string | null = null;
+    const replica = await backend("signed-command", {
+      post: (context) => {
+        proof = context.requestHeader.get("spine-internal-reader-proof");
+        return create(AckSchema);
       },
     });
     closeables.push(replica.close);
     const coordinator = await NodeCoordinator.open({
       members: new TestReadyMembers([replica.member]),
       port: 0,
-      readerAdmission: "trusted-network",
-      forwarding: "trusted-network",
+      readerAdmission: {
+        direct: {
+          authenticate: () => ({
+            reader: {
+              principal: { id: "reader-a" },
+            },
+          }),
+        },
+      },
+      forwardingProof: {
+        issue: (bytes) => {
+          expect(bytes.byteLength).toBeGreaterThan(0);
+          return "signed-command-proof";
+        },
+      },
     });
     closeables.push(() => coordinator.close());
-    const headers = ReaderForwarding.encode(
-      "spine.client.QueryService",
-      "Read",
-      { principal: { id: "reader-a" }, authorityFacts: { team: "ops" } },
-      4_194_304,
+    await createClient(CommandService, createGrpcTransport({ baseUrl: coordinator.baseUrl })).post(
+      create(CommandService.method.post.input),
     );
-    await createClient(QueryService, createGrpcTransport({ baseUrl: coordinator.baseUrl })).read(
-      coordinatorQuery(),
-      { headers },
-    );
-    expect(observed).toEqual([{ principal: { id: "reader-a" }, authorityFacts: { team: "ops" } }]);
+    expect(proof).toBe("signed-command-proof");
   });
 
   it("rejects conflicting managed forwarding choices before listening", async () => {
@@ -160,6 +210,17 @@ describe("NodeCoordinator", () => {
         } as never),
       ).rejects.toThrow(/Invalid managed reader/);
     }
+  });
+
+  it("rejects an internal network marker mixed with signed Coordinator admission", async () => {
+    const mixed = { forwarded: { verify: () => true }, trustedNetwork: true };
+    await expect(
+      NodeCoordinator.open({
+        members: new TestReadyMembers([]),
+        port: 0,
+        readerAdmission: mixed,
+      }),
+    ).rejects.toThrow("Invalid managed reader admission mode.");
   });
 
   it("reissues a verified reader proof for the managed child Read operation", async () => {

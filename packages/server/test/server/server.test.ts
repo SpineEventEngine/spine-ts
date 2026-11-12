@@ -33,6 +33,7 @@ import {
 } from "@spine-event-engine/auth";
 import type { RequestCredential, SessionResolver } from "@spine-event-engine/auth";
 import { AnyPacker, spineCoreRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
+import { ReaderForwarding } from "@spine-event-engine/core/spi/reader-forwarding";
 import { ApplicationNode } from "@spine-event-engine/deployment";
 import { AuthenticationService, ResolveContextRequestSchema } from "@spine-event-engine/proto/auth";
 import {
@@ -1349,21 +1350,30 @@ describe("Server", () => {
     },
   );
 
-  it.each(["connect", "grpc-web"] as const)(
-    "forwards one logical idle activation ACK over %s and cancels its native child",
-    async (protocol) => {
+  it.each([
+    ["connect", "proof"],
+    ["connect", "trusted-network"],
+    ["grpc-web", "proof"],
+    ["grpc-web", "trusted-network"],
+  ] as const)(
+    "forwards one logical idle activation ACK over %s with %s reader forwarding",
+    async (protocol, mode) => {
       let childActivations = 0;
       let childCancellations = 0;
+      const childHeaders = new Map<string, Headers>();
       const backend = http2.createServer(
         connectNodeAdapter({
           routes: (router) =>
             router.service(SubscriptionService, {
-              subscribe: (topic) =>
-                create(SubscriptionSchema, {
+              subscribe: (topic, context) => {
+                childHeaders.set("Subscribe", new Headers(context.requestHeader));
+                return create(SubscriptionSchema, {
                   id: create(SubscriptionIdSchema, { value: `native-${protocol}` }),
                   topic,
-                }),
+                });
+              },
               activate: async function* (subscription, context) {
+                childHeaders.set("Activate", new Headers(context.requestHeader));
                 childActivations++;
                 yield create(SubscriptionUpdateSchema, {
                   subscription,
@@ -1383,7 +1393,8 @@ describe("Server", () => {
                     );
                 });
               },
-              cancel: () => {
+              cancel: (_subscription, context) => {
+                childHeaders.set("Cancel", new Headers(context.requestHeader));
                 childCancellations++;
                 return create(ResponseSchema);
               },
@@ -1399,7 +1410,9 @@ describe("Server", () => {
       const server = await openStandalone({
         port: 0,
         ...browserGateway(),
-        forwardingProof: { issue: async () => "path-probe-peer-proof" },
+        ...(mode === "trusted-network"
+          ? { forwarding: "trusted-network" as const }
+          : { forwardingProof: { issue: async () => "path-probe-peer-proof" } }),
         backend: { baseUrl: `http://127.0.0.1:${address.port.toString()}` },
         bindings: inMemoryBindings(),
         credentials: {
@@ -1461,6 +1474,24 @@ describe("Server", () => {
         controller.abort();
         await iterator.return?.();
         await expect.poll(() => childCancellations).toBe(1);
+        for (const method of ["Subscribe", "Activate", "Cancel"]) {
+          const received = childHeaders.get(method);
+          expect(received).toBeDefined();
+          if (received === undefined) continue;
+          if (mode === "trusted-network") {
+            expect(received.has("spine-internal-reader-proof")).toBe(false);
+            expect(
+              ReaderForwarding.decode(
+                received,
+                "spine.client.SubscriptionService",
+                method,
+                4_194_304,
+              ).principal?.id,
+            ).toBe("ada");
+          } else {
+            expect(received.get("spine-internal-reader-proof")).toBe("path-probe-peer-proof");
+          }
+        }
         expect(
           seenCredentials.filter((credential) => credential === "stream-one").length,
         ).toBeGreaterThanOrEqual(3);
