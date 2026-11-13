@@ -30,16 +30,13 @@ complete server/runtime environment. It introduced a Node HTTP/2 listener over
 `SpineServices`, defaulted to `127.0.0.1`, and returned a `RunningServer` with
 `host`, `port`, `baseUrl`, and idempotent `close()`; it did not yet include
 `ServerEnvironment` or delivery managed by the environment. That is historical. The
-current runtime exposes one process-wide `Environment`/`ServerEnvironment`
-singleton graph for storage, transport, optional delivery/tracing facilities,
-and their explicit process-close responsibility. Server startup completes finite
-environment recovery and opens command/event transport intake before listener
-intake. Server close stops network intake and sessions, drains accepted
-transport work, detaches and quiesces delivery, then closes its contexts and
-resources. Shared facilities remain open until every server has detached and
-the process explicitly closes `ServerEnvironment.instance()`. This lifecycle
-adds no process supervision, public delivery scheduler, retry-timing policy, or
-production transport-topology policy.
+current runtime uses independent ServerEnvironment instances configured through
+builders. Application assembles Bounded Contexts, shared read routes, Delivery,
+monitoring, and one tenant index. Application build completes required setup before
+Server opens listener intake. Closing a Server stops its endpoint work and resources
+without closing shared Application services. Callers close successful endpoints
+before Application, which closes Bounded Contexts, tenant storage, and environment
+in dependency order. Failed cleanup retains unfinished phases for retry.
 
 ## Read-Side and Write-Side Segregation
 
@@ -331,21 +328,19 @@ before delivery.
 
 ## Environment Delivery Lifecycle Sequence
 
-The process-wide `ServerEnvironment` manages the delivery lifecycle for attached
-contexts.
-`Server.start()` builds its contexts and completes finite environment recovery
-before opening listener intake. If recovery rejects, startup rejects and the
-listener is not opened. Recovery completion does not claim that every pending
-delivery was completed.
+Each Application environment supplies shared Delivery to its Bounded Contexts.
+Application first assembles all Bounded Contexts and registers their shared reads,
+then activates integration, monitoring, and recovered work. Server attaches to an
+already built Application and opens endpoint services. Two endpoints may expose the
+same Application without rebuilding or reattaching its Bounded Contexts.
 
-`RunningServer.close()` stops listener intake and sessions, closes context
-transport intake and drains accepted work, detaches delivery and waits for
-quiescence, then closes contexts and resources. It never closes process-wide
-facilities. After all sibling servers detach, explicit
-`ServerEnvironment.instance().close()` closes the singleton. Retriable close
-failures retain unfinished work and do not duplicate completed phases.
-`ServerEnvironment.close()` is permanent only after it is no longer in use; an
-in-use close rejects without tearing down its configured facilities.
+RunningServer.close() stops endpoint intake, sessions, subscriptions, and accepted
+endpoint work. Application.close() follows successful endpoint cleanup and waits for
+accepted Application operations before releasing Bounded Contexts, index, and
+services. Failed pending-start listener cleanup remains reachable from Application
+and prevents premature storage closure. Process-managed retirement is coordinated
+per Application, including pending starts, and rejects mixed manual/managed usage
+within one Application.
 
 The lifecycle exposes no public delivery scheduler, monitor, action,
 dead-letter, retry-timing, topology, adapter, supervision, or catch-up policy.

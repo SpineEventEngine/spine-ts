@@ -44,6 +44,43 @@ import type {
   TenantIndexRead,
 } from "./tenant-index.js";
 
+const failedCreations = new WeakMap<object, PersistentTenantIndex>();
+
+/**
+ * Retries cleanup retained after persistent index initialization fails.
+ *
+ * @internal
+ */
+export const persistentTenantIndexAccess: Readonly<{
+  hasFailedCreation(error: unknown): boolean;
+  retryFailedCreation(error: unknown): Promise<boolean>;
+}> = Object.freeze({
+  /**
+   * Checks whether a failed creation still has a record handle to close.
+   *
+   * @param error Failure returned by index initialization.
+   * @returns Whether cleanup is pending.
+   */
+  hasFailedCreation(error: unknown): boolean {
+    return typeof error === "object" && error !== null && failedCreations.has(error);
+  },
+
+  /**
+   * Retries a failed creation's record close, when the error carries one.
+   *
+   * @param error Failure returned by index initialization.
+   * @returns Whether the error carried a retained record handle.
+   */
+  async retryFailedCreation(error: unknown): Promise<boolean> {
+    if (typeof error !== "object" || error === null) return false;
+    const index = failedCreations.get(error);
+    if (index === undefined) return false;
+    await index.close();
+    failedCreations.delete(error);
+    return true;
+  },
+});
+
 /**
  * Storage-backed tenant registration directory independent of application storage routing.
  */
@@ -83,6 +120,7 @@ export class PersistentTenantIndex implements TenantIndex {
     const storage = options.storageFactory.createRecordStorage(context, spec, options.group, {
       prepareOnAccess: false,
     });
+    const index = new PersistentTenantIndex(storage, options.clock ?? Time.currentTime);
     try {
       if (!storage.atomicCompareAndSet)
         throw new Error("PersistentTenantIndex requires atomic compare-and-set storage.");
@@ -93,9 +131,18 @@ export class PersistentTenantIndex implements TenantIndex {
           options.group,
           "create",
         );
-      return new PersistentTenantIndex(storage, options.clock ?? Time.currentTime);
+      return index;
     } catch (error) {
-      storage.close();
+      try {
+        await index.close();
+      } catch (cleanup) {
+        const failure = new AggregateError(
+          [error, cleanup],
+          "Persistent tenant index initialization and cleanup failed.",
+        );
+        failedCreations.set(failure, index);
+        throw failure;
+      }
       throw error;
     }
   }
@@ -179,7 +226,10 @@ export class PersistentTenantIndex implements TenantIndex {
           this.#drained = resolve;
         });
       this.#storage.close();
-    })();
+    })().catch((error: unknown) => {
+      this.#closeAttempt = undefined;
+      throw error;
+    });
     return this.#closeAttempt;
   }
 

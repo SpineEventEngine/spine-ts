@@ -22,16 +22,13 @@ import {
   signOut,
 } from "firebase/auth";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { ServerTests } from "@spine-event-engine/server/testing";
-import { afterEach, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { FieldnotesHost } from "../src/fieldnotes-host.js";
 import type { FieldnotesSettings } from "../src/host-settings.js";
 
 const emulator = process.env.FIREBASE_AUTH_EMULATOR_HOST;
 const projectId = "demo-fieldnotes";
 const origin = "https://localhost:3000";
-
-afterEach(async () => ServerTests.resetEnvironment());
 
 it.skipIf(emulator === undefined)(
   "exchanges an official browser SDK Google emulator token through Admin and the real gateway",

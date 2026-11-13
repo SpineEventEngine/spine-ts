@@ -121,7 +121,7 @@ import {
 import { NativeOperation } from "./native-operation.js";
 import { RegisteredTargets } from "./registered-targets.js";
 import { emitServerError, emitServerWarning } from "../server/server-log.js";
-import { ServerEnvironment } from "../server/server-environment.js";
+import { Application, applicationAccess } from "../server/application.js";
 import { managedChildSubscriptionAccess } from "../server/managed-child-subscription.js";
 import {
   type StandSubscriptionEntry,
@@ -139,6 +139,7 @@ const serviceInstances = new WeakSet<SpineServices>();
 const serviceAppQueries = new WeakMap<SpineServices, AppQueryExecution>();
 const serviceReadFilters = new WeakMap<SpineServices, ReadSideFilterEngine>();
 const serviceAdmissions = new WeakMap<SpineServices, AbortController>();
+const serviceDrains = new WeakMap<SpineServices, () => Promise<void>>();
 
 /**
  * Framework-only hooks for installing service read policies and App Query routing.
@@ -150,6 +151,14 @@ interface SpineServicesAccess {
    * @param services Local service adapter.
    */
   stopAdmissions(services: SpineServices): void;
+
+  /**
+   * Waits for accepted ordinary service calls to settle before endpoint resources close.
+   *
+   * @param services Local service adapter.
+   * @returns Completion after its admitted unary calls settle.
+   */
+  drainWork(services: SpineServices): Promise<void>;
 
   /**
    * Attaches one Server's gRPC read policy before accepting requests.
@@ -249,10 +258,14 @@ export class SpineServices {
 
   readonly #admissionShutdown = new AbortController();
 
+  readonly #activeOperations = new Set<Promise<unknown>>();
+
+  #operationsIdle: PromiseWithResolvers<undefined> | undefined;
+
   /**
-   * Creates service adapters over built bounded contexts.
+   * Creates service adapters over an assembled Application.
    *
-   * @param options Configures contexts and subscription bounds.
+   * @param options Configures Application routes and subscription bounds.
    */
   constructor(options: SpineServicesOptions) {
     const admission: unknown = options.readerAdmission;
@@ -267,15 +280,18 @@ export class SpineServices {
       throw new Error("Invalid native reader admission mode.");
     serviceInstances.add(this);
     serviceAdmissions.set(this, this.#admissionShutdown);
-    this.#contexts = Object.freeze([...options.contexts]);
-    this.#queueCapacity = ServerEnvironment.instance().subscriptionQueueCapacity;
+    serviceDrains.set(this, () => this.#drainWork());
+    this.#contexts = options.application.contexts();
+    this.#queueCapacity = applicationAccess.environment(
+      options.application,
+    ).subscriptionQueueCapacity;
     this.#subscriptionLimit = ServiceValues.subscriptionLimit(
       options.subscriptionLimit ?? ServiceValues.defaultSubscriptionLimit,
     );
     this.#readerAdmission = options.readerAdmission;
     this.#readMaxBytes = options.readMaxBytes ?? 4_194_304;
     this.#registerSignalRoutes();
-    this.#registerStateRoutes(new RegisteredTargets(this.#contexts));
+    this.#registerStateRoutes(applicationAccess.targets(options.application));
   }
 
   /**
@@ -284,9 +300,13 @@ export class SpineServices {
   #registerSignalRoutes(): void {
     for (const context of this.#contexts) {
       for (const typeUrl of context.commandBus().acceptedCommandTypes()) {
-        if (!this.#commandRoutes.has(typeUrl)) {
-          this.#commandRoutes.set(typeUrl, { context, typeUrl });
-        }
+        const prior = this.#commandRoutes.get(typeUrl);
+        if (prior !== undefined)
+          throw new Error(
+            `Command handler ${typeUrl} is registered in both ` +
+              `${prior.context.name.value} and ${context.name.value}.`,
+          );
+        this.#commandRoutes.set(typeUrl, { context, typeUrl });
       }
 
       for (const typeUrl of context.eventBus().acceptedEventTypes()) {
@@ -430,7 +450,18 @@ export class SpineServices {
    * @param context Native transport context.
    * @returns Created subscription only while admission remains live.
    */
-  async #subscribeNative(topic: Topic, context: HandlerContext): Promise<Subscription> {
+  #subscribeNative(topic: Topic, context: HandlerContext): Promise<Subscription> {
+    return this.#track(this.#performSubscribeNative(topic, context));
+  }
+
+  /**
+   * Performs a native subscription request after endpoint-local tracking begins.
+   *
+   * @param topic Requested subscription topic.
+   * @param context Native transport context.
+   * @returns Created subscription while admission remains live.
+   */
+  async #performSubscribeNative(topic: Topic, context: HandlerContext): Promise<Subscription> {
     const operation = new NativeOperation(
       // Direct test contexts can omit the transport signal.
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
@@ -548,7 +579,28 @@ export class SpineServices {
    * @param work Admitted service action.
    * @returns Result while the admission remains valid.
    */
-  async #runAdmitted<T>(
+  #runAdmitted<T>(
+    service: string,
+    method: string,
+    bytes: Uint8Array,
+    context: HandlerContext | undefined,
+    work: (reader: TrustedReaderContext, signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    return this.#track(this.#performAdmitted(service, method, bytes, context, work));
+  }
+
+  /**
+   * Performs one native unary call after endpoint-local work tracking begins.
+   *
+   * @typeParam T Service result.
+   * @param service Canonical RPC service.
+   * @param method Canonical RPC method.
+   * @param bytes Canonical request bytes.
+   * @param context Native transport context.
+   * @param work Admitted service action.
+   * @returns Result while admission remains valid.
+   */
+  async #performAdmitted<T>(
     service: string,
     method: string,
     bytes: Uint8Array,
@@ -572,6 +624,35 @@ export class SpineServices {
     } finally {
       operation.close();
     }
+  }
+
+  /**
+   * Retains one admitted call until its action and admission cleanup settle.
+   *
+   * @typeParam T Service result.
+   * @param operation Accepted service call.
+   * @returns The call's original result.
+   */
+  #track<T>(operation: Promise<T>): Promise<T> {
+    if (this.#activeOperations.size === 0)
+      this.#operationsIdle = Promise.withResolvers<undefined>();
+    this.#activeOperations.add(operation);
+    void operation
+      .finally(() => {
+        this.#activeOperations.delete(operation);
+        if (this.#activeOperations.size === 0) this.#operationsIdle?.resolve(undefined);
+      })
+      .catch(() => undefined);
+    return operation;
+  }
+
+  /**
+   * Drains ordinary operations admitted through this service adapter.
+   *
+   * @returns Completion after current accepted calls settle.
+   */
+  #drainWork(): Promise<void> {
+    return this.#operationsIdle?.promise ?? Promise.resolve();
   }
 
   /**
@@ -1441,6 +1522,18 @@ export const spineServicesAccess: SpineServicesAccess = Object.freeze({
   },
 
   /**
+   * Waits for this endpoint's accepted ordinary calls.
+   *
+   * @param services Local service adapter.
+   * @returns Completion after admitted calls settle.
+   */
+  drainWork(services: SpineServices): Promise<void> {
+    const drain = serviceDrains.get(services);
+    if (drain === undefined) throw new TypeError("Expected SpineServices instance.");
+    return drain();
+  },
+
+  /**
    * Attaches Server-only outward read policies to its service adapter.
    *
    * @param services Prepared service adapter.
@@ -1489,15 +1582,15 @@ export const spineServicesAccess: SpineServicesAccess = Object.freeze({
 });
 
 /**
- * Options for registering Spine service adapters over built bounded contexts.
+ * Options for registering Spine service adapters over an Application.
  */
 export interface SpineServicesOptions {
   // prettier-ignore
 
   /**
-   * Contexts exposed by these service adapters.
+   * Application supplying shared contexts and read routes.
    */
-  readonly contexts: readonly BoundedContext[];
+  readonly application: Application;
 
   /**
    * Existing native request-size bound used for internal reader assertions.

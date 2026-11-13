@@ -16,13 +16,8 @@ import { create } from "@bufbuild/protobuf";
 import { AnyPacker } from "@spine-event-engine/core";
 import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { Server, SignalMetadata } from "@spine-event-engine/server";
-import { ServerTests } from "@spine-event-engine/server/testing";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-afterEach(async () => {
-  await ServerTests.resetEnvironment();
-});
+import { Application, Server, SignalMetadata } from "@spine-event-engine/server";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   CreateOrderSchema,
@@ -42,8 +37,17 @@ describe("cross-context Orders example", () => {
       storageFactory: new InMemoryStorageFactory(),
       tenants: [ordersTenants.northwind, ordersTenants.contoso],
     });
-    const { catalog, orders } = await OrderReviewContexts.create();
-    const running = await Server.atPort(0).add(catalog).add(orders).start();
+    const builders = OrderReviewContexts.create();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(setup.environment)
+      .setTenantIndex(setup.tenantIndex)
+      .add(builders.catalog)
+      .add(builders.orders)
+      .build();
+    const [catalog, orders] = application.contexts();
+    if (catalog === undefined || orders === undefined)
+      throw new Error("Expected both Orders Bounded Contexts.");
+    const running = await Server.atPort(0).setApplication(application).start();
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "orders-reviewer" }),
       tenantId: ordersTenants.northwind,
@@ -157,6 +161,7 @@ describe("cross-context Orders example", () => {
       ).toBe("Blue mug");
     } finally {
       await running.close();
+      await application.close();
       await setup.close();
     }
   });
@@ -168,8 +173,16 @@ describe("cross-context Orders example", () => {
       storageFactory: new InMemoryStorageFactory(),
       tenants: [ordersTenants.northwind, ordersTenants.contoso],
     });
-    const { catalog, orders } = await OrderReviewContexts.create();
-    const running = await Server.atPort(0).add(catalog).add(orders).start();
+    const builders = OrderReviewContexts.create();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(setup.environment)
+      .setTenantIndex(setup.tenantIndex)
+      .add(builders.catalog)
+      .add(builders.orders)
+      .build();
+    const orders = application.contexts()[1];
+    if (orders === undefined) throw new Error("Expected Orders Bounded Context.");
+    const running = await Server.atPort(0).setApplication(application).start();
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "orders-reviewer" }),
       tenantId: ordersTenants.northwind,
@@ -198,6 +211,7 @@ describe("cross-context Orders example", () => {
       });
     } finally {
       await running.close();
+      await application.close();
       await setup.close();
     }
   });

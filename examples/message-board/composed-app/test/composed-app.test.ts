@@ -26,7 +26,6 @@ import {
   TopicSchema,
 } from "@spine-event-engine/proto/client";
 import { EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
-import { ServerTests } from "@spine-event-engine/server/testing";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -47,16 +46,65 @@ import { ComposedBoardApplication } from "../src/index.js";
 import { ReadBoardStatsHandler } from "../src/board-query-handler.js";
 
 describe("multi-package Message Board", () => {
-  beforeEach(async () => {
-    ServerEnvironment.when(EnvironmentType.Local).use({
-      storageFactory: new InMemoryStorageFactory(),
-    });
-    await ServerEnvironment.instance().completeSetup();
+  it("assembles both Bounded Contexts in one Application", async () => {
+    const environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (setting) => {
+        setting.use({
+          storageFactory: new InMemoryStorageFactory(),
+        });
+      })
+      .build();
+    const board = await new ComposedBoardApplication().create(environment);
+    expect(board.application.contexts()).toEqual([board.messages, board.announcements]);
+    await board.application.close();
   });
-  afterEach(async () => ServerTests.resetEnvironment());
+
+  it("closes a selected environment when a registry factory rejects assembly", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const close = vi.spyOn(storageFactory, "close");
+    const selected = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (setting) => {
+        setting.use({ storageFactory });
+      })
+      .build();
+    await expect(
+      new ComposedBoardApplication().create(selected, {
+        registryFactory: () => {
+          throw new Error("registry unavailable");
+        },
+      }),
+    ).rejects.toThrow("registry unavailable");
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("closes the selected environment when the native listener host is invalid", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const close = vi.spyOn(storageFactory, "close");
+    const selected = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (setting) => {
+        setting.use({ storageFactory });
+      })
+      .build();
+    await expect(new ComposedBoardApplication().create(selected, { host: " " })).rejects.toThrow(
+      "Server host must not be blank",
+    );
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  let environment: ServerEnvironment;
+  beforeEach(() => {
+    environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (setting) => {
+        setting.use({
+          storageFactory: new InMemoryStorageFactory(),
+        });
+      })
+      .build();
+  });
+  afterEach(async () => environment.close());
 
   it("reports cumulative per-board posts and distinct authors from accepted Events", async () => {
-    const application = await new ComposedBoardApplication().create();
+    const application = await new ComposedBoardApplication().create(environment);
     const running = await application.server.start();
     const client = Client.connectTo(running.baseUrl);
     try {
@@ -98,11 +146,12 @@ describe("multi-package Message Board", () => {
     } finally {
       await client.close();
       await running.close();
+      await application.application.close();
     }
   });
 
   it("retains the earliest accepted Event time when announcements arrive out of timestamp order", async () => {
-    const application = await new ComposedBoardApplication().create();
+    const application = await new ComposedBoardApplication().create(environment);
     const running = await application.server.start();
     const client = Client.connectTo(running.baseUrl);
     let seconds = 30n;
@@ -164,12 +213,13 @@ describe("multi-package Message Board", () => {
         await client.close();
       } finally {
         await running.close();
+        await application.application.close();
       }
     }
   });
 
   it("hides restricted totals without a verified grant and strips contributor directories", async () => {
-    const application = await new ComposedBoardApplication().create();
+    const application = await new ComposedBoardApplication().create(environment);
     const running = await application.server.start();
     const client = Client.connectTo(running.baseUrl);
     try {
@@ -229,11 +279,12 @@ describe("multi-package Message Board", () => {
     } finally {
       await client.close();
       await running.close();
+      await application.application.close();
     }
   });
 
   it("reads an individual Entity with public name redaction", async () => {
-    const application = await new ComposedBoardApplication().create();
+    const application = await new ComposedBoardApplication().create(environment);
     const running = await application.server.start();
     const client = Client.connectTo(running.baseUrl);
     try {
@@ -285,11 +336,12 @@ describe("multi-package Message Board", () => {
     } finally {
       await client.close();
       await running.close();
+      await application.application.close();
     }
   });
 
   it("delivers real Entity and Event RPC subscriptions from handlers in dependency packages", async () => {
-    const application = await new ComposedBoardApplication().create();
+    const application = await new ComposedBoardApplication().create(environment);
     const running = await application.server.start();
     const client = Client.connectTo(running.baseUrl);
     const target = create(TargetSchema, {
@@ -369,11 +421,12 @@ describe("multi-package Message Board", () => {
       await events.cancel();
       await client.close();
       await running.close();
+      await application.application.close();
     }
   });
 
   it("removes restricted messages for public reads and admits verified authority facts", async () => {
-    const application = await new ComposedBoardApplication().create();
+    const application = await new ComposedBoardApplication().create(environment);
     const running = await application.server.start();
     const client = Client.connectTo(running.baseUrl);
     try {
@@ -417,11 +470,12 @@ describe("multi-package Message Board", () => {
     } finally {
       await client.close();
       await running.close();
+      await application.application.close();
     }
   });
 
   it("rejects a missing required query field before invoking the application handler", async () => {
-    const application = await new ComposedBoardApplication().create();
+    const application = await new ComposedBoardApplication().create(environment);
     const running = await application.server.start();
     const client = Client.connectTo(running.baseUrl);
     const execute = vi.spyOn(ReadBoardStatsHandler.prototype, "execute");
@@ -437,11 +491,12 @@ describe("multi-package Message Board", () => {
       execute.mockRestore();
       await client.close();
       await running.close();
+      await application.application.close();
     }
   });
 
   it("suppresses restricted Event payloads while preserving the next public Event", async () => {
-    const application = await new ComposedBoardApplication().create();
+    const application = await new ComposedBoardApplication().create(environment);
     const running = await application.server.start();
     const client = Client.connectTo(running.baseUrl);
     const events = await client
@@ -482,6 +537,7 @@ describe("multi-package Message Board", () => {
       await events.cancel();
       await client.close();
       await running.close();
+      await application.application.close();
     }
   });
 
@@ -492,7 +548,9 @@ describe("multi-package Message Board", () => {
         authorityFacts: { canReadRestricted: true },
       },
     }));
-    const application = await new ComposedBoardApplication({ direct: { authenticate } }).create();
+    const application = await new ComposedBoardApplication({ direct: { authenticate } }).create(
+      environment,
+    );
     const running = await application.server.start();
     const client = Client.connectTo(running.baseUrl);
     const events = await client
@@ -548,6 +606,7 @@ describe("multi-package Message Board", () => {
       await events.cancel();
       await client.close();
       await running.close();
+      await application.application.close();
     }
   });
 });

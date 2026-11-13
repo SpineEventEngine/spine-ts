@@ -24,13 +24,8 @@ import {
 
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
-import {
-  BoundedContext,
-  BoundedContextBuilder,
-  boundedContextAccess,
-} from "../context/bounded-context.js";
+import { BoundedContext, boundedContextAccess } from "../context/bounded-context.js";
 import type { StandSubscriptionRegistry } from "../stand/subscription-registry.js";
-import type { Stand } from "../stand/stand.js";
 import {
   SpineServices,
   spineServicesAccess,
@@ -45,18 +40,15 @@ import { TypeRegistry } from "@spine-event-engine/core";
 import { registeredProtoModules } from "@spine-event-engine/proto/codegen";
 import { ProcessServerCoordinator } from "./process-server-coordinator.js";
 import { CloseErrors, RetryableCloseGroup } from "./retryable-close.js";
+import { managedApplicationCapture } from "./managed-application-capture.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "./server-environment.js";
+import { Application, applicationAccess } from "./application.js";
 
 const defaultHost = "127.0.0.1";
 const defaultPort = 0;
 const defaultMessageMaxBytes = 4_194_304;
 const maximumMessageMaxBytes = 0xffff_ffff;
 const gracefulSessionDrainMs = 100;
-
-/**
- * A context supplied directly or assembled from a builder during server startup.
- */
-type ServerContext = BoundedContext | BoundedContextBuilder;
 
 /**
  * Identifies whether caller-managed or server-managed startup controls the environment lifecycle.
@@ -79,7 +71,7 @@ export interface ServerQueryExecutionContext extends TrustedReaderContext {
 }
 const runningContexts = new WeakMap<RunningServer, readonly BoundedContext[]>();
 const serverHosts = new WeakMap<Server, string>();
-const assemblingStands = new WeakMap<Stand, object>();
+const serverApplications = new WeakMap<Server, Application>();
 
 /**
  * Performs work coupled to listener readiness and network shutdown.
@@ -105,9 +97,8 @@ export interface ListenerLifecycle {
 /**
  * Configures and starts local Spine Connect/gRPC-compatible services.
  *
- * A server assembles its bounded contexts and opens generated services before
- * accepting network requests. It closes its contexts and added resources in
- * order while environment Delivery remains available to sibling contexts.
+ * A server exposes one assembled Application through an HTTP/2 listener.
+ * Endpoint cleanup releases listener resources while the Application stays open.
  */
 export class Server {
   readonly #host: string;
@@ -117,8 +108,6 @@ export class Server {
   readonly #readMaxBytes: number;
 
   readonly #writeMaxBytes: number;
-
-  readonly #contexts: ServerContext[] = [];
 
   readonly #resources: {
     /**
@@ -135,9 +124,11 @@ export class Server {
     import("@spine-event-engine/core").MessageSchema
   >[];
 
-  readonly #services: Omit<SpineServicesOptions, "contexts">;
+  readonly #services: Omit<SpineServicesOptions, "application">;
 
-  readonly #environment: ServerEnvironment;
+  #environment!: ServerEnvironment;
+
+  #application: Application | undefined;
 
   #starting: Promise<RunningServer> | undefined;
 
@@ -169,12 +160,10 @@ export class Server {
       options.writeMaxBytes ?? defaultMessageMaxBytes,
       "writeMaxBytes",
     );
-    this.#contexts.push(...(options.contexts ?? []));
     this.#appQueries = Object.freeze([...(options.appQueries ?? [])]);
     this.#readFilters = Object.freeze([...new Set(options.readSideFilters ?? [])]);
     this.#resources.push(...(options.resources ?? []));
     this.#services = options.services ?? {};
-    this.#environment = ServerEnvironment.instance();
     serverHosts.set(this, this.#host);
   }
 
@@ -190,17 +179,18 @@ export class Server {
   }
 
   /**
-   * Adds one bounded context or builder to the assembly.
+   * Sets the assembled Application served by this endpoint.
    *
-   * Builders assemble during {@link start} before the listener opens.
-   * They use {@link ServerEnvironment.storageFactory}. The running server closes
-   * added contexts after services, sessions, and active work stop.
-   *
-   * @param context Supplies the context or builder to expose.
+   * @param application Supplies shared contexts and registered read routes.
    * @returns This server builder.
    */
-  add(context: BoundedContext | BoundedContextBuilder): this {
-    this.#contexts.push(context);
+  setApplication(application: Application): this {
+    if (this.#starting !== undefined || this.#active !== undefined)
+      throw new Error("Server application cannot change after startup.");
+    this.#application = application;
+    managedApplicationCapture.record(application);
+    serverApplications.set(this, application);
+    this.#environment = applicationAccess.environment(application);
     return this;
   }
 
@@ -227,9 +217,9 @@ export class Server {
   }
 
   /**
-   * Adds a framework closeable owned by this server assembly.
+   * Adds a closeable to release after this endpoint's accepted work drains.
    *
-   * @param resource Supplies the resource to close after contexts.
+   * @param resource Supplies the endpoint resource to close.
    * @returns This server builder.
    */
   addResource(resource: {
@@ -257,15 +247,12 @@ export class Server {
   }
 
   /**
-   * Starts the server after assembling contexts and services.
+   * Starts an endpoint after the Application has assembled its Bounded Contexts.
    *
-   * Built contexts register recipients before generated services and the listener
-   * open. A failed assembly or listener open leaves no listener and closes acquired
-   * resources. Network cleanup is a hard gate before context or dependency cleanup.
-   * Caller-managed startup shares the active environment, rejects during a managed
-   * server run, installs no signal handlers, and never closes the environment.
-   * A later call after incomplete cleanup retries only that cleanup and leaves
-   * this server terminal. A fresh server may reuse the singleton environment.
+   * The Application registers recipients before services and the listener open.
+   * Failed listener startup retains endpoint cleanup for a later attempt.
+   * Caller-managed startup installs no process signal handlers and leaves the
+   * Application available for explicit closure after all endpoints stop.
    * Concurrent callers share one start or cleanup attempt.
    *
    * @returns The running server once its listener accepts requests.
@@ -278,6 +265,14 @@ export class Server {
    * Shares or begins startup under the selected environment lifecycle mode.
    */
   #start(ownership: EnvironmentOwnership): Promise<RunningServer> {
+    const application = this.#application;
+    if (application === undefined)
+      return Promise.reject(new Error("Server requires setApplication() before startup."));
+    try {
+      applicationAccess.useMode(application, ownership);
+    } catch (error) {
+      return Promise.reject(this.#startError(error));
+    }
     const current = this.#starting;
     if (current !== undefined) {
       if (this.#startingOwnership !== ownership) {
@@ -292,14 +287,21 @@ export class Server {
         new Error("Server cannot restart after failed-start cleanup has completed."),
       );
     }
-    const cleanup = this.#failedStartCleanup;
-    const lifecycle = this.#failedListenerLifecycle;
-    const starting =
-      lifecycle !== undefined
-        ? this.#retryFailedListenerLifecycle(lifecycle)
-        : cleanup === undefined
-          ? this.#startOnce()
-          : this.#retryFailedStartCleanup(cleanup);
+    const starting = this.#selectStartAttempt();
+    return this.#trackStart(starting, ownership);
+  }
+
+  /**
+   * Shares the current start attempt and clears its marker after it settles.
+   *
+   * @param starting Selected listener start or cleanup retry.
+   * @param ownership Selected process lifecycle mode.
+   * @returns The selected start attempt.
+   */
+  #trackStart(
+    starting: Promise<RunningServer>,
+    ownership: EnvironmentOwnership,
+  ): Promise<RunningServer> {
     this.#starting = starting;
     this.#startingOwnership = ownership;
     void starting.then(
@@ -314,35 +316,101 @@ export class Server {
   }
 
   /**
-   * Starts this server with process-owned `SIGINT` and `SIGTERM` shutdown.
+   * Normalizes a thrown startup value for the public rejection.
    *
-   * This is the normal application entry point. Embedded applications should
-   * use {@link start} and keep ownership of process signals themselves.
-   * Concurrent calls on one builder return one managed handle. Run-managed
-   * siblings share an active generation but reject while caller-managed
-   * ownership is active. The final local environment-owning run retirement
-   * permanently closes its environment. A failed final
-   * close stays retryable through `close()` or a later process signal.
-   * Caller-managed servers never close their environment.
+   * @param error Thrown startup value.
+   * @returns An Error describing the failed start.
+   */
+  #startError(error: unknown): Error {
+    return error instanceof Error ? error : new Error("Server startup failed.", { cause: error });
+  }
+
+  /**
+   * Selects startup or retry of the last incomplete listener cleanup.
+   *
+   * @returns The selected asynchronous start attempt.
+   */
+  #selectStartAttempt(): Promise<RunningServer> {
+    const lifecycle = this.#failedListenerLifecycle;
+    if (lifecycle !== undefined) return this.#retryFailedListenerLifecycle(lifecycle);
+    const cleanup = this.#failedStartCleanup;
+    return cleanup === undefined
+      ? this.#startApplication(this.#requireApplication())
+      : this.#retryFailedStartCleanup(cleanup);
+  }
+
+  /**
+   * Returns the Application selected before listener startup.
+   *
+   * @returns The selected Application.
+   */
+  #requireApplication(): Application {
+    if (this.#application === undefined)
+      throw new Error("Server requires setApplication() before startup.");
+    return this.#application;
+  }
+
+  /**
+   * Starts this endpoint with process-managed `SIGINT` and `SIGTERM` shutdown.
+   *
+   * Concurrent calls on this server return one managed handle. A managed run
+   * cannot mix with caller-managed endpoints for the same Application. The
+   * process coordinator closes the Application after its final managed endpoint
+   * stops. Incomplete close work remains retryable through endpoint close or
+   * a later process signal.
    *
    * @returns The running server after its listener accepts requests.
    */
   run(): Promise<RunningServer> {
+    const application = this.#application;
+    if (application === undefined)
+      return Promise.reject(new Error("Server requires setApplication() before run()."));
     const current = this.#run;
     if (current !== undefined) return current;
     const environment = this.#environment;
-    const running = this.#start("server").then((server) =>
-      ProcessServerCoordinator.add(
-        server,
-        environment,
-        serverEnvironmentAccess.loggerFor(environment),
-        () => {
-          if (this.#run === running) {
-            this.#run = undefined;
-          }
-        },
-      ),
-    );
+    let finish: () => void;
+    try {
+      finish = applicationAccess.beginManagedStart(application);
+    } catch (error) {
+      return Promise.reject(
+        error instanceof Error
+          ? error
+          : new Error("Managed Server start failed.", { cause: error }),
+      );
+    }
+    return this.#beginManagedRun(application, environment, finish);
+  }
+
+  /**
+   * Tracks process startup and cleanup after managed admission succeeds.
+   *
+   * @param application Application exposed by the endpoint.
+   * @param environment Facilities used for process logging.
+   * @param onFinish Releases the pending managed start.
+   * @returns The running endpoint after registration.
+   */
+  #beginManagedRun(
+    application: Application,
+    environment: ServerEnvironment,
+    onFinish: () => void,
+  ): Promise<RunningServer> {
+    const running = this.#start("server")
+      .then((server) => {
+        const managed = ProcessServerCoordinator.add(
+          server,
+          application,
+          serverEnvironmentAccess.loggerFor(environment),
+          () => {
+            if (this.#run === running) {
+              this.#run = undefined;
+            }
+          },
+        );
+        managedApplicationCapture.replaceEndpoint(server, managed);
+        return managed;
+      })
+      .finally(onFinish)
+      .catch((error: unknown) => this.#cleanupFailedManagedStart(error));
     this.#run = running;
     void running.catch(() => {
       if (this.#run === running) {
@@ -353,19 +421,86 @@ export class Server {
   }
 
   /**
-   * Builds contexts and opens the listener for one start attempt.
+   * Releases a managed Application after failed startup when no endpoint survived.
    *
-   * @returns The running listener after lifecycle startup.
+   * @param error Startup failure to preserve.
+   * @returns A rejection after safe cleanup settles.
    */
-  async #startOnce(): Promise<RunningServer> {
-    await serverEnvironmentAccess.awaitSetup(this.#environment);
-    const admission: ContextAdmission = { token: {}, contexts: [] };
-    const contexts = await this.#prepareContexts(admission);
-    const routes = await this.#installContexts(contexts, admission);
-    const running = await this.#openListener(contexts, routes);
-    await this.#startLifecycles(running);
-    this.#active = running;
-    return running;
+  async #cleanupFailedManagedStart(error: unknown): Promise<never> {
+    const application = this.#requireApplication();
+    await applicationAccess.whenManagedStartsIdle(application);
+    if (applicationAccess.hasEndpoints(application)) throw error;
+    try {
+      await application.close();
+    } catch (cleanup) {
+      throw new AggregateError([error, cleanup], "Managed Server startup cleanup failed.");
+    }
+    throw error;
+  }
+
+  /**
+   * Starts a listener against preassembled Application contexts and routes.
+   *
+   * @param application Shared runtime to expose.
+   * @returns The listening endpoint after Application admission.
+   */
+  async #startApplication(application: Application): Promise<RunningServer> {
+    const finish = applicationAccess.beginStart(application);
+    try {
+      const running = await this.#openListener(
+        application.contexts(),
+        applicationAccess.targets(application),
+      );
+      await this.#startLifecycles(running);
+      try {
+        applicationAccess.endpointStarted(application);
+        running.markRegistered();
+      } catch (error) {
+        try {
+          await running.close();
+        } catch (cleanup) {
+          this.#failedListenerLifecycle = running;
+          throw new AggregateError([error, cleanup], "Application start cleanup failed.");
+        }
+        throw error;
+      }
+      this.#active = running;
+      managedApplicationCapture.recordEndpoint(running);
+      return running;
+    } catch (error) {
+      this.#retainFailedStart(application);
+      throw error;
+    } finally {
+      finish();
+    }
+  }
+
+  /**
+   * Gives the Application retryable cleanup for a failed listener start.
+   *
+   * @param application Shared runtime retaining failed network cleanup.
+   */
+  #retainFailedStart(application: Application): void {
+    if (this.#failedListenerLifecycle === undefined && this.#failedStartCleanup === undefined)
+      return;
+    applicationAccess.retainFailedStart(application, async () => {
+      const lifecycle = this.#failedListenerLifecycle;
+      if (lifecycle !== undefined) {
+        try {
+          await this.#retryFailedListenerLifecycle(lifecycle);
+        } catch (error) {
+          if (this.#failedListenerLifecycle !== undefined) throw error;
+        }
+      }
+      const cleanup = this.#failedStartCleanup;
+      if (cleanup !== undefined) {
+        try {
+          await this.#retryFailedStartCleanup(cleanup);
+        } catch (error) {
+          if (this.#failedStartCleanup !== undefined) throw error;
+        }
+      }
+    });
   }
 
   /**
@@ -379,13 +514,12 @@ export class Server {
     contexts: readonly BoundedContext[],
     routes: RegisteredTargets,
   ): Promise<RunningHttp2Server> {
-    const closeables = [...contexts, ...this.#resources];
+    const closeables = [...this.#resources];
     const cleanup: FailedStartCleanup = {
       closeGroup: new RetryableCloseGroup(
         closeables,
-        "Server start cleanup failed while closing owned contexts/resources.",
+        "Server start cleanup failed while closing listener resources.",
       ),
-      routes,
     };
     try {
       return await this.#prepareListener(contexts, routes, closeables, cleanup);
@@ -410,7 +544,7 @@ export class Server {
     closeables: readonly unknown[],
     cleanup: FailedStartCleanup,
   ): Promise<RunningHttp2Server> {
-    const { queries, services } = this.#createReadServices(contexts, routes, cleanup);
+    const { queries, services } = this.#createReadServices(routes, cleanup);
     const { httpServer, sessions } = this.#createHttpListener(services);
     cleanup.network = { server: httpServer, sessions };
     const address = await ServerValues.listen(httpServer, this.#host, this.#port);
@@ -419,26 +553,24 @@ export class Server {
       server: httpServer,
       sessions,
       environment: this.#environment,
-      routes,
       queries,
       services,
       host,
       port: address.port,
       contexts,
       closeables,
+      application: this.#requireApplication(),
     });
   }
 
   /**
    * Installs Server result policies and query execution into one listener's services.
    *
-   * @param contexts Exposed Bounded Contexts.
    * @param routes Validated Entity state routes.
    * @param cleanup Retained failure cleanup state.
    * @returns Listener services and App Query execution lifetime.
    */
   #createReadServices(
-    contexts: readonly BoundedContext[],
     routes: RegisteredTargets,
     cleanup: FailedStartCleanup,
   ): { queries: AppQueryExecution; services: SpineServices } {
@@ -451,7 +583,7 @@ export class Server {
           );
     const queries = new AppQueryExecution(this.#appQueries, routes, filters);
     const services = new SpineServices({
-      contexts,
+      application: this.#requireApplication(),
       readMaxBytes: this.#readMaxBytes,
       ...this.#services,
     });
@@ -500,130 +632,6 @@ export class Server {
     });
     runningContexts.set(running, options.contexts);
     return running;
-  }
-
-  /**
-   * Reserves prebuilt contexts before awaiting builders, then assembles each builder.
-   *
-   * @param admission Attempt-local reservations retained through cleanup.
-   * @returns Prepared contexts for this Server.
-   */
-  async #prepareContexts(admission: ContextAdmission): Promise<readonly BoundedContext[]> {
-    const contexts: BoundedContext[] = [];
-    let conflict: unknown;
-    let conflicted = false;
-    for (const entry of this.#contexts) {
-      if (boundedContextAccess.isBuilder(entry)) continue;
-      try {
-        this.#admitContext(entry, admission);
-      } catch (error) {
-        if (!conflicted) conflict = error;
-        conflicted = true;
-      }
-    }
-    try {
-      if (conflicted) throw conflict;
-      for (const entry of this.#contexts) {
-        const context = boundedContextAccess.isBuilder(entry)
-          ? await boundedContextAccess.build(entry)
-          : entry;
-        if (boundedContextAccess.isBuilder(entry)) this.#admitContext(context, admission);
-        contexts.push(context);
-      }
-      return contexts;
-    } catch (error) {
-      await this.#cleanupFailedRegistration(admission.contexts, undefined, error, admission);
-      throw error;
-    }
-  }
-
-  /**
-   * Reserves one context Stand while this Server assembles its routes.
-   *
-   * @param context Context to reserve.
-   * @param admission Attempt-local reservations and token.
-   */
-  #admitContext(context: BoundedContext, admission: ContextAdmission): void {
-    const stand = context.stand();
-    const token = assemblingStands.get(stand);
-    if (token !== undefined || RegisteredTargets.forStand(stand) !== undefined) {
-      throw new Error("Stand is already associated with another Server or assembly.");
-    }
-    assemblingStands.set(stand, admission.token);
-    admission.contexts.push(context);
-  }
-
-  /**
-   * Clears only reservations made by the given assembly attempt.
-   *
-   * @param admission Attempt whose reserved Stands may be released.
-   */
-  #releaseAdmission(admission: ContextAdmission): void {
-    for (const context of admission.contexts) {
-      const stand = context.stand();
-      if (assemblingStands.get(stand) === admission.token) assemblingStands.delete(stand);
-    }
-    admission.contexts.length = 0;
-  }
-
-  /**
-   * Installs state routes for the assembled contexts.
-   *
-   * @param contexts Built contexts for this Server.
-   * @param admission Reservations transferred to installed routes.
-   * @returns The installed routes.
-   */
-  async #installContexts(
-    contexts: readonly BoundedContext[],
-    admission: ContextAdmission,
-  ): Promise<RegisteredTargets> {
-    const freshContexts = contexts.filter(
-      (context) => RegisteredTargets.forStand(context.stand()) === undefined,
-    );
-    let routes: RegisteredTargets | undefined;
-    try {
-      routes = new RegisteredTargets(contexts);
-      routes.install(contexts);
-      this.#releaseAdmission(admission);
-      const logger = serverEnvironmentAccess.loggerFor(this.#environment);
-      for (const context of contexts) {
-        boundedContextAccess.installLogger(context, logger);
-        serverEnvironmentAccess.warnVolatileRegistry(this.#environment, context);
-      }
-      return routes;
-    } catch (error) {
-      await this.#cleanupFailedRegistration(freshContexts, routes, error, admission);
-      throw error;
-    }
-  }
-
-  /**
-   * Retains retryable cleanup when route installation fails.
-   *
-   * @param contexts Fresh contexts to close after failure.
-   * @param routes Routes installed by this attempt, if any.
-   * @param error Original route failure.
-   * @param admission Reservations retained until context cleanup succeeds.
-   */
-  async #cleanupFailedRegistration(
-    contexts: readonly BoundedContext[],
-    routes: RegisteredTargets | undefined,
-    error: unknown,
-    admission?: ContextAdmission,
-  ): Promise<void> {
-    const closeGroup = new RetryableCloseGroup(
-      [...contexts, ...this.#resources],
-      "Server start cleanup failed while closing owned contexts/resources.",
-    );
-    try {
-      await closeGroup.close();
-    } catch (cleanupError) {
-      this.#failedStartCleanup = { closeGroup, routes, admission };
-      throw ServerValues.registrationCleanupError(error, cleanupError);
-    }
-    routes?.release();
-    if (admission !== undefined) this.#releaseAdmission(admission);
-    this.#failedStartConsumed = true;
   }
 
   /**
@@ -695,8 +703,6 @@ export class Server {
       CloseErrors.collect(error, errors);
     }
     if (!closeFailed && this.#failedStartCleanup === cleanup) {
-      cleanup.routes?.release();
-      if (cleanup.admission !== undefined) this.#releaseAdmission(cleanup.admission);
       if (cleanup.services !== undefined) spineServicesAccess.clearLogger(cleanup.services);
       this.#failedStartCleanup = undefined;
       this.#failedStartConsumed = true;
@@ -737,18 +743,8 @@ export class Server {
  */
 interface FailedStartCleanup {
   readonly closeGroup: RetryableCloseGroup;
-  readonly routes?: RegisteredTargets | undefined;
-  readonly admission?: ContextAdmission | undefined;
   services?: SpineServices;
   network?: FailedStartNetwork;
-}
-
-/**
- * Context admission token and contexts installed for one running server.
- */
-interface ContextAdmission {
-  readonly token: object;
-  readonly contexts: BoundedContext[];
 }
 
 /**
@@ -769,6 +765,11 @@ export const serverBuilderAccess: Readonly<{
    * Reports whether the configured server host resolves to a loopback address.
    */
   isLoopback(server: Server): boolean;
+
+  /**
+   * Returns the Application configured for this native server builder.
+   */
+  application(server: Server): Application | undefined;
 }> = Object.freeze({
   /**
    * Reports whether the configured server host resolves to a loopback address.
@@ -776,6 +777,13 @@ export const serverBuilderAccess: Readonly<{
   isLoopback(server: Server): boolean {
     const host = serverHosts.get(server);
     return host !== undefined && isLoopbackHost(host);
+  },
+
+  /**
+   * Returns the Application configured for this native server builder.
+   */
+  application(server: Server): Application | undefined {
+    return serverApplications.get(server);
   },
 });
 
@@ -822,14 +830,6 @@ export interface ServerOptions {
   readonly writeMaxBytes?: number;
 
   /**
-   * Built bounded contexts or builders registered with this server assembly.
-   *
-   * Builders in this list are assembled during {@link Server.start} before
-   * listener open. They use {@link ServerEnvironment.storageFactory}.
-   */
-  readonly contexts?: readonly (BoundedContext | BoundedContextBuilder)[];
-
-  /**
    * Handler instances selected explicitly for this Server's App Query routes.
    */
   readonly appQueries?: readonly AppQueryHandler<never, Message>[];
@@ -844,14 +844,14 @@ export interface ServerOptions {
   /**
    * Service-level options for Command, Query, and Subscription routes.
    */
-  readonly services?: Omit<SpineServicesOptions, "contexts">;
+  readonly services?: Omit<SpineServicesOptions, "application">;
 
   /**
-   * Extra framework-owned closeables to close after contexts become safe to close.
+   * Extra endpoint closeables released after accepted work drains.
    */
   readonly resources?: readonly {
     /**
-     * Releases the resource after contexts are safe to close.
+     * Releases the resource while shared Bounded Contexts may remain open.
      */
     close(): unknown;
   }[];
@@ -879,10 +879,10 @@ export interface RunningServer {
   readonly baseUrl: string;
 
   /**
-   * Closes intake, admitted work, contexts, and added resources.
+   * Closes intake, admitted work, and added resources.
    *
    * It stops network intake and sessions, then drains
-   * accepted work before closing contexts. A failed intake close blocks later
+   * accepted work before closing listener resources. A failed intake close blocks later
    * phases until a retry. Sibling servers remain available. Caller-managed
    * servers leave process-wide facilities available; closing the final
    * run-managed server closes its environment. Concurrent calls share one
@@ -954,15 +954,15 @@ class RunningHttp2Server implements RunningServer {
 
   readonly #closeables: readonly unknown[];
 
-  readonly #contexts: readonly BoundedContext[];
-
   readonly #listenerLifecycles: readonly ListenerLifecycle[];
 
   readonly #startedLifecycles: ListenerLifecycle[] = [];
 
   readonly #environment: ServerEnvironment;
 
-  readonly #routes: RegisteredTargets;
+  readonly #application: Application;
+
+  #registered = false;
 
   readonly #services: SpineServices;
 
@@ -989,10 +989,9 @@ class RunningHttp2Server implements RunningServer {
     this.#server = options.server;
     this.#sessions = options.sessions;
     this.#closeables = options.closeables;
-    this.#contexts = options.contexts;
     this.#listenerLifecycles = options.listenerLifecycles;
     this.#environment = options.environment;
-    this.#routes = options.routes;
+    this.#application = options.application;
     this.#services = options.services;
     this.#queries = options.queries;
     this.host = options.host;
@@ -1000,7 +999,7 @@ class RunningHttp2Server implements RunningServer {
     this.baseUrl = `http://${ServerValues.formatHostForUrl(options.host)}:${options.port.toString()}`;
     this.#closeGroup = new RetryableCloseGroup(
       this.#closeables,
-      "Server close failed while closing owned contexts/resources.",
+      "Server close failed while closing listener resources.",
     );
   }
 
@@ -1074,6 +1073,13 @@ class RunningHttp2Server implements RunningServer {
   }
 
   /**
+   * Marks this listener as counted by its Application after startup.
+   */
+  markRegistered(): void {
+    this.#registered = true;
+  }
+
+  /**
    * Waits for the environment's admitted Delivery work.
    *
    * @returns Completion after active shard runs settle.
@@ -1083,7 +1089,7 @@ class RunningHttp2Server implements RunningServer {
   }
 
   /**
-   * Closes network, delivery, accepted context work, and registered resources.
+   * Closes network, accepted endpoint work, and registered resources.
    *
    * @returns Completion after all resources close.
    */
@@ -1091,23 +1097,26 @@ class RunningHttp2Server implements RunningServer {
     await this.#closeListenerAndNetwork();
     const errors: unknown[] = [];
     try {
-      await this.#drainContexts();
+      await Promise.all([this.#queries.drain(), spineServicesAccess.drainWork(this.#services)]);
     } catch (error) {
       errors.push(error);
     }
     try {
       await this.#closeGroup.close();
-      this.#routes.release();
     } catch (error) {
       errors.push(error);
     }
     if (errors.length > 1)
       throw new AggregateError(
         errors,
-        "Server close failed while draining contexts and resources.",
+        "Server close failed while draining endpoint work and resources.",
       );
     if (errors.length === 1) throw errors[0];
     spineServicesAccess.clearLogger(this.#services);
+    if (this.#registered) {
+      applicationAccess.endpointClosed(this.#application);
+      this.#registered = false;
+    }
   }
 
   /**
@@ -1127,28 +1136,6 @@ class RunningHttp2Server implements RunningServer {
       this.#networkClosed = true;
     }
   }
-
-  /**
-   * Waits for every context's accepted work before any Stand closes.
-   *
-   * @returns Completion after all context work drains.
-   */
-  async #drainContexts(): Promise<void> {
-    await this.#queries.drain();
-    for (const context of this.#contexts) boundedContextAccess.beginClose(context);
-    const drained = await Promise.allSettled(
-      this.#contexts.map((context) => boundedContextAccess.drainWork(context)),
-    );
-    const delivery = await Promise.allSettled([
-      serverEnvironmentAccess.whenDeliveryIdle(this.#environment),
-    ]);
-    const drainErrors = [...drained, ...delivery].flatMap((result) =>
-      result.status === "rejected" ? [result.reason as unknown] : [],
-    );
-    if (drainErrors.length > 0) {
-      throw new AggregateError(drainErrors, "Server close failed while draining contexts.");
-    }
-  }
 }
 
 /**
@@ -1158,10 +1145,10 @@ interface RunningHttp2ServerOptions {
   readonly server: http2.Http2Server;
   readonly sessions: Set<http2.ServerHttp2Session>;
   readonly closeables: readonly unknown[];
+  readonly application: Application;
   readonly contexts: readonly BoundedContext[];
   readonly listenerLifecycles: readonly ListenerLifecycle[];
   readonly environment: ServerEnvironment;
-  readonly routes: RegisteredTargets;
   readonly services: SpineServices;
   readonly queries: AppQueryExecution;
   readonly host: string;

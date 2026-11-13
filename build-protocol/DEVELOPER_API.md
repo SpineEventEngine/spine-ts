@@ -489,35 +489,54 @@ Their message contracts come from copied Spine `.proto` files. Service
 implementations may use any Node gRPC library chosen during implementation, but
 transport-specific APIs must not leak into domain code.
 
-The first public server lifecycle API is deliberately small:
+The accepted Application API replaces the singleton lifecycle. Implementation is
+tracked in [Application API and lifecycle](tasks/application-migration/TASK.md):
 
 ```typescript
-const running = await Server.atPort(8080).add(tasks).start();
+const environment = ServerEnvironment.newBuilder().build();
+
+const application = await Application.newBuilder()
+    .setServerEnvironment(environment)
+    .add(BoundedContext.singleTenant("Tasks"))
+    .build();
+
+const running = await Server.atPort(8080).setApplication(application).start();
 
 running.host; // "127.0.0.1" by default
 running.port;
 running.baseUrl;
 
 await running.close();
+await application.close();
 ```
 
 `ServerOptions.host` defaults to local-only `127.0.0.1`; broader binding such
 as `0.0.0.0` must be explicit. `RunningServer.close()` is idempotent: it stops
-listener intake and sessions, then drains accepted work,
-then detaches delivery before closing contexts and resources. Process-wide
-facilities remain open until explicit `ServerEnvironment.instance().close()`
-shutdown. A failed close retains unfinished phases for a later retry.
+listener intake and sessions, then waits for accepted endpoint work and releases
+endpoint resources. Shared Bounded Contexts, Delivery, reads, and monitoring stay
+available until Application cleanup. A failed close retains unfinished phases
+for a later retry. Callers close successful endpoints before Application.close().
 
-`ServerEnvironment` is the supported process-wide server-assembly value.
-Configure it before first resolution with
-`ServerEnvironment.when(EnvironmentType.Local).use(...)` or
-`ServerEnvironment.when(EnvironmentType.Production).use(...)`; `Server`
-always uses the resolved singleton. The singleton remains open when one server
-closes and can be reused after detach; `ServerEnvironment.close()` permanently
-closes an unused singleton and rejects non-destructively while it is in use.
-The selected `EnvironmentType` comes from `NODE_ENV` at first resolution, so a
-production process sets `NODE_ENV=production` before `Server.atPort()`,
-`Environment.instance()`, or `ServerEnvironment.instance()` first runs.
+`ServerEnvironment.newBuilder().under(EnvironmentType.Local, callback).build()`
+creates separate configured services. The callback uses `use({...})` for named
+settings. Application build performs asynchronous service setup. Environment
+profile selection still comes from `NODE_ENV` through `Environment`; selecting
+Production is optional and current memory defaults remain available.
+
+Application requires one open environment and at least one Bounded Context. Its
+synchronous `contexts()` returns the build-order list, and `tenantIndex()` returns
+one stable index handle without initiating storage I/O. A custom index can use a
+separate storage provider. Application-wide create/check operations accept explicit
+structurally valid TenantIds without requiring index membership; request admission
+continues to require membership. No-argument preparation enumerates registered
+tenants and includes single-tenant Bounded Contexts. The narrower Bounded Context
+runtime operations remain available. Compatibility checks inspect declared Bounded
+Context structures and do not guarantee that other services create no structures.
+
+Application construction accepts preparation and monitoring options, both enabled
+by default. Disabling both defers their work. Administrative preparation failure
+does not close an established Application; required startup failure prevents it
+from serving. One Application may serve multiple independently closed endpoints.
 The public lifecycle does not provide a delivery scheduler, monitor, retry
 policy, worker supervision, topology policy, or internal lifecycle controls.
 

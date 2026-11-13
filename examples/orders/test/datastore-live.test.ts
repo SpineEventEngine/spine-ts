@@ -17,7 +17,8 @@ import { randomUUID } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
 import { AnyPacker } from "@spine-event-engine/core";
 import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
-import { SignalMetadata } from "@spine-event-engine/server";
+import { Application, SignalMetadata } from "@spine-event-engine/server";
+import { ApplicationTests } from "@spine-event-engine/server/testing";
 import { expect, it } from "vitest";
 
 import { CreateOrderSchema } from "../generated/spine/examples/orders/commands_pb.js";
@@ -41,10 +42,16 @@ it("keeps matching order IDs in separate Datastore emulator tenant namespaces", 
     tenants,
     membership: "seed-if-empty",
   });
-  const context = await createOrdersContext();
+  const application = await Application.newBuilder()
+    .setServerEnvironment(setup.environment)
+    .setTenantIndex(setup.tenantIndex)
+    .add(createOrdersContext())
+    .build({ createStorageStructures: true });
+  const context = application.contexts()[0];
+  if (context === undefined) throw new Error("Expected Orders Bounded Context.");
   const id = `datastore-${randomUUID()}`;
   try {
-    await setup.environment.createStorageStructures();
+    await application.createStorageStructures();
     const metadata = new SignalMetadata();
     for (const [tenantId, skuId] of [
       [tenants[0], "northwind-sku"],
@@ -62,6 +69,7 @@ it("keeps matching order IDs in separate Datastore emulator tenant namespaces", 
         }),
       );
     }
+    await ApplicationTests.waitForDelivery(application);
     expect((await context.stand().read(OrderSchema, id, { tenantId: tenants[0] }))?.skuId).toBe(
       "northwind-sku",
     );
@@ -69,7 +77,7 @@ it("keeps matching order IDs in separate Datastore emulator tenant namespaces", 
       "contoso-sku",
     );
   } finally {
-    await context.close();
+    await application.close();
     await setup.close();
   }
 });

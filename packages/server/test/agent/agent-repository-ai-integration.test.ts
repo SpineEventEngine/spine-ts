@@ -38,16 +38,13 @@ import {
   EventContextSchema,
 } from "@spine-event-engine/proto";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Agent } from "../../src/entity/entity.js";
 import { AgentAcceptanceReceipts } from "../../src/agent/agent-acceptance-receipts.js";
-import { BoundedContext } from "../../src/context/bounded-context.js";
+import { BoundedContext, type BoundedContextBuilder } from "../../src/context/bounded-context.js";
+import { Application } from "../../src/server/application.js";
 import { EnvironmentType } from "../../src/server/environment.js";
-import {
-  ServerEnvironment,
-  ServerEnvironmentLifecycle,
-  serverEnvironmentAccess,
-} from "../../src/server/server-environment.js";
+import { ServerEnvironment, serverEnvironmentAccess } from "../../src/server/server-environment.js";
 import { HandlerRegistryIngestor } from "../../src/handler/generated-handler-registry.js";
 import type { EntityHandlersMetadata } from "../../src/handler/handler-metadata.js";
 import { Repository } from "../../src/repository/repository.js";
@@ -80,20 +77,32 @@ import {
   SupportTicketNumberSchema,
 } from "../../test-fixtures/generated/entity-metadata/support_ai_types_pb.js";
 
-beforeEach(async () => {
-  await ServerEnvironment.instance().completeSetup();
-});
+const applications: Application[] = [];
 
 afterEach(async () => {
-  const environment = ServerEnvironment.instance();
-  for (const context of serverEnvironmentAccess.openContexts(environment)) await context.close();
-  await ServerEnvironmentLifecycle.resetForTest();
+  await Promise.all(applications.splice(0).map((application) => application.close()));
 });
 
-async function configureStorage(factory: InMemoryStorageFactory): Promise<void> {
-  await ServerEnvironmentLifecycle.resetForTest();
-  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
-  await ServerEnvironment.instance().completeSetup();
+function configureStorage(factory: InMemoryStorageFactory): ServerEnvironment {
+  return ServerEnvironment.newBuilder()
+    .under(EnvironmentType.Local, (configuration) => {
+      configuration.use({ storageFactory: factory });
+    })
+    .build();
+}
+
+async function buildContext(
+  builder: BoundedContextBuilder,
+  environment: ServerEnvironment = ServerEnvironment.newBuilder().build(),
+): Promise<BoundedContext> {
+  const application = await Application.newBuilder()
+    .setServerEnvironment(environment)
+    .add(builder)
+    .build();
+  applications.push(application);
+  const [context] = application.contexts();
+  if (context === undefined) throw new Error("Expected the Agent Bounded Context.");
+  return context;
 }
 
 const proposal = AiModel.define({
@@ -339,13 +348,15 @@ describe("Agent repository source integration", () => {
       invokeLater: undefined as (() => Promise<unknown>) | undefined,
     };
     DraftingAgent.pendingCase = pendingCase;
-    await configureStorage(new InMemoryStorageFactory());
+    const environment = configureStorage(new InMemoryStorageFactory());
     const repository = draftingRepository();
-    const context = await BoundedContext.singleTenant("PendingAiReturn")
-      .withAi(registry)
-      .persistSystemEvents()
-      .add(repository)
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("PendingAiReturn")
+        .withAi(registry)
+        .persistSystemEvents()
+        .add(repository),
+      environment,
+    );
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-pending" });
     try {
       const posting = context.commandBus().post(
@@ -364,7 +375,7 @@ describe("Agent repository source integration", () => {
       );
       await handlerReturned.promise;
       await posting;
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environment);
       expect(pendingCase.overlapError).toMatchObject({
         message: "Agent AI calls must be sequential within one handler.",
       });
@@ -466,12 +477,14 @@ describe("Agent repository source integration", () => {
     const authorizeSelection = vi.fn(() => allowSelection);
     const repository = draftingRepository({ authorizeSelection });
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("SourceDrafting")
-      .withAi(registry)
-      .persistSystemEvents()
-      .add(repository)
-      .build();
+    const environment = configureStorage(factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("SourceDrafting")
+        .withAi(registry)
+        .persistSystemEvents()
+        .add(repository),
+      environment,
+    );
     const produced: string[] = [];
     const observation = observeProducedSignals(context, {
       onEvent: (event) => {
@@ -491,7 +504,7 @@ describe("Agent repository source integration", () => {
         }),
       });
       await context.commandBus().post(failed);
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environment);
       await vi.waitFor(async () => {
         expect(
           (await readAgentHistoryPage(context, repository, id, { pageSize: 50 })).items.some(
@@ -520,7 +533,7 @@ describe("Agent repository source integration", () => {
         }),
       });
       await context.commandBus().post(command);
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environment);
       await vi.waitFor(() => {
         expect(physical).toHaveBeenCalledTimes(1);
       });
@@ -579,7 +592,7 @@ describe("Agent repository source integration", () => {
           }),
         });
         await context.commandBus().post(next);
-        await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+        await serverEnvironmentAccess.whenDeliveryIdle(environment);
         return next;
       };
       await runNext("Prefer alternate");
@@ -717,12 +730,14 @@ describe("Agent repository source integration", () => {
       allowedModels: { generation: [ref] },
     });
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("LateSourceModel")
-      .withAi(registry)
-      .persistSystemEvents()
-      .add(repository)
-      .build();
+    const environment = configureStorage(factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("LateSourceModel")
+        .withAi(registry)
+        .persistSystemEvents()
+        .add(repository),
+      environment,
+    );
     registry.register(
       createBackendRegistration({
         ref,
@@ -795,11 +810,12 @@ describe("Agent repository source integration", () => {
       concurrentOperations: 1,
       queuedOperations: 1,
     });
-    const context = await BoundedContext.singleTenant("SelfFollowupCommand")
-      .withAi(ai)
-      .persistSystemEvents()
-      .add(followupRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("SelfFollowupCommand")
+        .withAi(ai)
+        .persistSystemEvents()
+        .add(followupRepository()),
+    );
     const outputs: string[] = [];
     const observer = observeProducedSignals(context, {
       onCommand: (command) => outputs.push(command.message?.typeUrl ?? ""),
@@ -841,16 +857,18 @@ describe("Agent repository source integration", () => {
       concurrentOperations: 1,
       queuedOperations: 1,
     });
-    const context = await BoundedContext.singleTenant("SelfFollowupClose")
-      .withAi(ai)
-      .persistSystemEvents()
-      .add(followupRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("SelfFollowupClose")
+        .withAi(ai)
+        .persistSystemEvents()
+        .add(followupRepository()),
+    );
     serverStatusRegistry();
-    const sibling = await BoundedContext.singleTenant("SiblingDuringAgentClose")
+    const sibling = await buildContext(
+      BoundedContext.singleTenant("SiblingDuringAgentClose")
 
-      .add(ServerStatusProjection)
-      .build();
+        .add(ServerStatusProjection),
+    );
     const siblingHandler = vi.spyOn(ServerStatusProjection.prototype, "onServerStarted");
     const outputs: string[] = [];
     const observer = observeProducedSignals(context, {
@@ -900,11 +918,12 @@ describe("Agent repository source integration", () => {
 
   it("keeps accepted receipt evidence but starts no Agent effects after context close", async () => {
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-receipt-gap" });
-    const context = await BoundedContext.singleTenant("ReceiptCloseGap")
-      .withAi(AiRegistry.create({ defaultModels: {} }))
-      .persistSystemEvents()
-      .add(followupRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("ReceiptCloseGap")
+        .withAi(AiRegistry.create({ defaultModels: {} }))
+        .persistSystemEvents()
+        .add(followupRepository()),
+    );
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
     const original = Object.getOwnPropertyDescriptor(AgentAcceptanceReceipts.prototype, "accept")
@@ -938,11 +957,12 @@ describe("Agent repository source integration", () => {
       await Promise.allSettled([posted, closing]);
       expect(accepted).toBe(true);
       expect(output).toEqual([]);
-      const reopened = await BoundedContext.singleTenant("ReceiptCloseGap")
-        .withAi(AiRegistry.create({ defaultModels: {} }))
-        .persistSystemEvents()
-        .add(followupRepository())
-        .build();
+      const reopened = await buildContext(
+        BoundedContext.singleTenant("ReceiptCloseGap")
+          .withAi(AiRegistry.create({ defaultModels: {} }))
+          .persistSystemEvents()
+          .add(followupRepository()),
+      );
       try {
         expect(await reopened.stand().read(SupportReplyAgentStateSchema, id)).toBeUndefined();
       } finally {

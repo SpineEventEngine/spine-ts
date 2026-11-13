@@ -15,20 +15,30 @@
 import { create } from "@bufbuild/protobuf";
 import { Datastore } from "@google-cloud/datastore";
 import { AiRegistry, ModelRef } from "@spine-event-engine/ai";
+import { Client } from "@spine-event-engine/client-node";
 import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { GenerationResponseSchema } from "@spine-event-engine/proto/agent";
 import * as Receipt from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
-import { BoundedContext, EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
+import {
+  Application,
+  BoundedContext,
+  EnvironmentType,
+  Server,
+  ServerEnvironment,
+} from "@spine-event-engine/server";
+import { observeProducedSignals, readAgentHistoryPage } from "@spine-event-engine/server/testing";
 import { StorageFactory } from "@spine-event-engine/storage";
 import {
   AgentHistoryStorageFactories,
   EntityCommitStorageFactories,
+  StoragePreparations,
 } from "@spine-event-engine/storage/provider";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-import { AiTestBackend, BlackBox } from "@spine-event-engine/testing";
+import { AiTestBackend } from "@spine-event-engine/testing";
 import process from "node:process";
+import { setTimeout } from "node:timers";
 
 import * as Commands from "../../dist/generated/spine/server/testing/support_recovery_commands_pb.js";
 import "../../dist/generated/spine-bootstrap.js";
@@ -109,6 +119,7 @@ class CutStorageFactory extends StorageFactory {
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => EntityCommitStorageFactories.create(native, input),
     });
+    StoragePreparations.register(this, StoragePreparations.for(native));
   }
 
   history(input) {
@@ -170,8 +181,9 @@ async function run() {
   stringifiers.setTypeRegistry(new TypeRegistry([SupportReplyAgentIdSchema]));
   const native = await nativeFactory(stringifiers);
   const storage = new CutStorageFactory(native);
-  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: storage });
-  await ServerEnvironment.instance().completeSetup();
+  const environment = ServerEnvironment.newBuilder()
+    .under(EnvironmentType.Local, (setting) => setting.use({ storageFactory: storage }))
+    .build();
   const registry = AiRegistry.create({
     defaultModels: { generation: backend.registration.ref },
     invocationLimits: {
@@ -186,16 +198,44 @@ async function run() {
     concurrentOperations: 1,
     queuedOperations: 0,
   }).register(backend.registration);
-  const context = await BoundedContext.singleTenant(contextName)
+  const builder = BoundedContext.singleTenant(contextName)
     .withAi(registry)
     .persistSystemEvents()
     .addAssignee(new SupportReviewAssignee())
     .addEventDispatcher(new SupportRejectionSubscriber())
     .addEventDispatcher(new SupportDraftReceiptObserver(() => undefined))
     .addEventDispatcher(new SupportDraftObserver(() => undefined))
-    .add(SupportRecoveryAgent, { ai: { models: [recoveryReplyModel] } })
+    .add(SupportRecoveryAgent, { ai: { models: [recoveryReplyModel] } });
+  const application = await Application.newBuilder()
+    .setServerEnvironment(environment)
+    .add(builder)
     .build();
-  const box = await BlackBox.from(context, { timeoutMs: 10_000 });
+  const context = application.contexts()[0];
+  const endpoint = await Server.atPort(0).setApplication(application).start();
+  const client = Client.connectTo(endpoint.baseUrl);
+  const events = [];
+  const observation = observeProducedSignals(context, { onEvent: (event) => events.push(event) });
+  const box = {
+    asGuest: () => client.asGuest(),
+    readAgentHistory: (repository, id, request) =>
+      readAgentHistoryPage(context, repository, id, request),
+    assertEvents: () => events,
+    eventually: async (read, ready) => {
+      const deadline = Date.now() + 10_000;
+      while (true) {
+        const value = await read();
+        if (ready(value)) return value;
+        if (Date.now() >= deadline) throw new Error("Recovery result did not become ready.");
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+    },
+    close: async () => {
+      await client.close();
+      await endpoint.close();
+      observation.close();
+      await application.close();
+    },
+  };
   const id = create(SupportReplyAgentIdSchema, { ticketNumber });
   const repository = context.getRepository(SupportRecoveryAgent);
   if (mode === "crash") {
@@ -258,7 +298,6 @@ async function run() {
     });
   } finally {
     await box.close();
-    await storage.close();
     Date.now = previousNow;
   }
 }

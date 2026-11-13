@@ -18,12 +18,6 @@
  */
 
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
-import {
-  EnvironmentType,
-  ServerEnvironment,
-  UniformAcrossAllShards,
-  type ServerEnvironmentDelivery,
-} from "@spine-event-engine/server";
 import type { StorageFactory } from "@spine-event-engine/storage";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import type { Datastore } from "@google-cloud/datastore";
@@ -31,8 +25,7 @@ import { Logging, type Log } from "@google-cloud/logging";
 import { GoogleCloudLoggingTransport } from "@loglayer/transport-google-cloud-logging";
 import { LogLayer, type ILogLayer } from "loglayer";
 
-import type { BoardServerOptions } from "./index.js";
-import { typeRegistry } from "./model-registry.js";
+import type { BoardApplicationFacilities, BoardServerOptions } from "./index.js";
 
 /**
  * Listener and Datastore project settings shared by deployment modes.
@@ -69,10 +62,7 @@ interface ManagedConfig extends DeploymentConfig {
 /**
  * Storage and optional delivery facilities constructed for a managed replica.
  */
-interface ManagedServerFacilities {
-  readonly storageFactory: StorageFactory;
-  readonly delivery?: ServerEnvironmentDelivery;
-}
+type ManagedServerFacilities = BoardApplicationFacilities;
 
 /**
  * Validated deployment configuration and facility constructors.
@@ -134,26 +124,14 @@ interface DeploymentContract {
    * @param client Datastore client.
    * @param environment Process environment.
    * @param logger Optional logging layer.
-   * @returns Storage factory in production, otherwise undefined.
+   * @returns Application facilities in production, otherwise undefined.
    */
   configureServer(
     config: DeploymentConfig,
     client: Datastore,
     environment: NodeJS.ProcessEnv,
     logger?: ILogLayer,
-  ): StorageFactory | undefined;
-
-  /**
-   * Sets gateway storage and logging layers.
-   * @param config Gateway deployment settings.
-   * @param storageFactory Configured storage factory.
-   * @param logger Optional logging layer.
-   */
-  configureGatewayServer(
-    config: GatewayConfig,
-    storageFactory: StorageFactory,
-    logger?: ILogLayer,
-  ): void;
+  ): ManagedServerFacilities | undefined;
 
   /**
    * Sets managed server storage, remote delivery, and configured shards.
@@ -169,11 +147,6 @@ interface DeploymentContract {
     environment: NodeJS.ProcessEnv,
     logger?: ILogLayer,
   ): ManagedServerFacilities;
-
-  /**
-   * Sets the production model registry for the managed Coordinator process.
-   */
-  configureManagedCoordinator(): void;
 }
 
 /**
@@ -299,33 +272,13 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     client: Datastore,
     environment: NodeJS.ProcessEnv,
     logger?: ILogLayer,
-  ): StorageFactory | undefined {
+  ): ManagedServerFacilities | undefined {
     if (environment.NODE_ENV !== "production") return undefined;
-    return MessageBoardDeployment.configureManagedServer(config, client, environment, logger)
-      .storageFactory;
+    return MessageBoardDeployment.configureManagedServer(config, client, environment, logger);
   },
 
   /**
-   * Configures a gateway with the selected storage and logging layers.
-   *
-   * @param _config Gateway deployment settings.
-   * @param storageFactory Configured storage factory.
-   * @param logger Optional logging layer.
-   */
-  configureGatewayServer(
-    _config: GatewayConfig,
-    storageFactory: StorageFactory,
-    logger?: ILogLayer,
-  ): void {
-    ServerEnvironment.when(EnvironmentType.Production).use({
-      storageFactory,
-      ...(logger === undefined ? {} : { logger }),
-      typeRegistry,
-    });
-  },
-
-  /**
-   * Configures managed server storage, remote delivery, and configured shards.
+   * Creates managed server storage and remote Delivery facilities.
    *
    * @param config Deployment settings.
    * @param client Datastore client.
@@ -343,23 +296,7 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     const delivery = RemoteDelivery.connectTo({
       endpoint: DeploymentValues.url(DeploymentValues.required(environment, "DELIVERY_SERVER_URL")),
     });
-    ServerEnvironment.when(EnvironmentType.Production).use({
-      storageFactory,
-      ...(logger === undefined ? {} : { logger }),
-      typeRegistry,
-      delivery,
-      ...("deliveryShardCount" in config && typeof config.deliveryShardCount === "number"
-        ? { deliveryStrategy: UniformAcrossAllShards.forNumber(config.deliveryShardCount) }
-        : {}),
-    });
-    return { storageFactory, delivery };
-  },
-
-  /**
-   * Sets the production model registry before the Coordinator opens its listener.
-   */
-  configureManagedCoordinator(): void {
-    ServerEnvironment.when(EnvironmentType.Production).use({ typeRegistry });
+    return { storageFactory, delivery, ...(logger === undefined ? {} : { logger }) };
   },
 });
 

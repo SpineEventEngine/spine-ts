@@ -16,7 +16,13 @@
  * Starts the beginner-friendly To-Do app as one Node process with selectable local storage.
  */
 
-import { Server, type RunningServer } from "@spine-event-engine/server";
+import {
+  Application,
+  EnvironmentType,
+  Server,
+  ServerEnvironment,
+  type RunningServer,
+} from "@spine-event-engine/server";
 import type { StorageFactory } from "@spine-event-engine/storage";
 
 import { createTodoContext } from "./todo-app.js";
@@ -43,7 +49,7 @@ export interface TodoServerOptions {
    * Supplies storage for a programmatically assembled server.
    *
    * When omitted, `TODO_STORAGE` selects the in-memory default, MySQL, or PostgreSQL.
-   * Callers close a supplied factory after server shutdown or rejected startup.
+   * The Application closes the selected factory after endpoint shutdown.
    */
   readonly storageFactory?: StorageFactory;
 }
@@ -57,7 +63,7 @@ export type TodoServer = RunningServer;
  * Starts one To-Do server process with selected local storage.
  *
  * @param options Optional listener and caller-supplied storage overrides.
- * @returns The running server, which callers must close when finished.
+ * @returns A host handle that closes its endpoint before its Application.
  */
 export async function startTodoServer(options: TodoServerOptions = {}): Promise<TodoServer> {
   const host = options.host ?? "127.0.0.1";
@@ -65,17 +71,57 @@ export async function startTodoServer(options: TodoServerOptions = {}): Promise<
   const selectedStorage =
     options.storageFactory === undefined ? await TodoStorage.select() : undefined;
   const storageFactory = options.storageFactory ?? selectedStorage;
-  let context: Awaited<ReturnType<typeof createTodoContext>>;
+  const application = await TodoApplication.open(storageFactory);
+  let endpoint: RunningServer;
   try {
-    context = await createTodoContext(storageFactory === undefined ? {} : { storageFactory });
+    endpoint = await Server.atPort(port, { host }).setApplication(application).start();
   } catch (error) {
-    await selectedStorage?.close();
+    try {
+      await application.close();
+    } catch (cleanup) {
+      throw new AggregateError([error, cleanup], "To-Do startup cleanup failed.");
+    }
     throw error;
   }
-  const server = Server.atPort(port, { host }).add(context);
-  if (selectedStorage !== undefined) server.addResource(selectedStorage);
-  return server.start();
+  return {
+    host: endpoint.host,
+    port: endpoint.port,
+    baseUrl: endpoint.baseUrl,
+    close: async () => {
+      await endpoint.close();
+      await application.close();
+    },
+  };
 }
+
+/**
+ * Builds the Tasks Application with the selected local storage.
+ */
+const TodoApplication = Object.freeze({
+  /**
+   * Builds the Tasks Application and releases failed setup.
+   *
+   * @param storageFactory Caller-selected or environment-selected provider.
+   * @returns A ready Application with one Tasks Bounded Context.
+   */
+  async open(storageFactory: StorageFactory | undefined): Promise<Application> {
+    const environmentBuilder = ServerEnvironment.newBuilder();
+    if (storageFactory !== undefined)
+      environmentBuilder.under(EnvironmentType.Local, (setting) => {
+        setting.use({ storageFactory });
+      });
+    const environment = environmentBuilder.build();
+    try {
+      return await Application.newBuilder()
+        .setServerEnvironment(environment)
+        .add(createTodoContext())
+        .build();
+    } catch (error) {
+      await environment.close();
+      throw error;
+    }
+  },
+});
 
 if (
   process.argv[1] !== undefined &&

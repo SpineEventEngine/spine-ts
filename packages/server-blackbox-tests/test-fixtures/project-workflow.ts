@@ -24,7 +24,7 @@ import {
   ProcessManager,
   Projection,
   Repository,
-  type BoundedContextBuildOptions,
+  type BoundedContextBuilder,
   type EntityHandlersMetadata,
 } from "@spine-event-engine/server";
 import type { GeneratedHandlerRegistry } from "@spine-event-engine/server/spi/handler-registry";
@@ -173,20 +173,20 @@ function handlersFor<Instance extends object, Schema extends GenMessage<Message>
 }
 
 /**
- * Builds the compiled process fixture from generated Project domain messages.
+ * Declares the compiled process fixture from generated Project domain messages.
  *
  * The entry callback must synchronously persist its record when used for crash evidence.
  *
  * @param name Names this diagnostic context.
  * @param onEntry Records each actual handler entry and may hold a selected handler before its effect.
- * @param options Selects tenant mode and build preparation for native integration tests.
- * @returns The configured bounded context.
+ * @param options Selects the tenant mode for native integration tests.
+ * @returns The configured Bounded Context builder.
  */
 export function projectWorkflow(
   name: string,
   onEntry: (entry: ProjectHandlerEntry) => void | Promise<void>,
-  options: { readonly multitenant?: boolean; readonly build?: BoundedContextBuildOptions } = {},
-): Promise<BoundedContext> {
+  options: { readonly multitenant?: boolean } = {},
+): BoundedContextBuilder {
   const recordEntry = onEntry;
 
   /**
@@ -373,7 +373,7 @@ export function projectWorkflow(
   };
   const generated = new HandlerRegistryIngestor().ingest(receivers);
   const builder = (
-    options.multitenant ? BoundedContext.multitenant(name) : BoundedContext.singleTenant(name)
+    options.multitenant ? BoundedContext.multiTenant(name) : BoundedContext.singleTenant(name)
   )
     .add(
       new Repository({
@@ -440,5 +440,5 @@ export function projectWorkflow(
         ),
       }),
     );
-  return builder.build(options.build);
+  return builder;
 }

@@ -19,7 +19,6 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import * as serverRoot from "@spine-event-engine/server";
 import * as serverTesting from "@spine-event-engine/server/testing";
-import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
 import type { BrowserBackend } from "@spine-event-engine/server/browser";
 import type { GeneratedHandlerRegistry } from "@spine-event-engine/server/spi/handler-registry";
 
@@ -108,20 +107,18 @@ describe("@spine-event-engine/server package exports", () => {
       expect(name in serverTesting).toBe(false);
     }
     expect(Object.keys(serverTesting).sort()).toEqual([
-      "ServerTests",
+      "ApplicationTests",
       "agentHistoryView",
       "observeProducedSignals",
       "postExternalEvent",
       "readAgentHistory",
       "readAgentHistoryPage",
       "readSystemEvents",
-      "resetServerEnvironmentForTest",
       "unpackExternalEvent",
       "wrapBoundedContextOnline",
       "wrapExternalEvent",
       "wrapExternalEventsWanted",
     ]);
-    expect(Object.keys(serverTesting.ServerTests).sort()).toEqual(["resetEnvironment"]);
   });
 
   it("requires a non-empty backend URL set at the browser type boundary", () => {
@@ -133,33 +130,33 @@ describe("@spine-event-engine/server package exports", () => {
     expectTypeOf(populated).toExtend<BrowserBackend>();
   });
 
-  it("resolves root and testing subpaths through package exports on one singleton graph", () => {
+  it("resolves root and testing subpaths with independent environments", () => {
     const output = execFileSync(
       process.execPath,
       [
         "--input-type=module",
         "--eval",
         `import * as root from "@spine-event-engine/server";
-         import { resetServerEnvironmentForTest as reset } from "@spine-event-engine/server/testing";
-         await reset();
-         const first = root.ServerEnvironment.instance();
-         await reset();
-         const second = root.ServerEnvironment.instance();
+         import * as testing from "@spine-event-engine/server/testing";
+         const first = root.ServerEnvironment.newBuilder().build();
+         const second = root.ServerEnvironment.newBuilder().build();
          process.stdout.write(JSON.stringify({
            hasResetAtRoot: "resetServerEnvironmentForTest" in root,
-           changedAfterTestingReset: first !== second,
-           nodeChangedAfterTestingReset: first.nodeId !== second.nodeId,
-         }));`,
+           hasTestingReads: typeof testing.readSystemEvents === "function",
+           independentEnvironments: first !== second,
+           independentNodes: first.nodeId !== second.nodeId,
+         }));
+         await Promise.all([first.close(), second.close()]);`,
       ],
       { cwd: new URL("..", import.meta.url), encoding: "utf8" },
     );
 
     expect(JSON.parse(output)).toEqual({
       hasResetAtRoot: false,
-      changedAfterTestingReset: true,
-      nodeChangedAfterTestingReset: true,
+      hasTestingReads: true,
+      independentEnvironments: true,
+      independentNodes: true,
     });
-    void resetServerEnvironmentForTest;
   });
 
   it("resolves the delivery SPI through its declared package subpath", () => {
@@ -187,23 +184,25 @@ describe("@spine-event-engine/server package exports", () => {
     expect(Object.keys(registry)).toEqual(["registerSpineMetadata"]);
   });
 
-  it("restores local defaults after testing reset from a production-profile process", () => {
+  it("selects production facilities in a production-profile process", () => {
     const output = execFileSync(
       process.execPath,
       [
         "--input-type=module",
         "--eval",
         `import * as root from "@spine-event-engine/server";
-         import { resetServerEnvironmentForTest as reset } from "@spine-event-engine/server/testing";
+         import { spineCoreRegistry } from "@spine-event-engine/core";
          const initialType = root.Environment.instance().type;
-         await reset();
-         const environment = root.ServerEnvironment.instance();
+         const environment = root.ServerEnvironment.newBuilder()
+           .under(root.EnvironmentType.Production, (configuration) =>
+             configuration.use({ typeRegistry: spineCoreRegistry }))
+           .build();
          process.stdout.write(JSON.stringify({
            initialType,
-           resetType: root.Environment.instance().type,
            facilityType: environment.environment.type,
            storageType: environment.storageFactory.constructor.name,
-         }));`,
+         }));
+         await environment.close();`,
       ],
       {
         cwd: new URL("..", import.meta.url),
@@ -214,8 +213,7 @@ describe("@spine-event-engine/server package exports", () => {
 
     expect(JSON.parse(output)).toEqual({
       initialType: "production",
-      resetType: "local",
-      facilityType: "local",
+      facilityType: "production",
       storageType: "InMemoryStorageFactory",
     });
   });

@@ -344,6 +344,8 @@ The Bounded Context registers this Agent alongside the other Entities. In
 Agent's repository options declare `models: [draftReleaseNotes]` and the
 application's `resolveModel` callback. The Agent uses the regular repository and
 signal-routing machinery; the app does not build a separate model-work queue.
+The factory returns a Bounded Context builder. Studio builds its Application from
+that declaration and closes the Application when the backend stops.
 
 ## 6. Let the model ask for Git details
 

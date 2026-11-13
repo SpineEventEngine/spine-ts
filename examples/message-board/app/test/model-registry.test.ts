@@ -52,14 +52,14 @@ import {
   type Query,
 } from "@spine-event-engine/proto/client";
 import {
+  Application,
   BoundedContext,
   EnvironmentType,
   Server,
   ServerEnvironment,
 } from "@spine-event-engine/server";
-import { ServerTests } from "@spine-event-engine/server/testing";
 import { EventStore, InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const browserHost = vi.hoisted(() => ({ open: vi.fn(), run: vi.fn() }));
 
@@ -74,8 +74,6 @@ import { MessageBoardApplication, BoardMessageAggregate, typeRegistry } from "..
 
 describe("MessageBoard Projection backend", () => {
   const application = new MessageBoardApplication();
-
-  afterEach(async () => ServerTests.resetEnvironment());
 
   it("decodes every MessageBoard model value from the single model package", () => {
     const user = create(UserIdSchema, { value: "ada" });
@@ -98,19 +96,26 @@ describe("MessageBoard Projection backend", () => {
   });
 
   it("starts an in-memory server on loopback by default", async () => {
+    const closeApplication = vi.spyOn(Application.prototype, "close");
     const server = await application.start();
     try {
       expect(new URL(server.baseUrl).hostname).toBe("127.0.0.1");
     } finally {
       await server.close();
     }
+    expect(closeApplication).toHaveBeenCalledOnce();
+    closeApplication.mockRestore();
   });
 
   it("assembles the same message and announcement contexts for the native app", async () => {
-    ServerEnvironment.when(EnvironmentType.Local).use({
-      storageFactory: new InMemoryStorageFactory(),
-    });
-    const composed = await application.create();
+    const environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (setting) => {
+        setting.use({
+          storageFactory: new InMemoryStorageFactory(),
+        });
+      })
+      .build();
+    const composed = await application.create(environment);
     const running = await composed.server.start();
     try {
       expect(composed.messages.name.value).toBe("ComposedMessages");
@@ -118,6 +123,7 @@ describe("MessageBoard Projection backend", () => {
       expect(new URL(running.baseUrl).hostname).toBe("127.0.0.1");
     } finally {
       await running.close();
+      await composed.application.close();
     }
   });
 
@@ -146,7 +152,12 @@ describe("MessageBoard Projection backend", () => {
         create(MessageIdSchema, { value: "producer-id" }),
       );
     } finally {
-      await closeResources([() => eventStore.close(), () => client.close(), () => server.close()]);
+      await closeResources([
+        () => eventStore.close(),
+        () => client.close(),
+        () => server.close(),
+        () => composed.application.close(),
+      ]);
     }
   });
 
@@ -190,6 +201,7 @@ describe("MessageBoard Projection backend", () => {
         () => subscription?.cancel(),
         () => client.close(),
         () => server.close(),
+        () => composed.application.close(),
       ]);
     }
   }, 15_000);
@@ -230,7 +242,11 @@ describe("MessageBoard Projection backend", () => {
           .readVersioned(AnnouncementBoardViewSchema, create(BoardIdSchema, { value: "general" })),
       ).resolves.toBeUndefined();
     } finally {
-      await closeResources([() => client.close(), () => server.close()]);
+      await closeResources([
+        () => client.close(),
+        () => server.close(),
+        () => composed.application.close(),
+      ]);
     }
   });
 
@@ -299,6 +315,7 @@ describe("MessageBoard Projection backend", () => {
         () => subscription?.cancel(),
         () => client.close(),
         () => server.close(),
+        () => composed.application.close(),
       ]);
     }
   });
@@ -356,6 +373,7 @@ describe("MessageBoard Projection backend", () => {
         () => subscription?.cancel(),
         () => client.close(),
         () => server.close(),
+        () => composed.application.close(),
       ]);
     }
   });
@@ -365,8 +383,10 @@ describe("MessageBoard Projection backend", () => {
     let subscription: Subscription | undefined;
     let client: ReturnType<typeof Client.connectTo> | undefined;
     let server: Awaited<ReturnType<Server["start"]>> | undefined;
+    let closeApplication: (() => Promise<void>) | undefined;
     try {
       const composed = await createApplication();
+      closeApplication = () => composed.application.close();
       const context = composed.messages;
       server = await composed.server.start();
       client = Client.connectTo(server.baseUrl);
@@ -415,14 +435,19 @@ describe("MessageBoard Projection backend", () => {
         () => subscription?.cancel(),
         () => client?.close(),
         () => server?.close(),
+        () => closeApplication?.(),
       ]);
     }
   });
 });
 
 async function createApplication(storageFactory = new InMemoryStorageFactory()) {
-  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
-  return new MessageBoardApplication().create();
+  const environment = ServerEnvironment.newBuilder()
+    .under(EnvironmentType.Local, (setting) => {
+      setting.use({ storageFactory });
+    })
+    .build();
+  return new MessageBoardApplication().create(environment);
 }
 
 function post(

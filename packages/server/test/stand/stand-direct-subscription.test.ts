@@ -18,6 +18,7 @@ import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it, vi } from "vitest";
 import { tenant } from "../tenant-fixture.js";
 import {
+  Application,
   BoundedContext,
   Stand,
   StandSubscriptionCapacityError,
@@ -25,11 +26,7 @@ import {
 } from "../../src/index.js";
 import { standAccess } from "../../src/stand/stand.js";
 import { ReadSideFilter, type ReadSideContext } from "../../src/stand/read-side-filter.js";
-import {
-  ServerEnvironment,
-  ServerEnvironmentLifecycle,
-} from "../../src/server/server-environment.js";
-import { EnvironmentType } from "../../src/server/environment.js";
+import { ServerEnvironment } from "../../src/server/server-environment.js";
 import "../../test-fixtures/generated/proto-module.js";
 import {
   ProjectOverviewStateSchema,
@@ -51,20 +48,19 @@ const deferred = () => {
   return { promise, resolve };
 };
 
-const standWithState = () => {
+const standWithState = (subscriptionQueueCapacity?: number) => {
   const stand = new Stand({
     context: { name: "Projects", multitenant: false },
     storageFactory: new InMemoryStorageFactory(),
+    ...(subscriptionQueueCapacity === undefined ? {} : { subscriptionQueueCapacity }),
   });
   stand.register(ProjectOverviewStateSchema);
   return stand;
 };
 
 describe("direct Stand subscription filtering", () => {
-  it("uses environment zero capacity without Server setup", async () => {
-    await ServerEnvironmentLifecycle.resetForTest();
-    ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: 0 });
-    const stand = standWithState();
+  it("uses configured zero capacity without Server setup", async () => {
+    const stand = standWithState(0);
     const entered = deferred();
     const release = deferred();
     const errors: Error[] = [];
@@ -88,7 +84,6 @@ describe("direct Stand subscription filtering", () => {
     } finally {
       release.resolve();
       await stand.close();
-      await ServerEnvironmentLifecycle.resetForTest();
     }
   });
 
@@ -197,9 +192,7 @@ describe("direct Stand subscription filtering", () => {
   });
 
   it("lets a peer continue when a configured one-waiting subscriber overflows", async () => {
-    await ServerEnvironmentLifecycle.resetForTest();
-    ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: 1 });
-    const stand = standWithState();
+    const stand = standWithState(1);
     const entered = deferred();
     const gate = deferred();
     const peerDone = deferred();
@@ -263,7 +256,6 @@ describe("direct Stand subscription filtering", () => {
     expect(principals).toContain("slow");
     expect(principals).toContain("fast");
     await stand.close();
-    await ServerEnvironmentLifecycle.resetForTest();
   });
 
   it("awaits asynchronous next delivery before starting the following update", async () => {
@@ -323,7 +315,6 @@ describe("direct Stand subscription filtering", () => {
   });
 
   it("reports the producing Bounded Context for a direct subscription", async () => {
-    await ServerEnvironment.instance().completeSetup();
     const seen: ReadSideContext[] = [];
     class Inspect extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
       constructor() {
@@ -334,9 +325,12 @@ describe("direct Stand subscription filtering", () => {
         return value;
       }
     }
-    const context = await BoundedContext.singleTenant("Projects")
-      .addReadSideFilter(new Inspect())
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(BoundedContext.singleTenant("Projects").addReadSideFilter(new Inspect()))
       .build();
+    const [context] = application.contexts();
+    if (context === undefined) throw new Error("Expected the Projects Bounded Context.");
     try {
       const stand = context.stand();
       stand.register(ProjectOverviewStateSchema);
@@ -359,8 +353,7 @@ describe("direct Stand subscription filtering", () => {
         },
       });
     } finally {
-      await context.close();
-      await ServerEnvironmentLifecycle.resetForTest();
+      await application.close();
     }
   });
 

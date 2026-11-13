@@ -12,17 +12,10 @@
  * the License.
  */
 
-import {
-  EnvironmentType,
-  ServerEnvironment,
-  type ServerEnvironmentSettings,
-} from "@spine-event-engine/server";
-import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
 import type { Datastore } from "@google-cloud/datastore";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MessageBoardDeployment } from "../src/deployment-config.js";
-import { typeRegistry } from "../src/model-registry.js";
 
 const completeEnvironment: NodeJS.ProcessEnv = {
   HOST: "127.0.0.1",
@@ -34,23 +27,11 @@ const completeEnvironment: NodeJS.ProcessEnv = {
 };
 const client = {} as Datastore;
 
-afterEach(async () => {
-  await resetServerEnvironmentForTest();
+afterEach(() => {
   vi.unstubAllEnvs();
 });
 
 describe("MessageBoard deployment configuration", () => {
-  it("configures the production Coordinator before shared environment resolution", () => {
-    vi.stubEnv("NODE_ENV", "production");
-
-    MessageBoardDeployment.configureManagedCoordinator();
-
-    const environment = ServerEnvironment.instance();
-    expect(environment.environment.type).toBe(EnvironmentType.Production);
-    expect(environment.typeRegistry).toBe(typeRegistry);
-    expect(environment.subscriptionQueueCapacity).toBe(100);
-  });
-
   it("requires shared Delivery for a managed replica", () => {
     expect(() =>
       MessageBoardDeployment.configureManagedServer(
@@ -64,9 +45,7 @@ describe("MessageBoard deployment configuration", () => {
     ).toThrow("DELIVERY_SERVER_URL");
   });
 
-  it("configures the managed replica shard count in Production", () => {
-    const use = vi.fn<(settings: ServerEnvironmentSettings) => void>();
-    const when = vi.spyOn(ServerEnvironment, "when").mockReturnValue({ use });
+  it("returns managed replica storage and remote Delivery facilities", () => {
     const config = {
       host: "127.0.0.1",
       port: 8080,
@@ -74,14 +53,13 @@ describe("MessageBoard deployment configuration", () => {
       processCount: 3,
       deliveryShardCount: 5,
     };
-    try {
-      MessageBoardDeployment.configureManagedServer(config, client, completeEnvironment);
-
-      expect(when).toHaveBeenCalledWith(EnvironmentType.Production);
-      expect(use.mock.lastCall?.[0].deliveryStrategy?.shardCount).toBe(5);
-    } finally {
-      when.mockRestore();
-    }
+    const facilities = MessageBoardDeployment.configureManagedServer(
+      config,
+      client,
+      completeEnvironment,
+    );
+    expect(facilities.storageFactory).toBeDefined();
+    expect(facilities.delivery).toBeDefined();
   });
 
   it("uses console logging in the local Datastore emulator and Cloud Logging elsewhere", () => {
@@ -231,7 +209,7 @@ describe("MessageBoard deployment configuration", () => {
       entry: vi.fn((_metadata: unknown, data: unknown) => data),
       write: vi.fn(),
     } as never);
-    const storage = MessageBoardDeployment.configureServer(
+    const facilities = MessageBoardDeployment.configureServer(
       config,
       client,
       {
@@ -241,7 +219,9 @@ describe("MessageBoard deployment configuration", () => {
       logger,
     );
 
-    expect(storage?.isOpen()).toBe(true);
+    expect(facilities?.storageFactory.isOpen()).toBe(true);
+    expect(facilities?.delivery).toBeDefined();
+    expect(facilities?.logger).toBe(logger);
   });
 
   it.each([

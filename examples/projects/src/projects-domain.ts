@@ -14,6 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import {
+  Application,
   Aggregate,
   Assign,
   BoundedContext,
@@ -882,15 +883,15 @@ export const projectManagementTopology: {
  * @param weights Shared service used by each new or restored TaskAssignment instance.
  * @returns The assembled bounded context.
  */
-export async function createProjectManagementContext(
+export function createProjectManagementContext(
   weights: AssignmentWeightService = unitAssignmentWeightService,
-): Promise<BoundedContext> {
+): BoundedContextBuilder {
   const builder = BoundedContext.singleTenant("ProjectManagement")
 
     .add(ProjectAggregate)
     .add(TaskAggregate)
     .add(PersonAggregate);
-  return ProjectRegistration.processes(ProjectRegistration.projections(builder), weights).build();
+  return ProjectRegistration.processes(ProjectRegistration.projections(builder), weights);
 }
 
 /**
@@ -988,8 +989,52 @@ export type ProjectManagementServer = RunningServer;
 export async function startProjectManagementServer(
   options: ProjectManagementServerOptions = {},
 ): Promise<ProjectManagementServer> {
-  await ServerEnvironment.instance().completeSetup();
-  return Server.atPort(options.port ?? 0, { host: options.host ?? "127.0.0.1" })
-    .add(await createProjectManagementContext())
-    .start();
+  const environment = ServerEnvironment.newBuilder().build();
+  const builder = Application.newBuilder().setServerEnvironment(environment);
+  let application: Application;
+  try {
+    application = await builder.add(createProjectManagementContext()).build();
+  } catch (error) {
+    return ProjectStartup.closeFailed(error, async () => {
+      await builder.close();
+      await environment.close();
+    });
+  }
+  let endpoint: RunningServer;
+  try {
+    endpoint = await Server.atPort(options.port ?? 0, {
+      host: options.host ?? "127.0.0.1",
+    })
+      .setApplication(application)
+      .start();
+  } catch (error) {
+    return ProjectStartup.closeFailed(error, () => application.close());
+  }
+  return {
+    host: endpoint.host,
+    port: endpoint.port,
+    baseUrl: endpoint.baseUrl,
+    close: async () => {
+      await endpoint.close();
+      await application.close();
+    },
+  };
 }
+
+const ProjectStartup = Object.freeze({
+  /**
+   * Closes an acquired project resource while preserving its startup failure.
+   *
+   * @param error The startup failure.
+   * @param close Closes the resource acquired before the failure.
+   * @returns Never, because startup failed.
+   */
+  async closeFailed(error: unknown, close: () => Promise<void>): Promise<never> {
+    try {
+      await close();
+    } catch (cleanup) {
+      throw new AggregateError([error, cleanup], "Project startup cleanup failed.");
+    }
+    throw error;
+  },
+});

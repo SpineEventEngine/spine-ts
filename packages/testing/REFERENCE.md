@@ -38,9 +38,9 @@ response, the scripted observation remains pending and satisfaction does not
 pass. This dependency does not replace BlackBox, establish delivery or state, or provide an
 MCP tool transport.
 
-`BlackBox.from(contextOrBuilder, options?)` accepts a built `BoundedContext` or
-`BoundedContextBuilder`, builds a builder asynchronously, starts a local
-`Server`, and connects a Node client. The returned box is ready to use. Options
+`BlackBox.from(builder, options?)` accepts a BoundedContextBuilder and constructs
+a fresh environment and Application for the test. It starts a local Server and
+connects a Node client. The returned box is ready to use. Options
 are fixed for its lifetime:
 
 - `tenant` is required by a multitenant context and must not be supplied to a
@@ -48,6 +48,8 @@ are fixed for its lifetime:
 - `zoneId` defaults to the framework's valid zone value;
 - `timeoutMs` defaults to 500 and `intervalMs` defaults to 5; both must be
   positive integers.
+- `storageFactory` supplies domain storage for this test Application.
+- `tenantIndex` supplies a separate tenant directory when needed.
 
 `asGuest()` creates an immutable guest scope. `onBehalfOf(actor)` creates an
 immutable actor scope; actor text is validated by the client contract.
@@ -80,7 +82,8 @@ stops waiting when close begins.
 
 `close()` is idempotent and returns one shared completion promise. It stops new
 operations, cancels tracked subscriptions, closes the client, then closes the
-local server. Operations begun after close starts throw `BlackBoxClosedError`.
+local Server, and finally its Application. Storage remains available if endpoint
+cleanup fails. Operations begun after close starts throw `BlackBoxClosedError`.
 
 Subscriptions returned by `createSubscription` are inactive until `activate()`
 and must be ended with `cancel()`. The same method accepts several Event schemas,

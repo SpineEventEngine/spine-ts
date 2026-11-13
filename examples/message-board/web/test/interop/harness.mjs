@@ -56,10 +56,28 @@ export async function startTopology({ lifecycle = {}, authenticated = false } = 
   const startBackend =
     lifecycle.startBackend ??
     (async () => {
-      ServerEnvironment.when(EnvironmentType.Local).use({
-        storageFactory: new InMemoryStorageFactory(),
-      });
-      return (await application.create()).server.start();
+      const environment = ServerEnvironment.newBuilder()
+        .under(EnvironmentType.Local, (setting) =>
+          setting.use({
+            storageFactory: new InMemoryStorageFactory(),
+          }),
+        )
+        .build();
+      const composed = await application.create(environment);
+      let endpoint;
+      try {
+        endpoint = await composed.server.start();
+      } catch (error) {
+        await composed.application.close();
+        throw error;
+      }
+      return {
+        baseUrl: endpoint.baseUrl,
+        close: async () => {
+          await endpoint.close();
+          await composed.application.close();
+        },
+      };
     });
   const createGateway = lifecycle.createGateway;
   const createSubscriptions =

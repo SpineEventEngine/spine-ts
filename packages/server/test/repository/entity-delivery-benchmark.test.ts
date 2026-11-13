@@ -24,6 +24,7 @@ import {
 import { expect, it } from "vitest";
 
 import {
+  Application,
   BoundedContext,
   EntityHandlers,
   EventRouting,
@@ -31,7 +32,6 @@ import {
   Repository,
 } from "../../src/index.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "../../src/server/server-environment.js";
-import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import {
   ProjectCreatedSchema,
   type ProjectCreated,
@@ -116,8 +116,7 @@ async function startCpuProfile(
 }
 
 async function measure(count: number, label: string): Promise<number> {
-  await resetServerEnvironmentForTest();
-  await ServerEnvironment.instance().completeSetup();
+  const environment = ServerEnvironment.newBuilder().build();
   const ids = Array.from({ length: count }, (_, index) => `queue-${label}-${String(index)}`);
   const handlers = EntityHandlers.define(RoutedQueue, ProjectQueueStateSchema, (builder) => [
     builder.react(ProjectCreatedSchema, "react"),
@@ -128,11 +127,16 @@ async function measure(count: number, label: string): Promise<number> {
     handlers,
     eventRouting: EventRouting.create(RoutedQueue).route(ProjectCreatedSchema, () => ids),
   });
-  const context = await BoundedContext.singleTenant(
-    `DeliveryBenchmark${String(count)}${label.replaceAll("-", "")}`,
-  )
-    .add(repository)
+  const application = await Application.newBuilder()
+    .setServerEnvironment(environment)
+    .add(
+      BoundedContext.singleTenant(
+        `DeliveryBenchmark${String(count)}${label.replaceAll("-", "")}`,
+      ).add(repository),
+    )
     .build();
+  const [context] = application.contexts();
+  if (context === undefined) throw new Error("Expected the benchmark Bounded Context.");
   const event = create(EventSchema, {
     id: create(EventIdSchema, { value: `queue-created-${label}` }),
     context: create(EventContextSchema, {
@@ -159,7 +163,7 @@ async function measure(count: number, label: string): Promise<number> {
     const start = performance.now();
     try {
       await context.eventBus().post(event);
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environment);
     } finally {
       const end = performance.now();
       elapsed = end - start;
@@ -175,7 +179,7 @@ async function measure(count: number, label: string): Promise<number> {
     expect(RoutedQueue.calls.size).toBe(count);
     return elapsed;
   } finally {
-    await context.close();
+    await application.close();
   }
 }
 

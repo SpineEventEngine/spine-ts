@@ -898,8 +898,8 @@ describes the required privileges.
       Register any custom converters before first storage use, with the same
       settings on every application instance. Check identifier and
       indexed integer/timestamp limits in chapter 3.
-- [ ] **5. Configure the factory and environment.** Use the factory setup above, then supply it to `ServerEnvironment`. Complete environment setup
-      before building the Bounded Context. Register all three Entity types, enable
+- [ ] **5. Configure the factory and environment.** Use the factory setup above, then supply it to `ServerEnvironment`. Application build completes environment setup
+      before activating its Bounded Contexts. Register all three Entity types, enable
       Ticket state history and System Event persistence, and configure the Agent's
       AI services. Merely importing an Entity class does not declare its storage.
 - [ ] **6. Prepare or precreate every enabled family.** Normal Bounded Context
@@ -2774,8 +2774,8 @@ describes the required privileges.
       Register any custom converters before first storage use, with the same
       settings on every application instance. Check identifier and
       indexed integer/timestamp limits in chapter 3.
-- [ ] **5. Configure the factory and environment.** Use the factory setup above, then supply it to `ServerEnvironment`. Complete environment setup
-      before building the Bounded Context. Register all three Entity types, enable
+- [ ] **5. Configure the factory and environment.** Use the factory setup above, then supply it to `ServerEnvironment`. Application build completes environment setup
+      before activating its Bounded Contexts. Register all three Entity types, enable
       Ticket state history and System Event persistence, and configure the Agent's
       AI services. Merely importing an Entity class does not declare its storage.
 - [ ] **6. Prepare or precreate every enabled family.** Normal Bounded Context
@@ -4074,15 +4074,12 @@ tenant directory. There are no external namespaces to provision.
 
 `TenantIndex` answers which tenants currently exist. The database resolver
 answers where a known tenant's data goes. These are separate responsibilities.
-The current environment index is `ServerEnvironment.instance().tenantIndex`;
-a Bounded Context exposes its effective `boundedContext.tenantIndex` and may
-configure a different implementation through `withTenantIndex()`.
-
-Omitting `tenantIndex` selects `SINGLE_TENANT`; that mode constructs no index
-and performs no tenant-catalog lookup. Every multitenant Bounded Context needs
-an explicitly supplied `TenantIndex`, either through the environment or
-`withTenantIndex()`. Fixed SQL tenant destinations, a dynamic database resolver,
-and existing Datastore namespaces do not supply that index automatically.
+The Application index is `application.tenantIndex()`. All its multi-tenant Bounded
+Contexts use that index. The synchronous getter returns a stable handle without
+storage I/O; its first asynchronous operation initializes the default directory.
+Single-tenant Bounded Contexts use `SINGLE_TENANT` without membership lookups.
+Fixed SQL destinations, database resolvers, and Datastore namespaces configure
+storage locations independently of registration.
 
 Use `PersistentTenantIndex.create({ storageFactory, group })` from
 `@spine-event-engine/server` for a standard record-backed directory. Its async
@@ -4101,7 +4098,13 @@ classes:
 
 ```ts
 import type { TenantId } from "@spine-event-engine/proto";
-import { EnvironmentType, ServerEnvironment, type TenantIndex } from "@spine-event-engine/server";
+import {
+  Application,
+  BoundedContext,
+  EnvironmentType,
+  ServerEnvironment,
+  type TenantIndex,
+} from "@spine-event-engine/server";
 import {
   PostgresStorageFactory,
   type PostgresStorageFactoryOptions,
@@ -4117,8 +4120,17 @@ const postgresBuilder = PostgresStorageFactory.newBuilder()
   .setTenantResolver((tenant) => directory.databaseOptions(tenant));
 const factory = await postgresBuilder.build();
 
-ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory, tenantIndex });
-await ServerEnvironment.instance().completeSetup();
+const environment = ServerEnvironment.newBuilder()
+  .under(EnvironmentType.Local, (configuration) => {
+    configuration.use({ storageFactory: factory });
+  })
+  .build();
+const application = await Application.newBuilder()
+  .setServerEnvironment(environment)
+  .setTenantIndex(tenantIndex)
+  .add(BoundedContext.multiTenant("Support"))
+  .build();
+await application.close();
 ```
 
 MySQL has the analogous `setTenantResolver()` with MySQL options. A successful
@@ -4133,16 +4145,16 @@ To add `initech`, run these steps in order:
    `support_initech` database and its chosen schema; for MySQL, the database.
    For Datastore, assign a distinct namespace through the converter.
 2. Make the database resolver return that destination's connection settings.
-3. Register the complete Tenant ID through the selected `TenantIndex.keep()`
-   implementation. If an external directory controls registration, update that
-   directory through its supported administration procedure before admission.
-4. Prepare the already-built Bounded Contexts that admit the tenant.
+3. Prepare the already-built Bounded Contexts for the supplied TenantId before
+   registering it.
    `createStorageStructures()` creates missing structures and verifies their
    layouts. A separate `checkStructureCompatibility()` is optional; use it when
    you want a read-only check of existing structures.
-5. Add the application's SQL query indexes to the newly prepared tables.
+4. Add the application's SQL query indexes to the newly prepared tables.
    Datastore's deployed kind indexes already apply in the new namespace.
-6. Allow external traffic for the tenant after these steps succeed.
+5. Register the complete TenantId with `application.tenantIndex().keep(tenantId)`.
+   If an external directory controls registration, use its administration API.
+6. Allow external traffic after preparation and registration succeed.
 
 The shared subscription, Inbox, gateway, and node tables do not need another
 copy for each tenant. If you allow traffic before explicit preparation, the
@@ -4151,29 +4163,31 @@ first valid input can trigger lazy preparation instead.
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { TenantId } from "@spine-event-engine/proto";
-import { SINGLE_TENANT, ServerEnvironment } from "@spine-event-engine/server";
+import { create } from "@bufbuild/protobuf";
+import { TenantIdSchema } from "@spine-event-engine/proto";
+import type { Application } from "@spine-event-engine/server";
 
-declare const initech: TenantId;
-const environment = ServerEnvironment.instance();
-const index = environment.tenantIndex;
-if (index === SINGLE_TENANT) throw new Error("Configure a multitenant TenantIndex first");
-await index.keep(initech);
-await environment.createStorageStructures(initech);
-await environment.checkStructureCompatibility(initech);
+// The built Application uses the resolver configured above.
+declare const application: Application;
+const initech = create(TenantIdSchema, {
+  kind: { case: "value", value: "initech" },
+});
+await application.createStorageStructures(initech);
+await application.checkStructureCompatibility(initech);
+await application.tenantIndex().keep(initech);
 ```
 
-No arguments means all current tenants of the relevant open Bounded Contexts;
-one or more Tenant IDs limit the operation. Bounded Context methods select just
-that Bounded Context. Environment methods cannot prepare an unbuilt Bounded
-Context. A per-Bounded-Context index override must admit the tenant too.
+With no arguments, Application methods prepare each open single-tenant Bounded
+Context and the index's current tenants for multi-tenant Bounded Contexts. Explicit
+TenantIds select all open multi-tenant Bounded Contexts without a membership check.
+The narrower Bounded Context runtime methods work on that Bounded Context only.
 
-Explicit required startup preparation must fail startup if it fails. Without
-explicit new-tenant preparation, a failure rejects that tenant's triggering
-request; other tenants remain running, and subsequent input can retry. A known
-tenant with an unreachable database is a storage failure, distinct from an
-unknown tenant. Once periodic subscription monitoring has started successfully,
-its later failures cause WARN logs and restart attempts, not application shutdown.
+Required startup preparation failure prevents startup. An administrative preparation
+failure after startup rejects that operation and leaves established tenants running.
+Without explicit preparation, a failure rejects the triggering request; later input
+can retry. An unreachable tenant database is a storage error, distinct from an
+unknown tenant. After subscription monitoring starts successfully, later periodic
+failures log warnings and retry without shutting down the Application.
 
 ## 3. Value conversion and customization
 
@@ -5251,6 +5265,7 @@ import type { StorageFactory } from "@spine-event-engine/storage";
 import {
   Agent,
   Aggregate,
+  Application,
   BoundedContext,
   EnvironmentType,
   Projection,
@@ -5267,48 +5282,54 @@ declare const factory: StorageFactory;
 declare const ai: AiRegistry;
 declare const agentAi: NonNullable<GeneratedRepositoryOptions<typeof ReplyAssistantAgent>["ai"]>;
 
-ServerEnvironment.when(EnvironmentType.Production).use({
-  storageFactory: factory,
-  typeRegistry: TypeRegistry.from(supportProtoModule),
-});
-const environment = ServerEnvironment.instance();
-await environment.completeSetup();
+const environment = ServerEnvironment.newBuilder()
+  .under(EnvironmentType.Production, (configuration) => {
+    configuration.use({
+      storageFactory: factory,
+      typeRegistry: TypeRegistry.from(supportProtoModule),
+    });
+  })
+  .build();
 
-const support = await BoundedContext.singleTenant("Support")
+const support = BoundedContext.singleTenant("Support")
   .withAi(ai)
   .persistSystemEvents()
   .add(new Repository({ entityType: TicketAggregate, schema: TicketSchema, stateHistory: true }))
   .add(TicketListProjection)
-  .add(ReplyAssistantAgent, { ai: agentAi })
+  .add(ReplyAssistantAgent, { ai: agentAi });
+const application = await Application.newBuilder()
+  .setServerEnvironment(environment)
+  .add(support)
   .build({ createStorageStructures: true, startSubscriptionMonitoring: true });
 
-await support.runtime.checkStructureCompatibility();
-const running = await new Server({ port: 8080 }).add(support).start();
-// During application shutdown: await running.close();
+await application.checkStructureCompatibility();
+const running = await Server.atPort(8080).setApplication(application).start();
+// At shutdown, close in this order.
+await running.close();
+await application.close();
 ```
 
-`completeSetup()` must finish before context build. Eager `build()` prepares
-the listed model families and starts subscription monitoring. `Server.start()`
-opens the listener after this assembly succeeds. For multitenant Support,
-use `BoundedContext.multitenant()`, configure a `TenantIndex` and tenant
-destinations before setup, and prepare each new tenant as shown in chapter 2.
+Application build completes environment setup, prepares the listed model families,
+and starts subscription monitoring. Server.start() then opens the listener.
+For multi-tenant Support, use `BoundedContext.multiTenant()`, configure tenant
+storage destinations, and prepare/register each tenant as shown in chapter 2.
+Application provides the default index or accepts a custom index.
 
 Factory `build()` validates configuration without connecting to the database.
 `factory.checkConnection()` explicitly checks the shared destination. Successful
 checks are remembered; failed checks can be retried. A SQL check releases its
 temporary pool unless an existing runtime pool can be reused.
 
-`ServerEnvironment.completeSetup()` checks the shared storage connection,
-initializes integration transport, and opens Delivery. It does not create
-Entity/Event tables or open Inbox and shard-session record handles. Build
-Bounded Contexts after setup; their registrations identify the required
-model-dependent families.
+Application first checks the shared storage connection and initializes shared
+services. It then assembles Bounded Contexts, whose registrations identify the
+model-dependent families. Their shared reads are available before integration,
+monitoring, and recovered Delivery can invoke handlers.
 
 | When                                    | Physical effect in this example                                                                                                                                                         |
 | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Factory `.build()`                      | Validates settings; no database connection or table creation.                                                                                                                           |
-| `completeSetup()`                       | Checks shared connection and initializes shared services. Delivery is constructed, but Inbox and shard-session tables are not prepared yet.                                             |
-| Eager Support `.build()`                | Prepares current Entity states, Ticket histories, domain/System Events, Agent records and the shared subscription registry for current tenants; starts initial subscription monitoring. |
+| Application service setup               | Checks shared connection and initializes shared services. Delivery is constructed, but Inbox and shard-session tables are not prepared yet.                                             |
+| Eager Application `.build()`            | Prepares current Entity states, Ticket histories, domain/System Events, Agent records and the shared subscription registry for current tenants; starts initial subscription monitoring. |
 | First routed signal                     | Its Entity's distinct Inbox receives a message, preparing the shared InboxMessage family on first storage use.                                                                          |
 | First shard pickup during delivery      | Prepares the shared ShardSessionRecord family on first storage use.                                                                                                                     |
 | Gateway binding or node lease first use | Prepares its separately constructed shared family; Bounded Context build does not do this.                                                                                              |
@@ -5321,14 +5342,14 @@ before exposing traffic.
 
 | Operation                                                          | Effect                                                                                                                                |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `boundedContextBuilder.build()`                                    | Prepares required structures for current tenants and starts the initial subscription-monitoring pass                                  |
+| `applicationBuilder.build()`                                       | Prepares required structures for current tenants and starts the initial subscription-monitoring pass                                  |
 | `build({ createStorageStructures: false })`                        | Defers model structure preparation until needed; subscription monitoring still starts by default and prepares its registry dependency |
 | `build({ startSubscriptionMonitoring: false })`                    | Prepares structures by default, but defers subscription monitoring                                                                    |
 | Both flags `false`                                                 | Defers both operations until the first valid input needs them                                                                         |
 | `boundedContext.runtime.createStorageStructures(...tenantIds)`     | Creates missing structures for that Bounded Context and verifies the resulting layouts                                                |
 | `boundedContext.runtime.checkStructureCompatibility(...tenantIds)` | Inspects the expected structures without creating or altering them                                                                    |
 | `boundedContext.runtime.startSubscriptionMonitoring()`             | Prepares its registry dependency and starts that Bounded Context's monitoring                                                         |
-| The corresponding environment structure methods                    | Apply preparation across relevant completed, open Bounded Contexts                                                                    |
+| The corresponding Application structure methods                    | Apply preparation across relevant completed, open Bounded Contexts                                                                    |
 
 For a multitenant Bounded Context, no tenant arguments means all tenants
 currently returned by its index. One or more arguments select those tenants.
@@ -5338,7 +5359,7 @@ SQL creation uses `CREATE TABLE IF NOT EXISTS` followed by compatibility checks.
 It does not automatically alter an incompatible table. A successful read-only
 compatibility check also establishes that the family is ready, avoiding later
 creation SQL for that family. This read-only setup path applies to the families
-exposed through the Bounded Context/environment preparation APIs. Delivery tables, separately constructed gateway bindings, and node
+exposed through the Bounded Context/Application preparation APIs. Delivery tables, separately constructed gateway bindings, and node
 registries expose no equivalent public check; their first SQL storage use still issues `CREATE TABLE IF NOT EXISTS`
 and then validates the table, even when administrators have precreated it.
 Provide the privileges needed for that first-use path and exercise it at startup.
@@ -5357,18 +5378,19 @@ The application sequence is:
 
 ```mermaid
 sequenceDiagram
-  participant App as Application code
-  participant Env as ServerEnvironment
+  participant Host as Application code
+  participant App as Application builder
   participant BC as Support Bounded Context
   participant DB as Storage provider
-  App->>Env: Configure factory and other environment resources
-  App->>Env: completeSetup()
-  Env->>DB: Initialize required shared resources
-  App->>BC: Register Entities and build()
+  Host->>App: Supply environment and Bounded Context builders
+  Host->>App: build()
+  App->>DB: Initialize shared services
+  App->>BC: Assemble every Bounded Context and register shared reads
   BC->>DB: Prepare declared families and subscription dependency
-  BC->>BC: Initial subscription monitoring
-  App->>DB: Initialize separately configured gateway/node storage
-  App->>App: Expose application services
+  App->>BC: Activate integration, monitoring, and recovered work
+  App-->>Host: Built Application
+  Host->>DB: Initialize separately configured gateway and node storage
+  Host->>Host: Start Server with Application
 ```
 
 Building the factory itself performs no silent database connection check.
@@ -5386,8 +5408,12 @@ import { EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
 import type { StorageFactory } from "@spine-event-engine/storage";
 
 declare const factory: StorageFactory; // One of the provider factories above.
-ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
-await ServerEnvironment.instance().completeSetup();
+const environment = ServerEnvironment.newBuilder()
+  .under(EnvironmentType.Local, (configuration) => {
+    configuration.use({ storageFactory: factory });
+  })
+  .build();
+// Supply environment to ApplicationBuilder.setServerEnvironment().
 ```
 
 The diagram shows eager startup. Both `build` flags set to `false` select lazy
@@ -5406,8 +5432,8 @@ Authentication configuration alone adds no SQL tables. The exact inventory
 changes only when a corresponding storage-using feature is enabled.
 
 Ordinary Entity family names do not include the Bounded Context name. Registering
-the same Entity state type in two open domain Bounded Contexts is prohibited,
-including in tests. Event Store names come from the Bounded Context names:
+the same Entity state type in two domain Bounded Contexts of one Application is
+prohibited, including in tests. Independent Applications may use the same type. Event Store names come from the Bounded Context names:
 `Support` and `Support_System` in this example. Changing a Bounded Context name
 therefore changes its default Event table or kind name. Use the provider's
 `setEventStoreTable` or `setEventStoreKind` setting when you want an explicit

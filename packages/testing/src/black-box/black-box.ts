@@ -48,17 +48,23 @@ import {
 import type { Query, Topic } from "@spine-event-engine/proto/client";
 import {
   BoundedContext,
+  Application,
+  type ApplicationBuilder,
+  EnvironmentType,
   Agent,
   Repository,
   type BoundedContextBuilder,
+  type TenantIndex,
   type ConcreteRepositoryEntityType,
   type RepositoryEntityId,
   type RepositoryEntityType,
   type RepositoryStateSchema,
   type RepositoryView,
   Server,
+  ServerEnvironment,
   type RunningServer,
 } from "@spine-event-engine/server";
+import type { StorageFactory } from "@spine-event-engine/storage";
 import {
   observeProducedSignals,
   postExternalEvent,
@@ -92,6 +98,16 @@ export interface BlackBoxOptions {
    * Delay between eventual read attempts, as a positive integer. Defaults to 5 milliseconds.
    */
   readonly intervalMs?: number;
+
+  /**
+   * Supplies domain storage for this test Application.
+   */
+  readonly storageFactory?: StorageFactory;
+
+  /**
+   * Supplies a separate tenant directory for this test Application.
+   */
+  readonly tenantIndex?: TenantIndex;
 }
 
 /**
@@ -239,6 +255,8 @@ interface BlackBoxInternal {
 export class BlackBox {
   readonly #context: BoundedContext;
 
+  readonly #application: Pick<Application, "close"> | undefined;
+
   readonly #server: RunningServer;
 
   readonly #client: ClientKernel;
@@ -278,6 +296,7 @@ export class BlackBox {
    * @param client The client connected to that server.
    * @param options The validated tenant, zone, and wait settings.
    * @param observation The optional produced-signal observer.
+   * @param application The Application assembled for this test session.
    */
   private constructor(
     context: BoundedContext,
@@ -285,8 +304,10 @@ export class BlackBox {
     client: ClientKernel,
     options: NormalizedBlackBoxOptions,
     observation?: { readonly close: () => void },
+    application?: Pick<Application, "close">,
   ) {
     this.#context = context;
+    this.#application = application;
     this.#server = server;
     this.#client = client;
     this.#tenant = BlackBoxOptionsValues.cloneTenant(options.tenant);
@@ -314,30 +335,30 @@ export class BlackBox {
   }
 
   /**
-   * Starts an ephemeral local server and public client for a context or builder.
+   * Starts a fresh Application, local endpoint, and public client for a builder.
    *
-   * @param contextOrBuilder The bounded context or builder to exercise.
+   * @param builder The Bounded Context builder to exercise.
    * @param options The tenant, zone, and eventual-wait options.
    * @returns A ready BlackBox.
    */
   static async from(
-    contextOrBuilder: BoundedContext | BoundedContextBuilder,
+    builder: BoundedContextBuilder,
     options: BlackBoxOptions = {},
   ): Promise<BlackBox> {
-    const normalized = BlackBoxOptionsValues.normalize(contextOrBuilder, options);
-    const context =
-      contextOrBuilder instanceof BoundedContext
-        ? contextOrBuilder
-        : await contextOrBuilder.build();
+    const normalized = BlackBoxOptionsValues.normalize(builder, options);
+    const application = await BlackBoxApplication.create(builder, options, normalized.tenant);
+    const context = application.contexts()[0];
+    if (context === undefined) throw new Error("Expected a Bounded Context in the Application.");
     return BlackBoxLifecycle.open(
       context,
       normalized,
-      () => new Server({ contexts: [context] }).start(),
+      () => Server.atPort(0).setApplication(application).start(),
       (server) =>
         NodeClient.connectTo(server.baseUrl, {
           ...(normalized.tenant === undefined ? {} : { tenant: normalized.tenant }),
           zoneId: normalized.zoneId,
         }),
+      application,
     );
   }
 
@@ -601,7 +622,7 @@ export class BlackBox {
   }
 
   /**
-   * Stops admission and waits, cancels subscriptions, and closes the client and server.
+   * Stops admission and closes the client, endpoint, then Application.
    *
    * @returns Completion after all cleanup settles, or an aggregate of failures.
    */
@@ -611,9 +632,21 @@ export class BlackBox {
     const failures = BlackBoxFailures.rejected(
       await Promise.allSettled([...this.#subscriptions].map((item) => item.cancel())),
     );
-    for (const operation of [() => this.#client.close(), () => this.#server.close()]) {
+    try {
+      await this.#client.close();
+    } catch (error) {
+      failures.push(error);
+    }
+    let endpointClosed = false;
+    try {
+      await this.#server.close();
+      endpointClosed = true;
+    } catch (error) {
+      failures.push(error);
+    }
+    if (endpointClosed) {
       try {
-        await operation();
+        await this.#application?.close();
       } catch (error) {
         failures.push(error);
       }
@@ -719,6 +752,7 @@ export const BlackBoxTestAccess: BlackBoxTestAccess = Object.freeze({
       resources.client as ClientKernel,
       BlackBoxOptionsValues.defaults(),
       resources.observation ?? Object.freeze({ close: () => undefined }),
+      resources.application as Application | undefined,
     );
     for (const subscription of resources.subscriptions ?? [])
       BlackBoxAccess.get(blackBox).track(subscription);
@@ -759,7 +793,94 @@ export const BlackBoxTestAccess: BlackBoxTestAccess = Object.freeze({
       BlackBoxOptionsValues.defaults(),
       resources.start as () => Promise<RunningServer>,
       resources.connect as unknown as (server: RunningServer) => ClientKernel,
+      resources.application as Application | undefined,
     );
+  },
+});
+
+/**
+ * Assembles one test Application and releases failed setup.
+ */
+const BlackBoxApplication = Object.freeze({
+  /**
+   * Builds a fresh Application and registers the selected test tenant.
+   *
+   * @param context The Bounded Context declaration under test.
+   * @param options Optional storage and tenant directory.
+   * @param tenant The tenant selected by the test session.
+   * @returns The assembled Application.
+   */
+  async create(
+    context: BoundedContextBuilder,
+    options: BlackBoxOptions,
+    tenant: TenantId | undefined,
+  ): Promise<Application> {
+    const environmentBuilder = ServerEnvironment.newBuilder();
+    const storageFactory = options.storageFactory;
+    if (storageFactory !== undefined)
+      environmentBuilder.under(EnvironmentType.Local, (setting) => {
+        setting.use({ storageFactory });
+      });
+    const environment = environmentBuilder.build();
+    const builder = Application.newBuilder().setServerEnvironment(environment).add(context);
+    if (options.tenantIndex !== undefined) builder.setTenantIndex(options.tenantIndex);
+    const application = await this.build(builder, environment);
+    await this.registerTenant(application, tenant);
+    return application;
+  },
+
+  /**
+   * Builds the test Application and releases safe partial setup on failure.
+   *
+   * @param builder Application assembly for this test.
+   * @param environment Facilities to release after successful builder cleanup.
+   * @returns The assembled Application.
+   */
+  async build(builder: ApplicationBuilder, environment: ServerEnvironment): Promise<Application> {
+    let application: Application;
+    try {
+      application = await builder.build();
+    } catch (error) {
+      const failures: unknown[] = [error];
+      let builderClosed = false;
+      try {
+        await builder.close();
+        builderClosed = true;
+      } catch (failure) {
+        failures.push(failure);
+      }
+      if (builderClosed) {
+        try {
+          await environment.close();
+        } catch (failure) {
+          failures.push(failure);
+        }
+      }
+      if (failures.length > 1)
+        throw new AggregateError(failures, "BlackBox Application setup failed.");
+      throw error;
+    }
+    return application;
+  },
+
+  /**
+   * Registers a selected tenant and closes a failed test Application.
+   *
+   * @param application Fresh Application that receives the test tenant.
+   * @param tenant The selected tenant, if any.
+   * @returns Completion after tenant registration or failed Application cleanup.
+   */
+  async registerTenant(application: Application, tenant: TenantId | undefined): Promise<void> {
+    try {
+      if (tenant !== undefined) await application.tenantIndex().keep(tenant);
+    } catch (error) {
+      try {
+        await application.close();
+      } catch (cleanup) {
+        throw new AggregateError([error, cleanup], "BlackBox tenant setup failed.");
+      }
+      throw error;
+    }
   },
 });
 
@@ -776,6 +897,7 @@ const BlackBoxLifecycle = Object.freeze({
    * @param options The validated tenant, zone, and wait settings.
    * @param start The operation that starts the test server.
    * @param connect The operation that connects a client to the started server.
+   * @param application The test Application to close after its endpoint.
    * @returns The started BlackBox or a startup cleanup failure.
    */
   async open(
@@ -783,22 +905,28 @@ const BlackBoxLifecycle = Object.freeze({
     options: NormalizedBlackBoxOptions,
     start: () => Promise<RunningServer>,
     connect: (server: RunningServer) => ClientKernel,
+    application?: Application,
   ): Promise<BlackBox> {
     let server: RunningServer | undefined;
     let client: ClientKernel | undefined;
     try {
       server = await start();
       client = connect(server);
-      return this.instantiate(context, server, client, options);
+      return this.instantiate(context, server, client, options, undefined, application);
     } catch (error) {
       const failures: unknown[] = [error];
+      let endpointClosed = server === undefined;
       for (const resource of [client, server]) {
         if (resource === undefined) continue;
         try {
           await resource.close();
+          if (resource === server) endpointClosed = true;
         } catch (cleanupError) {
           failures.push(cleanupError);
         }
+      }
+      if (endpointClosed && application !== undefined) {
+        try { await application.close(); } catch (cleanupError) { failures.push(cleanupError); }
       }
       if (failures.length === 1) throw error;
       throw new AggregateError(failures, "BlackBox startup cleanup failed.");
@@ -813,6 +941,7 @@ const BlackBoxLifecycle = Object.freeze({
    * @param client The client connected to that server.
    * @param options The validated tenant, zone, and wait settings.
    * @param observation The optional produced-signal observer.
+   * @param application The Application assembled for this test session.
    * @returns A BlackBox containing the supplied resources.
    */
   instantiate(
@@ -821,6 +950,7 @@ const BlackBoxLifecycle = Object.freeze({
     client: ClientKernel,
     options: NormalizedBlackBoxOptions,
     observation?: { readonly close: () => void },
+    application?: Application,
   ): BlackBox {
     const Constructor = BlackBox as unknown as new (
       context: BoundedContext,
@@ -828,8 +958,9 @@ const BlackBoxLifecycle = Object.freeze({
       client: ClientKernel,
       options: NormalizedBlackBoxOptions,
       observation?: { readonly close: () => void },
+      application?: Application,
     ) => BlackBox;
-    return new Constructor(context, server, client, options, observation);
+    return new Constructor(context, server, client, options, observation, application);
   },
 });
 
@@ -855,6 +986,16 @@ export interface BlackBoxTestResources {
   readonly server: {
     /**
      * Closes the test server.
+     */
+    close(): Promise<void>;
+  };
+
+  /**
+   * Closes the test Application after its endpoint.
+   */
+  readonly application?: {
+    /**
+     * Closes the test Application.
      */
     close(): Promise<void>;
   };
@@ -926,6 +1067,16 @@ export interface BlackBoxTestStartup {
   }) => {
     /**
      * Closes the connected test client.
+     */
+    close(): Promise<void>;
+  };
+
+  /**
+   * Closes the test Application after failed startup cleanup.
+   */
+  readonly application?: {
+    /**
+     * Closes the test Application.
      */
     close(): Promise<void>;
   };

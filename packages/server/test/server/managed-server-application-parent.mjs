@@ -12,16 +12,32 @@
  * the License.
  */
 
-import { ManagedServerApplication, Server, ServerEnvironment } from "../../dist/index.js";
+import {
+  Application,
+  BoundedContext,
+  InMemorySubscriptionRegistry,
+  ManagedServerApplication,
+  Server,
+  ServerEnvironment,
+} from "../../dist/index.js";
 import { managedServerApplicationAccess } from "../../dist/server/managed-server-application.js";
 import process from "node:process";
 
-await ServerEnvironment.instance().completeSetup();
 const managed = await ManagedServerApplication.run({
   processCount: 1,
   port: 0,
   moduleUrl: import.meta.url,
-  createServer: async ({ host, port }) => Server.atPort(port, { host }).start(),
+  createServer: async ({ host, port }) => {
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(
+        BoundedContext.singleTenant("ManagedParentChild").withSubscriptionRegistry(
+          new InMemorySubscriptionRegistry(),
+        ),
+      )
+      .build();
+    return Server.atPort(port, { host }).setApplication(application).start();
+  },
 });
 
 if (process.env.SPINE_MANAGED_SERVER_CHILD !== "true") {

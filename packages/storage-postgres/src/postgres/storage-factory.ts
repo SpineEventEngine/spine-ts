@@ -1222,10 +1222,8 @@ export class PostgresStorageFactory extends StorageFactory {
     };
     entry.pendingMode = mode;
     tables.set(key, entry);
-    const attempt = Promise.resolve().then(() =>
-      this.attemptTable(boundary, table, mode, customCreate),
-    );
-    entry.pending = attempt
+    entry.pending = Promise.resolve()
+      .then(() => this.attemptTable(boundary, table, mode, customCreate))
       .then(
         () => {
           entry.ready = true;

@@ -13,8 +13,6 @@
  */
 
 import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
-import type { TenantId } from "@spine-event-engine/proto";
-import { TenantBoundary, type StoragePreparationMode } from "@spine-event-engine/storage/provider";
 import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
 import { InMemoryTransportFactory, type TransportFactory } from "@spine-event-engine/transport";
 import { spineCoreRegistry, type TypeRegistryLookup } from "@spine-event-engine/core";
@@ -30,12 +28,10 @@ import type { Delivery as PublicDelivery, DeliveryStrategy } from "../delivery/d
 import { emitServerInfo, emitServerWarning } from "./server-log.js";
 import { managedDeliveryGate } from "./managed-delivery-gate.js";
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
-import { SINGLE_TENANT, type TenantIndexSetting } from "../context/tenant-index.js";
-import { TenantUnknownError } from "../context/tenant-unknown-error.js";
 import type { EnvironmentDeliveryPorts } from "../context/local-inbox-handoff.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
 import type { DeliverySource } from "../delivery/delivery-supervisor.js";
-import { Environment, EnvironmentTests, EnvironmentType } from "./environment.js";
+import { Environment, EnvironmentType } from "./environment.js";
 
 /**
  * Common closeable facility owned by a server environment.
@@ -92,25 +88,20 @@ export interface ServerEnvironmentSettings {
   readonly subscriptionQueueCapacity?: number;
 
   /**
-   * Tenant mode for this environment; omission selects SINGLE_TENANT without a directory.
-   */
-  readonly tenantIndex?: TenantIndexSetting;
-
-  /**
    * Default AI registry for Bounded Contexts without a local override.
    */
   readonly ai?: AiRegistry;
 
   /**
-   * Storage facility selected for server assembly, including server-added context builders.
+   * Storage facility selected for the Application's Bounded Context assembly.
    */
   readonly storageFactory?: StorageFactory;
 
   /**
-   * Optional message-channel factory for private bounded-context integration brokers.
+   * Optional message-channel factory for private Bounded Context integration brokers.
    *
-   * When omitted, this environment owns one `InMemoryTransportFactory` shared
-   * by every local broker in the process and closes it once with the environment.
+   * When omitted, this environment creates one `InMemoryTransportFactory` shared
+   * by its local brokers and closes it with the environment.
    */
   readonly integrationChannelFactory?: TransportFactory;
 
@@ -133,11 +124,6 @@ export interface ServerEnvironmentSettings {
   readonly deliveryStrategy?: DeliveryStrategy;
 
   /**
-   * Optional tracing factory placeholder for later tracing adapters.
-   */
-  readonly tracerFactory?: ServerEnvironmentCloseable;
-
-  /**
    * Application-owned logger used by this environment and its attached runtime parts.
    * The caller retains transport flush and close ownership.
    */
@@ -145,22 +131,7 @@ export interface ServerEnvironmentSettings {
 }
 
 /**
- * Creates facilities for the selected server environment.
- *
- * @returns The facilities selected for the environment.
- */
-export type ServerEnvironmentSettingsFactory = () => ServerEnvironmentSettings;
-
-/**
- * Accepts either fixed server-environment settings or a factory evaluated when the environment resolves.
- */
-type SettingsInput = ServerEnvironmentSettings | ServerEnvironmentSettingsFactory;
-const configuredSettings = new Map<EnvironmentType, SettingsInput>();
-let resolvedEnvironment: ServerEnvironment | undefined;
-let resetInProgress: Promise<void> | undefined;
-
-/**
- * Process-wide server facilities for the canonical {@link Environment}.
+ * Independent server facilities selected for one Application.
  */
 export class ServerEnvironment implements ServerEnvironmentCloseable {
   // prettier-ignore
@@ -171,12 +142,12 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   readonly environment: Environment;
 
   /**
-   * Stable identity shared by every server in this singleton lifecycle.
+   * Stable identity shared by this Application's facilities.
    */
   readonly nodeId: string;
 
   /**
-   * Storage facility selected for server assembly, including server-added context builders.
+   * Storage facility selected for Application Bounded Context assembly.
    */
   readonly storageFactory: StorageFactory;
 
@@ -186,21 +157,15 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   readonly subscriptionQueueCapacity: number;
 
   /**
-   * Captured tenant mode. SINGLE_TENANT means no directory and is selected by omission;
-   * otherwise this is the supplied directory. Narrow against the marker before index methods.
-   */
-  readonly tenantIndex: TenantIndexSetting;
-
-  /**
    * Default AI registry selected for Bounded Context assembly, when configured.
    */
   readonly ai: AiRegistry | undefined;
 
   /**
-   * Message-channel factory selected for private bounded-context integration.
+   * Message-channel factory selected for private Bounded Context integration.
    *
-   * This is either the configured override or one environment-owned
-   * `InMemoryTransportFactory` shared by every local broker in the process and
+   * This is either the configured override or one environment-scoped
+   * `InMemoryTransportFactory` shared by this environment's local brokers and
    * closed once with the environment.
    */
   readonly integrationChannelFactory: TransportFactory;
@@ -221,15 +186,13 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    */
   get delivery(): PublicDelivery {
     if (this.#publicDelivery === undefined)
-      throw new Error("ServerEnvironment.completeSetup() must finish before Delivery use.");
+      throw new Error("Build the Application before using environment Delivery.");
     return this.#publicDelivery;
   }
 
   /**
    * Optional tracing factory selected for this environment.
    */
-  readonly tracerFactory: ServerEnvironmentCloseable | undefined;
-
   readonly #ownedCloseables: readonly unknown[];
 
   readonly #closeGroup: RetryableCloseGroup;
@@ -262,6 +225,8 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       }
     | undefined;
 
+  #fatalCloseObserved = false;
+
   /**
    * Initializes resolved environment facilities.
    *
@@ -273,14 +238,13 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.nodeId = crypto.randomUUID();
     this.storageFactory = settings.storageFactory;
     this.subscriptionQueueCapacity = settings.subscriptionQueueCapacity;
-    this.tenantIndex = settings.tenantIndex ?? SINGLE_TENANT;
     this.ai = settings.ai;
     this.integrationChannelFactory = settings.integrationChannelFactory;
     this.typeRegistry = settings.typeRegistry;
     this.#remoteDelivery = settings.delivery;
     this.#deliveryStrategy = settings.deliveryStrategy;
-    this.tracerFactory = settings.tracerFactory;
     this.#registerRuntimeHooks(settings.logger);
+    environmentInitializers.set(this, () => this.#setup());
     this.#deliveryCloseGroup = new RetryableCloseGroup(
       [
         { close: () => this.#supervisor?.close() },
@@ -301,6 +265,21 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   }
 
   /**
+   * Starts configuration of an independent environment for one Application.
+   *
+   * @returns A builder that resolves the selected process profile synchronously.
+   */
+  static newBuilder(): ServerEnvironmentBuilder {
+    return constructEnvironmentBuilder(
+      (settings) =>
+        new ServerEnvironment(
+          Environment.instance(),
+          ServerEnvironmentValues.resolveFacilities(Environment.instance().type, settings),
+        ),
+    );
+  }
+
+  /**
    * Registers package-local callbacks for this environment's runtime.
    * @param logger Receives diagnostics from these callbacks.
    */
@@ -312,6 +291,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
         this.#failStartup(cause);
       },
       awaitFailure: () => this.#awaitStartupFailure(),
+      retryCleanup: () => this.#retryFatalResources(),
       available: () => {
         if (this.#closing) throw new Error("ServerEnvironment is closed.");
       },
@@ -329,164 +309,17 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   }
 
   /**
-   * Sets facilities for an environment type before first resolution.
-   *
-   * @param type Identifies the environment to configure.
-   * @returns A one-use configuration entry point.
-   */
-  static when(type: EnvironmentType): {
-    /**
-     * Configures settings for this environment type before singleton resolution.
-     */
-    use(settings: SettingsInput): void;
-  } {
-    return Object.freeze({
-      /**
-       * Stores settings for this environment type unless reset or singleton resolution has started.
-       */
-      use(settings: SettingsInput) {
-        if (resetInProgress !== undefined) {
-          throw new Error("ServerEnvironment reset is in progress.");
-        }
-        if (resolvedEnvironment !== undefined) {
-          throw new Error("ServerEnvironment is already resolved and cannot be reconfigured.");
-        }
-        configuredSettings.set(type, settings);
-      },
-    });
-  }
-
-  /**
-   * Resolves this module graph's configured server facilities exactly once.
-   *
-   * @returns The process-wide server environment.
-   */
-  static instance(): ServerEnvironment {
-    if (resetInProgress !== undefined) {
-      throw new Error("ServerEnvironment reset is in progress.");
-    }
-    return (resolvedEnvironment ??= this.#resolve());
-  }
-
-  /**
-   * Resolves the current Environment and its configured or default facilities into the process-wide ServerEnvironment.
-   */
-  static #resolve(): ServerEnvironment {
-    const environment = Environment.instance();
-    const configured = configuredSettings.get(environment.type);
-    const settings = typeof configured === "function" ? configured() : configured;
-    const facilities = ServerEnvironmentValues.resolveFacilities(environment.type, settings ?? {});
-    return new ServerEnvironment(environment, facilities);
-  }
-
-  /**
    * Checks shared storage and initializes transport and Delivery before context startup.
    *
    * @returns The coalesced setup attempt for this environment lifetime.
    */
-  completeSetup(): Promise<void> {
+  #setup(): Promise<void> {
     if (this.#closing) return Promise.reject(new Error("ServerEnvironment is closed."));
     const current = environmentSetups.get(this);
     if (current !== undefined) return current;
     const started = this.#completeSetup();
     environmentSetups.set(this, started);
     return started;
-  }
-
-  /**
-   * Creates declared structures for the completed open contexts in this environment.
-   * Explicit IDs select matching multitenant contexts through their effective indexes.
-   * Database-backed providers require an existing database; this method does not
-   * provision one or register tenants.
-   * @param tenantIds Optional complete tenant identities; absence includes single-tenant
-   * contexts and pages current multitenant indexes.
-   * @returns Completion after participating contexts are prepared.
-   */
-  createStorageStructures(...tenantIds: TenantId[]): Promise<void> {
-    return this.#prepareContexts("create", tenantIds);
-  }
-
-  /**
-   * Checks existing structures without authorizing creation.
-   * Explicit IDs select matching multitenant contexts through their effective indexes.
-   * The operation does not provision databases or register tenants.
-   * @param tenantIds Optional complete tenant identities; absence includes single-tenant
-   * contexts and pages current multitenant indexes.
-   * @returns Completion after participating contexts pass read-only checks.
-   */
-  checkStructureCompatibility(...tenantIds: TenantId[]): Promise<void> {
-    return this.#prepareContexts("check", tenantIds);
-  }
-
-  /**
-   * Prevalidates selected tenant membership before starting provider work.
-   * @param contexts Captured completed context references.
-   * @param tenantIds Explicit complete tenant identities.
-   * @returns Participating contexts and their selected tenants.
-   */
-  async #selectedContexts(
-    contexts: readonly BoundedContext[],
-    tenantIds: readonly TenantId[],
-  ): Promise<Map<BoundedContext, TenantId[]>> {
-    const selected = new Map<BoundedContext, TenantId[]>();
-    const boundaries = new Map<string | symbol, ReturnType<typeof TenantBoundary.from>>();
-    for (const id of tenantIds) {
-      const boundary = TenantBoundary.from(id);
-      boundaries.set(boundary.key, boundary);
-    }
-    for (const boundary of boundaries.values()) {
-      let found = false;
-      for (const context of contexts) {
-        serverEnvironmentAccess.requireAvailable(this);
-        if (!context.isMultitenant) continue;
-        const index = context.tenantIndex;
-        if (index === SINGLE_TENANT) continue;
-        const present = await index.contains(boundary.tenantId);
-        serverEnvironmentAccess.requireAvailable(this);
-        if (!present) continue;
-        const ids = selected.get(context) ?? [];
-        ids.push(boundary.tenantId);
-        selected.set(context, ids);
-        found = true;
-      }
-      if (!found) throw new TenantUnknownError(boundary.tenantId, "ServerEnvironment");
-    }
-    return selected;
-  }
-
-  /**
-   * Prepares captured contexts after complete explicit-ID validation.
-   * @param mode Creation or read-only check.
-   * @param tenantIds Optional complete tenant identities.
-   * @returns Completion after every participating context settles.
-   */
-  async #prepareContexts(
-    mode: StoragePreparationMode,
-    tenantIds: readonly TenantId[],
-  ): Promise<void> {
-    serverEnvironmentAccess.requireAvailable(this);
-    const captured = tenantIds.map((id) => TenantBoundary.from(id).tenantId);
-    const contexts = serverEnvironmentAccess
-      .openContexts(this)
-      .filter((context) => !boundedContextAccess.isClosing(context));
-    if (contexts.length === 0)
-      throw new Error("ServerEnvironment has no completed Bounded Context to prepare.");
-    const selection = Promise.withResolvers<Map<BoundedContext, TenantId[]> | undefined>();
-    const admitted = contexts.map((context) =>
-      boundedContextAccess.admitServiceRegistryOperation(context, async () => {
-        const selected = await selection.promise;
-        const ids = selected?.get(context);
-        if (selected !== undefined && ids === undefined) return;
-        await boundedContextAccess.prepareExplicit(context, mode, ids ?? []);
-      }),
-    );
-    if (captured.length === 0) selection.resolve(undefined);
-    else void this.#selectedContexts(contexts, captured).then(selection.resolve, selection.reject);
-    const results = await Promise.allSettled(admitted);
-    if (serverEnvironmentAccess.hasStartupFailure(this))
-      return serverEnvironmentAccess.awaitStartupFailure(this);
-    const failure = results.find((result) => result.status === "rejected");
-    if (failure?.status === "rejected") throw failure.reason;
   }
 
   /**
@@ -539,7 +372,17 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    * @returns Completion after facilities close or a rejection reporting failures.
    */
   close(): Promise<void> {
-    if (this.#fatal !== undefined) return this.#awaitStartupFailure();
+    if (this.#fatal !== undefined) {
+      if (!this.#fatalCloseObserved) {
+        this.#fatalCloseObserved = true;
+        return this.#awaitStartupFailure();
+      }
+      this.#close ??= this.#retryFatalClose().catch((error: unknown) => {
+        this.#close = undefined;
+        throw error;
+      });
+      return this.#close;
+    }
     if (EnvironmentContextRegistrations.forEnvironment(this).active)
       return Promise.reject(
         new Error("Cannot close ServerEnvironment with active Bounded Contexts."),
@@ -609,12 +452,60 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       .map(observe);
     for (const result of await Promise.all([...completed, ...remaining]))
       if (result.status === "rejected") CloseErrors.collect(result.reason, cleanupErrors);
+    if (cleanupErrors.length > 0) return;
     this.#delivery?.beginClose();
     try {
       await this.#closeGroup.close();
     } catch (error) {
       CloseErrors.collect(error, cleanupErrors);
     }
+  }
+
+  /**
+   * Retries unfinished failed-start cleanup without repeating successful facility closes.
+   *
+   * @returns Rejection with the startup cause after resources settle.
+   */
+  async #retryFatalClose(): Promise<never> {
+    const fatal = this.#fatal;
+    if (fatal === undefined) throw new Error("No startup failure was recorded.");
+    try {
+      await this.#retryFatalResources();
+    } catch (error) {
+      const errors: unknown[] = [];
+      CloseErrors.collect(error, errors);
+      throw new AggregateError(
+        [...fatal.originals, ...errors],
+        "Required environment initialization failed.",
+      );
+    }
+    if (fatal.originals.length === 1) throw fatal.originals[0];
+    throw new AggregateError(fatal.originals, "Required environment initialization failed.");
+  }
+
+  /**
+   * Retries resources left after automatic required-startup cleanup.
+   *
+   * @returns Completion once failed Bounded Contexts and facilities close.
+   */
+  async #retryFatalResources(): Promise<void> {
+    const fatal = this.#fatal;
+    if (fatal === undefined) throw new Error("No startup failure was recorded.");
+    await fatal.cleanup;
+    const contexts = EnvironmentContextRegistrations.forEnvironment(this).allContexts();
+    const settled = await Promise.allSettled(contexts.map((context) => context.close()));
+    const errors: unknown[] = [];
+    for (const result of settled)
+      if (result.status === "rejected") CloseErrors.collect(result.reason, errors);
+    if (errors.length === 0) {
+      this.#delivery?.beginClose();
+      try {
+        await this.#closeGroup.close();
+      } catch (error) {
+        CloseErrors.collect(error, errors);
+      }
+    }
+    if (errors.length > 0) throw new AggregateError(errors, "Environment retry cleanup failed.");
   }
 
   /**
@@ -764,70 +655,105 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   }
 }
 
+let constructEnvironmentBuilder: (
+  create: (settings: ServerEnvironmentSettings) => ServerEnvironment,
+) => ServerEnvironmentBuilder;
+
+/**
+ * Configures facilities by process profile before constructing an independent environment.
+ */
+export class ServerEnvironmentBuilder {
+  static {
+    constructEnvironmentBuilder = (create) => new ServerEnvironmentBuilder(create);
+  }
+
+  readonly #settings = new Map<EnvironmentType, ServerEnvironmentSettings>();
+
+  readonly #create: (settings: ServerEnvironmentSettings) => ServerEnvironment;
+
+  #built = false;
+
+  /**
+   * Captures construction of an environment for the selected process profile.
+   *
+   * @param create Constructs the selected environment without connecting facilities.
+   */
+  private constructor(create: (settings: ServerEnvironmentSettings) => ServerEnvironment) {
+    this.#create = create;
+  }
+
+  /**
+   * Records named facility settings to apply when this profile is active.
+   *
+   * @param type Process profile to configure.
+   * @param onConfigure Applies settings through the profile configurator.
+   * @returns This builder.
+   */
+  under(
+    type: EnvironmentType,
+    onConfigure: (setting: { use(settings: ServerEnvironmentSettings): void }) => void,
+  ): this {
+    if (this.#built) throw new Error("ServerEnvironment builder is already used.");
+    const configure: (setting: { use(settings: ServerEnvironmentSettings): void }) => unknown =
+      onConfigure;
+    const configured = configure({
+      use: (settings) => {
+        if (this.#built) throw new Error("ServerEnvironment builder is already used.");
+        this.#settings.set(type, { ...this.#settings.get(type), ...settings });
+      },
+    });
+    if (
+      configured !== null &&
+      (typeof configured === "object" || typeof configured === "function")
+    ) {
+      const then: unknown = Reflect.get(configured, "then");
+      if (typeof then === "function") {
+        this.#built = true;
+        void Promise.resolve(configured).catch(() => undefined);
+        throw new TypeError("ServerEnvironment profile configuration must be synchronous.");
+      }
+    }
+    return this;
+  }
+
+  /**
+   * Resolves settings into a distinct environment without opening storage or transport.
+   *
+   * @returns The new environment.
+   */
+  build(): ServerEnvironment {
+    if (this.#built) throw new Error("ServerEnvironment builder is already used.");
+    this.#built = true;
+    return this.#create(this.#settings.get(Environment.instance().type) ?? {});
+  }
+}
+
 /**
  * Contains normalized server facilities after defaults and environment-specific requirements are applied.
  */
 interface RequiredFacilities {
   readonly storageFactory: StorageFactory;
   readonly subscriptionQueueCapacity: number;
-  readonly tenantIndex: TenantIndexSetting | undefined;
   readonly ai: AiRegistry | undefined;
   readonly integrationChannelFactory: TransportFactory;
   readonly typeRegistry: TypeRegistryLookup;
   readonly delivery: ServerEnvironmentCloseable | undefined;
   readonly deliveryStrategy: DeliveryStrategy | undefined;
-  readonly tracerFactory: ServerEnvironmentCloseable | undefined;
   readonly logger: ILogLayer;
 }
-
-/**
- * Provides controlled server-environment lifecycle operations for package owners.
- *
- * @internal
- */
-export const ServerEnvironmentLifecycle: { readonly resetForTest: () => Promise<void> } =
-  Object.freeze({
-    // prettier-ignore
-
-    /**
-     * Resets singleton facilities to deterministic local defaults for the next package test.
-     */
-    resetForTest(): Promise<void> {
-      const current = resetInProgress;
-      if (current !== undefined) {
-        return current;
-      }
-      const resolved = resolvedEnvironment;
-      if (resolved !== undefined && EnvironmentContextRegistrations.forEnvironment(resolved).active) {
-        return Promise.reject(new Error("Cannot reset ServerEnvironment with active Bounded Contexts."));
-      }
-      const reset = Promise.resolve()
-        .then(() => {
-          if (resolved !== undefined && EnvironmentContextRegistrations.forEnvironment(resolved).active) {
-            throw new Error("Cannot reset ServerEnvironment with active Bounded Contexts.");
-          }
-          if (resolved !== undefined && startupControls.get(resolved)?.failed())
-            // spine-log-boundary: server.fatal_environment_test_reset
-            return resolved.close().catch(() => undefined);
-          return resolved?.close();
-        })
-        .then(() => {
-          resolvedEnvironment = undefined;
-          configuredSettings.clear();
-          EnvironmentTests.reset();
-        })
-        .finally(() => {
-          resetInProgress = undefined;
-        });
-      resetInProgress = reset;
-      return reset;
-    },
-  });
 
 /**
  * Groups package-private lifecycle, delivery, context-registration, and startup-failure operations.
  */
 interface ServerEnvironmentAccess {
+  /**
+   * Opens shared facilities during Application build.
+   *
+   * @param environment Claimed environment to initialize.
+   * @returns Coalesced setup completion.
+   */
+  setup(environment: ServerEnvironment): Promise<void>;
+
   /**
    * Returns the retained runtime behind the public Delivery facade.
    * @param environment Resolved environment after explicit setup.
@@ -888,6 +814,14 @@ interface ServerEnvironmentAccess {
    * @returns Rejection after cleanup settles.
    */
   awaitStartupFailure(environment: ServerEnvironment): Promise<never>;
+
+  /**
+   * Retries unfinished required-startup resource cleanup without rethrowing the original failure.
+   *
+   * @param environment Environment whose required startup failed.
+   * @returns Completion after its retained resources close.
+   */
+  retryStartupCleanup(environment: ServerEnvironment): Promise<void>;
 
   /**
    * Checks whether a required startup phase already failed.
@@ -990,11 +924,13 @@ interface ServerEnvironmentAccess {
 }
 
 const environmentSetups = new WeakMap<ServerEnvironment, Promise<void>>();
+const environmentInitializers = new WeakMap<ServerEnvironment, () => Promise<void>>();
 const startupControls = new WeakMap<
   ServerEnvironment,
   {
     readonly fail: (cause: unknown) => void;
     readonly awaitFailure: () => Promise<never>;
+    readonly retryCleanup: () => Promise<void>;
     readonly available: () => void;
     readonly failed: () => boolean;
     readonly recordCleanup: (error: unknown) => void;
@@ -1178,12 +1114,21 @@ class EnvironmentContextRegistrations {
  */
 export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
   /**
+   * Opens shared facilities during Application build.
+   */
+  setup(environment: ServerEnvironment): Promise<void> {
+    const initialize = environmentInitializers.get(environment);
+    if (initialize === undefined) throw new TypeError("Expected ServerEnvironment instance.");
+    return initialize();
+  },
+
+  /**
    * Returns the initialized internal Delivery engine, failing before environment setup completes.
    */
   coreDelivery(environment: ServerEnvironment): CoreDelivery {
     const core = environmentDeliveryCores.get(environment);
     if (core === undefined)
-      throw new Error("ServerEnvironment.completeSetup() must finish before Delivery use.");
+      throw new Error("Build the Application before using environment Delivery.");
     return core;
   },
 
@@ -1219,7 +1164,7 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     return (
       environmentSetups.get(environment) ??
       Promise.reject(
-        new Error("Await ServerEnvironment.completeSetup() before building a Bounded Context."),
+        new Error("Application setup must finish before activating a Bounded Context."),
       )
     ).then(() => {
       this.requireAvailable(environment);
@@ -1251,6 +1196,16 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     const control = startupControls.get(environment);
     if (control === undefined) return Promise.reject(new Error("Unknown ServerEnvironment."));
     return control.awaitFailure();
+  },
+
+  /**
+   * Retries unfinished resources after a required startup failure.
+   */
+  retryStartupCleanup(environment: ServerEnvironment): Promise<void> {
+    const control = startupControls.get(environment);
+    if (!control?.failed())
+      return Promise.reject(new Error("ServerEnvironment has no failed startup cleanup."));
+    return control.retryCleanup();
   },
 
   /**
@@ -1331,7 +1286,7 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
 
 /**
  *
- * @internal Groups private facility-assembly operations for the environment singleton.
+ * @internal Groups private facility-assembly operations for each environment.
  */
 const ServerEnvironmentValues = Object.freeze({
   /**
@@ -1398,7 +1353,6 @@ const ServerEnvironmentValues = Object.freeze({
     return Object.freeze([
       deliveryCloseGroup,
       options.integrationChannelFactory,
-      ...(options.tracerFactory === undefined ? [] : [options.tracerFactory]),
       options.storageFactory,
     ]);
   },
@@ -1451,14 +1405,12 @@ const ServerEnvironmentValues = Object.freeze({
     return {
       subscriptionQueueCapacity: capacity,
       storageFactory: settings.storageFactory ?? new InMemoryStorageFactory(),
-      tenantIndex: settings.tenantIndex,
       ai: settings.ai,
       integrationChannelFactory:
         settings.integrationChannelFactory ?? new InMemoryTransportFactory(),
       typeRegistry: settings.typeRegistry ?? spineCoreRegistry,
       delivery: settings.delivery,
       deliveryStrategy: settings.deliveryStrategy,
-      tracerFactory: settings.tracerFactory,
       logger: ServerEnvironmentValues.logger(settings.logger),
     };
   },

@@ -23,6 +23,7 @@ import {
   Projection,
   Subscribe,
   Throws,
+  type BoundedContextBuilder,
 } from "@spine-event-engine/server";
 
 import {
@@ -409,13 +410,10 @@ export class PlaceViewProjection extends Projection<PlaceId, typeof PlaceViewSch
 }
 
 /**
- * Builds the single-tenant Fieldnotes domain for isolated tests and host assembly.
+ * Creates the single-tenant Fieldnotes Bounded Context builder.
  *
- * @returns The assembled context with one Aggregate and one Projection.
+ * @returns A builder declaring one Aggregate and one Projection.
  */
-export async function createFieldnotesContext(): Promise<BoundedContext> {
-  return BoundedContext.singleTenant("Fieldnotes")
-    .add(PlaceAggregate)
-    .add(PlaceViewProjection)
-    .build();
+export function createFieldnotesContext(): BoundedContextBuilder {
+  return BoundedContext.singleTenant("Fieldnotes").add(PlaceAggregate).add(PlaceViewProjection);
 }

@@ -36,10 +36,12 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 
 import {
   Aggregate,
+  Application,
+  type BoundedContextBuilder,
   BoundedContext,
   EntityHandlers,
   HandlerRegistryIngestor,
@@ -49,11 +51,7 @@ import {
   SpineServices,
   type EntityHandlersMetadata,
 } from "../../src/index.js";
-import {
-  ServerEnvironment,
-  ServerEnvironmentLifecycle,
-  serverEnvironmentAccess,
-} from "../../src/server/server-environment.js";
+import { ServerEnvironment } from "../../src/server/server-environment.js";
 import { EnvironmentType } from "../../src/server/environment.js";
 import { TestTenantIndex, requireTenantDirectory } from "../tenant-index-fixture.js";
 import {
@@ -81,16 +79,36 @@ import {
   TaskListIdSchema,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
-beforeEach(async () => {
-  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: new TestTenantIndex() });
-  await ServerEnvironment.instance().completeSetup();
-});
+interface TestSetup {
+  readonly applications: Application[];
+  readonly index: TestTenantIndex;
+}
 
-afterEach(async () => {
-  const environment = ServerEnvironment.instance();
-  for (const context of serverEnvironmentAccess.openContexts(environment)) await context.close();
-  await ServerEnvironmentLifecycle.resetForTest();
-});
+function createTestSetup(): TestSetup {
+  const setup: TestSetup = { applications: [], index: new TestTenantIndex() };
+  onTestFinished(async () => {
+    for (const application of setup.applications.reverse()) await application.close();
+  });
+  return setup;
+}
+
+async function buildContext(
+  builder: BoundedContextBuilder,
+  setup: TestSetup,
+): Promise<BoundedContext> {
+  const environment = ServerEnvironment.newBuilder()
+    .under(EnvironmentType.Local, () => undefined)
+    .build();
+  const application = await Application.newBuilder()
+    .setServerEnvironment(environment)
+    .setTenantIndex(setup.index)
+    .add(builder)
+    .build();
+  setup.applications.push(application);
+  const [context] = application.contexts();
+  if (context === undefined) throw new Error("Expected a Bounded Context.");
+  return context;
+}
 
 class NativeAggregate extends Aggregate<string, typeof NativeProjectStateSchema> {
   assign(command: AssignReviewTask): TaskCreated {
@@ -164,22 +182,24 @@ class NativeProcessManager extends ProcessManager<string, typeof NativeProcessMa
 
 describe("native service subscriptions", () => {
   it("acknowledges an attached idle subscription before any business update", async () => {
-    const context = await BoundedContext.multitenant("NativeIdleAck")
-      .add(
+    const setup = createTestSetup();
+    const context = await buildContext(
+      BoundedContext.multiTenant("NativeIdleAck").add(
         new Repository({
           entityType: NativeAggregate,
           schema: NativeProjectStateSchema,
           handlers: nativeAggregateHandlers(),
           events: [TaskCreatedSchema],
         }),
-      )
-      .build();
+      ),
+      setup,
+    );
 
     try {
       await requireTenantDirectory(context.tenantIndex).keep(
         create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
       );
-      const handlers = registeredSubscriptionHandlers(context);
+      const handlers = registeredSubscriptionHandlers(setup);
       const subscription = await handlers.subscribe(
         createEntityTopic(NativeProjectStateSchema, "idle-ack"),
       );
@@ -197,22 +217,24 @@ describe("native service subscriptions", () => {
   });
 
   it("delivers an Aggregate commit through the registered command handler", async () => {
-    const context = await BoundedContext.multitenant("NativeAggregate")
-      .add(
+    const setup = createTestSetup();
+    const context = await buildContext(
+      BoundedContext.multiTenant("NativeAggregate").add(
         new Repository({
           entityType: NativeAggregate,
           schema: NativeProjectStateSchema,
           handlers: nativeAggregateHandlers(),
           events: [TaskCreatedSchema],
         }),
-      )
-      .build();
+      ),
+      setup,
+    );
 
     try {
       await requireTenantDirectory(context.tenantIndex).keep(
         create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
       );
-      const handlers = registeredSubscriptionHandlers(context);
+      const handlers = registeredSubscriptionHandlers(setup);
       const iterator = handlers
         .activate(
           await handlers.subscribe(createEntityTopic(NativeProjectStateSchema, "aggregate")),
@@ -236,8 +258,9 @@ describe("native service subscriptions", () => {
   });
 
   it("delivers a Projection commit through the registered event handler", async () => {
-    const context = await BoundedContext.multitenant("NativeProjection")
-      .add(
+    const setup = createTestSetup();
+    const context = await buildContext(
+      BoundedContext.multiTenant("NativeProjection").add(
         new Repository({
           entityType: NativeProjection,
           schema: NativeProjectOverviewStateSchema,
@@ -247,14 +270,15 @@ describe("native service subscriptions", () => {
             (builder) => [builder.subscribe(ReviewTaskAssignedSchema, "project")],
           ),
         }),
-      )
-      .build();
+      ),
+      setup,
+    );
 
     try {
       await requireTenantDirectory(context.tenantIndex).keep(
         create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
       );
-      const handlers = registeredSubscriptionHandlers(context);
+      const handlers = registeredSubscriptionHandlers(setup);
       const iterator = handlers
         .activate(
           await handlers.subscribe(
@@ -279,13 +303,14 @@ describe("native service subscriptions", () => {
   });
 
   it("delivers a Process Manager command commit through the registered command handler", async () => {
-    const context = await createProcessManagerContext("NativeProcessManagerCommand");
+    const setup = createTestSetup();
+    const context = await createProcessManagerContext("NativeProcessManagerCommand", setup);
 
     try {
       await requireTenantDirectory(context.tenantIndex).keep(
         create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
       );
-      const handlers = registeredSubscriptionHandlers(context);
+      const handlers = registeredSubscriptionHandlers(setup);
       const iterator = handlers
         .activate(
           await handlers.subscribe(
@@ -309,13 +334,14 @@ describe("native service subscriptions", () => {
   });
 
   it("delivers a Process Manager event commit through the registered event handler", async () => {
-    const context = await createProcessManagerContext("NativeProcessManagerEvent");
+    const setup = createTestSetup();
+    const context = await createProcessManagerContext("NativeProcessManagerEvent", setup);
 
     try {
       await requireTenantDirectory(context.tenantIndex).keep(
         create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
       );
-      const handlers = registeredSubscriptionHandlers(context);
+      const handlers = registeredSubscriptionHandlers(setup);
       const iterator = handlers
         .activate(
           await handlers.subscribe(
@@ -411,17 +437,18 @@ function nativeProcessManagerHandlers(): EntityHandlersMetadata<
   >;
 }
 
-function createProcessManagerContext(name: string): Promise<BoundedContext> {
-  return BoundedContext.multitenant(name)
-    .add(
+function createProcessManagerContext(name: string, setup: TestSetup): Promise<BoundedContext> {
+  return buildContext(
+    BoundedContext.multiTenant(name).add(
       new Repository({
         entityType: NativeProcessManager,
         schema: NativeProcessManagerStateSchema,
         handlers: nativeProcessManagerHandlers(),
         events: [TaskAssignedSchema],
       }),
-    )
-    .build();
+    ),
+    setup,
+  );
 }
 
 function createEntityTopic(schema: MessageSchema, id: string): Topic {
@@ -497,14 +524,16 @@ function createActorContext() {
   });
 }
 
-function registeredSubscriptionHandlers(context: BoundedContext) {
+function registeredSubscriptionHandlers(setup: TestSetup) {
   let handlers:
     | {
         subscribe(topic: Topic): Subscription | Promise<Subscription>;
         activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate>;
       }
     | undefined;
-  const services = new SpineServices({ contexts: [context] });
+  const application = setup.applications.at(-1);
+  if (application === undefined) throw new Error("Expected a test Application.");
+  const services = new SpineServices({ application });
 
   services.register({
     service(schema: unknown, implementation: unknown) {

@@ -35,7 +35,7 @@ import type {
 
 import { eventBusAccess, EventBus } from "../bus/event-bus.js";
 import { emitServerError } from "../server/server-log.js";
-import { ServerEnvironment, serverEnvironmentAccess } from "../server/server-environment.js";
+import type { ILogLayer } from "loglayer";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import {
   unpackExternalEvent,
@@ -273,16 +273,13 @@ export class IntegrationBroker {
       AnyPacker.unpack(original.message, schema);
       imported = toExternalEvent(original);
     } catch {
-      emitServerError(
-        serverEnvironmentAccess.loggerFor(ServerEnvironment.instance()),
-        "Dropped corrupt external event.",
-        {
+      if (this.#input.logger !== undefined)
+        emitServerError(this.#input.logger, "Dropped corrupt external event.", {
           contextName: message.boundedContextName.value,
           eventType: message.originalMessage?.typeUrl ?? "unknown",
           operation: "external-event-intake",
           reasonCode: "corrupt_external_event",
-        },
-      );
+        });
       return;
     }
     await this.#input.postImported(imported);
@@ -469,6 +466,11 @@ export interface IntegrationBrokerInput {
    * Transport resource factory owned by the context environment.
    */
   readonly transportFactory: TransportFactory;
+
+  /**
+   * Receives diagnostics for corrupt imported Event frames.
+   */
+  readonly logger?: ILogLayer;
 
   /**
    * Local EventBus used for domestic publication and schema lookup.

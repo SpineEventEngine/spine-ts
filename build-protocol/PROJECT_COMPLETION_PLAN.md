@@ -1,12 +1,21 @@
 # Spine TS Project Completion Plan
 
-Current example revision: [Orders and Fieldnotes](tasks/tenant-auth-storage/EXAMPLES.md).
+Current implementation: [Application API and lifecycle](tasks/application-migration/TASK.md)
+on `application-migration`, synchronized with official master `963282d10`.
+The human accepted the scenario proposal and authorized implementation on 2026-11-13.
+Introduce Application, make ServerEnvironment independent per instance, move
+application-wide storage preparation and tenant indexing to Application, and adapt
+Server and maintained callers. Follow the task's accepted lifecycle and cleanup
+requirements. Independent review, release verification, versioning, and final-SHA
+CI remain. No GitHub PR or issue changes are authorized.
+
+Previous example revision: [Orders and Fieldnotes](tasks/tenant-auth-storage/EXAMPLES.md).
 Implement both demonstrations in PR #22 and retain only required API adaptation
 in Message Board. The current correction wave adds immediate durable Inbox
 delivery and Fieldnotes ordering by `when_created`. Fresh independent reviews
 and final verification remain.
 
-Current human-authorized implementation: [Persistent tenant and authentication storage](tasks/tenant-auth-storage/TASK.md).
+Previous human-authorized implementation: [Persistent tenant and authentication storage](tasks/tenant-auth-storage/TASK.md).
 The accepted specification is [PROPOSAL.md](tasks/tenant-auth-storage/PROPOSAL.md).
 Implement in `feature/tenant-auth-storage` from official master `c3efab85c`,
 starting with per-handle preparation and the explicit tenant directory, then

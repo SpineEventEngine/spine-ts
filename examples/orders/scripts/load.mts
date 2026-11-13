@@ -29,7 +29,7 @@ const setup = await configureOrdersEnvironment({
 });
 const result = await withOrdersServer(
   setup,
-  () => startOrdersServer({ host: "127.0.0.1", port: 0 }),
+  () => startOrdersServer(setup, { host: "127.0.0.1", port: 0 }),
   (server) =>
     runOrdersLoad({
       baseUrl: server.baseUrl,

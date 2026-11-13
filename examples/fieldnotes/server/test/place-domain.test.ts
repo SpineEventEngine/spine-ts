@@ -15,6 +15,7 @@
 import { clone, create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
+import { Client } from "@spine-event-engine/client-node";
 import {
   CommandSchema,
   EventContextSchema,
@@ -23,10 +24,15 @@ import {
   type Event,
 } from "@spine-event-engine/proto";
 import { TargetSchema, TopicIdSchema, TopicSchema } from "@spine-event-engine/proto/client";
-import { ServerEnvironment, SignalMetadata } from "@spine-event-engine/server";
-import { ServerTests } from "@spine-event-engine/server/testing";
-import { BlackBox } from "@spine-event-engine/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  Application,
+  Server,
+  ServerEnvironment,
+  SignalMetadata,
+  type BoundedContext,
+} from "@spine-event-engine/server";
+import { ApplicationTests, observeProducedSignals } from "@spine-event-engine/server/testing";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   AddPlaceSchema,
@@ -55,20 +61,57 @@ import {
   PlaceUnavailableSchema,
 } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/rejections_pb.js";
 import { createFieldnotesContext } from "../src/index.js";
-import { serverEnvironmentAccess } from "../../../../packages/server/dist/server/server-environment.js";
 
 const metadata = new SignalMetadata();
+const sessions = new Set<Awaited<ReturnType<typeof openPlaceSession>>>();
+let currentApplication: Application;
 
 async function waitForDelivery(): Promise<void> {
-  await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+  await ApplicationTests.waitForDelivery(currentApplication);
+}
+
+async function openPlaceSession() {
+  const environment = ServerEnvironment.newBuilder().build();
+  const application = await Application.newBuilder()
+    .setServerEnvironment(environment)
+    .add(createFieldnotesContext())
+    .build();
+  const context: BoundedContext | undefined = application.contexts()[0];
+  if (context === undefined) throw new Error("Expected a Bounded Context in the Application.");
+  const endpoint = await Server.atPort(0).setApplication(application).start();
+  const client = Client.connectTo(endpoint.baseUrl);
+  const events: Event[] = [];
+  const observation = observeProducedSignals(context, {
+    onEvent: (event) => events.push(clone(EventSchema, event)),
+  });
+  currentApplication = application;
+  let closed = false;
+  const session = {
+    context,
+    onBehalfOf: (actor: string) => client.onBehalfOf(actor),
+    assertEvents: () => events.map((event) => clone(EventSchema, event)),
+    close: async () => {
+      if (closed) return;
+      await client.close();
+      await endpoint.close();
+      observation.close();
+      await application.close();
+      closed = true;
+      sessions.delete(session);
+    },
+  };
+  sessions.add(session);
+  return session;
 }
 
 describe("Fieldnotes Place domain", () => {
-  beforeEach(async () => ServerEnvironment.instance().completeSetup());
-  afterEach(async () => ServerTests.resetEnvironment());
+  afterEach(async () => {
+    await Promise.all([...sessions].map((session) => session.close()));
+  });
 
   it("creates a place with the admitted author, empty Markdown and revision one", async () => {
-    const context = await createFieldnotesContext();
+    const session = await openPlaceSession();
+    const context = session.context;
     const id = create(PlaceIdSchema, { value: "place-one" });
     const coordinates = create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 });
     const actorContext = metadata.actorContext({
@@ -102,12 +145,13 @@ describe("Fieldnotes Place domain", () => {
         });
       });
     } finally {
-      await context.close();
+      await session.close();
     }
   });
 
   it("applies each accepted edit once and leaves a deleted tombstone", async () => {
-    const context = await createFieldnotesContext();
+    const session = await openPlaceSession();
+    const context = session.context;
     const id = create(PlaceIdSchema, { value: "edited-place" });
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "editor" }),
@@ -216,12 +260,13 @@ describe("Fieldnotes Place domain", () => {
         });
       });
     } finally {
-      await context.close();
+      await session.close();
     }
   });
 
   it("keeps distinct IDs at the same coordinates and refuses repeated creation", async () => {
-    const context = await createFieldnotesContext();
+    const session = await openPlaceSession();
+    const context = session.context;
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "one-author" }),
     });
@@ -258,13 +303,13 @@ describe("Fieldnotes Place domain", () => {
       await waitForDelivery();
       expect(await context.stand().read(PlaceSchema, first)).toEqual(before);
     } finally {
-      await context.close();
+      await session.close();
     }
   });
 
   it("uses unavailable refusal for a removed ID and already-exists for an active duplicate", async () => {
-    const context = await createFieldnotesContext();
-    const box = await BlackBox.from(context);
+    const session = await openPlaceSession();
+    const box = session;
     const author = box.onBehalfOf("author");
     const id = create(PlaceIdSchema, { value: "creation-refusals" });
     const topic = (schema: typeof PlaceUnavailableSchema | typeof PlaceAlreadyExistsSchema) =>
@@ -312,7 +357,8 @@ describe("Fieldnotes Place domain", () => {
   });
 
   it("does not apply an exact repeated command or reuse its ID with altered content", async () => {
-    const context = await createFieldnotesContext();
+    const session = await openPlaceSession();
+    const context = session.context;
     const id = create(PlaceIdSchema, { value: "duplicate-command" });
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "author" }),
@@ -349,12 +395,13 @@ describe("Fieldnotes Place domain", () => {
       await waitForDelivery();
       expect(await context.stand().read(PlaceSchema, id)).toEqual(accepted);
     } finally {
-      await context.close();
+      await session.close();
     }
   });
 
   it("checks the author before stale revision and keeps state unchanged", async () => {
-    const context = await createFieldnotesContext();
+    const session = await openPlaceSession();
+    const context = session.context;
     const id = create(PlaceIdSchema, { value: "private-place" });
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "author" }),
@@ -390,13 +437,13 @@ describe("Fieldnotes Place domain", () => {
       await waitForDelivery();
       expect(await context.stand().read(PlaceSchema, id)).toEqual(before);
     } finally {
-      await context.close();
+      await session.close();
     }
   });
 
   it("emits requester-only refusal before revealing a revision conflict", async () => {
-    const context = await createFieldnotesContext();
-    const box = await BlackBox.from(context);
+    const session = await openPlaceSession();
+    const box = session;
     const id = create(PlaceIdSchema, { value: "hidden-place" });
     const author = box.onBehalfOf("author");
     const foreign = box.onBehalfOf("foreign");
@@ -466,7 +513,8 @@ describe("Fieldnotes Place domain", () => {
   });
 
   it("rejects invalid coordinates before creation and preserves a deleted projection on stale Event delivery", async () => {
-    const context = await createFieldnotesContext();
+    const session = await openPlaceSession();
+    const context = session.context;
     const id = create(PlaceIdSchema, { value: "stale-place" });
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "author" }),
@@ -530,13 +578,13 @@ describe("Fieldnotes Place domain", () => {
         revision: 2,
       });
     } finally {
-      await context.close();
+      await session.close();
     }
   });
 
   it("rebuilds complete results from Aggregate Events in changed delivery orders", async () => {
-    const source = await createFieldnotesContext();
-    const box = await BlackBox.from(source);
+    const sourceSession = await openPlaceSession();
+    const box = sourceSession;
     const actor = box.onBehalfOf("author");
     const id = create(PlaceIdSchema, { value: "ordered-place" });
     const firstPoint = create(CoordinatesSchema, { latitude: 10, longitude: 11 });
@@ -593,9 +641,8 @@ describe("Fieldnotes Place domain", () => {
     } finally {
       await box.close();
     }
-    await ServerTests.resetEnvironment();
-    await ServerEnvironment.instance().completeSetup();
-    const restarted = await createFieldnotesContext();
+    const restartedSession = await openPlaceSession();
+    const restarted = restartedSession.context;
     try {
       for (const index of [2, 1, 0, 2, 3]) {
         const event = events[index];
@@ -627,11 +674,10 @@ describe("Fieldnotes Place domain", () => {
         author: { value: "author" },
       });
     } finally {
-      await restarted.close();
+      await restartedSession.close();
     }
-    await ServerTests.resetEnvironment();
-    await ServerEnvironment.instance().completeSetup();
-    const noteFirst = await createFieldnotesContext();
+    const noteFirstSession = await openPlaceSession();
+    const noteFirst = noteFirstSession.context;
     try {
       for (const index of [3, 2, 1, 0]) {
         const event = events[index];
@@ -648,11 +694,10 @@ describe("Fieldnotes Place domain", () => {
         removed: false,
       });
     } finally {
-      await noteFirst.close();
+      await noteFirstSession.close();
     }
-    await ServerTests.resetEnvironment();
-    await ServerEnvironment.instance().completeSetup();
-    const deletedFirst = await createFieldnotesContext();
+    const deletedFirstSession = await openPlaceSession();
+    const deletedFirst = deletedFirstSession.context;
     try {
       for (const index of [4, 0, 1, 2, 3, 4]) {
         const event = events[index];
@@ -670,12 +715,13 @@ describe("Fieldnotes Place domain", () => {
         removed: true,
       });
     } finally {
-      await deletedFirst.close();
+      await deletedFirstSession.close();
     }
   });
 
   it("preserves the first complete Event's author and creation time against newer inconsistent Events", async () => {
-    const context = await createFieldnotesContext();
+    const session = await openPlaceSession();
+    const context = session.context;
     const id = create(PlaceIdSchema, { value: "immutable-place" });
     const author = create(UserIdSchema, { value: "original-author" });
     const whenCreated = metadata.timestamp();
@@ -748,12 +794,13 @@ describe("Fieldnotes Place domain", () => {
         whenCreated,
       });
     } finally {
-      await context.close();
+      await session.close();
     }
   });
 
   it("ignores incomplete first active Events so lower complete results can establish the view", async () => {
-    const context = await createFieldnotesContext();
+    const session = await openPlaceSession();
+    const context = session.context;
     const author = create(UserIdSchema, { value: "author" });
     const whenCreated = metadata.timestamp();
     const coordinates = create(CoordinatesSchema, { latitude: 10, longitude: 11 });
@@ -804,7 +851,7 @@ describe("Fieldnotes Place domain", () => {
         });
       }
     } finally {
-      await context.close();
+      await session.close();
     }
   });
 });

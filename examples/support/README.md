@@ -162,9 +162,9 @@ import { SupportContext, draftSupportReply } from "../dist/src/index.js";
 /**
  * Configures the support application with a scripted model response.
  *
- * @returns Backend and Bounded Context for a local BlackBox story.
+ * @returns Backend and Bounded Context builder for a local BlackBox test.
  */
-async function configuredSupport() {
+function configuredSupport() {
     const backend = AiTestBackend.create({
         ref: ModelRef.of("support-scripted", "v1"),
         kind: "generation",
@@ -176,14 +176,14 @@ async function configuredSupport() {
     const registry = AiRegistry.create({
         defaultModels: { generation: backend.registration.ref },
     }).register(backend.registration);
-    const context = await SupportContext.create(registry);
-    return { backend, context };
+    const builder = SupportContext.create(registry);
+    return { backend, builder };
 }
 ```
 
 <!-- prettier-ignore-end -->
 
-The application posts `DraftSupportReply` with the ticket ID, reported facts, and a conversation ID. Start each test with a fresh `BlackBox` built from the configured Bounded Context, then observe the later proposal and Agent history. Close the box when the test finishes, as the complete test does:
+The application posts `DraftSupportReply` with the ticket ID, reported facts, and a conversation ID. Pass the configured Bounded Context builder to `BlackBox.from()` to create a fresh test Application, then observe the later proposal and Agent history. Close the box when the test finishes, as the complete test does:
 
 <!-- prettier-ignore-start -->
 

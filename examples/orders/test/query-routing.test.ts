@@ -16,14 +16,9 @@ import { create } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { AnyPacker } from "@spine-event-engine/core";
 import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
-import { BoundedContext, SignalMetadata } from "@spine-event-engine/server";
-import { ServerTests } from "@spine-event-engine/server/testing";
+import { Application, SignalMetadata } from "@spine-event-engine/server";
 import { InMemoryStorageBackend, InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-afterEach(async () => {
-  await ServerTests.resetEnvironment();
-});
+import { describe, expect, it, vi } from "vitest";
 
 import {
   CreateOrderSchema,
@@ -43,7 +38,13 @@ describe("Orders query routing example", () => {
       storageFactory: new InMemoryStorageFactory(backend),
       tenants: [ordersTenants.northwind, ordersTenants.contoso],
     });
-    const context: BoundedContext = await OrderCardContext.create();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(setup.environment)
+      .setTenantIndex(setup.tenantIndex)
+      .add(OrderCardContext.create())
+      .build();
+    const context = application.contexts()[0];
+    if (context === undefined) throw new Error("Expected a Bounded Context in the Application.");
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "orders-query-routing" }),
       tenantId: ordersTenants.northwind,
@@ -180,8 +181,18 @@ describe("Orders query routing example", () => {
         ).map(({ state }) => state.skuName),
       ).toEqual(["Blue mug", "Blue mug", ""]);
       // Closing drains accepted Event delivery before either negative assertion.
-      await context.close();
-      const inspection = await OrderCardContext.create();
+      await application.close();
+      const inspectionSetup = await configureOrdersEnvironment({
+        storageFactory: new InMemoryStorageFactory(backend),
+        tenants: [ordersTenants.northwind, ordersTenants.contoso],
+      });
+      const inspectionApplication = await Application.newBuilder()
+        .setServerEnvironment(inspectionSetup.environment)
+        .setTenantIndex(inspectionSetup.tenantIndex)
+        .add(OrderCardContext.create())
+        .build();
+      const inspection = inspectionApplication.contexts()[0];
+      if (inspection === undefined) throw new Error("Expected an inspection Bounded Context.");
       try {
         const after = (
           await inspection
@@ -191,10 +202,11 @@ describe("Orders query routing example", () => {
         expect(reaction).toHaveBeenCalledTimes(3);
         expect(after).toEqual(before);
       } finally {
-        await inspection.close();
+        await inspectionApplication.close();
+        await inspectionSetup.close();
       }
     } finally {
-      await context.close();
+      await application.close();
       await setup.close();
     }
   });

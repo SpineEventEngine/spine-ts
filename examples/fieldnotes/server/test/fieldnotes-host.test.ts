@@ -35,10 +35,9 @@ import {
   CoordinatesSchema,
   PlaceIdSchema,
 } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/types_pb.js";
-import { ServerTests } from "@spine-event-engine/server/testing";
-import { EnvironmentType } from "@spine-event-engine/server";
+import { Application, EnvironmentType } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FieldnotesHost } from "../src/fieldnotes-host.js";
 import type { FieldnotesSettings } from "../src/host-settings.js";
 import { EnvironmentTests } from "../../../../packages/server/dist/server/environment.js";
@@ -55,7 +54,18 @@ const settings = (): FieldnotesSettings => ({
 });
 
 describe("Fieldnotes host private Connect boundary", () => {
-  afterEach(async () => ServerTests.resetEnvironment());
+  it("closes its Application after both listeners", async () => {
+    const closeApplication = vi.spyOn(Application.prototype, "close");
+    const host = await FieldnotesHost.open(settings(), {
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    try {
+      await host.close();
+      expect(closeApplication).toHaveBeenCalledOnce();
+    } finally {
+      closeApplication.mockRestore();
+    }
+  });
 
   it("closes the selected storage after startup connection failure", async () => {
     const factory = new InMemoryStorageFactory();

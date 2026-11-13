@@ -25,16 +25,11 @@ import { QueryService } from "@spine-event-engine/proto/client";
 import { TopicIdSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { SignalMetadata } from "@spine-event-engine/server";
-import { ServerTests } from "@spine-event-engine/server/testing";
+import { Application, Server, SignalMetadata } from "@spine-event-engine/server";
 import type { Datastore } from "@google-cloud/datastore";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
-
-afterEach(async () => {
-  await ServerTests.resetEnvironment();
-});
+import { describe, expect, it, vi } from "vitest";
 
 import {
   CreateOrderSchema,
@@ -45,6 +40,54 @@ import { OrderSummarySchema } from "../generated/spine/examples/orders/read_mode
 const metadata = new SignalMetadata();
 
 describe("datastore orders test app", () => {
+  it("closes the endpoint and its Application before the explicit setup", async () => {
+    const { configureOrdersEnvironment, ordersTenants, startOrdersServer } =
+      await import("../dist/src/index.js");
+    const setup = await configureOrdersEnvironment({
+      storageFactory: new InMemoryStorageFactory(),
+      tenants: [ordersTenants.northwind, ordersTenants.contoso],
+    });
+    const closeApplication = vi.spyOn(Application.prototype, "close");
+    const server = await startOrdersServer(setup, { port: 0 });
+    let setupClosed = false;
+    try {
+      await server.close();
+      await setup.close();
+      setupClosed = true;
+      expect(closeApplication).toHaveBeenCalledOnce();
+    } finally {
+      closeApplication.mockRestore();
+      if (!setupClosed) await setup.close();
+    }
+  });
+
+  it("retains Application cleanup through setup after listener startup fails", async () => {
+    const { configureOrdersEnvironment, ordersTenants, startOrdersServer } =
+      await import("../dist/src/index.js");
+    const setup = await configureOrdersEnvironment({
+      storageFactory: new InMemoryStorageFactory(),
+      tenants: [ordersTenants.northwind, ordersTenants.contoso],
+    });
+    const startFailure = new Error("listener unavailable");
+    const cleanupFailure = new Error("listener cleanup unavailable");
+    const start = vi.spyOn(Server.prototype, "start").mockRejectedValue(startFailure);
+    const closeOriginal = Application.prototype.close.bind(Application.prototype);
+    const close = vi
+      .spyOn(Application.prototype, "close")
+      .mockRejectedValueOnce(cleanupFailure)
+      .mockImplementation(function (this: Application) {
+        return closeOriginal.call(this);
+      });
+    try {
+      await expect(startOrdersServer(setup)).rejects.toThrow();
+      await setup.close();
+      expect(close).toHaveBeenCalledTimes(2);
+    } finally {
+      start.mockRestore();
+      close.mockRestore();
+    }
+  });
+
   it("provides the generated-domain runtime", () => {
     expect(existsSync(fileURLToPath(new URL("../dist/src/index.js", import.meta.url)))).toBe(true);
   });
@@ -59,11 +102,17 @@ describe("datastore orders test app", () => {
       storageFactory: new InMemoryStorageFactory(),
       tenants: [ordersTenants.northwind, ordersTenants.contoso],
     });
-    const context = await createOrdersContext();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(setup.environment)
+      .setTenantIndex(setup.tenantIndex)
+      .add(createOrdersContext())
+      .build();
+    const context = application.contexts()[0];
+    if (context === undefined) throw new Error("Expected a Bounded Context in the Application.");
     try {
       expect(context.registeredRepositories()).toHaveLength(14);
     } finally {
-      await context.close();
+      await application.close();
       await setup.close();
     }
   });
@@ -75,7 +124,7 @@ describe("datastore orders test app", () => {
       storageFactory: new InMemoryStorageFactory(),
       tenants: [ordersTenants.northwind, ordersTenants.contoso],
     });
-    const server = await startOrdersServer({
+    const server = await startOrdersServer(setup, {
       host: "127.0.0.1",
       port: 0,
     });
@@ -175,7 +224,7 @@ describe("datastore orders test app", () => {
       storageFactory: new InMemoryStorageFactory(),
       tenants: [ordersTenants.northwind, ordersTenants.contoso],
     });
-    const server = await startOrdersServer();
+    const server = await startOrdersServer(setup);
     await server.close();
     await setup.close();
   });
@@ -197,7 +246,7 @@ describe("datastore orders test app", () => {
       storageFactory: new InMemoryStorageFactory(),
       tenants: [ordersTenants.northwind, ordersTenants.contoso],
     });
-    const server = await startOrdersServer({
+    const server = await startOrdersServer(setup, {
       host: "127.0.0.1",
       port: 0,
     });

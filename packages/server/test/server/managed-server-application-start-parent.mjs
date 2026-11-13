@@ -13,16 +13,32 @@
  */
 
 import process from "node:process";
-import { ManagedServerApplication, Server, ServerEnvironment } from "../../dist/index.js";
+import {
+  Application,
+  BoundedContext,
+  InMemorySubscriptionRegistry,
+  ManagedServerApplication,
+  Server,
+  ServerEnvironment,
+} from "../../dist/index.js";
 
 const priorSigint = new Set(process.listeners("SIGINT"));
 const priorSigterm = new Set(process.listeners("SIGTERM"));
-await ServerEnvironment.instance().completeSetup();
 const managed = await ManagedServerApplication.start({
   processCount: 1,
   port: 0,
   moduleUrl: import.meta.url,
-  createServer: async ({ host, port }) => Server.atPort(port, { host }).start(),
+  createServer: async ({ host, port }) => {
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(
+        BoundedContext.singleTenant("ManagedStartChild").withSubscriptionRegistry(
+          new InMemorySubscriptionRegistry(),
+        ),
+      )
+      .build();
+    return Server.atPort(port, { host }).setApplication(application).start();
+  },
 });
 
 if (process.env.SPINE_MANAGED_SERVER_CHILD !== "true") {

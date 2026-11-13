@@ -177,17 +177,21 @@ container, make the native listener reachable only by trusted components:
 <!-- docs-snippet-path: packages/server/src/server/server.ts -->
 
 ```ts
-import { Server, type ServerOptions } from "@spine-event-engine/server";
+import { Server, type Application } from "@spine-event-engine/server";
 
-declare const contexts: NonNullable<ServerOptions["contexts"]>;
+declare const application: Application;
 declare const privateHost: string;
 
-const app = await new Server({
+const endpoint = await new Server({
   host: privateHost,
-  contexts,
   services: { readerAdmission: "trusted-network" },
-}).start();
+})
+  .setApplication(application)
+  .start();
 ```
+
+Here `application` is the Application already built by the native host. At shutdown,
+close `endpoint` before `application`.
 
 In the Gateway container, use the deployed private URL for that listener.
 The application supplies the other Gateway settings, including sessions,
@@ -268,31 +272,50 @@ envelope:
 
 ```ts
 import {
+  Application,
+  BoundedContext,
+  InMemorySubscriptionRegistry,
   ManagedServerApplication,
   Server,
+  ServerEnvironment,
   type ManagedServerApplicationOptions,
-  type ServerOptions,
 } from "@spine-event-engine/server";
 
 declare const managedOptions: Omit<
   ManagedServerApplicationOptions,
   "createServer" | "readerAdmission" | "forwarding" | "forwardingProof"
 >;
-declare const contexts: NonNullable<ServerOptions["contexts"]>;
 
 const managed = await ManagedServerApplication.run({
   ...managedOptions,
   readerAdmission: "trusted-network", // Gateway to Coordinator
   forwarding: "trusted-network", // Coordinator to child
-  createServer: async ({ host, port }) =>
-    new Server({
+  createServer: async ({ host, port }) => {
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(
+        BoundedContext.singleTenant("Tasks").withSubscriptionRegistry(
+          new InMemorySubscriptionRegistry(),
+        ),
+      )
+      .build();
+    return new Server({
       host,
       port,
-      contexts,
       services: { readerAdmission: "trusted-network" }, // Child listener
-    }).start(),
+    })
+      .setApplication(application)
+      .start();
+  },
 });
 ```
+
+Each child builds a separate Application inside `createServer`. This minimal
+example uses the default local storage and an empty Tasks Bounded Context; add
+the application's generated Entities and configured services for a real host.
+Managed children require in-memory subscription registries. Managed shutdown
+stops the child endpoint before closing its Application; the parent and standalone
+Gateway do not build that Application.
 
 ## Gateway contracts and request facts
 
@@ -530,11 +553,11 @@ sequenceDiagram
   B->>G: POST start with S256 PKCE challenge + chosen redirect
   G->>P: redirect with state, nonce, provider PKCE challenge
   P->>G: callback(code,state) once
-  G->>P: one code exchange; verify issuer/audience/nonce/signature
+  G->>P: one code exchange#59; verify issuer/audience/nonce/signature
   G->>G: identity mapping + application session issuance
   G-->>B: no-store handoff (HttpOnly one-time cookie or response body)
   B->>G: POST exchange(grant, verifier)
-  G-->>B: application cookie or memory bearer; no provider token
+  G-->>B: application cookie or memory bearer#59; no provider token
 ```
 
 Use `createOidcProvider()` for explicit verified OIDC endpoints or

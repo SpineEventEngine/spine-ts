@@ -15,6 +15,7 @@
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import {
+  Application,
   EnvironmentType,
   ManagedServerApplication,
   Server,
@@ -85,29 +86,31 @@ const storageFactory =
     ? undefined
     : new HandlerGateStorageFactory(handlerGate);
 
-if (isManagedChild) {
-  ServerEnvironment.when(EnvironmentType.Local).use({
-    delivery,
-    deliveryStrategy: strategy,
-    ...(storageFactory === undefined ? {} : { storageFactory }),
-  });
-}
-
 const managed = await ManagedServerApplication.run({
   processCount: 2,
   port: 0,
   moduleUrl: import.meta.url,
   createServer: async ({ host, port }) => {
-    await ServerEnvironment.instance().completeSetup();
-    const server = Server.atPort(port, { host });
+    const environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (setting) =>
+        setting.use({
+          delivery,
+          deliveryStrategy: strategy,
+          ...(storageFactory === undefined ? {} : { storageFactory }),
+        }),
+      )
+      .build();
     const { InMemorySubscriptionRegistry } = await import("@spine-event-engine/server");
-    server.add(
-      await createManagedProjectContext({
-        includeProjection: true,
-        subscriptionRegistry: new InMemorySubscriptionRegistry(),
-      }),
-    );
-    const running = await server.start();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(environment)
+      .add(
+        createManagedProjectContext({
+          includeProjection: true,
+          subscriptionRegistry: new InMemorySubscriptionRegistry(),
+        }),
+      )
+      .build();
+    const running = await Server.atPort(port, { host }).setApplication(application).start();
     return running;
   },
   synchronize: async () => {

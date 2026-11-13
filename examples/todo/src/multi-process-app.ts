@@ -16,26 +16,14 @@
  * Starts the To-Do app with one Coordinator parent and several complete replica children.
  */
 
-import { TypeRegistry } from "@spine-event-engine/core";
-import {
-  EnvironmentType,
-  ManagedServerApplication,
-  ServerEnvironment,
-} from "@spine-event-engine/server";
+import { ManagedServerApplication } from "@spine-event-engine/server";
 
-import { todoProtoModule } from "../generated/proto-module.js";
 import { runTodoCoordinator } from "./multi-process-coordinator.js";
 import { createTodoReplica, type TodoReplica } from "./multi-process-replica.js";
 import { readMultiProcessSettings } from "./multi-process-settings.js";
 
 const settings = readMultiProcessSettings(process.env);
 let replica: TodoReplica | undefined;
-
-if (process.env.SPINE_MANAGED_SERVER_CHILD !== "true") {
-  ServerEnvironment.when(EnvironmentType.Production).use({
-    typeRegistry: TypeRegistry.from(todoProtoModule),
-  });
-}
 
 const managed = await ManagedServerApplication.run({
   processCount: settings.processCount,

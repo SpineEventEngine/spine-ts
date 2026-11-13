@@ -85,7 +85,9 @@ state messages or generic framework payloads in fixtures.
 
 ## Request boundaries
 
-The Node host assembles the single-tenant environment and Bounded Context.
+The Node host builds one Application with a separate ServerEnvironment and the
+single-tenant Fieldnotes Bounded Context builder. It stops browser and native
+listeners before closing the Application.
 Next.js serves the interface and proxies same-origin application routes.
 Both processes share loopback networking: the proxy accepts only the configured
 `http://127.0.0.1` upstream and the host binds its gateway to loopback.

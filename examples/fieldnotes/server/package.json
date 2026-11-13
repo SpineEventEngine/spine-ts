@@ -38,6 +38,7 @@
     "@connectrpc/connect": "2.1.2",
     "@connectrpc/connect-node": "2.1.2",
     "@spine-event-engine/client-web": "2.0.0-snapshot.30",
+    "@spine-event-engine/client-node": "2.0.0-snapshot.30",
     "@spine-event-engine/proto-tools": "2.0.0-snapshot.30",
     "@spine-event-engine/testing": "2.0.0-snapshot.30",
     "@types/pg": "8.23.1",

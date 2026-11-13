@@ -37,15 +37,13 @@ import { QueryService } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
 import { ordersTenants } from "../src/orders-environment.js";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { ServerTests } from "@spine-event-engine/server/testing";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ordersLoadLevels, runOrdersLoad } from "../src/load-runner.js";
 import { LatencyDistribution } from "../src/internal/latency-distribution.js";
 import { OrderSummarySchema } from "../generated/spine/examples/orders/read_models_pb.js";
 
 describe("datastore-orders load runner", () => {
-  afterEach(async () => ServerTests.resetEnvironment());
   it("calculates nearest-rank percentiles from unsorted latencies and zeros empty distributions", () => {
     expect(LatencyDistribution.from([40, 10, 30, 20, 50]).percentiles()).toEqual({
       p50Ms: 30,
@@ -63,7 +61,7 @@ describe("datastore-orders load runner", () => {
       storageFactory: new InMemoryStorageFactory(),
       tenants: [ordersTenants.northwind, ordersTenants.contoso],
     });
-    const server = await startOrdersServer({
+    const server = await startOrdersServer(setup, {
       host: "127.0.0.1",
       port: 0,
     });
@@ -202,7 +200,7 @@ describe("datastore-orders load runner", () => {
       storageFactory: new InMemoryStorageFactory(),
       tenants: [ordersTenants.northwind, ordersTenants.contoso],
     });
-    const server = await startOrdersServer({
+    const server = await startOrdersServer(setup, {
       host: "127.0.0.1",
       port: 0,
     });

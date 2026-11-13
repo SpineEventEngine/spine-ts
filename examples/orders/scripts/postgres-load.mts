@@ -41,7 +41,7 @@ const setup = await configureOrdersEnvironment({
 });
 const result = await withOrdersServer(
   setup,
-  () => startOrdersServer(),
+  () => startOrdersServer(setup),
   (server) =>
     runOrdersLoad({
       baseUrl: server.baseUrl,

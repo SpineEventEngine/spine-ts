@@ -39,8 +39,8 @@ provides setup, restart, and failure handling steps.
 
 ## Cross-context order review
 
-`OrderReviewContexts.create()` assembles separate multitenant Catalog and
-Ordering Bounded Contexts in the same server process. An order reaction reads
+`OrderReviewContexts.create()` declares separate multi-tenant Catalog and
+Ordering Bounded Context builders for one Application. An order reaction reads
 a SKU name from Catalog under the Event tenant. Run the focused behavior test
 from the repository root with:
 
