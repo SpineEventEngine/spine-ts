@@ -58,6 +58,14 @@
       "rationale": "Cancellation already closed the stream and retired its record; this catch observes a late policy rejection without exposing private error details or changing the settled stream outcome."
     },
     {
+      "id": "server.service_work_completion_observer",
+      "source": "../../packages/server/src/services/spine-services.ts",
+      "operation": "service.accepted_work",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/application-endpoint.test.ts",
+      "rationale": "The original operation Promise is returned to the service caller; this detached finally only removes it from endpoint drain tracking, and its catch observes the mirrored rejection without duplicating error reporting."
+    },
+    {
       "id": "server.event_bus_close_runtime",
       "source": "../../packages/server/src/bus/event-bus.ts",
       "operation": "event.close",
@@ -93,12 +101,20 @@
       "test": "packages/server/test/server/server-environment.test.ts"
     },
     {
-      "id": "server.fatal_environment_test_reset",
+      "id": "server.profile_async_configuration_observer",
       "source": "../../packages/server/src/server/server-environment.ts",
-      "operation": "server.environment_test_reset",
+      "operation": "server.profile_configuration",
       "disposition": "no-log",
-      "test": "packages/server/test/server/server-environment.test.ts",
-      "rationale": "A fatal environment already attempted and recorded automatic cleanup; test reset restores singleton configuration after joining that outcome."
+      "test": "packages/server/test/server/application-kernel.test.ts",
+      "rationale": "under() rejects an asynchronous callback synchronously and retires its builder; observing the later callback rejection prevents an unhandled rejection without creating an environment or a duplicate log."
+    },
+    {
+      "id": "server.application_administrative_completion_observer",
+      "source": "../../packages/server/src/server/application.ts",
+      "operation": "application.structure_preparation",
+      "disposition": "no-log",
+      "test": "packages/server/test/context/bounded-context.test.ts",
+      "rationale": "The administrative preparation Promise is returned to the caller, including its failure; this detached finally only removes completed work from Application close tracking, and its catch observes the mirrored rejection."
     },
     {
       "id": "server.log_sync_failure",

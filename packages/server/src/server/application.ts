@@ -242,6 +242,7 @@ export class Application {
       ),
     ).then(() => undefined);
     this.#administrative.add(work);
+    // spine-log-boundary: server.application_administrative_completion_observer
     void work.finally(() => this.#administrative.delete(work)).catch(() => undefined);
     return work;
   }

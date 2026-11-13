@@ -709,6 +709,7 @@ export class ServerEnvironmentBuilder {
       const then: unknown = Reflect.get(configured, "then");
       if (typeof then === "function") {
         this.#built = true;
+        // spine-log-boundary: server.profile_async_configuration_observer
         void Promise.resolve(configured).catch(() => undefined);
         throw new TypeError("ServerEnvironment profile configuration must be synchronous.");
       }

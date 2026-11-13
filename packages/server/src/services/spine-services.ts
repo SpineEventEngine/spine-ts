@@ -637,6 +637,7 @@ export class SpineServices {
     if (this.#activeOperations.size === 0)
       this.#operationsIdle = Promise.withResolvers<undefined>();
     this.#activeOperations.add(operation);
+    // spine-log-boundary: server.service_work_completion_observer
     void operation
       .finally(() => {
         this.#activeOperations.delete(operation);
