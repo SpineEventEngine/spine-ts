@@ -790,6 +790,10 @@ describe("DynamicSubscriptionCreator", () => {
 
   it("compensates every installed child when one current node rejects creation", async () => {
     const disposals: string[] = [];
+    const child = toBinary(
+      SubscriptionSchema,
+      create(SubscriptionSchema, { id: { value: "a-child" }, topic: create(TopicSchema) }),
+    );
     const owner = new DynamicUnaryForwarder({
       create: (node) =>
         Promise.resolve({
@@ -798,11 +802,11 @@ describe("DynamicSubscriptionCreator", () => {
             if (node.id === "b") return Promise.reject(new Error("native creation failed"));
             return Promise.resolve({
               kind: "backend-subscription-envelope" as const,
-              bytes: new Uint8Array([1]),
+              bytes: child,
             });
           },
-          dispose: () => {
-            disposals.push(node.id);
+          dispose: (envelope) => {
+            disposals.push(`${node.id}:${envelope.reader?.principal?.id ?? "missing"}`);
             return Promise.resolve();
           },
         }),
@@ -815,9 +819,13 @@ describe("DynamicSubscriptionCreator", () => {
     ]);
 
     await expect(
-      creator.subscribe(subscription(), new AbortController().signal, 100),
+      creator.subscribe(
+        { ...subscription(), reader: { principal: { id: "reader-a" } } },
+        new AbortController().signal,
+        100,
+      ),
     ).rejects.toThrow("native creation failed");
-    expect(disposals).toEqual(["a"]);
+    expect(disposals).toEqual(["a:reader-a"]);
   });
 
   it("rejects creation after an empty desired membership snapshot before stale clients close", async () => {

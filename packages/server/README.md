@@ -464,20 +464,33 @@ This setup does not construct a
 ## Native reader admission
 
 Native authentication is configured through `ServerOptions.services.readerAdmission`.
-Use `direct` to authenticate native callers or `forwarded` to verify reader
-assertions from an authenticated gateway. For browser forwarding, supply the
-corresponding issuer as `BrowserServerOptions.forwardingProof`. Configure both
-ends; the backend does not trust an actor ID or incoming identity header by
-itself. With neither admission adapter configured, the native server remains
-public and supplies no authenticated principal or authority facts.
+Use `direct` to authenticate native callers, or `forwarded` to verify signed
+assertions from a Gateway. For signed browser forwarding, configure the matching
+`BrowserServerOptions.forwardingProof` issuer. The server verifies the proof and
+forwarding peer before admitting reader facts.
 
-Subscription activation and cancellation also check the admitted principal
-against the stored reader binding. A different principal cannot reuse a
-subscription even with the same ActorContext. The host supplies an operation
-signal before authentication and closes it after unary work or the complete
-Activate stream. A direct authenticator can return a separately captured
-`invalidated` signal for local logout and session expiry. See [native reader admission](REFERENCE.md#native-reader-admission)
-for adapter signatures, public admission, and managed application configuration.
+For an application listener reachable only by trusted components, set
+`services.readerAdmission: "trusted-network"` on the receiving Server and
+`BrowserServerOptions.forwarding: "trusted-network"` on the Gateway. The Gateway
+sends its admitted principal and authority facts without a proof. The listener
+checks the envelope and operation, then trusts those facts. Anyone able to reach
+that listener can assert another principal, so restrict its network access.
+ActorContext does not authenticate a reader.
+
+With neither admission adapter configured, the native server remains public and
+supplies no authenticated principal or authority facts. It rejects internal
+reader metadata. A trusted-network listener also admits native calls without
+reader metadata, supplying an empty reader. Existing read filters and application
+policy decide what those calls may access. A signed-only listener still requires
+a valid proof. A trusted-network listener rejects proof-bearing metadata.
+
+Subscribe, Activate, Cancel, and cleanup carry the admitted reader identity.
+Activation and cancellation compare the current reader with the subscription's
+stored identity. The host supplies an operation signal before authentication and
+closes it after unary work or the complete Activate stream. A direct authenticator
+can return a separate `invalidated` signal for local logout and session expiry.
+See [native reader admission](REFERENCE.md#native-reader-admission) for signatures
+and managed application configuration.
 
 ## Limits
 

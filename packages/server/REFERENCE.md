@@ -1301,6 +1301,8 @@ Configure app-node admission at `ServerOptions.services.readerAdmission`:
   forwarding peer. It must authenticate that peer and validate the supplied
   proof over the exact bytes. `BrowserServerOptions.forwardingProof.issue(bytes)`
   supplies the corresponding gateway adapter.
+- `"trusted-network"` accepts structurally valid unsigned reader facts and
+  header-free identity-free calls on a restricted native listener.
 
 Admission completes before service validation, routing, or subscription mutation.
 Principal IDs and authority facts are copied per invocation. `principal.attributes`
@@ -1309,19 +1311,32 @@ arrays and nested objects. ActorContext remains separate from authentication.
 Neither the framework nor these ports promise live provider information.
 
 With no admission adapters, native requests remain public. Internal identity
-headers are still rejected without a configured verifier. With a forwarding
-verifier but no direct adapter, a request without a forwarding assertion is
-rejected as unauthenticated. An application that also permits public direct
-requests can explicitly return an empty reader from its direct adapter.
+headers are rejected. With a forwarding verifier and no direct adapter, a
+request without a signed assertion is rejected. A direct adapter may explicitly
+return `{ reader: {} }` for a public native operation.
+
+Set `services.readerAdmission: "trusted-network"` to accept unsigned reader
+metadata on a native listener restricted to trusted components. The matching
+browser Gateway setting is `forwarding: "trusted-network"`; a manually assembled
+native adapter uses `{ forwarding: "trusted-network", maxBytes }`. A native
+request without internal reader headers is admitted with `{ reader: {} }` and no
+privileges supplied by this mode. A malformed reader, an operation mismatch, a
+proof-only header, or proof-bearing metadata is rejected. A signed-only listener
+rejects the unsigned metadata. Network access is the trust boundary: a caller
+that reaches the listener can assert any principal. Unsigned metadata does not
+cryptographically bind the request body.
+
 Malformed assertions and denied authentication return `UNAUTHENTICATED`;
 unexpected adapter faults return sanitized `INTERNAL`. Explicit cancellation,
 availability, and permission statuses retain their meaning.
 
-`ManagedServerApplication` accepts `readerAdmission` for its Coordinator listener
-and `forwardingProof` for Coordinator-to-child requests. Configure the receiving
-child Servers with their verifier as well. Each hop verifies its incoming
-assertion and issues a new proof for the actual outgoing operation and payload.
-Loopback placement alone does not authenticate a forwarding peer.
+`ManagedServerApplication.readerAdmission` sets the Coordinator listener's
+incoming policy. Its `forwarding: "trusted-network"` setting sends unsigned
+reader facts to child Servers. Configure each child Server's
+`services.readerAdmission` separately. Either hop may instead use matching
+`forwardingProof` and `forwarded` adapters. The Coordinator creates metadata for
+the actual outgoing operation rather than copying incoming headers. A trusted
+network hop requires restricted access to its receiving listener.
 
 A standard session strategy accepts the host signal during `resolve` and
 returns an invalidation signal for local logout, its captured session deadline,

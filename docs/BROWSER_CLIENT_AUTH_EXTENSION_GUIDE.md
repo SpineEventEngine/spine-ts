@@ -167,6 +167,133 @@ external state managers. A late result or update from a retired generation is
 ignored. Cancellation is cooperative: a factory that ignores its signal can
 keep the underlying work alive.
 
+## Forwarding a reader to an application container
+
+The browser Gateway authenticates the request and resolves a principal and
+authority facts before it forwards a native operation. A two-container deployment
+configures the application listener and Gateway separately. In the application
+container, make the native listener reachable only by trusted components:
+
+<!-- docs-snippet-path: packages/server/src/server/server.ts -->
+
+```ts
+import { Server, type ServerOptions } from "@spine-event-engine/server";
+
+declare const contexts: NonNullable<ServerOptions["contexts"]>;
+declare const privateHost: string;
+
+const app = await new Server({
+  host: privateHost,
+  contexts,
+  services: { readerAdmission: "trusted-network" },
+}).start();
+```
+
+In the Gateway container, use the deployed private URL for that listener.
+The application supplies the other Gateway settings, including sessions,
+authorization, context resolution, and the public listener:
+
+<!-- docs-snippet-path: packages/server/src/browser/index.ts -->
+
+```ts
+import type { SessionResolver } from "@spine-event-engine/auth";
+import {
+  BrowserServer,
+  type StandaloneBrowserServerOptions,
+} from "@spine-event-engine/server/browser";
+
+declare const applicationGrpcUrl: string;
+declare const gatewayOptions: Omit<
+  Extract<StandaloneBrowserServerOptions, { readonly sessions: SessionResolver }>,
+  "backend" | "discovery" | "forwarding" | "forwardingProof"
+>;
+
+const gateway = await BrowserServer.run({
+  ...gatewayOptions,
+  backend: { baseUrl: applicationGrpcUrl },
+  forwarding: "trusted-network",
+});
+```
+
+The application listener checks the reader envelope and operation, then trusts
+the supplied principal and authority facts. It does not verify a proof or bind
+the request body cryptographically. Anyone who can reach that listener can
+assert another principal, so restrict its network access. ActorContext carries
+request facts separately and cannot establish the reader's principal.
+
+For proof-based forwarding, configure `BrowserServerOptions.forwardingProof`
+and the receiving Server's `services.readerAdmission.forwarded` verifier. The
+issuer signs the exact request bytes and reader envelope; the verifier checks
+the proof and peer. These are alternatives for one hop. If no forwarding mode is
+configured, authenticated reader facts cannot be silently dropped. A native
+listener without admission configuration rejects forwarded identity metadata.
+
+A trusted-network listener also admits a native call without reader metadata
+as an empty reader. This permits internal reads that application policy makes
+public; it does not grant a service identity or bypass read filters. Subscribe,
+Activate, Cancel, and cleanup retain the reader identity from the admitted
+operation. In managed deployments, configure Gateway-to-Coordinator admission,
+Coordinator-to-child forwarding, and each child's admission independently.
+
+For a managed application, the Gateway targets the Coordinator's private
+listener. In the Gateway container, configure that outgoing hop:
+
+<!-- docs-snippet-path: packages/server/src/browser/index.ts -->
+
+```ts
+import type { SessionResolver } from "@spine-event-engine/auth";
+import {
+  BrowserServer,
+  type StandaloneBrowserServerOptions,
+} from "@spine-event-engine/server/browser";
+
+declare const coordinatorGrpcUrl: string;
+declare const gatewayOptions: Omit<
+  Extract<StandaloneBrowserServerOptions, { readonly sessions: SessionResolver }>,
+  "backend" | "discovery" | "forwarding" | "forwardingProof"
+>;
+
+const gateway = await BrowserServer.run({
+  ...gatewayOptions,
+  backend: { baseUrl: coordinatorGrpcUrl },
+  forwarding: "trusted-network",
+});
+```
+
+The managed application configures the Coordinator's incoming policy and its
+outgoing hop to each child. Each child Server independently admits that new
+envelope:
+
+<!-- docs-snippet-path: packages/server/src/server/managed-server-application.ts -->
+
+```ts
+import {
+  ManagedServerApplication,
+  Server,
+  type ManagedServerApplicationOptions,
+  type ServerOptions,
+} from "@spine-event-engine/server";
+
+declare const managedOptions: Omit<
+  ManagedServerApplicationOptions,
+  "createServer" | "readerAdmission" | "forwarding" | "forwardingProof"
+>;
+declare const contexts: NonNullable<ServerOptions["contexts"]>;
+
+const managed = await ManagedServerApplication.run({
+  ...managedOptions,
+  readerAdmission: "trusted-network", // Gateway to Coordinator
+  forwarding: "trusted-network", // Coordinator to child
+  createServer: async ({ host, port }) =>
+    new Server({
+      host,
+      port,
+      contexts,
+      services: { readerAdmission: "trusted-network" }, // Child listener
+    }).start(),
+});
+```
+
 ## Gateway contracts and request facts
 
 One standalone Gateway dynamically discovers application nodes on GKE or GCE.

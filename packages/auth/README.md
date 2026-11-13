@@ -134,22 +134,31 @@ session and resolver result before forwarding. The framework does not copy the
 request credential into them or fetch fresh information from an identity provider.
 Your resolver decides which facts to supply on each request.
 
-For a browser gateway, supply the issuer through
-`BrowserServerOptions.forwardingProof`. When assembling a native gateway,
-configure `NativeSubscriptionCreator(transport, { issuer, maxBytes })`; a custom
-unary forwarder must produce the same operation-bound proof. See
-[Verified reader forwarding](REFERENCE.md#verified-reader-forwarding) for the forwarding adapters.
+For a browser Gateway connected to an application listener that only trusted
+components can reach, set `forwarding: "trusted-network"` on the Gateway and
+`services.readerAdmission: "trusted-network"` on the receiving Server. The
+Gateway sends the admitted principal and authority facts in internal metadata
+without a proof. The receiving listener checks the metadata shape and operation,
+then accepts those facts. Network access to that listener is the trust boundary:
+a caller that can reach it can assert another principal. ActorContext remains
+separate from the admitted reader.
 
-In either setup, configure `ServerOptions.services.readerAdmission.forwarded`
-on the receiving application node. The issuer produces a proof for the service,
-method, request bytes, and reader facts. The verifier checks that proof and the
-forwarding peer. Both are replaceable application adapters. A header name, actor
-ID, or loopback connection does not establish a verified reader.
+For proof-based forwarding, set `BrowserServerOptions.forwardingProof` and the
+receiving Server's `services.readerAdmission.forwarded`. The issuer signs the
+service, method, exact request bytes, and reader facts; the verifier checks the
+proof and forwarding peer. Use `NativeSubscriptionCreator(transport, {
+issuer, maxBytes })` for a manually assembled Gateway, or `{ forwarding:
+"trusted-network", maxBytes }` for a restricted listener. The two sending
+settings cannot be combined. See [Verified reader forwarding](REFERENCE.md#verified-reader-forwarding).
 
-Authenticated forwarding requires an issuer. Deliberate `publicAccess: true`
-forwards no principal or authority facts; the gateway's public admission marker
-does not become a user identity. See the [server reference](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/REFERENCE.md#native-reader-admission)
-for direct native authentication and managed forwarding configuration.
+The default remains identity-free native admission. A receiving Server without
+reader admission rejects internal reader metadata. A signed-only listener rejects
+unsigned metadata; a trusted-network listener rejects proof-bearing metadata.
+The trusted-network listener also admits a native request without either
+internal header with an empty reader. Read filters and application policy still
+decide what that identity-free request may read. Public Gateway admission does
+not invent a principal or authority facts. Subscription Subscribe, Activate,
+Cancel, and cleanup retain the admitted reader identity.
 
 ## Browser and OIDC extensions
 

@@ -233,18 +233,30 @@ export interface NodeCoordinatorOptions {
   readonly writeMaxBytes?: number;
 
   /**
-   * Configured native reader admission at the managed listener.
+   * Selects network trust or native authentication ports at the managed listener.
    */
-  readonly readerAdmission?: Readonly<{
-    forwarded?: ReaderProofVerifier<HandlerContext>;
-    direct?: DirectReaderAuthenticator<HandlerContext>;
-  }>;
+  readonly readerAdmission?:
+    | "trusted-network"
+    | Readonly<{
+        forwarded?: ReaderProofVerifier<HandlerContext>;
+        direct?: DirectReaderAuthenticator<HandlerContext>;
+      }>;
 
   /**
-   * Configured proof issuer for each Coordinator-to-child request.
+   * Configured proof forwarding for each Coordinator-to-child request.
    */
   readonly forwardingProof?: ReaderProofIssuer;
+
+  /**
+   * Sends unsigned reader facts to restricted child listeners.
+   */
+  readonly forwarding?: "trusted-network";
 }
+
+/**
+ * Selects the managed child reader forwarding mode.
+ */
+type OutgoingReaderForwarding = ReaderProofIssuer | "trusted-network" | undefined;
 
 /**
  * Hosts generated unary services in front of managed complete replicas.
@@ -258,7 +270,7 @@ export class NodeCoordinator {
 
   readonly #readerAdmission: NodeCoordinatorOptions["readerAdmission"];
 
-  readonly #forwardingProof: ReaderProofIssuer | undefined;
+  readonly #forwarding: OutgoingReaderForwarding;
 
   readonly #readers = new Map<string, TrustedReaderContext>();
 
@@ -343,13 +355,13 @@ export class NodeCoordinator {
   ) {
     this.#members = options.members;
     this.#readerAdmission = options.readerAdmission;
-    this.#forwardingProof = options.forwardingProof;
+    this.#forwarding = options.forwarding ?? options.forwardingProof;
     this.#readMaxBytes = options.readMaxBytes ?? defaultMessageMaxBytes;
     this.#subscriptionQueueCapacity = subscriptionQueueCapacity;
     this.#unaryKernel = new BackendMembershipKernel(
       NodeCoordinatorValues.unaryKernelOptions(
         undefined,
-        this.#forwardingProof,
+        this.#forwarding,
         this.#readMaxBytes,
         (bytes) => this.#readerFor(bytes),
       ),
@@ -379,7 +391,7 @@ export class NodeCoordinator {
     return new BackendMembershipKernel(
       NodeCoordinatorValues.unaryKernelOptions(
         members,
-        this.#forwardingProof,
+        this.#forwarding,
         this.#readMaxBytes,
         (bytes) => this.#readerFor(bytes),
         (definition, child) => {
@@ -408,6 +420,7 @@ export class NodeCoordinator {
    * @returns The running private Coordinator.
    */
   static async open(options: NodeCoordinatorOptions): Promise<NodeCoordinator> {
+    NodeCoordinatorValues.validateReaderModes(options);
     const subscriptionQueueCapacity = ServerEnvironment.instance().subscriptionQueueCapacity;
     const { host, port, readMaxBytes, writeMaxBytes } = this.#listenerOptions(options);
     // eslint-disable-next-line prefer-const -- routes capture the Coordinator before the listener exists.
@@ -630,6 +643,7 @@ export class NodeCoordinator {
     context: HandlerContext,
     signal: AbortSignal,
   ): Promise<ReaderAdmissionResult> {
+    const policy = this.#readerAdmission;
     return TrustedReaderIngress.admit({
       service,
       method,
@@ -638,7 +652,12 @@ export class NodeCoordinator {
       peer: context,
       signal,
       maxBytes: this.#readMaxBytes,
-      ...this.#readerAdmission,
+      ...(policy === "trusted-network"
+        ? { trustedNetwork: true }
+        : {
+            ...(policy?.direct === undefined ? {} : { direct: policy.direct }),
+            ...(policy?.forwarded === undefined ? {} : { forwarded: policy.forwarded }),
+          }),
     });
   }
 
@@ -1367,18 +1386,41 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
 
 const NodeCoordinatorValues = Object.freeze({
   /**
+   * Rejects invalid or conflicting trust choices before opening a listener.
+   *
+   * @param options Managed listener and child forwarding choices.
+   */
+  validateReaderModes(options: NodeCoordinatorOptions): void {
+    const admission: unknown = options.readerAdmission;
+    const forwarding: unknown = options.forwarding;
+    if (
+      admission !== undefined &&
+      admission !== "trusted-network" &&
+      (admission === null ||
+        typeof admission !== "object" ||
+        Array.isArray(admission) ||
+        "trustedNetwork" in admission)
+    )
+      throw new Error("Invalid managed reader admission mode.");
+    if (forwarding !== undefined && forwarding !== "trusted-network")
+      throw new Error("Invalid managed reader forwarding mode.");
+    if (forwarding !== undefined && options.forwardingProof !== undefined)
+      throw new Error("Choose one managed reader forwarding mode.");
+  },
+
+  /**
    * Builds membership options for native unary forwarding.
    *
    * @param members The ready member source when available.
    * @returns The configured membership kernel options.
-   * @param issuer The configured forwarding proof producer.
+   * @param forwarding The proof issuer or trusted-network forwarding mode.
    * @param maxBytes The existing native message-size bound.
    * @param readerFor Reader lookup for a retained subscription.
    * @param onRememberChild Records a native child ID for its logical subscription.
    */
   unaryKernelOptions(
     members?: ReadyMemberSource,
-    issuer?: ReaderProofIssuer,
+    forwarding?: OutgoingReaderForwarding,
     maxBytes = defaultMessageMaxBytes,
     readerFor?: (definition: Uint8Array) => TrustedReaderContext | undefined,
     onRememberChild?: (definition: Uint8Array, child: Uint8Array) => void,
@@ -1394,7 +1436,7 @@ const NodeCoordinatorValues = Object.freeze({
           NodeCoordinatorValues.client(
             member,
             members,
-            issuer,
+            forwarding,
             maxBytes,
             readerFor,
             onRememberChild,
@@ -1484,7 +1526,7 @@ const NodeCoordinatorValues = Object.freeze({
    * @param member The discovered backend member.
    * @param members The ready member source when available.
    * @returns The member transport client.
-   * @param issuer The configured forwarding proof producer.
+   * @param forwarding The proof issuer or trusted-network forwarding mode.
    * @param maxBytes The existing native message-size bound.
    * @param readerFor Reader lookup for a retained subscription.
    * @param onRememberChild Records a native child ID for its logical subscription.
@@ -1492,7 +1534,7 @@ const NodeCoordinatorValues = Object.freeze({
   client(
     member: ReadyCoordinatorMember,
     members: ReadyMemberSource | undefined,
-    issuer?: ReaderProofIssuer,
+    forwarding?: OutgoingReaderForwarding,
     maxBytes = defaultMessageMaxBytes,
     readerFor?: (definition: Uint8Array) => TrustedReaderContext | undefined,
     onRememberChild?: (definition: Uint8Array, child: Uint8Array) => void,
@@ -1500,7 +1542,7 @@ const NodeCoordinatorValues = Object.freeze({
     const manager = new Http2SessionManager(member.endpoint);
     const transport = createGrpcTransport({ baseUrl: member.endpoint, sessionManager: manager });
     return {
-      forward: (request) => NodeCoordinatorValues.forward(transport, request, issuer, maxBytes),
+      forward: (request) => NodeCoordinatorValues.forward(transport, request, forwarding, maxBytes),
       close: () => NodeCoordinatorValues.closeManager(manager),
       subscribe: (definition, signal) =>
         NodeCoordinatorValues.subscribeChild(
@@ -1508,7 +1550,7 @@ const NodeCoordinatorValues = Object.freeze({
           definition,
           signal,
           readerFor?.(definition),
-          issuer,
+          forwarding,
           maxBytes,
           onRememberChild,
         ),
@@ -1516,7 +1558,7 @@ const NodeCoordinatorValues = Object.freeze({
         transport,
         member,
         members,
-        issuer,
+        forwarding,
         maxBytes,
         readerFor,
       ),
@@ -1540,7 +1582,7 @@ const NodeCoordinatorValues = Object.freeze({
    * @param transport The connected native transport.
    * @param member The selected backend member.
    * @param members The available backend member source.
-   * @param issuer The configured forwarding proof producer.
+   * @param forwarding The proof issuer or trusted-network forwarding mode.
    * @param maxBytes The existing native message-size bound.
    * @param readerFor Reader lookup for a retained subscription.
    * @returns The managed-child operations.
@@ -1549,7 +1591,7 @@ const NodeCoordinatorValues = Object.freeze({
     transport: ReturnType<typeof createGrpcTransport>,
     member: ReadyCoordinatorMember,
     members: ReadyMemberSource | undefined,
-    issuer: ReaderProofIssuer | undefined,
+    forwarding: OutgoingReaderForwarding,
     maxBytes: number,
     readerFor?: (definition: Uint8Array) => TrustedReaderContext | undefined,
   ) {
@@ -1558,7 +1600,7 @@ const NodeCoordinatorValues = Object.freeze({
         transport,
         member,
         members,
-        issuer,
+        forwarding,
         maxBytes,
         readerFor,
       ),
@@ -1570,7 +1612,7 @@ const NodeCoordinatorValues = Object.freeze({
           child,
           signal,
           readerFor?.(child),
-          issuer,
+          forwarding,
           maxBytes,
         ),
     };
@@ -1582,7 +1624,7 @@ const NodeCoordinatorValues = Object.freeze({
    * @param transport The connected native transport.
    * @param member The selected backend member.
    * @param members The available backend member source.
-   * @param issuer The configured forwarding proof producer.
+   * @param forwarding The proof issuer or trusted-network forwarding mode.
    * @param maxBytes The existing native message-size bound.
    * @param readerFor Reader lookup for a retained subscription.
    * @returns The activation stream completion.
@@ -1591,7 +1633,7 @@ const NodeCoordinatorValues = Object.freeze({
     transport: ReturnType<typeof createGrpcTransport>,
     member: ReadyCoordinatorMember,
     members: ReadyMemberSource | undefined,
-    issuer: ReaderProofIssuer | undefined,
+    forwarding: OutgoingReaderForwarding,
     maxBytes: number,
     readerFor?: (definition: Uint8Array) => TrustedReaderContext | undefined,
   ) {
@@ -1608,7 +1650,7 @@ const NodeCoordinatorValues = Object.freeze({
         updates,
         signal,
         readerFor?.(child),
-        issuer,
+        forwarding,
         maxBytes,
       );
   },
@@ -1620,7 +1662,7 @@ const NodeCoordinatorValues = Object.freeze({
    * @param definition The serialized subscription definition.
    * @param signal The cancellation signal for this operation.
    * @param reader The verified reader facts for this operation.
-   * @param issuer The configured forwarding proof producer.
+   * @param forwarding The proof issuer or trusted-network forwarding mode.
    * @param maxBytes The existing native message-size bound.
    * @param onRememberChild Records a native child ID for its logical subscription.
    * @returns The managed-child subscription.
@@ -1630,7 +1672,7 @@ const NodeCoordinatorValues = Object.freeze({
     definition: Uint8Array,
     signal: AbortSignal,
     reader: TrustedReaderContext | undefined,
-    issuer: ReaderProofIssuer | undefined,
+    forwarding: OutgoingReaderForwarding,
     maxBytes: number,
     onRememberChild?: (definition: Uint8Array, child: Uint8Array) => void,
   ): Promise<Uint8Array> {
@@ -1643,7 +1685,7 @@ const NodeCoordinatorValues = Object.freeze({
       "Subscribe",
       toBinary(TopicSchema, topic),
       reader,
-      issuer,
+      forwarding,
       maxBytes,
     );
     if (signal.aborted) throw new ConnectError("Reader operation cancelled.", Code.Canceled);
@@ -1665,7 +1707,7 @@ const NodeCoordinatorValues = Object.freeze({
    * @param child The native child subscription definition.
    * @param signal The cancellation signal for this operation.
    * @param reader The verified reader facts for this operation.
-   * @param issuer The configured forwarding proof producer.
+   * @param forwarding The proof issuer or trusted-network forwarding mode.
    * @param maxBytes The existing native message-size bound.
    * @returns Completion after the operation settles.
    */
@@ -1676,7 +1718,7 @@ const NodeCoordinatorValues = Object.freeze({
     child: Uint8Array,
     signal: AbortSignal,
     reader: TrustedReaderContext | undefined,
-    issuer: ReaderProofIssuer | undefined,
+    forwarding: OutgoingReaderForwarding,
     maxBytes: number,
   ): Promise<void> {
     const subscription = fromBinary(SubscriptionSchema, child);
@@ -1684,7 +1726,7 @@ const NodeCoordinatorValues = Object.freeze({
       "Cancel",
       child,
       reader,
-      issuer,
+      forwarding,
       maxBytes,
     );
     if (signal.aborted) throw new ConnectError("Reader operation cancelled.", Code.Canceled);
@@ -1701,16 +1743,16 @@ const NodeCoordinatorValues = Object.freeze({
    * @param transport The connected native transport.
    * @param request The request to forward.
    * @returns Empty routing bytes after the response is assigned.
-   * @param issuer The configured forwarding proof producer.
+   * @param forwarding The proof issuer or trusted-network forwarding mode.
    * @param maxBytes The existing native message-size bound.
    */
   async forward(
     transport: ReturnType<typeof createGrpcTransport>,
     request: CoordinatorRequest,
-    issuer?: ReaderProofIssuer,
+    forwarding?: OutgoingReaderForwarding,
     maxBytes = defaultMessageMaxBytes,
   ): Promise<Uint8Array> {
-    const headers = await NodeCoordinatorValues.forwardHeaders(request, issuer, maxBytes);
+    const headers = await NodeCoordinatorValues.forwardHeaders(request, forwarding, maxBytes);
     if (request.signal.aborted)
       throw new ConnectError("Reader operation cancelled.", Code.Canceled);
     if (request.kind === "command") {
@@ -1767,37 +1809,59 @@ const NodeCoordinatorValues = Object.freeze({
    * Encodes verified reader facts into one exact native unary operation.
    *
    * @param request The request being processed.
-   * @param issuer The configured forwarding proof producer.
+   * @param forwarding The proof issuer or trusted-network forwarding mode.
    * @param maxBytes The existing native message-size bound.
    * @returns The operation-bound forwarding headers.
    */
   async forwardHeaders(
     request: CoordinatorRequest,
-    issuer: ReaderProofIssuer | undefined,
+    forwarding: OutgoingReaderForwarding,
     maxBytes: number,
   ): Promise<Headers> {
     const service =
       request.kind === "command" ? "spine.client.CommandService" : "spine.client.QueryService";
     const method =
       request.kind === "command" ? "Post" : request.kind === "query" ? "Read" : "Execute";
+    const headers = NodeCoordinatorValues.applicationHeaders(request.context.requestHeader);
+    if (
+      forwarding === undefined &&
+      (request.reader.principal !== undefined || request.reader.authorityFacts !== undefined)
+    )
+      throw new ConnectError("Managed reader forwarding is unavailable.", Code.Internal);
+    if (forwarding !== undefined)
+      for (const [name, entry] of Object.entries(
+        await NodeCoordinatorValues.unaryAssertion(request, service, method, forwarding, maxBytes),
+      ))
+        headers.set(name, entry);
+    return headers;
+  },
+
+  /**
+   * Creates a child assertion, serializing the request only for a signed proof.
+   *
+   * @param request Admitted managed request.
+   * @param service Canonical RPC service.
+   * @param method Canonical RPC method.
+   * @param forwarding Selected proof issuer or network mode.
+   * @param maxBytes Existing native request-size bound.
+   * @returns Operation-specific reader metadata.
+   */
+  async unaryAssertion(
+    request: CoordinatorRequest,
+    service: string,
+    method: string,
+    forwarding: Exclude<OutgoingReaderForwarding, undefined>,
+    maxBytes: number,
+  ): Promise<Readonly<Record<string, string>>> {
+    if (forwarding === "trusted-network")
+      return ReaderForwarding.encode(service, method, request.reader, maxBytes);
     const value =
       request.kind === "command"
         ? toBinary(CommandService.method.post.input, request.command)
         : request.kind === "query"
           ? toBinary(QuerySchema, request.query)
           : toBinary(AppQuerySchema, request.query);
-    const headers = NodeCoordinatorValues.applicationHeaders(request.context.requestHeader);
-    if (
-      issuer === undefined &&
-      (request.reader.principal !== undefined || request.reader.authorityFacts !== undefined)
-    )
-      throw new ConnectError("Managed reader forwarding is unavailable.", Code.Internal);
-    if (issuer !== undefined)
-      for (const [name, entry] of Object.entries(
-        await ReaderForwarding.seal(service, method, value, request.reader, issuer, maxBytes),
-      ))
-        headers.set(name, entry);
-    return headers;
+    return ReaderForwarding.seal(service, method, value, request.reader, forwarding, maxBytes);
   },
 
   /**
@@ -1811,7 +1875,7 @@ const NodeCoordinatorValues = Object.freeze({
    * @param signal Cancels child activation.
    * @returns Completion after the child stream closes.
    * @param reader The verified reader facts for this operation.
-   * @param issuer The configured forwarding proof producer.
+   * @param forwarding The proof issuer or trusted-network forwarding mode.
    * @param maxBytes The existing native message-size bound.
    */
   async activateChild(
@@ -1822,7 +1886,7 @@ const NodeCoordinatorValues = Object.freeze({
     updates: (update: Uint8Array) => Promise<void>,
     signal: AbortSignal,
     reader?: TrustedReaderContext,
-    issuer?: ReaderProofIssuer,
+    forwarding?: OutgoingReaderForwarding,
     maxBytes = defaultMessageMaxBytes,
   ): Promise<void> {
     const subscription = fromBinary(SubscriptionSchema, child);
@@ -1830,7 +1894,7 @@ const NodeCoordinatorValues = Object.freeze({
       "Activate",
       child,
       reader,
-      issuer,
+      forwarding,
       maxBytes,
     );
     if (signal.aborted) throw new ConnectError("Reader operation cancelled.", Code.Canceled);
@@ -1868,7 +1932,7 @@ const NodeCoordinatorValues = Object.freeze({
    * @param method The canonical RPC method name.
    * @param value Canonical child subscription RPC bytes.
    * @param reader The verified reader facts for this operation.
-   * @param issuer The configured forwarding proof producer.
+   * @param forwarding The proof issuer or trusted-network forwarding mode.
    * @param maxBytes The existing native message-size bound.
    * @returns The canonical reader assertion headers.
    */
@@ -1876,24 +1940,26 @@ const NodeCoordinatorValues = Object.freeze({
     method: string,
     value: Uint8Array,
     reader: TrustedReaderContext | undefined,
-    issuer: ReaderProofIssuer | undefined,
+    forwarding: OutgoingReaderForwarding,
     maxBytes: number,
   ): Promise<Headers | undefined> {
     if (reader === undefined) return undefined;
-    if (issuer === undefined) {
+    if (forwarding === undefined) {
       if (reader.principal !== undefined || reader.authorityFacts !== undefined)
         throw new ConnectError("Managed reader forwarding is unavailable.", Code.Internal);
       return undefined;
     }
     return new Headers(
-      await ReaderForwarding.seal(
-        "spine.client.SubscriptionService",
-        method,
-        value,
-        reader,
-        issuer,
-        maxBytes,
-      ),
+      forwarding === "trusted-network"
+        ? ReaderForwarding.encode("spine.client.SubscriptionService", method, reader, maxBytes)
+        : await ReaderForwarding.seal(
+            "spine.client.SubscriptionService",
+            method,
+            value,
+            reader,
+            forwarding,
+            maxBytes,
+          ),
     );
   },
 

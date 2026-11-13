@@ -65,21 +65,30 @@ The existing `ContextResolver` remains the replacement point for obtaining
 application-specific authority information; there is no provider polling or
 promise that its information remains current after resolution.
 
-`NativeSubscriptionCreator(transport, { issuer, maxBytes })` uses the configured
-issuer to forward that reader with each native operation. `BrowserServerOptions.forwardingProof`
-configures the same issuer in browser composition. Its `issue(bytes)` method
-returns a transport-safe proof. The application node's corresponding
+`NativeSubscriptionCreator(transport, { issuer, maxBytes })` forwards a signed
+reader with each native operation. `BrowserServerOptions.forwardingProof` selects
+the same mode in browser composition. Its `issue(bytes)` method returns a
+transport-safe proof. The receiving Server's
 `services.readerAdmission.forwarded.verify(bytes, proof, peer)` verifies the
-forwarding peer and the assertion. The signed bytes bind the service, method,
+forwarding peer and assertion. The signed bytes bind the service, method,
 canonical request, and reader facts; an Activate proof cannot authorize Cancel.
-Internal metadata received from a caller is not accepted without that verifier.
 
-An authenticated native forwarding call without an issuer fails rather than
-discarding its reader identity. Configure both issuer and verifier for authenticated
-browser forwarding. These are TS forwarding ports; merely sending
-their metadata to a JVM backend does not add verified-reader support there.
-Custom forwarding implementations must establish the equivalent trust at their
-receiving boundary. Credentials and provider tokens are not forwarding fields.
+For a network-restricted receiving listener, configure the native adapter with
+`{ forwarding: "trusted-network", maxBytes }`, or set
+`BrowserServerOptions.forwarding: "trusted-network"`. Set the receiving Server's
+`services.readerAdmission: "trusted-network"`. The adapter sends the same
+reader envelope without a proof. The listener checks its structure and operation,
+then trusts the supplied facts. This mode does not authenticate the peer or
+cryptographically bind the request body. Restrict listener access to trusted
+components. The two sending settings are mutually exclusive.
+
+A native call without reader metadata reaches a trusted-network listener with an
+empty reader. It receives no principal or authority facts. A server without
+reader admission rejects forwarded metadata, and a signed-only listener rejects
+unsigned metadata. A trusted-network listener rejects proof-bearing metadata.
+Calls with authenticated reader facts and no sending mode fail rather than
+discarding identity. Credentials and provider tokens are not forwarding fields.
+These TS forwarding modes do not add verified-reader support to a JVM backend.
 
 ## Sessions and sign-in
 

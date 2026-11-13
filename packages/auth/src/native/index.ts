@@ -270,14 +270,16 @@ const NativeRelayValues = Object.freeze({
 /**
  * Native Connect adapter. Post/Read use their matching Command/Query descriptors;
  * Subscribe/Activate/Cancel/Dispose use the shared Subscription descriptors.
- * Native requests carry the admitted cancellation signal and, when an issuer is
- * configured, operation-bound internal headers with detached verified reader
- * facts. Browser credentials and raw transport facts are not forwarded.
+ * Native requests carry the admitted cancellation signal and detached reader
+ * facts when a proof issuer or trusted-network forwarding is configured.
+ * Browser credentials and raw transport facts are not forwarded.
  */
 export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForwarder {
   readonly #transport: Transport;
 
   readonly #issuer: ReaderProofIssuer | undefined;
+
+  readonly #trustedNetwork: boolean;
 
   readonly #maxBytes: number;
 
@@ -285,17 +287,31 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
    * Creates a native adapter over one Connect transport.
    *
    * @param transport The native Connect transport.
-   * @param forwarding Configured peer proof issuer and existing request-size bound.
+   * @param forwarding Proof issuer or network trust choice and existing request-size bound.
    */
   constructor(
     transport: Transport,
-    forwarding?: {
-      readonly issuer: ReaderProofIssuer;
-      readonly maxBytes: number;
-    },
+    forwarding?:
+      | {
+          readonly issuer: ReaderProofIssuer;
+          readonly maxBytes: number;
+          readonly forwarding?: never;
+        }
+      | {
+          readonly forwarding: "trusted-network";
+          readonly maxBytes: number;
+          readonly issuer?: never;
+        },
   ) {
+    const supplied = forwarding as
+      { readonly issuer?: unknown; readonly forwarding?: unknown } | undefined;
+    if (supplied?.forwarding !== undefined && supplied.forwarding !== "trusted-network")
+      throw new Error("Invalid native reader forwarding mode.");
+    if (supplied?.issuer !== undefined && supplied.forwarding !== undefined)
+      throw new Error("Choose one native reader forwarding mode.");
     this.#transport = transport;
     this.#issuer = forwarding?.issuer;
+    this.#trustedNetwork = forwarding?.forwarding === "trusted-network";
     this.#maxBytes = forwarding?.maxBytes ?? 4 * 1024 * 1024;
   }
 
@@ -376,6 +392,13 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     readonly reader?: TrustedReaderContext | undefined;
   }): Promise<Readonly<Record<string, string>> | undefined> {
     if (request.reader === undefined) return undefined;
+    if (this.#trustedNetwork)
+      return ReaderForwarding.encode(
+        request.service,
+        request.method,
+        request.reader,
+        this.#maxBytes,
+      );
     if (this.#issuer === undefined) {
       if (request.reader.principal !== undefined || request.reader.authorityFacts !== undefined)
         throw new Error("Authenticated forwarding requires a configured proof issuer.");

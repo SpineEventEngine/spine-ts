@@ -161,7 +161,7 @@ export interface ManagedServerApplicationOptions {
   readonly synchronize?: () => Promise<void>;
 
   /**
-   * Authenticates direct and forwarded requests at the managed Coordinator.
+   * Selects trusted-network or port-based admission at the managed Coordinator.
    */
   readonly readerAdmission?: NodeCoordinatorOptions["readerAdmission"];
 
@@ -169,6 +169,11 @@ export interface ManagedServerApplicationOptions {
    * Issues fresh operation-bound proofs from the Coordinator to children.
    */
   readonly forwardingProof?: NodeCoordinatorOptions["forwardingProof"];
+
+  /**
+   * Sends unsigned reader facts from the Coordinator to restricted child listeners.
+   */
+  readonly forwarding?: "trusted-network";
 
   /**
    *
@@ -746,6 +751,8 @@ export class ManagedServerCoordinator {
     options: ManagedServerCoordinatorOptions,
     dependencies: ManagedServerCoordinatorDependencies = ManagedServerCoordinatorValues.dependencies,
   ) {
+    if (options.forwarding !== undefined && options.forwardingProof !== undefined)
+      throw new Error("Choose one managed reader forwarding mode.");
     this.#options = options;
     this.#dependencies = dependencies;
     this.#restart = ManagedServerCoordinatorValues.restart(options);
@@ -808,6 +815,9 @@ export class ManagedServerCoordinator {
           ...(this.#options.forwardingProof === undefined
             ? {}
             : { forwardingProof: this.#options.forwardingProof }),
+          ...(this.#options.forwarding === undefined
+            ? {}
+            : { forwarding: this.#options.forwarding }),
           ...(this.#options.host === undefined ? {} : { host: this.#options.host }),
           ...(this.#options.port === undefined ? {} : { port: this.#options.port }),
         });
