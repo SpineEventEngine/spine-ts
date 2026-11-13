@@ -9,6 +9,7 @@ import {
   RemoteWorkRegistry,
 } from "@spine-event-engine/delivery-client";
 import { CommandSchema } from "@spine-event-engine/proto";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import process from "node:process";
 import {
   DeliveryBuilder,
@@ -24,9 +25,11 @@ export function createMultiMachineApplication({ baseUrl, node }) {
   });
   const inbox = new RemoteInbox(client);
   const registry = new RemoteWorkRegistry(client);
+  const storageFactory = new InMemoryStorageFactory();
   const delivery = new DeliveryBuilder()
     .withInbox(inbox)
     .withWorkRegistry(registry)
+    .withStorageFactory(storageFactory)
     .withStrategy(UniformAcrossAllShards.singleShard())
     .withNode(node)
     .build();
@@ -102,6 +105,7 @@ export function createMultiMachineApplication({ baseUrl, node }) {
     async close() {
       await supervisor?.close({ graceMs: 5_000 });
       client.close();
+      await storageFactory.close();
     },
   };
 }

@@ -37,7 +37,7 @@ import {
 } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/types_pb.js";
 import { Application, EnvironmentType } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FieldnotesHost } from "../src/fieldnotes-host.js";
 import type { FieldnotesSettings } from "../src/host-settings.js";
 import { EnvironmentTests } from "../../../../packages/server/dist/server/environment.js";
@@ -54,6 +54,10 @@ const settings = (): FieldnotesSettings => ({
 });
 
 describe("Fieldnotes host private Connect boundary", () => {
+  afterEach(() => {
+    EnvironmentTests.reset();
+  });
+
   it("closes its Application after both listeners", async () => {
     const closeApplication = vi.spyOn(Application.prototype, "close");
     const host = await FieldnotesHost.open(settings(), {

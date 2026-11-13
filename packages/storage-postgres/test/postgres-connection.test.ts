@@ -451,15 +451,40 @@ describe("PostgresStorageFactory connection", () => {
       expect(pools[1]?.connect).not.toHaveBeenCalled();
       expect(pools[2]?.connect).toHaveBeenCalledOnce();
       expect(pools[2]?.release).toHaveBeenCalledOnce();
+      const checkedIndexes = () =>
+        driver.query.mock.calls.flatMap(([, values]) => {
+          const name = values?.[1];
+          return typeof name === "string" && name in columns ? [name] : [];
+        });
+      expect(checkedIndexes()).toEqual(["agent_history_full", "agent_history_category"]);
       repaired = true;
       await expect(preparation.prepareAgentHistory(agentScope, "check")).resolves.toBeUndefined();
-      expect(pools).toHaveLength(4);
-      expect(pools[3]?.connect).toHaveBeenCalledOnce();
-      expect(pools[3]?.release).toHaveBeenCalledOnce();
+      expect(pools).toHaveLength(5);
+      expect(pools[3]?.connect).not.toHaveBeenCalled();
       expect(pools[3]?.end).toHaveBeenCalledOnce();
+      expect(pools[4]?.connect).toHaveBeenCalledOnce();
+      expect(pools[4]?.release).toHaveBeenCalledOnce();
+      expect(pools[4]?.end).toHaveBeenCalledOnce();
+      expect(checkedIndexes()).toEqual([
+        "agent_history_full",
+        "agent_history_category",
+        "agent_history_full",
+        "agent_history_category",
+        "agent_history_conversation",
+      ]);
       await preparation.prepareAgentHistory(agentScope, "check");
-      expect(pools).toHaveLength(4);
-      expect(table).toHaveBeenCalledTimes(1);
+      expect(pools).toHaveLength(7);
+      expect(pools[5]?.connect).not.toHaveBeenCalled();
+      expect(pools[5]?.end).toHaveBeenCalledOnce();
+      expect(pools[6]?.connect).toHaveBeenCalledOnce();
+      expect(pools[6]?.release).toHaveBeenCalledOnce();
+      expect(pools[6]?.end).toHaveBeenCalledOnce();
+      expect(checkedIndexes().slice(-3)).toEqual([
+        "agent_history_full",
+        "agent_history_category",
+        "agent_history_conversation",
+      ]);
+      expect(table.mock.calls.map(([mode]) => mode)).toEqual(["check", "check", "check"]);
     } finally {
       await factory.close();
       table.mockRestore();

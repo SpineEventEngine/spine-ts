@@ -71,13 +71,7 @@ describe("datastore orders test app", () => {
     const startFailure = new Error("listener unavailable");
     const cleanupFailure = new Error("listener cleanup unavailable");
     const start = vi.spyOn(Server.prototype, "start").mockRejectedValue(startFailure);
-    const closeOriginal = Application.prototype.close.bind(Application.prototype);
-    const close = vi
-      .spyOn(Application.prototype, "close")
-      .mockRejectedValueOnce(cleanupFailure)
-      .mockImplementation(function (this: Application) {
-        return closeOriginal.call(this);
-      });
+    const close = vi.spyOn(Application.prototype, "close").mockRejectedValueOnce(cleanupFailure);
     try {
       await expect(startOrdersServer(setup)).rejects.toThrow();
       await setup.close();

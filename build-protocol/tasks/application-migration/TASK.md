@@ -12,7 +12,7 @@ Estimated uninterrupted agent work: 10–16 hours, including focused tests,
 maintained examples and API documentation, independent review, and release checks.
 This record keeps accepted requirements and remaining work, not the discarded
 proposal or review transcripts. Implementation and focused review are accepted;
-final release verification, dependency-pin commit and exact-SHA CI remain.
+final release verification and exact-SHA CI remain.
 
 ## Human-imposed requirements ledger
 
@@ -182,144 +182,75 @@ Assignments and dispositions:
 | application_api_review           | typescript_api_docs_reviewer         | gpt-6-sol / medium | Accepted findings resolved in affected re-review.                                                                                                                                  |
 | application_style_review         | style_maintainability_reviewer       | gpt-6-sol / medium | Helper cleanup finding resolved in focused re-review.                                                                                                                              |
 
-Parent edits maintained Markdown. Writer scopes do not overlap.
-`application_documentation_review` completed the existing documentation_reviewer
-assignment with explicit gpt-6-luna/medium fields and a clean disposition. It checks reader comprehension, completeness and
-accuracy without documentation-writing skills. Every reviewer reads the full
-ledger and accepted contracts above. Superseded historical text is outside scope
-unless changed current text presents it as active behavior. Collect the entire
-four-concern wave before one correction batch. Final release-readiness security
-review uses the existing security_reviewer with explicit gpt-6-sol/high.
+Parent edits maintained Markdown. Writer scopes do not overlap. All four review
+concerns are accepted after focused corrections and affected re-review. The
+documentation reviewer used explicit gpt-6-luna / medium and checked reader
+comprehension, completeness and accuracy without documentation-writing skills.
+The security reviewer used explicit gpt-6-sol / high and found no confirmed
+security regression. Both full and production dependency audits are clean.
 
-All four specialist concerns are resolved. The original explicit profiles matched
-every dispatch and affected re-review; runtime introspection was unavailable.
-Accepted corrections cover managed endpoint/wrapper capture, startup failure
+Accepted review corrections cover managed endpoint/wrapper capture, startup
 cleanup, ThirdParty attachment and broker readiness before handler activation,
-independent-Application cleanup after a sibling endpoint failure, caller/test
-helper cleanup, retryable ReleaseStudio close, synchronous under() configuration,
-private constructor declarations, and endpoint-resource TSDoc. Regression tests
-failed before the relevant fixes and pass afterward. Re-review was limited to
-affected concerns; no unrelated design expansion was accepted.
+independent-Application cleanup, caller/test helper cleanup, retryable
+ReleaseStudio close, synchronous under() configuration, private constructor
+declarations and endpoint-resource documentation. Focused regressions demonstrate
+the corrected behavior. No unexplained Entity-family difference remains.
 
-The broad ThirdParty Message input predates this change and was excluded from the
-batch. No new Fieldnotes failure regression was established. Parent additionally
-corrected a stale ThirdParty factory spelling in the API reference. No further
-full documentation review was needed for that deterministic correction.
+Release version is `2.0.0-snapshot.31`, checked unpublished for all 21 public
+packages. Version-only commit `d867c3f1f` changes 41 top-level manifest versions.
+Commit `64a53cef9` aligns 109 internal pins, lockfile specifiers, 12 Proto
+manifests and five generation markers. External dependency versions are unchanged.
+Frozen installation succeeds. Both commits are pushed to the official branch.
 
-`application_security_review`, existing security_reviewer with explicit
-`gpt-6-sol/high`, completed read-only release-readiness review with no confirmed
-security regression. Its scope covered tenant admission/preparation, endpoint
-authentication/subscriptions, Any handling, integration, local IPC, logging,
-resource lifetime, generated registry loading and the workspace dependency change.
-Both full and production dependency audits report no known vulnerabilities.
+Verification evidence:
 
-Final combined preflight passes 2,525 tests, with 15 intentional skips across
-three skipped files. One stale broker handshake assertion was corrected after
-source inspection: concurrent opening lets both peers observe Online and reply
-with ExternalEventsWanted. The test now checks announcements and requests per
-Bounded Context, domain-correct ProjectCreated metadata, empty withdrawals and
-complete publisher cleanup. All 49 focused integration tests also pass. No
-production change was needed for that assertion correction.
-
-Implementation commit `81166c4fb` and version-only commit `d867c3f1f` are pushed
-to the official task branch. All 41 workspace manifests now use
-`2.0.0-snapshot.31`, verified unpublished for all 21 public packages. The 109
-internal dependency pins and corresponding lockfile specifiers are prepared for
-their separate commit. No external dependency version changed, and frozen
-installation succeeds. Official master was fetched again and remains the recorded
-baseline. The first release-gate attempt stopped during generation because the tracked
-Proto manifests still declared `.30`. No later gate ran. Align the 12 model
-manifests and their generation markers with `.31` using the existing
-`generationIdForContents` helper, following prior snapshot metadata refreshes.
-This changes release metadata only. Repeated full lint also found one stale
-await in the maintained Todo documentation example; it now passes the synchronous
-Bounded Context builder directly to BlackBox.from(). Normal generation and the complete repeated cheap preflight now pass, including
-29 fixture checks, generated-content consistency, full lint/format/docs/build
-checks and 2,525 combined tests. The second full-gate attempt reached logging containment and stopped on two
-missing annotations and the retired environment-reset binding. The runtime
-implementer will update the existing containment registry and comments, including
-the new Application's detached administrative completion observer. Preserve error
-propagation; do not add duplicate logs. Check all remaining fast release gates
-and complete cheap preflight before the next attempt. The annotation/registry correction is pushed as `bf7321897`; containment,
-its five checker tests, four focused behavior cases and scoped checks pass.
-Production-dependency and release-readiness checks also pass. Complete preflight now passes again, including every fast release check and
-2,525 combined tests. The third full-gate attempt is authorized. A transient
-copyright scan of concurrent generation staging files was resolved by sequencing
-the checks; no source change or checker exemption was needed.
-
-Current implementation: Application assembles all Bounded Contexts and shared
-query routes before activation. The singleton, public completeSetup, direct
-Bounded Context construction, Server.add and tenant-index overrides are removed.
-Shared endpoints, managed/browser processes, tenant preparation, retryable cleanup,
-BlackBox and maintained examples use the accepted Application contract directly.
-The JVM comparison also corrected repeated configuration calls: each use/under
-preserves other settings, captures the supplied object, and rejects use after
-build. Its regression failed before the fix and passes afterward.
-
-Verification completed:
-
-- Provider checkpoint `2a49166c3` is committed and pushed. All 159 focused provider
-  tests pass after independent review; subsequent PostgreSQL method-length cleanup
-  preserves behavior and awaits the Application commit.
-- Disposable live checks pass: PostgreSQL 16 and 18 (33 selected cases each), MySQL
-  8.4 (37), and Datastore emulator (21). Five cross-provider/engine cases are skipped
-  in each configured suite. Separate Agent persistence checks pass for PostgreSQL
-  (2), MySQL (3), and Datastore (4).
-- Adapted live examples pass: native PostgreSQL preparation (3), Agent interruption
-  recovery (6), Orders PostgreSQL restart (4), Orders Datastore tenant isolation
-  (1), and Fieldnotes PostgreSQL persistence/restart/paging (6). All task-only
-  containers were removed; existing services and data were untouched.
-- Combined server/testing suites pass 2,515 tests, with 15 skipped tests and three
-  skipped files. The added Application kernel regressions pass all 30 cases:
-  default-index failed close retries, retained failed-opening cleanup, and
-  administrative rejection after closure. These cases required no runtime fix.
-- Changed-file formatting, ESLint, whitespace, cleanup, TSDoc, affected build and
-  full tooling typecheck pass. Fixture-generation contracts pass 29 tests.
-  API documentation, audience checks, all Markdown TypeScript snippets and changed
-  Mermaid parse checks pass.
-- Selected changed-production-file coverage: 93.89% lines, 92.28% statements,
-  96.29% functions and 85.47% branches before the final three regressions. Its
-  inherited global branch threshold made the scoped command exit nonzero. This
-  does not establish full-repository coverage. The release gate must still reach
-  at least 90% in all four metrics; no threshold is changed. Application had
-  98.22% line coverage. Remaining invalid-object guards and unreachable internal
-  invariants do not justify tests that merely mirror implementation.
-
-Remaining estimate: 0.75–1.5 hours for release verification, any gate corrections,
-version commits and remote synchronization. Use
-`verify:release` because this changes shared runtime, public contracts and callers.
-Run it once after review convergence; a failed gate returns to cheap preflight
-before another attempt.
-
-The Build workflow runs on pull requests, not feature-branch pushes or manual
-dispatch. No final-SHA Build run exists. Finish local work and pushes before
-seeking any necessary PR publication approval. No PR or issue mutation is
-currently authorized.
-
-Remaining work:
-
-1. Run the release gate, including global coverage, and resolve any gate failures.
-2. Commit and push the internal dependency pins, lockfile and final acceptance
-   record, then verify the remote SHA.
-3. Request only the approval needed to start required PR-only CI after local work
-   is ready.
+- Server/testing suites: 2,525 passing tests, 15 intentional skips. Focused
+  integration tests also check concurrent broker readiness and complete cleanup.
+- Disposable live checks: PostgreSQL 16 and 18, MySQL 8.4, Datastore emulator,
+  Agent persistence, native preparation, Orders restart/tenant isolation and
+  Fieldnotes persistence/restart/paging all pass. Task-only containers are removed.
+- Full static build, tooling typecheck, lint, formatting, cleanup, TSDoc, copyright,
+  time-read, documentation API/audience/snippets, fixture generation, generated
+  consistency, logging containment, production dependency and readiness checks pass.
+  Changed Mermaid diagrams were parse-checked.
+- Changed-source coverage was inspected before review, with focused lifecycle
+  regressions added. This is not a substitute for global coverage. The required
+  release gate must still establish at least 90% in all four metrics.
 
 ### Remaining release corrections
 
-The third full gate passed static checks but failed 15 tests in six files.
-Isolated clean-build tests check out HEAD, so release metadata must be committed
-before they can observe the prepared version alignment. Commit and push the
-internal pins, lockfile, Proto manifests and generation markers now.
+The latest full gate passed static checks but exposed 15 test failures in six files.
+Isolated clean-build tests check out HEAD, so the release metadata alignment is
+now committed and pushed before their focused rerun.
 
-Existing implementer function `application_caller_corrections` is dispatched with
-explicit gpt-6-sol / medium for Fieldnotes host profile isolation, Orders cleanup
-spy receiver and delivery-client child-process failures. The earlier external
-caller agent is unavailable in the current surface. Scope is those three callers
-and their tests/fixtures, with no unrelated production edits.
-`application_server_tests`, existing implementer gpt-6-sol / medium, receives
-the PostgreSQL connection test failure: verify the fresh-check behavior and
-resource-release assertions before correcting the test. No provider production
-change without reporting evidence. These assignments must not spawn children.
-Configured profiles are explicit; hidden runtime metadata is unavailable.
-Remaining estimate is 1–2 hours for corrections, focused checks, repeated cheap
-preflight, full release verification and synchronization.
+| Assignment                                                | Explicit profile   | Bounded responsibility                                                                                                                                         |
+| --------------------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| application_caller_corrections, existing implementer role | gpt-6-sol / medium | Fieldnotes profile isolation, Orders cleanup spy receiver, delivery-client child-process failures. Earlier caller agent is unavailable on the current surface. |
+| application_server_tests, existing implementer role       | gpt-6-sol / medium | PostgreSQL connection test expectations for repeated compatibility checks and resource release.                                                                |
+| application_preflight, mechanical verification function   | gpt-6-luna / low   | Isolated clean-build tests, then complete cheap preflight and release gate after correction convergence.                                                       |
+
+All profiles were explicit dispatch fields. Runtime introspection is unavailable.
+No children or overlapping production edits are allowed. Do not weaken guards,
+expected failure behavior, coverage thresholds or provider checks to pass tests.
+Caller and provider corrections pass 48 focused tests, scoped formatting/lint and
+tooling typecheck. Fieldnotes resets the deployment profile between tests; the
+Orders spy resumes the actual instance method after its deliberate failure; the
+delivery fixture explicitly supplies and closes its storage factory. PostgreSQL
+assertions verify fresh checks, index queries and temporary-pool release on every
+call. These are test/fixture corrections; production semantics are unchanged.
+No specialist re-review is needed for this mechanical correction batch.
+Remaining estimate: 1–2 hours for preflight, release verification and synchronization.
+
+Selected final profile: `verify:release`, because the change affects shared runtime,
+public contracts and maintained callers. After any failed gate, complete the cheap
+preflight again before another full attempt. Generation staging and repository
+scans run sequentially to avoid inspecting temporary generated directories.
+
+Remaining work:
+
+1. Resolve the focused failure batch and complete cheap preflight.
+2. Pass the full release gate, including global coverage and Node tests.
+3. Push final corrections and acceptance evidence, then verify the remote SHA.
+4. Obtain only the approval needed for required PR-only CI. The Build workflow
+   runs on pull requests; no final-SHA Build run or open task PR exists. No PR or
+   issue mutation is authorized. Finish local work before requesting publication.
