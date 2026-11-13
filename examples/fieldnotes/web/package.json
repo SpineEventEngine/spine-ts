@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/example-fieldnotes-web",
-  "version": "2.0.0-snapshot.30",
+  "version": "2.0.0-snapshot.31",
   "private": true,
   "type": "module",
   "scripts": {
