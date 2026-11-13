@@ -1,8 +1,8 @@
 {
   "formatVersion": 2,
-  "generationId": "892368a8-67a3-4974-85cd-eeedfb28b798",
+  "generationId": "a52e9e0e1ad565e09805b9ddd45cd29fe723e4ff9b7e5c5f443b713bee594a8a",
   "packageName": "@spine-event-engine/server-test-fixtures",
-  "packageVersion": "2.0.0-snapshot.30",
+  "packageVersion": "2.0.0-snapshot.31",
   "protoFiles": [
     "entity-metadata/empty.proto",
     "entity-metadata/invalid-column.proto",

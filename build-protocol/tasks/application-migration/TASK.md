@@ -12,7 +12,7 @@ Estimated uninterrupted agent work: 10–16 hours, including focused tests,
 maintained examples and API documentation, independent review, and release checks.
 This record keeps accepted requirements and remaining work, not the discarded
 proposal or review transcripts. Implementation and focused review are accepted;
-final release verification, version commits and exact-SHA CI remain.
+final release verification, dependency-pin commit and exact-SHA CI remain.
 
 ## Human-imposed requirements ledger
 
@@ -221,10 +221,31 @@ Bounded Context, domain-correct ProjectCreated metadata, empty withdrawals and
 complete publisher cleanup. All 49 focused integration tests also pass. No
 production change was needed for that assertion correction.
 
-The next common version `2.0.0-snapshot.31` is unpublished for all 21 public
-workspace packages, verified directly against npm. All 41 manifests are still at
-`.30`; no version commit has been made yet. Official master was fetched again and
-remains the recorded baseline.
+Implementation commit `81166c4fb` and version-only commit `d867c3f1f` are pushed
+to the official task branch. All 41 workspace manifests now use
+`2.0.0-snapshot.31`, verified unpublished for all 21 public packages. The 109
+internal dependency pins and corresponding lockfile specifiers are prepared for
+their separate commit. No external dependency version changed, and frozen
+installation succeeds. Official master was fetched again and remains the recorded
+baseline. The first release-gate attempt stopped during generation because the tracked
+Proto manifests still declared `.30`. No later gate ran. Align the 12 model
+manifests and their generation markers with `.31` using the existing
+`generationIdForContents` helper, following prior snapshot metadata refreshes.
+This changes release metadata only. Repeated full lint also found one stale
+await in the maintained Todo documentation example; it now passes the synchronous
+Bounded Context builder directly to BlackBox.from(). Normal generation and the complete repeated cheap preflight now pass, including
+29 fixture checks, generated-content consistency, full lint/format/docs/build
+checks and 2,525 combined tests. The second full-gate attempt reached logging containment and stopped on two
+missing annotations and the retired environment-reset binding. The runtime
+implementer will update the existing containment registry and comments, including
+the new Application's detached administrative completion observer. Preserve error
+propagation; do not add duplicate logs. Check all remaining fast release gates
+and complete cheap preflight before the next attempt. The annotation/registry correction is pushed as `bf7321897`; containment,
+its five checker tests, four focused behavior cases and scoped checks pass.
+Production-dependency and release-readiness checks also pass. Complete preflight now passes again, including every fast release check and
+2,525 combined tests. The third full-gate attempt is authorized. A transient
+copyright scan of concurrent generation staging files was resolved by sequencing
+the checks; no source change or checker exemption was needed.
 
 Current implementation: Application assembles all Bounded Contexts and shared
 query routes before activation. The singleton, public completeSetup, direct
@@ -277,9 +298,28 @@ currently authorized.
 
 Remaining work:
 
-1. Commit and push the reviewed implementation.
-2. Create and push the version-only commit for the unused common workspace
-   version, with internal dependency pins and lockfile updates in a separate commit.
-3. Run the release gate, including global coverage, then verify the final remote
-   SHA. Request only the approval needed to start required PR-only CI after local
-   work is ready.
+1. Run the release gate, including global coverage, and resolve any gate failures.
+2. Commit and push the internal dependency pins, lockfile and final acceptance
+   record, then verify the remote SHA.
+3. Request only the approval needed to start required PR-only CI after local work
+   is ready.
+
+### Remaining release corrections
+
+The third full gate passed static checks but failed 15 tests in six files.
+Isolated clean-build tests check out HEAD, so release metadata must be committed
+before they can observe the prepared version alignment. Commit and push the
+internal pins, lockfile, Proto manifests and generation markers now.
+
+Existing implementer function `application_caller_corrections` is dispatched with
+explicit gpt-6-sol / medium for Fieldnotes host profile isolation, Orders cleanup
+spy receiver and delivery-client child-process failures. The earlier external
+caller agent is unavailable in the current surface. Scope is those three callers
+and their tests/fixtures, with no unrelated production edits.
+`application_server_tests`, existing implementer gpt-6-sol / medium, receives
+the PostgreSQL connection test failure: verify the fresh-check behavior and
+resource-release assertions before correcting the test. No provider production
+change without reporting evidence. These assignments must not spawn children.
+Configured profiles are explicit; hidden runtime metadata is unavailable.
+Remaining estimate is 1–2 hours for corrections, focused checks, repeated cheap
+preflight, full release verification and synchronization.
