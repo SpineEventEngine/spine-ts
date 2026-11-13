@@ -60,10 +60,168 @@ import { NodeCoordinator } from "../../src/server/node-coordinator.js";
 import { Projection } from "../../src/entity/entity.js";
 import { Repository } from "../../src/repository/repository.js";
 import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import { GetProjectOverview_QuerySchema } from "../../test-fixtures/generated/repository-routing/project_queries_pb.js";
+import { ProjectIdSchema } from "../../test-fixtures/generated/repository-routing/project_identifiers_pb.js";
+import { serverTestFixturesProtoModule } from "../../test-fixtures/generated/proto-module.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 
 class ReviewProjectProjection extends Projection<string, typeof ProjectOverviewStateSchema> {}
+
+void serverTestFixturesProtoModule;
+
+it("requires an Application before either server startup mode", async () => {
+  const server = Server.atPort(0);
+  await expect(server.start()).rejects.toThrow(/requires setApplication/);
+  await expect(server.run()).rejects.toThrow(/requires setApplication/);
+});
+
+it("rejects a typed App Query before listener startup", async () => {
+  const application = await Application.newBuilder()
+    .setServerEnvironment(ServerEnvironment.newBuilder().build())
+    .add(BoundedContext.singleTenant("Tasks"))
+    .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+  const server = Server.atPort(0).setApplication(application);
+  const query = create(GetProjectOverview_QuerySchema, {
+    project: create(ProjectIdSchema, { value: "project-1" }),
+  });
+  const actorContext = create(ActorContextSchema, {
+    actor: create(UserIdSchema, { value: "reader" }),
+    timestamp: create(TimestampSchema, { seconds: 1n }),
+  });
+  try {
+    await expect(server.query(query, { actorContext })).rejects.toThrow(/running Server/);
+  } finally {
+    await application.close();
+  }
+});
+
+it("keeps a typed App Query pending until listener startup settles", async () => {
+  const application = await Application.newBuilder()
+    .setServerEnvironment(ServerEnvironment.newBuilder().build())
+    .add(BoundedContext.singleTenant("Tasks"))
+    .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+  const entered = Promise.withResolvers<undefined>();
+  const release = Promise.withResolvers<undefined>();
+  const failure = new Error("listener startup failed");
+  const server = Server.atPort(0)
+    .setApplication(application)
+    .addListenerLifecycle({
+      start: async () => {
+        entered.resolve(undefined);
+        await release.promise;
+        throw failure;
+      },
+      close: () => undefined,
+    });
+  const starting = server.start();
+  let pending: Promise<unknown> | undefined;
+  try {
+    const stage = await Promise.race([
+      entered.promise.then(() => "entered" as const),
+      starting.then(
+        () => "started" as const,
+        () => "failed" as const,
+      ),
+    ]);
+    expect(stage).toBe("entered");
+    const query = create(GetProjectOverview_QuerySchema, {
+      project: create(ProjectIdSchema, { value: "project-1" }),
+    });
+    const actorContext = create(ActorContextSchema, {
+      actor: create(UserIdSchema, { value: "reader" }),
+      timestamp: create(TimestampSchema, { seconds: 1n }),
+    });
+    pending = server.query(query, { actorContext });
+    let settled = false;
+    void pending.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(settled).toBe(false);
+    release.resolve(undefined);
+    await expect(starting).rejects.toBe(failure);
+    await expect(pending).rejects.toBe(failure);
+  } finally {
+    release.resolve(undefined);
+    const [outcome] = await Promise.allSettled([starting]);
+    if (outcome.status === "fulfilled") await outcome.value.close();
+    if (pending !== undefined) await Promise.allSettled([pending]);
+    await application.close();
+  }
+});
+
+it("rejects Application replacement during and after listener startup", async () => {
+  const seen: string[] = [];
+  const first = await Application.newBuilder()
+    .setServerEnvironment(ServerEnvironment.newBuilder().build())
+    .add(
+      BoundedContext.singleTenant("First").addCommandDispatcher({
+        messageSchemas: () => [CreateReviewProjectSchema],
+        dispatch: (command) => {
+          seen.push(command.id?.uuid ?? "missing");
+          return Promise.resolve();
+        },
+      }),
+    )
+    .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+  const second = await Application.newBuilder()
+    .setServerEnvironment(ServerEnvironment.newBuilder().build())
+    .add(BoundedContext.singleTenant("Second"))
+    .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+  const entered = Promise.withResolvers<undefined>();
+  const release = Promise.withResolvers<undefined>();
+  const server = Server.atPort(0)
+    .setApplication(first)
+    .addListenerLifecycle({
+      start: () => {
+        entered.resolve(undefined);
+        return release.promise;
+      },
+      close: () => undefined,
+    });
+  const starting = server.start();
+  await entered.promise;
+  let running: Awaited<typeof starting> | undefined;
+  try {
+    expect(() => server.setApplication(second)).toThrow(/cannot change after startup/);
+    release.resolve(undefined);
+    running = await starting;
+    expect(() => server.setApplication(second)).toThrow(/cannot change after startup/);
+    const commands = createClient(
+      CommandService,
+      createGrpcTransport({ baseUrl: running.baseUrl }),
+    );
+    const acknowledgement = await commands.post(
+      create(CommandSchema, {
+        id: create(CommandIdSchema, { uuid: "first-application" }),
+        context: create(CommandContextSchema, {
+          actorContext: create(ActorContextSchema, {
+            actor: create(UserIdSchema, { value: "reader" }),
+            timestamp: create(TimestampSchema, { seconds: 1n }),
+          }),
+        }),
+        message: AnyPacker.pack(
+          CreateReviewProjectSchema,
+          create(CreateReviewProjectSchema, { id: "project-1", name: "Review" }),
+        ),
+      }),
+    );
+    expect(acknowledgement.status?.status.case).toBe("ok");
+    expect(seen).toEqual(["first-application"]);
+  } finally {
+    release.resolve(undefined);
+    await Promise.allSettled([starting]);
+    await running?.close();
+    await first.close();
+    await second.close();
+  }
+});
 
 it("closes one endpoint while another serves the same Application", async () => {
   const application = await Application.newBuilder()
@@ -458,6 +616,42 @@ it("retries failed listener cleanup before Application storage closes", async ()
   await application.close();
   expect(closes).toBe(2);
   expect(storageClose).toHaveBeenCalledOnce();
+});
+
+it("keeps Application storage open until repeated listener cleanup succeeds", async () => {
+  const storage = new InMemoryStorageFactory();
+  const closeStorage = vi.spyOn(storage, "close");
+  const application = await Application.newBuilder()
+    .setServerEnvironment(
+      ServerEnvironment.newBuilder()
+        .under(EnvironmentType.Local, (setting) => {
+          setting.use({ storageFactory: storage });
+        })
+        .build(),
+    )
+    .add(BoundedContext.singleTenant("Tasks"))
+    .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+  let attempts = 0;
+  const server = Server.atPort(0)
+    .setApplication(application)
+    .addListenerLifecycle({
+      start: () => undefined,
+      close: () => {
+        if (++attempts < 3) throw new Error("listener close failed");
+      },
+    })
+    .addListenerLifecycle({
+      start: () => {
+        throw new Error("listener start failed");
+      },
+      close: () => undefined,
+    });
+  await expect(server.start()).rejects.toThrow(/lifecycle start and rollback failed/);
+  await expect(application.close()).rejects.toThrow(/listener cleanup failed/i);
+  expect(closeStorage).not.toHaveBeenCalled();
+  await expect(application.close()).resolves.toBeUndefined();
+  expect(attempts).toBe(3);
+  expect(closeStorage).toHaveBeenCalledOnce();
 });
 
 it("constructs a Production endpoint using its supplied Application environment", async () => {

@@ -553,6 +553,86 @@ describe("DatastoreStorageFactory", () => {
     expect(client.closed).toBe(false);
   });
 
+  it("checks only required Agent families without optional histories and retries a failed recheck", async () => {
+    const client = new MetadataClient();
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(
+      new TypeRegistry([SupportReplyAgentIdSchema, SupportReplyAgentStateSchema]),
+    );
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const input = entityInput() as unknown as EntityStoragePreparationInput<
+      SupportReplyAgentId,
+      SupportReplyAgentState
+    >;
+    const preparation = StoragePreparations.for(factory);
+    const failure = new Error("Agent metadata temporarily unavailable");
+    try {
+      await preparation.prepareAgentCommit(input, "check");
+      expect(client.queries).toHaveLength(4);
+      client.failQueryNumber = 5;
+      client.queryFailure = failure;
+      await expect(preparation.prepareAgentCommit(input, "check")).rejects.toBe(failure);
+      expect(client.queries).toHaveLength(5);
+      client.failQueryNumber = undefined;
+      await expect(preparation.prepareAgentCommit(input, "check")).resolves.toBeUndefined();
+      expect(client.queries).toHaveLength(9);
+      expect(client.writes).toBe(0);
+    } finally {
+      await factory.close();
+    }
+    expect(client.closed).toBe(false);
+  });
+
+  it("rejects custom Agent Entity storage before native transaction preparation", async () => {
+    const client = new MetadataClient();
+    let created = false;
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .useEntityStorage(SupportReplyAgentStateSchema, () => {
+        created = true;
+        return {} as never;
+      })
+      .build();
+    const input = entityInput() as unknown as EntityStoragePreparationInput<
+      SupportReplyAgentId,
+      SupportReplyAgentState
+    >;
+    try {
+      await expect(
+        StoragePreparations.for(factory).prepareAgentCommit(input, "check"),
+      ).rejects.toThrow(
+        "Custom Datastore Entity storage does not support native Agent transactions.",
+      );
+      expect(created).toBe(false);
+      expect(client.queries).toEqual([]);
+    } finally {
+      await factory.close();
+    }
+  });
+
+  it("rejects mismatched Agent query columns before native metadata access", async () => {
+    const client = new MetadataClient();
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .build();
+    const base = entityInput();
+    const input = {
+      ...base,
+      columns: [new RecordColumn("priority", ColumnTypes.scalar(ScalarType.INT32), () => 1)],
+    } as unknown as EntityStoragePreparationInput<SupportReplyAgentId, SupportReplyAgentState>;
+    try {
+      await expect(
+        StoragePreparations.for(factory).prepareAgentCommit(input, "check"),
+      ).rejects.toThrow("Datastore Entity query columns differ from current records.");
+      expect(client.queries).toEqual([]);
+    } finally {
+      await factory.close();
+    }
+  });
+
   it("selects exact custom preparation and rejects a custom Entity without its callback", async () => {
     const calls: string[] = [];
     const client = new MetadataClient();

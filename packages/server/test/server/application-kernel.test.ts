@@ -76,6 +76,15 @@ it("merges profile settings by field and rejects retained configurator use after
   expect(() => retained?.use({ storageFactory: replacement })).toThrow(/already used/i);
 });
 
+it("rejects new profile configuration after environment build without invoking its callback", async () => {
+  const builder = ServerEnvironment.newBuilder();
+  const environment = builder.build();
+  const configure = vi.fn();
+  expect(() => builder.under(EnvironmentType.Local, configure)).toThrow(/already used/);
+  expect(configure).not.toHaveBeenCalled();
+  await environment.close();
+});
+
 it("rejects asynchronous profile configuration before a late use can change settings", async () => {
   const late = Promise.withResolvers<undefined>();
   const storage = new InMemoryStorageFactory();
@@ -132,6 +141,65 @@ it("rejects repeated Bounded Context names before connecting storage", async () 
   expect(connection).not.toHaveBeenCalled();
 });
 
+it("rejects a transport without initialization before checking storage", async () => {
+  const storage = new InMemoryStorageFactory();
+  const checkConnection = vi.spyOn(storage, "checkConnection");
+  const closeStorage = vi.spyOn(storage, "close");
+  const closeTransport = vi.fn(() => Promise.resolve());
+  const builder = Application.newBuilder()
+    .setServerEnvironment(
+      ServerEnvironment.newBuilder()
+        .under(EnvironmentType.Local, (setting) => {
+          setting.use({
+            storageFactory: storage,
+            integrationChannelFactory: { close: closeTransport } as never,
+          });
+        })
+        .build(),
+    )
+    .add(BoundedContext.singleTenant("Tasks"));
+  await expect(builder.build()).rejects.toThrow(/TransportFactory.initialize is required/);
+  expect(checkConnection).not.toHaveBeenCalled();
+  expect(closeTransport).toHaveBeenCalledOnce();
+  expect(closeStorage).toHaveBeenCalledOnce();
+});
+
+it("rejects an Application without Bounded Contexts before opening storage", async () => {
+  const storage = new InMemoryStorageFactory();
+  const checkConnection = vi.spyOn(storage, "checkConnection");
+  const builder = Application.newBuilder().setServerEnvironment(
+    ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (setting) => {
+        setting.use({ storageFactory: storage });
+      })
+      .build(),
+  );
+  await expect(builder.build()).rejects.toThrow(/requires a Bounded Context/);
+  expect(checkConnection).not.toHaveBeenCalled();
+  await builder.close();
+});
+
+it("rejects incomplete remote Delivery ports and closes shared storage", async () => {
+  const storage = new InMemoryStorageFactory();
+  const closeStorage = vi.spyOn(storage, "close");
+  const closeRemote = vi.fn(() => Promise.resolve());
+  const builder = Application.newBuilder()
+    .setServerEnvironment(
+      ServerEnvironment.newBuilder()
+        .under(EnvironmentType.Local, (setting) => {
+          setting.use({
+            storageFactory: storage,
+            delivery: { open: () => Promise.resolve(), close: closeRemote },
+          });
+        })
+        .build(),
+    )
+    .add(BoundedContext.singleTenant("Tasks"));
+  await expect(builder.build()).rejects.toThrow(/requires inbox and workRegistry ports/);
+  expect(closeRemote).toHaveBeenCalledOnce();
+  expect(closeStorage).toHaveBeenCalledOnce();
+});
+
 it("retires an Application builder after preflight failure or unused close", async () => {
   const failed = Application.newBuilder().add(BoundedContext.singleTenant("Tasks"));
   await expect(failed.build()).rejects.toThrow(/ServerEnvironment/);
@@ -142,6 +210,19 @@ it("retires an Application builder after preflight failure or unused close", asy
   const unused = Application.newBuilder();
   await unused.close();
   expect(() => unused.add(BoundedContext.singleTenant("Later"))).toThrow(/already used/i);
+});
+
+it("keeps a built Application active when its retired builder is closed", async () => {
+  const builder = Application.newBuilder()
+    .setServerEnvironment(ServerEnvironment.newBuilder().build())
+    .add(BoundedContext.singleTenant("Tasks"));
+  const application = await builder.build({
+    createStorageStructures: false,
+    startSubscriptionMonitoring: false,
+  });
+  await expect(builder.close()).rejects.toThrow(/built Application/);
+  expect(application.contexts()[0]?.stand()).toBeDefined();
+  await application.close();
 });
 
 it("does not release an environment claim while its Application build is pending", async () => {
@@ -449,6 +530,79 @@ it("retains environment storage when a Bounded Context close fails", async () =>
   expect(storageClose).not.toHaveBeenCalled();
 });
 
+it("reports two Bounded Context close failures and retries both before shared storage", async () => {
+  const storage = new InMemoryStorageFactory();
+  const closeStorage = vi.spyOn(storage, "close");
+  const firstRegistry = new InMemorySubscriptionRegistry();
+  const secondRegistry = new InMemorySubscriptionRegistry();
+  const closeFirst = vi
+    .spyOn(firstRegistry, "close")
+    .mockRejectedValueOnce(new Error("first registry close failed"));
+  const closeSecond = vi
+    .spyOn(secondRegistry, "close")
+    .mockRejectedValueOnce(new Error("second registry close failed"));
+  const application = await Application.newBuilder()
+    .setServerEnvironment(
+      ServerEnvironment.newBuilder()
+        .under(EnvironmentType.Local, (setting) => {
+          setting.use({ storageFactory: storage });
+        })
+        .build(),
+    )
+    .add(BoundedContext.singleTenant("First").withSubscriptionRegistry(firstRegistry))
+    .add(BoundedContext.singleTenant("Second").withSubscriptionRegistry(secondRegistry))
+    .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+  const failure = await application.close().catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(AggregateError);
+  expect((failure as AggregateError).errors).toHaveLength(2);
+  expect(closeStorage).not.toHaveBeenCalled();
+  await expect(application.close()).resolves.toBeUndefined();
+  expect(closeFirst).toHaveBeenCalledTimes(2);
+  expect(closeSecond).toHaveBeenCalledTimes(2);
+  expect(closeStorage).toHaveBeenCalledOnce();
+});
+
+it("retries required-startup facility cleanup after automatic and builder retries fail", async () => {
+  const storage = new InMemoryStorageFactory();
+  const provider = StoragePreparations.for(storage);
+  const startup = new Error("required startup preparation failed");
+  StoragePreparations.register(storage, {
+    supportsRecordIndexes: provider.supportsRecordIndexes === true,
+    prepareRecord: () => Promise.reject(startup),
+    prepareEntity: provider.prepareEntity.bind(provider),
+    prepareAgentHistory: provider.prepareAgentHistory.bind(provider),
+    prepareAgentCommit: provider.prepareAgentCommit.bind(provider),
+  });
+  const originalClose = storage.close.bind(storage);
+  let closeAttempts = 0;
+  const closeStorage = vi.spyOn(storage, "close").mockImplementation(() => {
+    if (++closeAttempts < 5) return Promise.reject(new Error("facility close failed"));
+    return originalClose();
+  });
+  const environment = ServerEnvironment.newBuilder()
+    .under(EnvironmentType.Local, (setting) => {
+      setting.use({ storageFactory: storage });
+    })
+    .build();
+  const builder = Application.newBuilder()
+    .setServerEnvironment(environment)
+    .add(BoundedContext.singleTenant("Tasks"));
+  const buildFailure = await builder.build().catch((error: unknown) => error);
+  expect(buildFailure).toBeInstanceOf(AggregateError);
+  expect(closeStorage).toHaveBeenCalledTimes(2);
+  await expect(builder.close()).rejects.toThrow(/Environment retry cleanup failed/);
+  expect(closeStorage).toHaveBeenCalledTimes(3);
+  await expect(environment.close()).rejects.toThrow(/required|startup/i);
+  expect(closeStorage).toHaveBeenCalledTimes(3);
+  const retryFailure = await environment.close().catch((error: unknown) => error);
+  expect(retryFailure).toBeInstanceOf(AggregateError);
+  expect(closeStorage).toHaveBeenCalledTimes(4);
+  await expect(environment.close()).rejects.toBe(startup);
+  expect(closeStorage).toHaveBeenCalledTimes(5);
+  await builder.close();
+  expect(closeStorage).toHaveBeenCalledTimes(5);
+});
+
 it("keeps the environment open until a failed tenant index close is retried", async () => {
   const storage = new InMemoryStorageFactory();
   const closeStorage = vi.spyOn(storage, "close");
@@ -566,6 +720,73 @@ it("rejects Application structure operations after close before provider prepara
   await expect(application.createStorageStructures()).rejects.toThrow(/Application is closed/);
   await expect(application.checkStructureCompatibility()).rejects.toThrow(/Application is closed/);
   expect(prepareCalls).toBe(before);
+});
+
+it("rejects structure preparation after its final Bounded Context closes", async () => {
+  const storage = new InMemoryStorageFactory();
+  const createRecord = vi.spyOn(storage, "createRecordStorage");
+  const application = await Application.newBuilder()
+    .setServerEnvironment(
+      ServerEnvironment.newBuilder()
+        .under(EnvironmentType.Local, (setting) => {
+          setting.use({ storageFactory: storage });
+        })
+        .build(),
+    )
+    .add(BoundedContext.singleTenant("Tasks"))
+    .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+  const context = application.contexts()[0];
+  if (context === undefined) throw new Error("Expected Tasks Bounded Context.");
+  await context.close();
+  const opened = createRecord.mock.calls.length;
+  await expect(application.checkStructureCompatibility()).rejects.toThrow(
+    /no open Bounded Context/,
+  );
+  expect(createRecord).toHaveBeenCalledTimes(opened);
+  await application.close();
+});
+
+it("drains a failing administrative preparation before closing shared storage", async () => {
+  const storage = new InMemoryStorageFactory();
+  const closeStorage = vi.spyOn(storage, "close");
+  const provider = StoragePreparations.for(storage);
+  const entered = Promise.withResolvers<undefined>();
+  const release = Promise.withResolvers<undefined>();
+  const failure = new Error("administrative preparation failed");
+  let fail = false;
+  StoragePreparations.register(storage, {
+    supportsRecordIndexes: provider.supportsRecordIndexes === true,
+    prepareRecord: async (context, spec, group, mode) => {
+      if (fail) {
+        entered.resolve(undefined);
+        await release.promise;
+        throw failure;
+      }
+      await provider.prepareRecord(context, spec, group, mode);
+    },
+    prepareEntity: provider.prepareEntity.bind(provider),
+    prepareAgentHistory: provider.prepareAgentHistory.bind(provider),
+    prepareAgentCommit: provider.prepareAgentCommit.bind(provider),
+  });
+  const application = await Application.newBuilder()
+    .setServerEnvironment(
+      ServerEnvironment.newBuilder()
+        .under(EnvironmentType.Local, (setting) => {
+          setting.use({ storageFactory: storage });
+        })
+        .build(),
+    )
+    .add(BoundedContext.singleTenant("Tasks"))
+    .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+  fail = true;
+  const preparing = application.createStorageStructures();
+  await entered.promise;
+  const closing = application.close();
+  expect(closeStorage).not.toHaveBeenCalled();
+  release.resolve(undefined);
+  await expect(preparing).rejects.toBe(failure);
+  await expect(closing).resolves.toBeUndefined();
+  expect(closeStorage).toHaveBeenCalledOnce();
 });
 
 it("prepares an explicit valid tenant without requiring index membership", async () => {

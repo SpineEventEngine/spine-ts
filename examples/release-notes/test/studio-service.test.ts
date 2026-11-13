@@ -30,7 +30,7 @@ import {
 } from "@spine-event-engine/client-node";
 import { AnyPacker } from "@spine-event-engine/core";
 import type { Topic } from "@spine-event-engine/proto/client";
-import { Application, BoundedContext } from "@spine-event-engine/server";
+import { Application, BoundedContext, SpineServices } from "@spine-event-engine/server";
 
 import {
   EditReleaseNotesSchema,
@@ -867,6 +867,38 @@ it("closes the Application when its Bounded Context is unavailable", async () =>
   } finally {
     contexts.mockRestore();
     closeApplication.mockRestore();
+  }
+});
+
+it("preserves client setup and Application cleanup failures after assembly", async () => {
+  const setupFailure = new Error("Client setup failed.");
+  const cleanupFailure = new Error("Application cleanup failed.");
+  const register = vi.spyOn(SpineServices.prototype, "register").mockImplementationOnce(() => {
+    throw setupFailure;
+  });
+  let applicationClosed = false;
+  const close = vi.spyOn(Application.prototype, "close").mockImplementationOnce(async function (
+    this: Application,
+  ) {
+    close.mockRestore();
+    await this.close();
+    applicationClosed = true;
+    throw cleanupFailure;
+  });
+  try {
+    const failure = await ReleaseStudio.start({
+      gitExecutable: "git",
+      workerExecutable: process.execPath,
+      workerPath: resolve("examples/release-notes/dist/src/trusted/git-worker-main.js"),
+      workerCwd: process.cwd(),
+      plan: { activeBinding: () => Promise.resolve(undefined) },
+    }).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([setupFailure, cleanupFailure]);
+    expect(applicationClosed).toBe(true);
+  } finally {
+    register.mockRestore();
+    close.mockRestore();
   }
 });
 

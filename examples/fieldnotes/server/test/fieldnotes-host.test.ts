@@ -14,6 +14,7 @@
 
 import { randomBytes } from "node:crypto";
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:net";
 import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport, createGrpcTransport } from "@connectrpc/connect-node";
@@ -103,6 +104,31 @@ describe("Fieldnotes host private Connect boundary", () => {
     expect(factory.isOpen()).toBe(false);
   });
 
+  it("closes the native Application when the browser listener cannot start", async () => {
+    const listener = createServer();
+    await new Promise<void>((resolve) => listener.listen(0, "127.0.0.1", resolve));
+    const address = listener.address();
+    if (address === null || typeof address === "string")
+      throw new Error("Expected a browser listener port.");
+    const factory = new InMemoryStorageFactory();
+    const closeApplication = vi.spyOn(Application.prototype, "close");
+    try {
+      await expect(
+        FieldnotesHost.open(settings(), { storageFactory: factory, gatewayPort: address.port }),
+      ).rejects.toThrow();
+      expect(closeApplication).toHaveBeenCalledOnce();
+      expect(factory.isOpen()).toBe(false);
+    } finally {
+      closeApplication.mockRestore();
+      await new Promise<void>((resolve, reject) => {
+        listener.close((error) => {
+          if (error === undefined) resolve();
+          else reject(error);
+        });
+      });
+    }
+  });
+
   it("rejects production test injection, missing provider launch and emulator configuration", async () => {
     EnvironmentTests.use(EnvironmentType.Production);
     const selected = settings();
@@ -148,6 +174,25 @@ describe("Fieldnotes host private Connect boundary", () => {
       });
     } finally {
       failing.mockRestore();
+    }
+  });
+
+  it("retains the Application when browser listener close fails, then retries cleanup", async () => {
+    const factory = new InMemoryStorageFactory();
+    const host = await FieldnotesHost.open(settings(), { storageFactory: factory });
+    const gatewayClose = host.gateway.close.bind(host.gateway);
+    const close = vi.spyOn(host.gateway, "close").mockImplementationOnce(async () => {
+      await gatewayClose();
+      throw new Error("browser listener close failed");
+    });
+    try {
+      await expect(host.close()).rejects.toThrow("Fieldnotes listener close failed");
+      expect(factory.isOpen()).toBe(true);
+      await expect(host.close()).resolves.toBeUndefined();
+      expect(factory.isOpen()).toBe(false);
+    } finally {
+      close.mockRestore();
+      if (factory.isOpen()) await host.close();
     }
   });
 

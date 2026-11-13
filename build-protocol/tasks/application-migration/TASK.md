@@ -12,7 +12,7 @@ Estimated uninterrupted agent work: 10–16 hours, including focused tests,
 maintained examples and API documentation, independent review, and release checks.
 This record keeps accepted requirements and remaining work, not the discarded
 proposal or review transcripts. Implementation and focused review are accepted;
-final release verification and exact-SHA CI remain.
+local release verification is accepted; exact-SHA CI remains.
 
 ## Human-imposed requirements ledger
 
@@ -202,55 +202,53 @@ Commit `64a53cef9` aligns 109 internal pins, lockfile specifiers, 12 Proto
 manifests and five generation markers. External dependency versions are unchanged.
 Frozen installation succeeds. Both commits are pushed to the official branch.
 
+### Verification and final corrections
+
+Additional bounded assignments used explicit profiles; runtime introspection was
+unavailable. Each assignment kept disjoint test paths and spawned no children.
+
+| Assignment                     | Existing role or function            | Explicit profile   | Disposition                                                                    |
+| ------------------------------ | ------------------------------------ | ------------------ | ------------------------------------------------------------------------------ |
+| application_caller_corrections | implementer                          | gpt-6-sol / medium | Caller setup and example startup/cleanup regressions pass.                     |
+| application_server_tests       | implementer                          | gpt-6-sol / medium | Provider preparation concurrency, retry and resource-release regressions pass. |
+| application_implementation     | implementer                          | gpt-6-sol / medium | Application/environment and endpoint lifecycle regressions pass.               |
+| application_regression_review  | performance_reliability_reviewer     | gpt-6-sol / medium | Barrier cleanup finding resolved and accepted in focused re-review.            |
+| application_preflight          | Orchestrator mechanical verification | gpt-6-luna / low   | Cheap preflight and full release gate pass.                                    |
+
+Final test corrections cover independent deployment-profile setup, instance-bound
+cleanup spies, explicit delivery-fixture storage, fresh provider checks and
+release metadata in isolated HEAD builds. Added lifecycle tests cover required
+startup failure, retryable cleanup, pending queries, fixed endpoint Application
+configuration, provider check concurrency and example startup rollback. Barrier
+tests observe early operation completion/failure and always release, settle and
+clean up without adding timeouts. Runtime contracts and coverage thresholds are
+unchanged by this correction batch.
+
 Verification evidence:
 
-- Server/testing suites: 2,525 passing tests, 15 intentional skips. Focused
-  integration tests also check concurrent broker readiness and complete cleanup.
-- Disposable live checks: PostgreSQL 16 and 18, MySQL 8.4, Datastore emulator,
-  Agent persistence, native preparation, Orders restart/tenant isolation and
-  Fieldnotes persistence/restart/paging all pass. Task-only containers are removed.
-- Full static build, tooling typecheck, lint, formatting, cleanup, TSDoc, copyright,
+- Disposable live checks pass for PostgreSQL 16 and 18, MySQL 8.4 and the
+  Datastore emulator, including Agent persistence, native preparation, Orders
+  restart/tenant isolation and Fieldnotes persistence/restart/paging. Task-only
+  containers are removed.
+- Full static build, tooling, lint, formatting, cleanup, TSDoc, copyright,
   time-read, documentation API/audience/snippets, fixture generation, generated
-  consistency, logging containment, production dependency and readiness checks pass.
-  Changed Mermaid diagrams were parse-checked.
-- Changed-source coverage was inspected before review, with focused lifecycle
-  regressions added. This is not a substitute for global coverage. The required
-  release gate must still establish at least 90% in all four metrics.
+  consistency, logging containment, dependency and readiness checks pass. Changed
+  Mermaid diagrams were parse-checked.
+- `pnpm verify:release` passes: 466 Vitest files pass, six are intentionally skipped;
+  7,318 tests pass and 29 are intentionally skipped. All 44 Node tests pass, along
+  with the 29 Proto fixture tests.
+- Global coverage passes unchanged thresholds: statements 93.46%, branches 90.00%,
+  functions 95.51%, lines 95.34%. No threshold, exclusion or production code was
+  changed for coverage.
+- The complete cheap preflight was repeated after correction convergence and is
+  clean. The bounded reliability re-review has no remaining finding.
 
-### Remaining release corrections
-
-The latest full gate passed static checks but exposed 15 test failures in six files.
-Isolated clean-build tests check out HEAD, so the release metadata alignment is
-now committed and pushed before their focused rerun.
-
-| Assignment                                                | Explicit profile   | Bounded responsibility                                                                                                                                         |
-| --------------------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| application_caller_corrections, existing implementer role | gpt-6-sol / medium | Fieldnotes profile isolation, Orders cleanup spy receiver, delivery-client child-process failures. Earlier caller agent is unavailable on the current surface. |
-| application_server_tests, existing implementer role       | gpt-6-sol / medium | PostgreSQL connection test expectations for repeated compatibility checks and resource release.                                                                |
-| application_preflight, mechanical verification function   | gpt-6-luna / low   | Isolated clean-build tests, then complete cheap preflight and release gate after correction convergence.                                                       |
-
-All profiles were explicit dispatch fields. Runtime introspection is unavailable.
-No children or overlapping production edits are allowed. Do not weaken guards,
-expected failure behavior, coverage thresholds or provider checks to pass tests.
-Caller and provider corrections pass 48 focused tests, scoped formatting/lint and
-tooling typecheck. Fieldnotes resets the deployment profile between tests; the
-Orders spy resumes the actual instance method after its deliberate failure; the
-delivery fixture explicitly supplies and closes its storage factory. PostgreSQL
-assertions verify fresh checks, index queries and temporary-pool release on every
-call. These are test/fixture corrections; production semantics are unchanged.
-No specialist re-review is needed for this mechanical correction batch.
-Remaining estimate: 1–2 hours for preflight, release verification and synchronization.
-
-Selected final profile: `verify:release`, because the change affects shared runtime,
-public contracts and maintained callers. After any failed gate, complete the cheap
-preflight again before another full attempt. Generation staging and repository
-scans run sequentially to avoid inspecting temporary generated directories.
+Selected final profile: `verify:release`, because this changes shared runtime,
+public contracts and maintained callers. Local acceptance is complete after the
+clean release gate and focused review. Participating assignments have completed.
 
 Remaining work:
 
-1. Resolve the focused failure batch and complete cheap preflight.
-2. Pass the full release gate, including global coverage and Node tests.
-3. Push final corrections and acceptance evidence, then verify the remote SHA.
-4. Obtain only the approval needed for required PR-only CI. The Build workflow
+1. Obtain only the approval needed for required PR-only CI. The Build workflow
    runs on pull requests; no final-SHA Build run or open task PR exists. No PR or
    issue mutation is authorized. Finish local work before requesting publication.
