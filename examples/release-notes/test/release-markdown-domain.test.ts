@@ -20,13 +20,10 @@ import { EventContextSchema, UserIdSchema, VersionSchema } from "@spine-event-en
 import { TargetSchema, TopicIdSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { SignalMetadata } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { AiTestBackend, BlackBox } from "@spine-event-engine/testing";
-import { afterEach, expect, test } from "vitest";
-import { ServerTests } from "@spine-event-engine/server/testing";
+import { AiTestBackend } from "@spine-event-engine/testing";
+import { ReleaseTestSession } from "./release-test-session.js";
+import { expect, test } from "vitest";
 
-afterEach(async () => {
-  await ServerTests.resetEnvironment();
-});
 import {
   CancelReleaseGenerationSchema,
   ChangeReleaseInputsSchema,
@@ -75,7 +72,7 @@ const comparison = create(ReleaseComparisonSchema, {
 });
 const encoder = new TextEncoder();
 
-const contextForTest = async () => {
+const contextForTest = () => {
   const backend = AiTestBackend.create({
     ref: ModelRef.of("release-scripted", "v1"),
     kind: "generation",
@@ -94,12 +91,12 @@ const contextForTest = async () => {
     concurrentOperations: 1,
     queuedOperations: 0,
   }).register(backend.registration);
-  return ReleaseNotesContext.create(registry, new InMemoryStorageFactory());
+  return ReleaseNotesContext.create(registry);
 };
 
 test("authoritative Markdown preserves arbitrary exact bytes and export snapshots the current Version", async () => {
-  const context = await contextForTest();
-  const box = await BlackBox.from(context, { timeoutMs: 5_000 });
+  const box = await ReleaseTestSession.open(contextForTest(), new InMemoryStorageFactory(), 5_000);
+  const context = box.context;
   const scope = box.asGuest();
   try {
     await scope.post(
@@ -238,8 +235,8 @@ test("authoritative Markdown preserves arbitrary exact bytes and export snapshot
 });
 
 test("audience changes preserve edited notes while comparison changes invalidate them", async () => {
-  const context = await contextForTest();
-  const box = await BlackBox.from(context, { timeoutMs: 5_000 });
+  const box = await ReleaseTestSession.open(contextForTest(), new InMemoryStorageFactory(), 5_000);
+  const context = box.context;
   const scope = box.asGuest();
   try {
     expect(
@@ -380,8 +377,8 @@ test("audience changes preserve edited notes while comparison changes invalidate
 });
 
 test("canceling the matching generation preserves Markdown and discards a late proposal", async () => {
-  const context = await contextForTest();
-  const box = await BlackBox.from(context, { timeoutMs: 5_000 });
+  const box = await ReleaseTestSession.open(contextForTest(), new InMemoryStorageFactory(), 5_000);
+  const context = box.context;
   const scope = box.asGuest();
   const generation = create(ReleaseGenerationIdSchema, { value: "to-cancel" });
   try {
@@ -487,8 +484,8 @@ test("canceling the matching generation preserves Markdown and discards a late p
 });
 
 test("generation sees readable edited Markdown and invalid UTF-8 cannot replace it", async () => {
-  const context = await contextForTest();
-  const box = await BlackBox.from(context, { timeoutMs: 5_000 });
+  const box = await ReleaseTestSession.open(contextForTest(), new InMemoryStorageFactory(), 5_000);
+  const context = box.context;
   const scope = box.asGuest();
   const generation = create(ReleaseGenerationIdSchema, { value: "readable-input" });
   try {

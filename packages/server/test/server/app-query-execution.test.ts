@@ -13,7 +13,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
@@ -42,14 +42,14 @@ import {
 } from "../../src/handler/spine-metadata-inventory.js";
 import { Server, type ServerQueryExecutionContext } from "../../src/server/server.js";
 import { BrowserServer, type StandaloneBrowserServerOptions } from "../../src/browser/index.js";
-import { BoundedContext } from "../../src/context/bounded-context.js";
+import { BoundedContext, type BoundedContextBuilder } from "../../src/context/bounded-context.js";
+import { Application } from "../../src/server/application.js";
 import { EnvironmentType } from "../../src/server/environment.js";
 import { TestTenantIndex } from "../tenant-index-fixture.js";
 import { ProcessManager, Projection } from "../../src/entity/entity.js";
 import { Repository } from "../../src/repository/repository.js";
 import { EntityHandlers } from "../../src/handler/handler-metadata.js";
 import { ServerEnvironment } from "../../src/server/server-environment.js";
-import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import {
   GetProjectOverview_QuerySchema,
   GetProjectOverview_ResponseSchema,
@@ -218,19 +218,54 @@ function rejectUnpairedRequestAtCompileTime(server: Server): void {
 }
 void rejectUnpairedRequestAtCompileTime;
 
-beforeEach(async () => {
-  await resetServerEnvironmentForTest();
-  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: new TestTenantIndex() });
-  await ServerEnvironment.instance().completeSetup();
-});
+interface TestSetup {
+  readonly applications: Application[];
+  readonly index: TestTenantIndex;
+}
 
-afterEach(async () => {
-  await resetServerEnvironmentForTest();
+function createTestSetup(): TestSetup {
+  const setup: TestSetup = { applications: [], index: new TestTenantIndex() };
+  onTestFinished(async () => {
+    for (const application of setup.applications.reverse()) await application.close();
+  });
+  return setup;
+}
+
+async function buildContext(
+  builder: BoundedContextBuilder,
+  setup: TestSetup,
+): Promise<BoundedContext> {
+  const environment = ServerEnvironment.newBuilder()
+    .under(EnvironmentType.Local, () => undefined)
+    .build();
+  const application = await Application.newBuilder()
+    .setServerEnvironment(environment)
+    .setTenantIndex(setup.index)
+    .add(builder)
+    .build();
+  setup.applications.push(application);
+  const [context] = application.contexts();
+  if (context === undefined) throw new Error("Expected a Bounded Context.");
+  return context;
+}
+
+async function attachApplication(server: Server, setup: TestSetup): Promise<Server> {
+  let application = setup.applications.at(-1);
+  if (application === undefined) {
+    await buildContext(BoundedContext.singleTenant("AppQueryFixtures"), setup);
+    application = setup.applications.at(-1);
+  }
+  if (application === undefined) throw new Error("Expected a test Application.");
+  return server.setApplication(application);
+}
+
+afterEach(() => {
   spineMetadataTestAccess.clear();
 });
 
 describe("Server App Query execution", () => {
   it("keeps BC read policies separate for two registered state families", async () => {
+    const setup = createTestSetup();
     class Label extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
       constructor(private readonly label: string) {
         super(ProjectOverviewStateSchema);
@@ -251,27 +286,39 @@ describe("Server App Query execution", () => {
         return state;
       }
     }
-    const first = await BoundedContext.singleTenant("FirstProjects")
-      .add(
-        new Repository({
-          entityType: OverviewProjection,
-          schema: ProjectOverviewStateSchema,
-          handlers: EntityHandlers.define(OverviewProjection, ProjectOverviewStateSchema, () => []),
-        }),
-      )
-      .addReadSideFilter(new Label("FirstProjects"))
-      .build();
-    try {
-      const second = await BoundedContext.singleTenant("SecondProjects")
+    const first = await buildContext(
+      BoundedContext.singleTenant("FirstProjects")
         .add(
           new Repository({
-            entityType: HiddenProjectQueue,
-            schema: ProjectQueueStateSchema,
-            handlers: EntityHandlers.define(HiddenProjectQueue, ProjectQueueStateSchema, () => []),
+            entityType: OverviewProjection,
+            schema: ProjectOverviewStateSchema,
+            handlers: EntityHandlers.define(
+              OverviewProjection,
+              ProjectOverviewStateSchema,
+              () => [],
+            ),
           }),
         )
-        .addReadSideFilter(new QueueLabel())
-        .build();
+        .addReadSideFilter(new Label("FirstProjects")),
+      setup,
+    );
+    try {
+      const second = await buildContext(
+        BoundedContext.singleTenant("SecondProjects")
+          .add(
+            new Repository({
+              entityType: HiddenProjectQueue,
+              schema: ProjectQueueStateSchema,
+              handlers: EntityHandlers.define(
+                HiddenProjectQueue,
+                ProjectQueueStateSchema,
+                () => [],
+              ),
+            }),
+          )
+          .addReadSideFilter(new QueueLabel()),
+        setup,
+      );
       try {
         await first.stand().update(
           ProjectOverviewStateSchema,
@@ -303,6 +350,7 @@ describe("Server App Query execution", () => {
   });
 
   it("isolates Server policy selection between two listeners", async () => {
+    const setup = createTestSetup();
     class Label extends ReadSideFilter<typeof GetProjectOverview_ResponseSchema> {
       constructor(private readonly label: string) {
         super(GetProjectOverview_ResponseSchema);
@@ -313,14 +361,20 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(ProjectOverviewHandler);
-    const first = new Server({
-      appQueries: [new ProjectOverviewHandler()],
-      readSideFilters: [new Label("First")],
-    });
-    const second = new Server({
-      appQueries: [new ProjectOverviewHandler()],
-      readSideFilters: [new Label("Second")],
-    });
+    const first = await attachApplication(
+      new Server({
+        appQueries: [new ProjectOverviewHandler()],
+        readSideFilters: [new Label("First")],
+      }),
+      setup,
+    );
+    const second = await attachApplication(
+      new Server({
+        appQueries: [new ProjectOverviewHandler()],
+        readSideFilters: [new Label("Second")],
+      }),
+      setup,
+    );
     const left = await first.start();
     const right = await second.start();
     try {
@@ -344,6 +398,7 @@ describe("Server App Query execution", () => {
   });
 
   it("invokes one filter instance once at each installed BC and Server boundary", async () => {
+    const setup = createTestSetup();
     const calls: string[] = [];
     class Mark extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
       constructor() {
@@ -356,17 +411,23 @@ describe("Server App Query execution", () => {
       }
     }
     const policy = new Mark();
-    const projects = await BoundedContext.singleTenant("TwoBoundaries")
-      .add(
-        new Repository({
-          entityType: OverviewProjection,
-          schema: ProjectOverviewStateSchema,
-          handlers: EntityHandlers.define(OverviewProjection, ProjectOverviewStateSchema, () => []),
-        }),
-      )
-      .addReadSideFilter(policy)
-      .addReadSideFilter(policy)
-      .build();
+    const projects = await buildContext(
+      BoundedContext.singleTenant("TwoBoundaries")
+        .add(
+          new Repository({
+            entityType: OverviewProjection,
+            schema: ProjectOverviewStateSchema,
+            handlers: EntityHandlers.define(
+              OverviewProjection,
+              ProjectOverviewStateSchema,
+              () => [],
+            ),
+          }),
+        )
+        .addReadSideFilter(policy)
+        .addReadSideFilter(policy),
+      setup,
+    );
     await projects.stand().update(
       ProjectOverviewStateSchema,
       create(ProjectOverviewStateSchema, {
@@ -375,7 +436,10 @@ describe("Server App Query execution", () => {
         priority: 1,
       }),
     );
-    const server = new Server({ contexts: [projects], readSideFilters: [policy, policy] });
+    const server = await attachApplication(
+      new Server({ readSideFilters: [policy, policy] }),
+      setup,
+    );
     const running = await server.start();
     try {
       const client = createClient(
@@ -398,6 +462,7 @@ describe("Server App Query execution", () => {
   });
 
   it("fails a Server policy fault without exposing private details or returning raw R", async () => {
+    const setup = createTestSetup();
     class Fault extends ReadSideFilter<typeof GetProjectOverview_ResponseSchema> {
       constructor() {
         super(GetProjectOverview_ResponseSchema);
@@ -407,10 +472,13 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(ProjectOverviewHandler);
-    const server = new Server({
-      appQueries: [new ProjectOverviewHandler()],
-      readSideFilters: [new Fault()],
-    });
+    const server = await attachApplication(
+      new Server({
+        appQueries: [new ProjectOverviewHandler()],
+        readSideFilters: [new Fault()],
+      }),
+      setup,
+    );
     const running = await server.start();
     try {
       const error = await executeEnvelope(running.baseUrl, appQuery()).catch(
@@ -431,6 +499,7 @@ describe("Server App Query execution", () => {
     [Code.Unavailable, Code.Unavailable],
     [Code.InvalidArgument, Code.Internal],
   ])("sanitizes App Query policy status %s as %s", async (raised, expected) => {
+    const setup = createTestSetup();
     class Fault extends ReadSideFilter<typeof GetProjectOverview_ResponseSchema> {
       constructor() {
         super(GetProjectOverview_ResponseSchema);
@@ -440,10 +509,15 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(ProjectOverviewHandler);
-    const running = await new Server({
-      appQueries: [new ProjectOverviewHandler()],
-      readSideFilters: [new Fault()],
-    }).start();
+    const running = await (
+      await attachApplication(
+        new Server({
+          appQueries: [new ProjectOverviewHandler()],
+          readSideFilters: [new Fault()],
+        }),
+        setup,
+      )
+    ).start();
     try {
       const error = await executeEnvelope(running.baseUrl, appQuery()).catch(
         (failure: unknown) => failure,
@@ -457,6 +531,7 @@ describe("Server App Query execution", () => {
   });
 
   it("preserves a sanitized child-read authorization status during App Query execution", async () => {
+    const setup = createTestSetup();
     class DenySource extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
       constructor() {
         super(ProjectOverviewStateSchema);
@@ -466,16 +541,22 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(ReadOverviewHandler);
-    const projects = await BoundedContext.singleTenant("DeniedProjectSource")
-      .add(
-        new Repository({
-          entityType: OverviewProjection,
-          schema: ProjectOverviewStateSchema,
-          handlers: EntityHandlers.define(OverviewProjection, ProjectOverviewStateSchema, () => []),
-        }),
-      )
-      .addReadSideFilter(new DenySource())
-      .build();
+    const projects = await buildContext(
+      BoundedContext.singleTenant("DeniedProjectSource")
+        .add(
+          new Repository({
+            entityType: OverviewProjection,
+            schema: ProjectOverviewStateSchema,
+            handlers: EntityHandlers.define(
+              OverviewProjection,
+              ProjectOverviewStateSchema,
+              () => [],
+            ),
+          }),
+        )
+        .addReadSideFilter(new DenySource()),
+      setup,
+    );
     await projects.stand().update(
       ProjectOverviewStateSchema,
       create(ProjectOverviewStateSchema, {
@@ -484,10 +565,14 @@ describe("Server App Query execution", () => {
         priority: 3,
       }),
     );
-    const running = await new Server({
-      contexts: [projects],
-      appQueries: [new ReadOverviewHandler()],
-    }).start();
+    const running = await (
+      await attachApplication(
+        new Server({
+          appQueries: [new ReadOverviewHandler()],
+        }),
+        setup,
+      )
+    ).start();
     try {
       const error = await executeEnvelope(running.baseUrl, appQuery()).catch(
         (failure: unknown) => failure,
@@ -501,6 +586,7 @@ describe("Server App Query execution", () => {
   });
 
   it("returns OK with no App Query message when a Server policy removes R", async () => {
+    const setup = createTestSetup();
     class RemoveResult extends ReadSideFilter<typeof GetProjectOverview_ResponseSchema> {
       constructor() {
         super(GetProjectOverview_ResponseSchema);
@@ -510,10 +596,13 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(ProjectOverviewHandler);
-    const server = new Server({
-      appQueries: [new ProjectOverviewHandler()],
-      readSideFilters: [new RemoveResult()],
-    });
+    const server = await attachApplication(
+      new Server({
+        appQueries: [new ProjectOverviewHandler()],
+        readSideFilters: [new RemoveResult()],
+      }),
+      setup,
+    );
     const running = await server.start();
     try {
       expect((await directQuery(server, appQuery())).project?.name).toBe("Overview");
@@ -526,6 +615,7 @@ describe("Server App Query execution", () => {
   });
 
   it("filters public Entity Query output at the Server boundary without changing stored state", async () => {
+    const setup = createTestSetup();
     class EgressPolicy extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
       constructor() {
         super(ProjectOverviewStateSchema);
@@ -536,15 +626,16 @@ describe("Server App Query execution", () => {
         return state;
       }
     }
-    const projects = await BoundedContext.singleTenant("PublicProjects")
-      .add(
+    const projects = await buildContext(
+      BoundedContext.singleTenant("PublicProjects").add(
         new Repository({
           entityType: OverviewProjection,
           schema: ProjectOverviewStateSchema,
           handlers: EntityHandlers.define(OverviewProjection, ProjectOverviewStateSchema, () => []),
         }),
-      )
-      .build();
+      ),
+      setup,
+    );
     await projects.stand().update(
       ProjectOverviewStateSchema,
       create(ProjectOverviewStateSchema, {
@@ -553,7 +644,10 @@ describe("Server App Query execution", () => {
         priority: 3,
       }),
     );
-    const server = new Server({ contexts: [projects], readSideFilters: [new EgressPolicy()] });
+    const server = await attachApplication(
+      new Server({ readSideFilters: [new EgressPolicy()] }),
+      setup,
+    );
     const running = await server.start();
     try {
       const client = createClient(
@@ -579,6 +673,7 @@ describe("Server App Query execution", () => {
     [Code.Unavailable, Code.Unavailable],
     [Code.InvalidArgument, Code.Internal],
   ])("sanitizes Entity Query policy status %s as %s", async (raised, expected) => {
+    const setup = createTestSetup();
     class Fault extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
       constructor() {
         super(ProjectOverviewStateSchema);
@@ -587,15 +682,16 @@ describe("Server App Query execution", () => {
         throw new ConnectError("private Entity policy detail", raised);
       }
     }
-    const projects = await BoundedContext.singleTenant("FaultedProjectReads")
-      .add(
+    const projects = await buildContext(
+      BoundedContext.singleTenant("FaultedProjectReads").add(
         new Repository({
           entityType: OverviewProjection,
           schema: ProjectOverviewStateSchema,
           handlers: EntityHandlers.define(OverviewProjection, ProjectOverviewStateSchema, () => []),
         }),
-      )
-      .build();
+      ),
+      setup,
+    );
     await projects.stand().update(
       ProjectOverviewStateSchema,
       create(ProjectOverviewStateSchema, {
@@ -604,10 +700,14 @@ describe("Server App Query execution", () => {
         priority: 3,
       }),
     );
-    const running = await new Server({
-      contexts: [projects],
-      readSideFilters: [new Fault()],
-    }).start();
+    const running = await (
+      await attachApplication(
+        new Server({
+          readSideFilters: [new Fault()],
+        }),
+        setup,
+      )
+    ).start();
     try {
       const client = createClient(
         QueryService,
@@ -624,6 +724,7 @@ describe("Server App Query execution", () => {
     }
   });
   it("applies BC source policy before handler execution and Server result policy only at RPC egress", async () => {
+    const setup = createTestSetup();
     const seen: ReadSideContext[] = [];
     class SourcePolicy extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
       constructor() {
@@ -649,16 +750,22 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(ReadOverviewHandler);
-    const projects = await BoundedContext.singleTenant("FilteredProjects")
-      .add(
-        new Repository({
-          entityType: OverviewProjection,
-          schema: ProjectOverviewStateSchema,
-          handlers: EntityHandlers.define(OverviewProjection, ProjectOverviewStateSchema, () => []),
-        }),
-      )
-      .addReadSideFilter(new SourcePolicy())
-      .build();
+    const projects = await buildContext(
+      BoundedContext.singleTenant("FilteredProjects")
+        .add(
+          new Repository({
+            entityType: OverviewProjection,
+            schema: ProjectOverviewStateSchema,
+            handlers: EntityHandlers.define(
+              OverviewProjection,
+              ProjectOverviewStateSchema,
+              () => [],
+            ),
+          }),
+        )
+        .addReadSideFilter(new SourcePolicy()),
+      setup,
+    );
     await projects.stand().update(
       ProjectOverviewStateSchema,
       create(ProjectOverviewStateSchema, {
@@ -667,11 +774,13 @@ describe("Server App Query execution", () => {
         priority: 3,
       }),
     );
-    const server = new Server({
-      contexts: [projects],
-      appQueries: [new ReadOverviewHandler()],
-      readSideFilters: [new EgressPolicy()],
-    });
+    const server = await attachApplication(
+      new Server({
+        appQueries: [new ReadOverviewHandler()],
+        readSideFilters: [new EgressPolicy()],
+      }),
+      setup,
+    );
     const running = await server.start();
     try {
       const local = await directQuery(server, appQuery());
@@ -695,8 +804,12 @@ describe("Server App Query execution", () => {
     }
   });
   it("accepts generated Q directly and returns its paired R to application code", async () => {
+    const setup = createTestSetup();
     registerOverview(ProjectOverviewHandler);
-    const server = new Server({ appQueries: [new ProjectOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new ProjectOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     try {
       const query = create(GetProjectOverview.querySchema, {
@@ -712,8 +825,12 @@ describe("Server App Query execution", () => {
   });
 
   it("executes an explicitly registered generated handler through the Server capability", async () => {
+    const setup = createTestSetup();
     registerOverview(ProjectOverviewHandler);
-    const server = new Server({ appQueries: [new ProjectOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new ProjectOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     const response = await directQuery(server, appQuery());
 
@@ -722,8 +839,9 @@ describe("Server App Query execution", () => {
   });
 
   it("keeps passive metadata unavailable until this Server selects an instance", async () => {
+    const setup = createTestSetup();
     registerOverview(ProjectOverviewHandler);
-    const server = new Server();
+    const server = await attachApplication(new Server(), setup);
     const running = await server.start();
 
     await expect(directQuery(server, appQuery())).rejects.toMatchObject({ code: 3 });
@@ -732,19 +850,28 @@ describe("Server App Query execution", () => {
   });
 
   it("rejects absent and duplicate handler metadata before listening", async () => {
+    const setup = createTestSetup();
     await expect(
-      new Server({ appQueries: [new ProjectOverviewHandler()] }).start(),
+      (
+        await attachApplication(new Server({ appQueries: [new ProjectOverviewHandler()] }), setup)
+      ).start(),
     ).rejects.toThrow(/metadata.*missing/u);
     registerOverview(ProjectOverviewHandler);
     registerOverview(AlternateOverviewHandler);
     await expect(
-      new Server({
-        appQueries: [new ProjectOverviewHandler(), new AlternateOverviewHandler()],
-      }).start(),
+      (
+        await attachApplication(
+          new Server({
+            appQueries: [new ProjectOverviewHandler(), new AlternateOverviewHandler()],
+          }),
+          setup,
+        )
+      ).start(),
     ).rejects.toThrow(/Two App Query handlers/u);
   });
 
   it("rejects invalid root Q and unsupported Q before handler work", async () => {
+    const setup = createTestSetup();
     let calls = 0;
     class CountingOverviewHandler extends ProjectOverviewHandler {
       override execute(
@@ -756,7 +883,10 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(CountingOverviewHandler);
-    const server = new Server({ appQueries: [new CountingOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new CountingOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     const invalid = appQuery();
     invalid.message = AnyPacker.pack(
@@ -795,6 +925,7 @@ describe("Server App Query execution", () => {
   });
 
   it("keeps different implementations of one Q isolated between Servers", async () => {
+    const setup = createTestSetup();
     class OtherOverviewHandler extends ProjectOverviewHandler {
       override execute(query: GetProjectOverview_Query): GetProjectOverview_Response {
         return create(GetProjectOverview_ResponseSchema, {
@@ -804,8 +935,14 @@ describe("Server App Query execution", () => {
     }
     registerOverview(ProjectOverviewHandler);
     registerOverview(OtherOverviewHandler);
-    const first = new Server({ appQueries: [new ProjectOverviewHandler()] });
-    const second = new Server({ appQueries: [new OtherOverviewHandler()] });
+    const first = await attachApplication(
+      new Server({ appQueries: [new ProjectOverviewHandler()] }),
+      setup,
+    );
+    const second = await attachApplication(
+      new Server({ appQueries: [new OtherOverviewHandler()] }),
+      setup,
+    );
     const firstRunning = await first.start();
     const secondRunning = await second.start();
     try {
@@ -818,6 +955,7 @@ describe("Server App Query execution", () => {
   });
 
   it("dispatches the captured Q when its caller mutates the envelope during an await", async () => {
+    const setup = createTestSetup();
     const seen: string[] = [];
     class CapturingOverviewHandler extends ProjectOverviewHandler {
       override execute(
@@ -829,7 +967,10 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(CapturingOverviewHandler);
-    const server = new Server({ appQueries: [new CapturingOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new CapturingOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     const request = create(GetProjectOverview_QuerySchema, {
       project: create(ProjectIdSchema, { value: "project-before" }),
@@ -846,23 +987,28 @@ describe("Server App Query execution", () => {
   });
 
   it("reads a registered projection through the handler's Server-bound scope", async () => {
+    const setup = createTestSetup();
     registerOverview(ReadOverviewHandler);
-    const projects = await BoundedContext.singleTenant("OverviewProjects")
-      .add(
+    const projects = await buildContext(
+      BoundedContext.singleTenant("OverviewProjects").add(
         new Repository({
           entityType: OverviewProjection,
           schema: ProjectOverviewStateSchema,
           handlers: EntityHandlers.define(OverviewProjection, ProjectOverviewStateSchema, () => []),
         }),
-      )
-      .build();
+      ),
+      setup,
+    );
     await projects
       .stand()
       .update(
         ProjectOverviewStateSchema,
         create(ProjectOverviewStateSchema, { id: "project-1", name: "Stored", priority: 3 }),
       );
-    const server = new Server({ contexts: [projects], appQueries: [new ReadOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new ReadOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     try {
       const response = await directQuery(server, appQuery());
@@ -882,6 +1028,7 @@ describe("Server App Query execution", () => {
   });
 
   it("drains an accepted App Query before closing its projection and rejects late work", async () => {
+    const setup = createTestSetup();
     let entered!: () => void;
     let resume!: () => void;
     const started = new Promise<void>((resolve) => (entered = resolve));
@@ -894,22 +1041,26 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(PausedReadHandler);
-    const projects = await BoundedContext.singleTenant("ClosingProjects")
-      .add(
+    const projects = await buildContext(
+      BoundedContext.singleTenant("ClosingProjects").add(
         new Repository({
           entityType: OverviewProjection,
           schema: ProjectOverviewStateSchema,
           handlers: EntityHandlers.define(OverviewProjection, ProjectOverviewStateSchema, () => []),
         }),
-      )
-      .build();
+      ),
+      setup,
+    );
     await projects
       .stand()
       .update(
         ProjectOverviewStateSchema,
         create(ProjectOverviewStateSchema, { id: "project-1", name: "Stored", priority: 3 }),
       );
-    const server = new Server({ contexts: [projects], appQueries: [new PausedReadHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new PausedReadHandler()] }),
+      setup,
+    );
     const running = await server.start();
     const pending = directQuery(server, appQuery());
     await started;
@@ -927,6 +1078,7 @@ describe("Server App Query execution", () => {
   });
 
   it("drains a canceled handler without making close fail", async () => {
+    const setup = createTestSetup();
     let entered!: () => void;
     let resume!: () => void;
     const started = new Promise<void>((resolve) => (entered = resolve));
@@ -945,7 +1097,10 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(CanceledHandler);
-    const server = new Server({ appQueries: [new CanceledHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new CanceledHandler()] }),
+      setup,
+    );
     const running = await server.start();
     const controller = new AbortController();
     const pending = directQuery(server, appQuery(), { signal: controller.signal });
@@ -958,6 +1113,7 @@ describe("Server App Query execution", () => {
   });
 
   it("waits for accepted native Execute handler work after its session closes", async () => {
+    const setup = createTestSetup();
     let entered!: () => void;
     let resume!: () => void;
     const started = new Promise<void>((resolve) => (entered = resolve));
@@ -975,7 +1131,10 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(NativePausedHandler);
-    const server = new Server({ appQueries: [new NativePausedHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new NativePausedHandler()] }),
+      setup,
+    );
     const running = await server.start();
     const pending = executeEnvelope(running.baseUrl, appQuery()).catch((error: unknown) => error);
     await started;
@@ -992,9 +1151,13 @@ describe("Server App Query execution", () => {
   });
 
   it("keeps App Query admission closed after a retryable close failure", async () => {
+    const setup = createTestSetup();
     registerOverview(ProjectOverviewHandler);
     let attempts = 0;
-    const server = new Server({ appQueries: [new ProjectOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new ProjectOverviewHandler()] }),
+      setup,
+    );
     server.addListenerLifecycle({
       start: () => undefined,
       close: () => {
@@ -1009,17 +1172,22 @@ describe("Server App Query execution", () => {
   });
 
   it("keeps target tenant membership failures structured and never returns state", async () => {
+    const setup = createTestSetup();
     registerOverview(ReadOverviewHandler);
-    const projects = await BoundedContext.multitenant("TenantProjects")
-      .add(
+    await buildContext(
+      BoundedContext.multiTenant("TenantProjects").add(
         new Repository({
           entityType: OverviewProjection,
           schema: ProjectOverviewStateSchema,
           handlers: EntityHandlers.define(OverviewProjection, ProjectOverviewStateSchema, () => []),
         }),
-      )
-      .build();
-    const server = new Server({ contexts: [projects], appQueries: [new ReadOverviewHandler()] });
+      ),
+      setup,
+    );
+    const server = await attachApplication(
+      new Server({ appQueries: [new ReadOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     try {
       const required = await directQuery(server, appQuery()).catch((error: unknown) => error);
@@ -1041,8 +1209,12 @@ describe("Server App Query execution", () => {
   });
 
   it("rejects a child read whose state is absent from this Server", async () => {
+    const setup = createTestSetup();
     registerOverview(ReadOverviewHandler);
-    const server = new Server({ appQueries: [new ReadOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new ReadOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     try {
       const failure = await directQuery(server, appQuery()).catch((error: unknown) => error);
@@ -1056,20 +1228,24 @@ describe("Server App Query execution", () => {
   });
 
   it("denies a subscription-only source even when its context shares this Server", async () => {
+    const setup = createTestSetup();
     registerOverview(HiddenReadOverviewHandler);
-    const queues = await BoundedContext.singleTenant("PrivateQueues")
-      .add(
+    await buildContext(
+      BoundedContext.singleTenant("PrivateQueues").add(
         new Repository({
           entityType: HiddenProjectQueue,
           schema: ProjectQueueStateSchema,
           handlers: EntityHandlers.define(HiddenProjectQueue, ProjectQueueStateSchema, () => []),
         }),
-      )
-      .build();
-    const server = new Server({
-      contexts: [queues],
-      appQueries: [new HiddenReadOverviewHandler()],
-    });
+      ),
+      setup,
+    );
+    const server = await attachApplication(
+      new Server({
+        appQueries: [new HiddenReadOverviewHandler()],
+      }),
+      setup,
+    );
     const running = await server.start();
     try {
       await expect(directQuery(server, appQuery())).rejects.toMatchObject({
@@ -1081,8 +1257,12 @@ describe("Server App Query execution", () => {
   });
 
   it("does not invent a target tenant membership check for a no-read handler", async () => {
+    const setup = createTestSetup();
     registerOverview(ProjectOverviewHandler);
-    const server = new Server({ appQueries: [new ProjectOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new ProjectOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     try {
       const input = appQuery();
@@ -1095,8 +1275,12 @@ describe("Server App Query execution", () => {
   });
 
   it("executes through the direct app-node QueryService route", async () => {
+    const setup = createTestSetup();
     registerOverview(ProjectOverviewHandler);
-    const server = new Server({ appQueries: [new ProjectOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new ProjectOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     try {
       const client = createClient(
@@ -1115,8 +1299,12 @@ describe("Server App Query execution", () => {
   });
 
   it("executes through a standalone public browser gateway without activating a handler there", async () => {
+    const setup = createTestSetup();
     registerOverview(ProjectOverviewHandler);
-    const server = new Server({ appQueries: [new ProjectOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new ProjectOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     const browserOptions = {
       port: 0,
@@ -1159,6 +1347,7 @@ describe("Server App Query execution", () => {
   });
 
   it("detaches verified reader facts for the handler and keeps concurrent readers separate", async () => {
+    const setup = createTestSetup();
     const entered: string[] = [];
     let release!: () => void;
     const waiting = new Promise<void>((resolve) => {
@@ -1184,7 +1373,10 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(FactsOverviewHandler);
-    const server = new Server({ appQueries: [new FactsOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new FactsOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     try {
       const firstRoles = ["reviewer"];
@@ -1211,6 +1403,7 @@ describe("Server App Query execution", () => {
   });
 
   it("stops a canceled internal invocation before handler work", async () => {
+    const setup = createTestSetup();
     let calls = 0;
     class CancelOverviewHandler extends ProjectOverviewHandler {
       override execute(
@@ -1222,7 +1415,10 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(CancelOverviewHandler);
-    const server = new Server({ appQueries: [new CancelOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new CancelOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     try {
       const controller = new AbortController();
@@ -1237,6 +1433,7 @@ describe("Server App Query execution", () => {
   });
 
   it("propagates cancellation into an active handler and rejects its late result", async () => {
+    const setup = createTestSetup();
     let entered!: () => void;
     let release!: () => void;
     const started = new Promise<void>((resolve) => {
@@ -1261,7 +1458,10 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(WaitingOverviewHandler);
-    const server = new Server({ appQueries: [new WaitingOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new WaitingOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     try {
       const pending = directQuery(server, appQuery(), { signal: controller.signal });
@@ -1277,13 +1477,17 @@ describe("Server App Query execution", () => {
   });
 
   it("rejects a wrong paired response type instead of returning empty success", async () => {
+    const setup = createTestSetup();
     class WrongOverviewHandler extends ProjectOverviewHandler {
       override execute(): GetProjectOverview_Response {
         return create(GetProjectOverview_QuerySchema) as unknown as GetProjectOverview_Response;
       }
     }
     registerOverview(WrongOverviewHandler);
-    const server = new Server({ appQueries: [new WrongOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new WrongOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     try {
       await expect(directQuery(server, appQuery())).rejects.toMatchObject({ code: Code.Internal });
@@ -1293,6 +1497,7 @@ describe("Server App Query execution", () => {
   });
 
   it("rejects an unserializable paired response as a technical failure", async () => {
+    const setup = createTestSetup();
     class BrokenOverviewHandler extends ProjectOverviewHandler {
       override execute(): GetProjectOverview_Response {
         const response = create(GetProjectOverview_ResponseSchema, {
@@ -1303,7 +1508,10 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(BrokenOverviewHandler);
-    const server = new Server({ appQueries: [new BrokenOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new BrokenOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     try {
       await expect(directQuery(server, appQuery())).rejects.toMatchObject({ code: Code.Internal });
@@ -1313,13 +1521,17 @@ describe("Server App Query execution", () => {
   });
 
   it("preserves an authentication status without leaking handler details", async () => {
+    const setup = createTestSetup();
     class DeniedOverviewHandler extends ProjectOverviewHandler {
       override execute(): GetProjectOverview_Response {
         throw new ConnectError("private credential", Code.Unauthenticated);
       }
     }
     registerOverview(DeniedOverviewHandler);
-    const server = new Server({ appQueries: [new DeniedOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new DeniedOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     try {
       const failure = await directQuery(server, appQuery()).catch((error: unknown) => error);
@@ -1333,6 +1545,7 @@ describe("Server App Query execution", () => {
   });
 
   it("sanitizes unexpected handler transport errors without leaking private details", async () => {
+    const setup = createTestSetup();
     class FaultyOverviewHandler extends ProjectOverviewHandler {
       override execute(): GetProjectOverview_Response {
         throw new ConnectError("private backend key", Code.Internal, undefined, [
@@ -1344,7 +1557,10 @@ describe("Server App Query execution", () => {
       }
     }
     registerOverview(FaultyOverviewHandler);
-    const server = new Server({ appQueries: [new FaultyOverviewHandler()] });
+    const server = await attachApplication(
+      new Server({ appQueries: [new FaultyOverviewHandler()] }),
+      setup,
+    );
     const running = await server.start();
     try {
       const failure = await directQuery(server, appQuery()).catch((error: unknown) => error);

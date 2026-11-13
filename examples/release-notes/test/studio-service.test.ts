@@ -20,7 +20,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, expect, it, vi } from "vitest";
+import { expect, it, vi } from "vitest";
 import { ModelRef } from "@spine-event-engine/ai";
 import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
 import {
@@ -30,8 +30,7 @@ import {
 } from "@spine-event-engine/client-node";
 import { AnyPacker } from "@spine-event-engine/core";
 import type { Topic } from "@spine-event-engine/proto/client";
-import { BoundedContext } from "@spine-event-engine/server";
-import { ServerTests } from "@spine-event-engine/server/testing";
+import { Application, BoundedContext, SpineServices } from "@spine-event-engine/server";
 
 import {
   EditReleaseNotesSchema,
@@ -56,8 +55,6 @@ type SubscriptionForwarder = (
   topicOrSchemas: Topic | readonly GenMessage<Message>[],
   options: CreateSubscriptionOptions,
 ) => Promise<Subscription>;
-
-afterEach(async () => ServerTests.resetEnvironment());
 
 const delayRejectionDelivery = () => {
   const client = Client.usingTransport(
@@ -112,6 +109,7 @@ const delayRejectionDelivery = () => {
 };
 
 it("opens a draft through the public in-process Client with one pinned Git comparison", async () => {
+  const closeApplication = vi.spyOn(Application.prototype, "close");
   const directory = mkdtempSync(join(tmpdir(), "spine-studio-service-"));
   const gitExecutable = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
   const git = (...args: string[]) =>
@@ -402,6 +400,7 @@ it("opens a draft through the public in-process Client with one pinned Git compa
     );
   } finally {
     await studio.close();
+    expect(closeApplication).toHaveBeenCalledOnce();
     rmSync(directory, { recursive: true, force: true });
   }
 });
@@ -847,6 +846,79 @@ it("closes client and Bounded Context after subscription cancellation reports a 
     closedClient.mockRestore();
     closedContext.mockRestore();
     await dummyClient.close();
+  }
+});
+
+it("closes the Application when its Bounded Context is unavailable", async () => {
+  const closeApplication = vi.spyOn(Application.prototype, "close");
+  closeApplication.mockClear();
+  const contexts = vi.spyOn(Application.prototype, "contexts").mockReturnValueOnce([]);
+  try {
+    await expect(
+      ReleaseStudio.start({
+        gitExecutable: "git",
+        workerExecutable: process.execPath,
+        workerPath: resolve("examples/release-notes/dist/src/trusted/git-worker-main.js"),
+        workerCwd: process.cwd(),
+        plan: { activeBinding: () => Promise.resolve(undefined) },
+      }),
+    ).rejects.toThrow("Expected a Bounded Context");
+    expect(closeApplication).toHaveBeenCalledOnce();
+  } finally {
+    contexts.mockRestore();
+    closeApplication.mockRestore();
+  }
+});
+
+it("preserves client setup and Application cleanup failures after assembly", async () => {
+  const setupFailure = new Error("Client setup failed.");
+  const cleanupFailure = new Error("Application cleanup failed.");
+  const register = vi.spyOn(SpineServices.prototype, "register").mockImplementationOnce(() => {
+    throw setupFailure;
+  });
+  let applicationClosed = false;
+  const close = vi.spyOn(Application.prototype, "close").mockImplementationOnce(async function (
+    this: Application,
+  ) {
+    close.mockRestore();
+    await this.close();
+    applicationClosed = true;
+    throw cleanupFailure;
+  });
+  try {
+    const failure = await ReleaseStudio.start({
+      gitExecutable: "git",
+      workerExecutable: process.execPath,
+      workerPath: resolve("examples/release-notes/dist/src/trusted/git-worker-main.js"),
+      workerCwd: process.cwd(),
+      plan: { activeBinding: () => Promise.resolve(undefined) },
+    }).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([setupFailure, cleanupFailure]);
+    expect(applicationClosed).toBe(true);
+  } finally {
+    register.mockRestore();
+    close.mockRestore();
+  }
+});
+
+it("retries Application close after a one-time shutdown failure", async () => {
+  const closeApplication = vi
+    .spyOn(Application.prototype, "close")
+    .mockRejectedValueOnce(new Error("Storage close failed."));
+  try {
+    const studio = await ReleaseStudio.start({
+      gitExecutable: "git",
+      workerExecutable: process.execPath,
+      workerPath: resolve("examples/release-notes/dist/src/trusted/git-worker-main.js"),
+      workerCwd: process.cwd(),
+      plan: { activeBinding: () => Promise.resolve(undefined) },
+    });
+    await expect(studio.close()).rejects.toThrow("Storage close failed.");
+    await expect(studio.close()).resolves.toBeUndefined();
+    expect(closeApplication).toHaveBeenCalledTimes(2);
+  } finally {
+    closeApplication.mockRestore();
   }
 });
 

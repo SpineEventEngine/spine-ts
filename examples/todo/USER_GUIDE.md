@@ -255,21 +255,21 @@ server's `close()` method. The command-line process keeps its listener until
 `Ctrl-C` stops it. Each start has fresh in-memory state.
 
 Importing Todo's application entrypoint runs its generated
-`generated/spine-bootstrap.js` before `createTodoContext()` assembles the
-context. The function adds `TaskAggregate` and `TaskListProjection`; `build()`
-selects their registered descriptions by class. If bootstrap import is omitted,
-context creation reports the class with missing metadata and the required
+`generated/spine-bootstrap.js` before `createTodoContext()` declares the
+Bounded Context. The function returns a builder containing `TaskAggregate` and
+`TaskListProjection`; Application build selects their registered descriptions by
+class. If bootstrap import is omitted, assembly reports the missing class and required
 bootstrap import. Rerun `pnpm typecheck:build` if the generated bootstrap is
 absent. Application handlers keep
 their bare `@Assign` and `@Subscribe` decorators: they do not manually register
 handler schemas.
 
-For application behavior tests, prefer `await BlackBox.from(await createTodoContext())`
+For application behavior tests, prefer `await BlackBox.from(createTodoContext())`
 from `@spine-event-engine/testing`. Use `asGuest()` or `onBehalfOf()` for a fixed actor,
 post generated command messages, query `TaskListSchema`, and use
 `blackBox.eventually()` for projection visibility. Close the BlackBox in
-`finally`; it closes its local listener, client session, and uncancelled typed
-state/event subscriptions. This runner-neutral boundary works in Node and
+`finally`; it closes its local listener, client session, uncancelled typed
+state/event subscriptions, and test Application. This runner-neutral boundary works in Node and
 Vitest without raw Connect or private server types.
 
 ## Post commands and inspect acknowledgements

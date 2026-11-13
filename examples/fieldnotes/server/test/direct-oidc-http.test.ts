@@ -15,10 +15,9 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { createOidcProvider, type ProviderFetch } from "@spine-event-engine/auth";
-import { ServerTests } from "@spine-event-engine/server/testing";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
-import { afterEach, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { FieldnotesHost } from "../src/fieldnotes-host.js";
 import type { FieldnotesSettings } from "../src/host-settings.js";
 
@@ -34,8 +33,6 @@ const settings = (): FieldnotesSettings => ({
   authRouteTimeoutMs: 10_000,
   authRouteMaxBytes: 65_536,
 });
-
-afterEach(async () => ServerTests.resetEnvironment());
 
 it("exchanges a signed local OIDC code through the real auth routes", async () => {
   const keys = await generateKeyPair("RS256");

@@ -197,6 +197,78 @@ describe("DatastoreStorageFactory", () => {
     expect(client.queries).toHaveLength(1);
   });
 
+  it("probes native metadata again when a check follows creation", async () => {
+    const client = new MetadataClient();
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "recheck", multitenant: false } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    await preparation.prepareRecord(context, spec, undefined, "create");
+    await preparation.prepareRecord(context, spec, undefined, "check");
+    expect(client.queries).toHaveLength(2);
+    await factory.close();
+  });
+
+  it("runs a queued native check after concurrent creation", async () => {
+    const client = new MetadataClient();
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "concurrent-recheck", multitenant: false } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    await Promise.all([
+      preparation.prepareRecord(context, spec, undefined, "create"),
+      preparation.prepareRecord(context, spec, undefined, "check"),
+      preparation.prepareRecord(context, spec, undefined, "check"),
+    ]);
+    expect(client.queries).toHaveLength(2);
+    await factory.close();
+  });
+
+  it("reports lost metadata access on a later explicit check", async () => {
+    const client = new MetadataClient();
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "drift", multitenant: false } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    await preparation.prepareRecord(context, spec, undefined, "check");
+    client.fail = true;
+    await expect(preparation.prepareRecord(context, spec, undefined, "check")).rejects.toThrow(
+      "metadata read failed",
+    );
+    const beforeConflict = client.queries.length;
+    const conflicting = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "int32",
+      extractId: () => 1,
+    });
+    await expect(
+      preparation.prepareRecord(context, conflicting, undefined, "check"),
+    ).rejects.toThrow(/incompatible/i);
+    expect(client.queries).toHaveLength(beforeConflict);
+    client.fail = false;
+    await preparation.prepareRecord(context, spec, undefined, "check");
+    expect(client.queries).toHaveLength(beforeConflict + 1);
+    await factory.close();
+  });
+
   it("shares physical compatibility declarations with ordinary native handles", async () => {
     const client = new MetadataClient();
     const factory = DatastoreStorageFactory.newBuilder()
@@ -427,7 +499,7 @@ describe("DatastoreStorageFactory", () => {
     expect(client.writes).toBe(0);
   });
 
-  it("retries a failed mandatory Agent preference probe without repeating ready families", async () => {
+  it("rechecks Agent metadata after a failed mandatory preference probe", async () => {
     const client = new MetadataClient();
     const stringifiers = new StringifierRegistry();
     stringifiers.setTypeRegistry(
@@ -471,14 +543,94 @@ describe("DatastoreStorageFactory", () => {
 
       client.failQueryNumber = undefined;
       await preparation.prepareAgentCommit(input, "check");
-      expect(client.queries).toHaveLength(7);
+      expect(client.queries).toHaveLength(12);
       await preparation.prepareAgentCommit(input, "create");
-      expect(client.queries).toHaveLength(7);
+      expect(client.queries).toHaveLength(12);
       expect(client.writes).toBe(0);
     } finally {
       await factory.close();
     }
     expect(client.closed).toBe(false);
+  });
+
+  it("checks only required Agent families without optional histories and retries a failed recheck", async () => {
+    const client = new MetadataClient();
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(
+      new TypeRegistry([SupportReplyAgentIdSchema, SupportReplyAgentStateSchema]),
+    );
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const input = entityInput() as unknown as EntityStoragePreparationInput<
+      SupportReplyAgentId,
+      SupportReplyAgentState
+    >;
+    const preparation = StoragePreparations.for(factory);
+    const failure = new Error("Agent metadata temporarily unavailable");
+    try {
+      await preparation.prepareAgentCommit(input, "check");
+      expect(client.queries).toHaveLength(4);
+      client.failQueryNumber = 5;
+      client.queryFailure = failure;
+      await expect(preparation.prepareAgentCommit(input, "check")).rejects.toBe(failure);
+      expect(client.queries).toHaveLength(5);
+      client.failQueryNumber = undefined;
+      await expect(preparation.prepareAgentCommit(input, "check")).resolves.toBeUndefined();
+      expect(client.queries).toHaveLength(9);
+      expect(client.writes).toBe(0);
+    } finally {
+      await factory.close();
+    }
+    expect(client.closed).toBe(false);
+  });
+
+  it("rejects custom Agent Entity storage before native transaction preparation", async () => {
+    const client = new MetadataClient();
+    let created = false;
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .useEntityStorage(SupportReplyAgentStateSchema, () => {
+        created = true;
+        return {} as never;
+      })
+      .build();
+    const input = entityInput() as unknown as EntityStoragePreparationInput<
+      SupportReplyAgentId,
+      SupportReplyAgentState
+    >;
+    try {
+      await expect(
+        StoragePreparations.for(factory).prepareAgentCommit(input, "check"),
+      ).rejects.toThrow(
+        "Custom Datastore Entity storage does not support native Agent transactions.",
+      );
+      expect(created).toBe(false);
+      expect(client.queries).toEqual([]);
+    } finally {
+      await factory.close();
+    }
+  });
+
+  it("rejects mismatched Agent query columns before native metadata access", async () => {
+    const client = new MetadataClient();
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .build();
+    const base = entityInput();
+    const input = {
+      ...base,
+      columns: [new RecordColumn("priority", ColumnTypes.scalar(ScalarType.INT32), () => 1)],
+    } as unknown as EntityStoragePreparationInput<SupportReplyAgentId, SupportReplyAgentState>;
+    try {
+      await expect(
+        StoragePreparations.for(factory).prepareAgentCommit(input, "check"),
+      ).rejects.toThrow("Datastore Entity query columns differ from current records.");
+      expect(client.queries).toEqual([]);
+    } finally {
+      await factory.close();
+    }
   });
 
   it("selects exact custom preparation and rejects a custom Entity without its callback", async () => {

@@ -81,15 +81,16 @@ const setup = await configureOrdersEnvironment({
 });
 const result = await withOrdersServer(
   setup,
-  () => startOrdersServer(),
+  () => startOrdersServer(setup),
   (server) => runOrdersLoad({ baseUrl: server.baseUrl, users: 10, tenants }),
 );
 console.log(result.perTenant);
 ```
 
-`configureOrdersEnvironment()` explicitly supplies the persistent tenant
-index and selected storage factory to the server environment. Bounded Context
-factories consume that configuration. Calls to the gRPC services must carry a
+`configureOrdersEnvironment()` returns the persistent tenant index and an
+environment configured with the selected storage factory. Pass that setup to
+`startOrdersServer()`, which builds the Application from Bounded Context builders.
+Calls to the gRPC services must carry a
 complete registered `TenantId`; a request does not change membership.
 
 ## Load results
@@ -118,7 +119,7 @@ The PostgreSQL restart test writes the same order ID with different SKU values
 in the two tenants, closes its first Node process, then opens a **new Node
 process**. The second process validates stored tenant membership and reads both
 stored orders with `membership: "existing"` before any `keep` or reseeding and
-without an explicit `environment.createStorageStructures()` call on that read
+without an explicit `application.createStorageStructures()` call on that read
 path. Additional checks reject a changed membership/routing set and an
 unreachable tenant database before a listener starts. The Datastore emulator
 test stores the same order ID under both tenant namespaces and reads the
@@ -133,11 +134,11 @@ subscription responses.
 
 ## Shutdown and recovery
 
-The runner closes the running server first, then the tenant index and storage
-environment. A failed server drain leaves storage open rather than closing a
-factory beneath active work; the command exits with the failure for diagnosis.
-If startup fails before a server exists, the configured index and environment
-are closed. The application does not reset a database during recovery.
+The runner closes the endpoint first, then the Application closes its Bounded
+Contexts, tenant index, and environment. Failed endpoint shutdown leaves shared
+storage available for a cleanup retry. Startup failure releases acquired resources
+in dependency order and retains unfinished cleanup. The application does not reset
+a database during recovery.
 
 PostgreSQL can resume pending durable Inbox delivery after an interrupted
 launch once the previous process's shard lease expires. A new process cannot

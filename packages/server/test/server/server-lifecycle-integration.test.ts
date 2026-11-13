@@ -14,10 +14,12 @@
 
 import * as http2 from "node:http2";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 import {
+  Application,
   BoundedContext,
+  EnvironmentType,
   type ListenerLifecycle,
   Server,
   ServerEnvironment,
@@ -25,7 +27,6 @@ import {
 import { BrowserServer, type StandaloneBrowserServerOptions } from "../../src/browser/index.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
-import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 
 const createHttp2Server = vi.hoisted(() =>
   vi.fn<(server: import("node:http2").Http2Server) => void>(),
@@ -43,6 +44,18 @@ vi.mock("node:http2", async (importOriginal) => {
   };
 });
 
+async function createTestApplication(): Promise<Application> {
+  const environment = ServerEnvironment.newBuilder()
+    .under(EnvironmentType.Local, () => undefined)
+    .build();
+  const application = await Application.newBuilder()
+    .setServerEnvironment(environment)
+    .add(BoundedContext.singleTenant("Lifecycle"))
+    .build();
+  onTestFinished(() => application.close());
+  return application;
+}
+
 describe("Server lifecycle integration", () => {
   it("exports the listener lifecycle contract", () => {
     const lifecycle: ListenerLifecycle = { start: () => undefined, close: () => undefined };
@@ -50,11 +63,14 @@ describe("Server lifecycle integration", () => {
   });
 
   it("starts listener lifecycles after readiness and closes them before network intake", async () => {
+    const application = await createTestApplication();
     const events: string[] = [];
-    const server = Server.atPort(0).addListenerLifecycle({
-      start: () => events.push("start"),
-      close: () => events.push("close"),
-    });
+    const server = Server.atPort(0)
+      .setApplication(application)
+      .addListenerLifecycle({
+        start: () => events.push("start"),
+        close: () => events.push("close"),
+      });
     const running = await server.start();
     expect(events).toEqual(["start"]);
     await running.close();
@@ -62,6 +78,7 @@ describe("Server lifecycle integration", () => {
   });
 
   it("retries only a failed listener lifecycle close", async () => {
+    const application = await createTestApplication();
     let attempts = 0;
     const successful = vi.fn();
     const failing = vi.fn(() => {
@@ -69,6 +86,7 @@ describe("Server lifecycle integration", () => {
       if (attempts === 1) throw new Error("close failed");
     });
     const running = await Server.atPort(0)
+      .setApplication(application)
       .addListenerLifecycle({ start: () => undefined, close: successful })
       .addListenerLifecycle({ start: () => undefined, close: failing })
       .start();
@@ -79,10 +97,12 @@ describe("Server lifecycle integration", () => {
   });
 
   it("rolls back only listener lifecycles admitted before a start failure", async () => {
+    const application = await createTestApplication();
     const firstClose = vi.fn();
     const secondClose = vi.fn();
     const thirdClose = vi.fn();
     const server = Server.atPort(0)
+      .setApplication(application)
       .addListenerLifecycle({ start: () => undefined, close: firstClose })
       .addListenerLifecycle({
         start: () => {
@@ -98,8 +118,10 @@ describe("Server lifecycle integration", () => {
   });
 
   it("rolls back admitted listener lifecycles in reverse start order", async () => {
+    const application = await createTestApplication();
     const closed: string[] = [];
     const server = Server.atPort(0)
+      .setApplication(application)
       .addListenerLifecycle({ start: () => undefined, close: () => closed.push("first") })
       .addListenerLifecycle({ start: () => undefined, close: () => closed.push("second") })
       .addListenerLifecycle({
@@ -114,10 +136,13 @@ describe("Server lifecycle integration", () => {
   });
 
   it("does not restart after a listener-start failure rolls back cleanly", async () => {
+    const application = await createTestApplication();
     const start = vi.fn(() => {
       throw new Error("start failed");
     });
-    const server = Server.atPort(0).addListenerLifecycle({ start, close: () => undefined });
+    const server = Server.atPort(0)
+      .setApplication(application)
+      .addListenerLifecycle({ start, close: () => undefined });
 
     await expect(server.start()).rejects.toThrow("start failed");
     await expect(server.start()).rejects.toThrow("cannot restart after failed-start cleanup");
@@ -125,6 +150,7 @@ describe("Server lifecycle integration", () => {
   });
 
   it("retries later server cleanup after listener rollback before becoming terminal", async () => {
+    const application = await createTestApplication();
     const startFailure = new Error("listener start failed");
     const networkFailure = new Error("network close failed");
     const closed: string[] = [];
@@ -133,6 +159,7 @@ describe("Server lifecycle integration", () => {
       network = trackNetworkClose(httpServer, [networkFailure]);
     });
     const server = Server.atPort(0)
+      .setApplication(application)
       .addListenerLifecycle({ start: () => undefined, close: () => closed.push("admitted") })
       .addListenerLifecycle({
         start: () => {
@@ -156,10 +183,12 @@ describe("Server lifecycle integration", () => {
   });
 
   it("aggregates listener start and admitted rollback failures in order", async () => {
+    const application = await createTestApplication();
     const startFailure = new Error("start failed");
     const rollbackFailure = new Error("rollback failed");
     const laterClose = vi.fn();
     const server = Server.atPort(0)
+      .setApplication(application)
       .addListenerLifecycle({
         start: () => undefined,
         close: vi.fn().mockImplementationOnce(() => {
@@ -181,8 +210,10 @@ describe("Server lifecycle integration", () => {
   });
 
   it("keeps the listener open until a failed lifecycle close retries", async () => {
+    const application = await createTestApplication();
     let attempts = 0;
     const running = await Server.atPort(0)
+      .setApplication(application)
       .addListenerLifecycle({
         start: () => undefined,
         close: () => {
@@ -214,34 +245,41 @@ describe("Server lifecycle integration", () => {
   });
 
   it("shares one environment Delivery across sibling servers until both listeners close", async () => {
-    const environment = ServerEnvironment.instance();
+    const environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, () => undefined)
+      .build();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(environment)
+      .add(BoundedContext.singleTenant("SharedFirst"))
+      .add(BoundedContext.singleTenant("SharedSecond"))
+      .build();
+    onTestFinished(() => application.close());
+    const [firstContext, secondContext] = application.contexts();
+    if (firstContext === undefined || secondContext === undefined)
+      throw new Error("Expected both Bounded Contexts.");
     const delivery = environment.delivery;
-    const firstContext = await BoundedContext.singleTenant("SharedFirst").build();
-    const secondContext = await BoundedContext.singleTenant("SharedSecond").build();
-    const first = await Server.atPort(0).add(firstContext).start();
-    const second = await Server.atPort(0).add(secondContext).start();
+    const first = await Server.atPort(0).setApplication(application).start();
+    const second = await Server.atPort(0).setApplication(application).start();
     try {
       expect(serverEnvironmentAccess.openContexts(environment)).toHaveLength(2);
       await first.close();
-      expect(serverEnvironmentAccess.openContexts(environment)).toEqual([secondContext]);
+      expect(serverEnvironmentAccess.openContexts(environment)).toEqual([
+        firstContext,
+        secondContext,
+      ]);
       expect(environment.delivery).toBe(delivery);
       await expect(delivery.inbox.read(ShardIndex.single())).resolves.toEqual([]);
       await second.close();
-      expect(serverEnvironmentAccess.openContexts(environment)).toEqual([]);
+      expect(serverEnvironmentAccess.openContexts(environment)).toEqual([
+        firstContext,
+        secondContext,
+      ]);
     } finally {
       await first.close();
       await second.close();
     }
-    await environment.close();
-  });
-  beforeEach(async () => {
-    await resetServerEnvironmentForTest();
-    await ServerEnvironment.instance().completeSetup();
-    createHttp2Server.mockReset();
-  });
-  afterEach(async () => {
-    for (const context of serverEnvironmentAccess.openContexts(ServerEnvironment.instance()))
-      await context.close();
+    await application.close();
+    expect(serverEnvironmentAccess.openContexts(environment)).toEqual([]);
   });
 });
 

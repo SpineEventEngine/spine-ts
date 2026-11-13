@@ -363,7 +363,10 @@ export class SubscriptionRuntime {
    * @returns Resolves after the durable registry closes.
    */
   finishClose(): Promise<void> {
-    this.#closed ??= this.#finishClose();
+    this.#closed ??= this.#finishClose().catch((error: unknown) => {
+      this.#closed = undefined;
+      throw error;
+    });
     return this.#closed;
   }
 

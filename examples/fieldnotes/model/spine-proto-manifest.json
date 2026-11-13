@@ -1,8 +1,8 @@
 {
   "formatVersion": 2,
-  "generationId": "90aa2849-c177-4885-8928-303909c28af9",
+  "generationId": "a2efcf354f580d714057144cf0da1cff1e1346ed6343ad9cf0f2aabf4293ef4f",
   "packageName": "@spine-event-engine/example-fieldnotes-model",
-  "packageVersion": "2.0.0-snapshot.30",
+  "packageVersion": "2.0.0-snapshot.31",
   "protoFiles": [
     "spine/examples/fieldnotes/commands.proto",
     "spine/examples/fieldnotes/entities.proto",

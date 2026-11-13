@@ -501,6 +501,67 @@ describe("Postgres record storage", () => {
     await factory.close();
   });
 
+  it("inspects a table again when a check follows successful creation", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "recheck", multitenant: false } as const;
+    await preparation.prepareRecord(context, recordSpec(), undefined, "create");
+    const before = driver.calls.filter(({ sql }) => sql.includes("columns WHERE")).length;
+    await preparation.prepareRecord(context, recordSpec(), undefined, "check");
+    expect(driver.calls.filter(({ sql }) => sql.includes("columns WHERE"))).toHaveLength(
+      before + 1,
+    );
+    await factory.close();
+  });
+
+  it("runs a queued check after concurrent creation", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "concurrent-recheck", multitenant: false } as const;
+    await Promise.all([
+      preparation.prepareRecord(context, recordSpec(), undefined, "create"),
+      preparation.prepareRecord(context, recordSpec(), undefined, "check"),
+      preparation.prepareRecord(context, recordSpec(), undefined, "check"),
+    ]);
+    expect(driver.calls.filter(({ sql }) => sql.includes("columns WHERE"))).toHaveLength(2);
+    await factory.close();
+  });
+
+  it("detects missing columns on a later explicit check", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "drift", multitenant: false } as const;
+    await preparation.prepareRecord(context, recordSpec(), undefined, "check");
+    const query = driver.query.getMockImplementation();
+    if (query === undefined) throw new Error("PostgreSQL query fixture is required.");
+    driver.query.mockImplementation((sql, values) =>
+      sql.includes("columns WHERE") ? Promise.resolve({ rows: [] }) : query(sql, values),
+    );
+    await expect(
+      preparation.prepareRecord(context, recordSpec(), undefined, "check"),
+    ).rejects.toThrow();
+    const beforeConflict = driver.query.mock.calls.length;
+    const conflicting = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "int32",
+      extractId: () => 1,
+    });
+    await expect(
+      preparation.prepareRecord(context, conflicting, undefined, "check"),
+    ).rejects.toThrow(/conflict/i);
+    expect(driver.query).toHaveBeenCalledTimes(beforeConflict);
+    driver.query.mockImplementation(query);
+    await preparation.prepareRecord(context, recordSpec(), undefined, "check");
+    expect(driver.query.mock.calls.length).toBeGreaterThan(beforeConflict);
+    await factory.close();
+  });
+
   it("retries failed read-only checking with creation after the missing table appears", async () => {
     let present = false;
     driver.query.mockImplementation((sql, values) => {
@@ -584,7 +645,7 @@ describe("Postgres record storage", () => {
     expect(driver.end.mock.calls.length).toBeGreaterThan(endedBeforeRelease);
   });
 
-  it("does not escalate a pending failed check into creation", async () => {
+  it("runs creation after a pending check fails", async () => {
     const started = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
     let present = false;
@@ -637,8 +698,8 @@ describe("Postgres record storage", () => {
     const createPending = preparation.prepareRecord(context, recordSpec(), undefined, "create");
     release.resolve(undefined);
     const outcomes = await Promise.allSettled([check, createPending]);
-    expect(outcomes.map(({ status }) => status)).toEqual(["rejected", "rejected"]);
-    expect(driver.calls.some(({ sql }) => sql.startsWith("CREATE"))).toBe(false);
+    expect(outcomes.map(({ status }) => status)).toEqual(["rejected", "fulfilled"]);
+    expect(driver.calls.some(({ sql }) => sql.startsWith("CREATE"))).toBe(true);
     await preparation.prepareRecord(context, recordSpec(), undefined, "create");
     expect(driver.calls.some(({ sql }) => sql.startsWith("CREATE"))).toBe(true);
     await factory.close();

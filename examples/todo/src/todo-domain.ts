@@ -21,15 +21,12 @@ import {
   Aggregate,
   Assign,
   BoundedContext,
-  EnvironmentType,
+  type BoundedContextBuilder,
   EventRouting,
   Projection,
-  ServerEnvironment,
   Subscribe,
   Throws,
-  type DeliveryStrategy,
 } from "@spine-event-engine/server";
-import type { StorageFactory } from "@spine-event-engine/storage";
 import { type EventContext, UserIdSchema, type UserId } from "@spine-event-engine/proto";
 
 import {
@@ -630,16 +627,9 @@ export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssign
 }
 
 /**
- * Selects optional facilities for the single-tenant Tasks context.
+ * Selects the optional subscription facility for the Tasks Bounded Context.
  */
 interface TodoContextOptions {
-  // prettier-ignore
-
-  /**
-   * Selects the Delivery shard strategy used by the Tasks context.
-   */
-  readonly deliveryStrategy?: DeliveryStrategy;
-
   // prettier-ignore
 
   /**
@@ -647,31 +637,15 @@ interface TodoContextOptions {
    * The context closes the supplied registry during shutdown.
    */
   readonly subscriptionRegistry?: import("@spine-event-engine/server").StandSubscriptionRegistry;
-
-  // prettier-ignore
-
-  /**
-   * Supplies the storage factory used by the Tasks context.
-   * The caller closes it after all dependent contexts and servers finish.
-   */
-  readonly storageFactory?: StorageFactory;
 }
 
 /**
- * Creates the single-tenant Tasks bounded context with in-memory defaults.
+ * Creates a single-tenant Tasks Bounded Context builder for an Application.
  *
- * @param options Supplies optional context facilities.
- * @returns The assembled Tasks bounded context.
+ * @param options Supplies an optional subscription registry.
+ * @returns The Tasks Bounded Context builder.
  */
-export async function createTodoContext(options: TodoContextOptions = {}): Promise<BoundedContext> {
-  if (options.storageFactory !== undefined || options.deliveryStrategy !== undefined)
-    ServerEnvironment.when(EnvironmentType.Local).use({
-      ...(options.storageFactory === undefined ? {} : { storageFactory: options.storageFactory }),
-      ...(options.deliveryStrategy === undefined
-        ? {}
-        : { deliveryStrategy: options.deliveryStrategy }),
-    });
-  await ServerEnvironment.instance().completeSetup();
+export function createTodoContext(options: TodoContextOptions = {}): BoundedContextBuilder {
   const taskListRouting = EventRouting.create<TaskListId>()
     .route(TaskEvent, (event) => [taskListIds.require(event.taskListId)])
     .route(TaskAlreadyDoneSchema, (event) => taskListIds.fromTaskId(event.id))
@@ -690,7 +664,7 @@ export async function createTodoContext(options: TodoContextOptions = {}): Promi
     .add(TaskAssigneeProjection, { eventRouting: assigneeRouting });
   if (options.subscriptionRegistry !== undefined)
     builder.withSubscriptionRegistry(options.subscriptionRegistry);
-  return builder.build();
+  return builder;
 }
 
 const taskIds = {

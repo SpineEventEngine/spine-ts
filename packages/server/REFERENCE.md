@@ -6,8 +6,11 @@ This reference gives coding agents the detailed server contracts. For an introdu
 ## Testing entry point
 
 `@spine-event-engine/server/testing` is for framework-package tests and controlled
-in-process fixtures. It exposes test reset and integration-frame helpers; managed-host
-internals remain repository-only fixture code. This entrypoint is deliberately outside
+in-process fixtures. It exposes integration-frame helpers and
+`ApplicationTests.waitForDelivery(application)`, which waits for Delivery work
+already accepted by that Application. Tests build and close explicit Applications;
+there is no process-wide ServerEnvironment reset. Managed-host internals remain
+repository-only fixture code. This entrypoint is deliberately outside
 the end-user root API and may change with test infrastructure rather than normal server
 compatibility guarantees.
 
@@ -134,7 +137,14 @@ channels. Failed cleanup remains retryable and concurrent close callers share
 one attempt.
 
 `ThirdPartyContext` is the sole public third-party import API. Its
-`singleTenant()` form forbids an actor tenant; `multitenant()` requires one.
+`singleTenant()` form forbids an actor tenant; `multiTenant()` requires one.
+Both factories synchronously create unattached declarations. Add the declaration
+to Application before publishing. Application attaches it after all Bounded
+Contexts and query routes are assembled, before startup can invoke handlers.
+Ordinary callers publish after Application build succeeds. Publication before
+attachment and a second attachment fail. A failed build closes the attached
+Bounded Context, leaving that declaration unusable. Closing an unattached
+declaration does nothing.
 `emittedEvent(event, actor)` accepts a registered generated Protobuf message used as an event
 payload and `ActorContext` (or a
 `UserId` in the single-tenant form), preserves actor identity and timestamp,
@@ -143,111 +153,151 @@ valid event with no interested external receptor is simply not delivered.
 
 ## Server environment facilities
 
-`ServerEnvironment.instance()` is a process-wide singleton. Production
-resolution requires the complete application schema registry; storage defaults to
-in-memory when `storageFactory` is omitted:
+Each `ServerEnvironment` is a separate configured instance. Its builder selects
+settings for the global `Environment` profile, which comes from `NODE_ENV`.
+`under()` configures a profile; it does not select that profile. A process can
+start with the default Local profile without configuring Production.
 
 ```ts
-import { EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
+import {
+  Application,
+  BoundedContext,
+  EnvironmentType,
+  ServerEnvironment,
+} from "@spine-event-engine/server";
 import type { TypeRegistryLookup } from "@spine-event-engine/core";
 import type { StorageFactory } from "@spine-event-engine/storage";
 
 declare const storageFactory: StorageFactory;
 declare const typeRegistry: TypeRegistryLookup;
 
-ServerEnvironment.when(EnvironmentType.Production).use({
-  storageFactory,
-  typeRegistry,
-});
-await ServerEnvironment.instance().completeSetup();
+const environment = ServerEnvironment.newBuilder()
+  .under(EnvironmentType.Production, (configuration) => {
+    configuration.use({ storageFactory, typeRegistry });
+  })
+  .build();
+const application = await Application.newBuilder()
+  .setServerEnvironment(environment)
+  .add(BoundedContext.singleTenant("Tasks"))
+  .build();
+await application.close();
 ```
 
-Call `completeSetup()` explicitly before building any Bounded Context. It
-checks the storage connection, initializes integration transport, and opens the
-shared Delivery. Concurrent callers join one setup attempt; a failed attempt
-closes acquired facilities and prevents context assembly. Building a context
-does not start setup. The environment logs an INFO message after each successful
-phase without implying that every Entity model has been prepared.
+Separate `use()` calls preserve earlier settings for that profile. For example,
+`configuration.use({ storageFactory })` followed by
+`configuration.use({ typeRegistry })` keeps both settings. Repeating a setting
+replaces its earlier value. The builder captures each supplied settings object;
+changing that object later does not reconfigure the environment. Configuration
+after `build()` is rejected, including through a saved configurator. Configuration
+callbacks must be synchronous; an async callback is rejected. If a setting needs
+an asynchronous factory, await that factory before calling `under()`. Per-setting
+configuration through `under()` follows JVM.
 
-`BoundedContextBuilder.build({ createStorageStructures, startSubscriptionMonitoring })`
-awaits both model preparation and the first subscription reconciliation by
-default. Each option can be set to `false` independently. A deferred phase runs
-before the first valid Command, Event, query, subscription operation, or Inbox
-delivery for the receiving context; lazy multitenant preparation selects only that
-input's currently registered tenant. A failed lazy attempt rejects its current
-input and can be retried by a later input. Monitoring requires the shared
-subscription registry, so `startSubscriptionMonitoring: true` prepares that
-registry even when `createStorageStructures: false`; it does not prepare all
-tenant Entity families. An eager required preparation or initial monitoring
-failure stops accepting new input and triggers attempt-all cleanup.
-After a successful first pass, a failed periodic reconciliation logs a WARN
-with the context name and bounded error name or code, leaves unaffected observers active,
-and retries on the existing ten-second schedule. Closing the context cancels
-the timer and drains an admitted pass before detaching observers.
+Environment build is synchronous configuration without connections. Application
+build checks the storage connection, initializes integration transport, and opens
+shared Delivery. It assembles all Bounded Contexts and registers shared reads
+before integration, monitoring, or recovered messages can invoke handlers.
+There is no separate public setup call.
 
-`context.runtime.createStorageStructures(...tenantIds)` and
-`context.runtime.checkStructureCompatibility(...tenantIds)` prepare declared
-Record, Entity, history, and Agent audit structures through the configured
-provider. The check is read-only; a successful provider check also satisfies
-later creation readiness. Explicit IDs must be registered in the context's
-effective tenant index. With no IDs, a multitenant context traverses its current
-index in finite pages; a single-tenant context prepares its neutral destination
-without registering a synthetic tenant. `context.runtime.startSubscriptionMonitoring()`
-performs the first registry pass independently of per-tenant Entity preparation.
-The environment's no-argument structure methods include both kinds of completed,
-open context. With explicit IDs, they select only matching multitenant contexts,
-respect each `withTenantIndex` override, and reject an ID absent from all current
-indexes before provider work. They validate every supplied ID before preparing
-any structures. Database-backed providers require an existing database; these
-calls do not provision one or register a tenant. Required explicit provider or initial-monitor
-failure stops new input and triggers automatic cleanup. Unknown or malformed IDs,
-directory lookup failure, and local API misuse reject only that operation;
-lazy first-input provider failures remain request-local and retryable.
+`storageFactory` supplies domain storage and the default tenant index.
+`integrationChannelFactory` supplies private integration channels. Both default to
+memory implementations, including in Production. Production still requires a
+complete generated `typeRegistry`; Local can fall back to the core registry.
+Other settings configure Delivery ports and strategy, logging, subscription queue
+capacity, and a default AI registry. There is no placeholder tracing setting.
 
-`storageFactory` supplies records and events to every context. `typeRegistry` is the complete
-application schema universe used by `ThirdPartyContext` to encode outgoing
-imported events. An optional `integrationChannelFactory` overrides the
-process-wide private
-integration message channel factory. When it is absent, all local bounded
-contexts share one in-memory factory, including in production. Local and test
-environments default storage in memory and use the core registry only as a
-fallback; those defaults are not production configuration.
+## Application assembly and storage preparation
 
-`tenantIndex` is optional and defaults to `SINGLE_TENANT`, a marker that creates
-no directory and never consults a provider catalog. The environment getter
-returns `TenantIndexSetting`, either that marker or an application-supplied
-`TenantIndex`. Narrow against the marker before calling `contains()`, `keep()`,
-`page()`, or `all()`. A multitenant Bounded Context requires a real environment
-index before business storage opens. A single-tenant Bounded Context always returns the
-marker, including inside a multitenant environment. Provider catalogs remain
-separate storage-provider APIs and do not select application membership.
+Application requires an open environment and at least one Bounded Context builder
+or ThirdPartyContext declaration. One environment can serve one Application. A
+successful build fixes the Bounded Context list; builders cannot be reused.
+`contexts()` returns a read-only list in build order, with closed entries retained
+and no extra entries for internal System pairing. Names, generated System names,
+and domain Entity state types must be unique within that Application. Independent
+Applications may use identical names and types.
 
-`PersistentTenantIndex.create({ storageFactory, group })` opens a separate,
-storage-backed registration directory without constructing a Bounded Context or
-`ServerEnvironment`. It creates and checks supported storage structures before
-returning. Set `createMissingStructures: false` to skip preparation on creation
-and on later reads or writes. A skipped directory needs structures prepared by
-the application before data access; missing structures cause provider errors.
-Memory storage remains process-local. The injected factory remains usable after the
-index closes. `keep()` registers a complete `TenantId` atomically and retains
-the first registration time; `contains()` reads its primary key. `page()` uses
-finite keyset traversal with an abort signal and a continuation accepted only
-by that index instance. `all()` traverses the complete current directory, so
-its result can be large. Traversal does not promise a snapshot while other
-writers register tenants. Registration does not provision tenant databases or
-authorize users. The environment defaults to the explicit `SINGLE_TENANT` marker.
+`ApplicationBuilder.build({ createStorageStructures, startSubscriptionMonitoring })`
+awaits model preparation and the first subscription registry pass by default.
+Either option can be false independently. Both false defer both phases. Monitoring
+still prepares its shared registry when model creation is deferred. Lazy first-use
+preparation selects the receiving Bounded Context and tenant. A lazy failure rejects
+that input and permits a later attempt. Required startup preparation failure prevents
+successful Application construction.
 
-Multitenant receiving contexts check current index membership before Command,
-Event, query, direct repository/history, and subscription work. Inbox persistence
-and later delivery check separately, so removing a tenant prevents saved work from
-restoring it. Input does not call `keep()` implicitly. A confirmed missing member
-raises `TenantUnknownError` with the complete tenant ID and context name; native
-services return `NotFound` with a structured `spine.base.Error` detail whose type
-is `TENANT_UNKNOWN`. Lookup failures remain operational errors. Single-tenant
-work does not consult the directory.
+`application.createStorageStructures(...tenantIds)` creates declared Record,
+Entity, history, and Agent audit structures through each selected provider.
+`application.checkStructureCompatibility(...tenantIds)` checks those declarations
+without creating or altering them, including when creation already succeeded.
+This check does not stop other startup services from preparing their separate
+structures and is not a whole-process no-creation mode.
 
-To override the default channel factory, add
-`integrationChannelFactory: customFactory` to the same settings object.
+With explicit IDs, both methods validate the complete TenantIds, remove duplicates,
+and select every open multi-tenant Bounded Context. No index membership lookup is
+needed. Single-tenant Bounded Contexts are excluded; an Application without an open
+multi-tenant target rejects the call. With no IDs, both methods include all open
+single-tenant Bounded Contexts and enumerate the index for multi-tenant targets.
+No multi-tenant targets means no index access; an empty index means no tenant work.
+Closed Bounded Contexts are skipped. Administrative failure rejects the operation
+without closing an established Application. These calls do not create databases,
+register tenants, or approve customer eligibility.
+
+The narrower `boundedContext.runtime.createStorageStructures(...tenantIds)` and
+`checkStructureCompatibility(...tenantIds)` operate on that Bounded Context only.
+`startSubscriptionMonitoring()` starts the initial registry pass independently of
+per-tenant Entity preparation. After the initial pass, failed periodic reconciliation
+logs a warning and retries on the existing schedule; closing the Bounded Context
+cancels its timer and waits for an admitted pass.
+
+### Tenant index
+
+`application.tenantIndex()` is synchronous and returns one stable handle. Obtaining
+the default handle does not open or prepare storage. Its first asynchronous operation
+initializes storage, sharing that attempt across concurrent callers. A single-tenant
+Application that never uses tenant storage does not initialize it.
+
+All multi-tenant Bounded Contexts use this index. Single-tenant Bounded Contexts use
+`SINGLE_TENANT` and perform no membership lookup. There are no per-Bounded-Context
+index overrides. Provider catalogs remain separate provider APIs.
+
+Supply a custom index through `ApplicationBuilder.setTenantIndex(index)`. For
+separate tenant storage, create it with
+`PersistentTenantIndex.create({ storageFactory: tenantStorage, group })` and use a
+different factory in ServerEnvironment for domain data. The asynchronous factory
+prepares its record family by default. `createMissingStructures: false` skips that
+preparation and later automatic preparation; the family must already be available.
+
+`keep()` atomically registers a complete TenantId and preserves its first registration
+time. `contains()` checks current membership. `page()` reads a finite page with
+cancellation and an index-specific continuation; `all()` traverses the current
+index. Traversal is not a snapshot while other writers register tenants. Memory
+storage is process-local; persistent providers retain registrations across restarts.
+
+Request admission still checks membership before Command, Event, query, repository,
+history, subscription, and Inbox work. Confirmed absence produces `TENANT_UNKNOWN`;
+a failed index lookup remains an operational error. Input never registers tenants
+implicitly. Explicit administrative preparation can therefore run before `keep()`.
+
+Application closes its index after accepted work finishes. Index close rejects new
+work and retries unfinished failed cleanup. A separately supplied StorageFactory
+remains open and must be closed separately after index cleanup succeeds. A custom
+index transfers to Application only after a successful build; the caller cleans it
+up if construction fails.
+
+### Application cleanup
+
+Close successful Server endpoints before calling `application.close()`. Application
+then closes Bounded Contexts in reverse order, its initialized tenant index, and its
+environment. It waits for admitted work and rejects new administrative operations.
+Successful cleanup is not repeated; failed phases remain available for another
+close attempt. Dependencies remain open while work still needs them.
+
+A failed Application build retains partial cleanup in its builder. Call
+`await builder.close()` to retry unfinished cleanup. The supplied environment and
+custom tenant index remain the caller's responsibility on ordinary assembly
+failure. Required setup failure can already have closed services, so another build
+requires fresh services. A builder that failed cannot build again. Calling its close method while build
+is still pending rejects. After successful construction, close Application
+rather than its builder.
 
 ## Routing lifecycle
 
@@ -531,12 +581,14 @@ import {
   type CommandContext,
 } from "@spine-event-engine/proto";
 import {
+  Application,
   BoundedContext,
   Command,
   type EntityHandlersMetadata,
   HandlerRegistryIngestor,
   ProcessManager,
   Repository,
+  ServerEnvironment,
 } from "@spine-event-engine/server";
 import type { GeneratedHandlerRegistry } from "@spine-event-engine/server/spi/handler-registry";
 
@@ -590,14 +642,22 @@ const repository = new Repository<typeof ApprovalCoordinator>({
   schema: CoordinationStateSchema,
   handlers: handlers as EntityHandlersMetadata<ApprovalCoordinator, typeof CoordinationStateSchema>,
 });
-const context = await BoundedContext.singleTenant("Projects").add(repository).build();
-await context.commandBus().post(
-  SignalEnvelopes.command({
-    context: create(CommandContextSchema),
-    schema: ApproveProjectSchema,
-    message: create(ApproveProjectSchema, { project, status: "approved" }),
-  }),
-);
+const application = await Application.newBuilder()
+  .setServerEnvironment(ServerEnvironment.newBuilder().build())
+  .add(BoundedContext.singleTenant("Projects").add(repository))
+  .build();
+const context = application.contexts()[0]!;
+try {
+  await context.commandBus().post(
+    SignalEnvelopes.command({
+      context: create(CommandContextSchema),
+      schema: ApproveProjectSchema,
+      message: create(ApproveProjectSchema, { project, status: "approved" }),
+    }),
+  );
+} finally {
+  await application.close();
+}
 ```
 
 The generated record declares `ApproveProjectSchema` as the input and
@@ -613,7 +673,7 @@ repeated declarations fail closed. It is not an alternative routing mechanism.
 
 Configure logging through `ServerEnvironment` when assembling the server. The
 server installs that logger into its runtime components, where warnings and
-failures carry operation context. Durable facts belong in events or storage.
+failures carry operation context. Record durable facts in Events or storage.
 Ordinary Aggregate, Process Manager, and Projection Inbox delivery sends persisted
 accepted work through the normal handler path. Handler effects must tolerate
 redelivery after an uncertain acknowledgement. An accepted Agent interaction is recorded by its receipt and is
@@ -621,20 +681,15 @@ never re-executed after interruption.
 
 ## Context assembly and entities
 
-Create a context with `BoundedContext.singleTenant(name)` or
-`BoundedContext.multitenant(name)`. Names are immutable. Use
-`ServerEnvironment.when(type).use({ storageFactory: factory })` before explicit
-environment setup to supply record/event storage to all contexts.
-`withTenantIndex(index)` selects a different live membership directory for a
-multitenant Bounded Context after its environment has a real index. The Bounded Context getter
-returns its captured selection; single-tenant Bounded Contexts return `SINGLE_TENANT`.
-Both getters have type `TenantIndexSetting` and require narrowing before index
-methods. Closing a Bounded Context does not close the configured directory.
-The application imports its generated `spine-bootstrap.js` before registering
-classes with `add(EntityClass)`; `build()` then selects passive descriptions
-by exact constructor and performs assembly, including
-explicit `Repository` registration. Await it before using the context. A built context contains `CommandBus`,
-`EventBus`, `Stand`, repositories, and its storage lifecycle.
+Declare a Bounded Context with `BoundedContext.singleTenant(name)` or
+`BoundedContext.multiTenant(name)`. Names are immutable. Configure storage through
+`ServerEnvironment.newBuilder().under(type, configuration => configuration.use(settings))`.
+Pass the Bounded Context builder to Application, whose asynchronous build selects
+passive generated descriptions and creates repositories. Import the application's
+`spine-bootstrap.js` before registering Entity classes with `add(EntityClass)`.
+A built Bounded Context provides CommandBus, EventBus, Stand, and repositories.
+Its tenant index is the Application index in multi-tenant mode and `SINGLE_TENANT`
+in single-tenant mode. Closing one Bounded Context does not close the shared index.
 Trusted server-side code can call `context.getRepository(EntityClass)` to obtain
 the already registered repository for that exact constructor. The lookup does
 not create a repository or read Entity state; an absent class or closing
@@ -649,8 +704,7 @@ registry shapes with an instruction to regenerate.
 
 Each built context also has one `StandSubscriptionRegistry`. By default the
 builder creates a storage-backed registry from the resolved context
-`StorageFactory` (including the `ServerEnvironment` factory used for a builder
-added to a server). Its physical `StorageGroup` derives from the logical Bounded Context name, so two contexts using one factory keep distinct definitions. An injected `StorageSubscriptionRegistry` takes an explicit group as its third constructor argument and prepares its captured factory and context. It stores one `spine.client.SubscriptionRecord` under each
+`StorageFactory` (the factory configured in its Application environment). Its physical `StorageGroup` derives from the logical Bounded Context name, so two contexts using one factory keep distinct definitions. An injected `StorageSubscriptionRegistry` takes an explicit group as its third constructor argument and prepares its captured factory and context. It stores one `spine.client.SubscriptionRecord` under each
 explicit `SubscriptionId`. A complete custom implementation can instead be
 supplied with `withSubscriptionRegistry(registry)`; responsibility transfers to
 the builder on the first build attempt.
@@ -663,8 +717,10 @@ and the assembled child is closed before READY. Durable logical bindings remain
 Gateway-only. The Coordinator fans each logical definition to ready children,
 merges updates, propagates cancellation, and carries no subscription payload on
 parent/child IPC. A late or replacement child synchronizes retained definitions
-before it is eligible for normal requests. The Coordinator resolves the same
-`subscriptionQueueCapacity` before binding its HTTP/2 listener. Its activation
+before it is eligible for normal requests. Set the Coordinator waiting capacity
+through `ManagedServerApplicationOptions.subscriptionQueueCapacity`; its default
+remains 100. Configure each child Application’s capacity separately through its
+environment builder. Its activation
 ACK is separate from the update queue, which reserves one active DATA update
 plus the configured waiting count for each logical subscriber. Overflow closes
 that subscriber's relay and aborts its child streams.
@@ -766,16 +822,16 @@ registration with these options.
 
 Configuration has these scopes:
 
-| Scope           | Setting                                    | Effect                                                           |
-| --------------- | ------------------------------------------ | ---------------------------------------------------------------- |
-| Environment     | `ServerEnvironment.when(type).use({ ai })` | Default registry for Bounded Contexts.                           |
-| Bounded Context | `BoundedContextBuilder.withAi(registry)`   | Overrides environment AI for one Bounded Context.                |
-| Repository      | `ai.defaultModels`                         | Generation and decision defaults before the registry's defaults. |
-| Repository      | `ai.allowedModels`                         | Deployment references the Agent may use.                         |
-| Repository      | `ai.resolveModel`                          | Optional accepted-source choice before the Agent handler.        |
-| Repository      | `ai.authorizeSelection`                    | Authorizes explicit choices and staged preference changes.       |
-| Repository      | `ai.invocationLimits`                      | Limits that can narrow the registry's whole-signal limits.       |
-| Instance        | `this.ai.select(kind, ref)`                | A saved preference applied to later accepted signals.            |
+| Scope           | Setting                                                           | Effect                                                           |
+| --------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Environment     | `builder.under(type, configuration => configuration.use({ ai }))` | Default registry for Bounded Contexts.                           |
+| Bounded Context | `BoundedContextBuilder.withAi(registry)`                          | Overrides environment AI for one Bounded Context.                |
+| Repository      | `ai.defaultModels`                                                | Generation and decision defaults before the registry's defaults. |
+| Repository      | `ai.allowedModels`                                                | Deployment references the Agent may use.                         |
+| Repository      | `ai.resolveModel`                                                 | Optional accepted-source choice before the Agent handler.        |
+| Repository      | `ai.authorizeSelection`                                           | Authorizes explicit choices and staged preference changes.       |
+| Repository      | `ai.invocationLimits`                                             | Limits that can narrow the registry's whole-signal limits.       |
+| Instance        | `this.ai.select(kind, ref)`                                       | A saved preference applied to later accepted signals.            |
 
 A prebuilt Bounded Context already has its registry; adding it to a server does not
 reconfigure it. An instance preference takes precedence over its repository
@@ -923,13 +979,22 @@ thereby an external dispatch route.
 
 ## Services, reads, and lifecycle
 
-`SpineServices({ contexts }).register(router)` registers the JVM-compatible
+`new SpineServices({ application }).register(router)` registers the JVM-compatible
 CommandService, QueryService, and SubscriptionService contracts. `Server`
 opens the local Node HTTP/2 listener; default host is `127.0.0.1`. Set
 `readMaxBytes` and `writeMaxBytes` only to integers 1–4294967295; defaults are 4194304. `RunningServer.close()` stops intake, closes sessions, waits for active
-work to stop using dependencies, then closes contexts. Caller-managed `start()`
-does not close global process facilities; close `ServerEnvironment.instance()`
-separately when used. The final run-managed `run()` close closes its environment.
+endpoint work to finish and closes endpoint resources. It leaves shared Bounded
+Contexts, Delivery, monitoring, and reads available to sibling endpoints. With
+caller-managed start(), close every endpoint before Application.close(). The final
+run-managed retirement closes its Application after pending starts settle.
+Manual start() and managed run() cannot be mixed for the same Application.
+
+Server receives an already built Application through setApplication(). Duplicate
+Command handlers reject service assembly before listening. Failed additional
+listener startup leaves established endpoints usable. If Application close begins
+during a pending start, that start releases its listener and rejects. Application
+retains failed listener cleanup for retry even if the Server builder is discarded;
+storage remains available until that cleanup succeeds.
 
 Native QueryService accepts `BytesValue` equality and range operands for annotated scalar `bytes`
 columns and permits ascending or descending byte ordering. The shared evaluator uses unsigned
@@ -962,7 +1027,7 @@ separates actor metadata from verified reader facts and identifies the current
 operation, plus a detached containing message and field for nested calls.
 Read-only packed bytes remain available to Buf decoding through a detached
 `value.slice()` passed to `fromBinary`.
-Call `addReadSideFilter(filter)` on a `BoundedContextBuilder` before `build()` to apply it to that
+Call `addReadSideFilter(filter)` on a `BoundedContextBuilder` before Application build to apply it to that
 Bounded Context's outward Entity reads and retained histories. Pass `readSideFilters`
 to `new Server(...)` to apply policies to Entity Query and App Query results
 leaving that Server over gRPC. The same instance can be installed in both
@@ -1192,7 +1257,7 @@ does not guarantee cluster-complete observations, subscription replay,
 event-gap repair, or exactly-once effects.
 
 This typed local observer handles visible states, removals, and terminal faults.
-Configure `subscriptionQueueCapacity: 250` through `ServerEnvironment.when(...).use(...)`
+Configure `subscriptionQueueCapacity: 250` in the environment builder’s `under()` callback
 before creating the Stand to allow 250 waiting updates beyond the active one:
 
 <!-- docs-snippet-path: packages/server/test/stand/stand-direct-subscription.test.ts -->
@@ -1219,14 +1284,17 @@ export function observeProjects(
 
 ### Native and managed hosting
 
-`Server.start()` installs no process signal handlers, never closes its
-environment, and shares only a caller-managed active generation. `Server.run()`
-coalesces concurrent calls on one builder, shares a run-managed generation with
-other `run()` servers, and rejects mixed admission before listener open. The
-coordinator uses one `SIGINT`/`SIGTERM` listener pair, closes servers in reverse
-successful-start order, retains failed final environment closure for later
-signal or explicit-close retry, and sets `process.exitCode` to `1` after a
-signal-driven failure.
+`Server.start()` installs no process signal handlers. The caller closes the
+endpoint before its Application. `Server.run()` coalesces concurrent calls on one
+Server builder and can expose the same Application through several managed
+endpoints. Manual and managed endpoints cannot share one Application; separate
+Applications remain independent.
+
+The process coordinator uses one `SIGINT`/`SIGTERM` listener pair and stops endpoints
+in reverse registration order. It closes each Application after its final managed
+endpoint stops and pending starts settle. Failed cleanup remains available for a
+later signal or explicit close attempt. A signal-driven failure sets
+`process.exitCode` to `1`.
 
 `ManagedServerApplication.run()` is the Node-only deployment entrypoint for a
 group of complete server replicas when the framework handles process shutdown.
@@ -1238,7 +1306,10 @@ the machine. Its optional `host` and required `port` (zero selects an OS-assigne
 port) bind the public
 Coordinator listener. Every child executes that same module and calls the
 module's `createServer({ host: "127.0.0.1", port: 0 })`. The child reports its
-actual loopback endpoint only after its local readiness gates settle. The parent
+actual loopback endpoint only after its local readiness gates settle. If the
+callback starts an endpoint and then fails, managed startup closes that endpoint
+before closing its Application. Failures during activation or the final readiness
+notification use the same cleanup order. The parent
 initially waits until every configured child is ready. Afterwards it is ready
 while at least one child is ready; it remains alive and keeps replacing while
 degraded, and reports unready if no child is ready. It replaces an unexpected
@@ -1353,21 +1424,17 @@ An active stream in another process receives no local signal.
 
 ```ts
 import type { SignedSessions } from "@spine-event-engine/auth";
-import { Server, type ReaderAdmissionResult, type ServerOptions } from "@spine-event-engine/server";
+import { Server, type Application, type ReaderAdmissionResult } from "@spine-event-engine/server";
 
 /**
  * Configures direct native bearer admission with the local session strategy.
  *
  * @param sessions Strategy also used by the application's logout action.
- * @param contexts Application Bounded Contexts exposed by this Server.
+ * @param application Built Application exposed by this Server.
  * @returns Server configured for native authentication.
  */
-function nativeServer(
-  sessions: SignedSessions,
-  contexts: NonNullable<ServerOptions["contexts"]>,
-): Server {
+function nativeServer(sessions: SignedSessions, application: Application): Server {
   return new Server({
-    contexts,
     services: {
       readerAdmission: {
         direct: {
@@ -1391,14 +1458,14 @@ function nativeServer(
         },
       },
     },
-  });
+  }).setApplication(application);
 }
 ```
 
 The admitted logout action checks `await sessions.logout(credential)` on that
 same strategy. It reports durable success only for `revoked`; `unavailable`
-and `expiryOnly` remain distinct. Application shutdown closes both Server and
-strategy. A custom authenticator still enforces its own credential and policy
+and `expiryOnly` remain distinct. The host stops its Server endpoints and session strategy before closing
+Application. A custom authenticator still enforces its own credential and policy
 checks; a token in a header alone does not establish authority.
 
 Authenticated forwarding now requires an issuer; configure both gateway and
@@ -1561,17 +1628,23 @@ targets to shards across all Bounded Contexts; the default is one shard. For exa
 
 ```ts
 import {
+  Application,
   BoundedContext,
   EnvironmentType,
   ServerEnvironment,
   UniformAcrossAllShards,
 } from "@spine-event-engine/server";
 
-ServerEnvironment.when(EnvironmentType.Local).use({
-  deliveryStrategy: UniformAcrossAllShards.forNumber(3),
-});
-await ServerEnvironment.instance().completeSetup();
-const context = await BoundedContext.singleTenant("Tasks").build();
+const environment = ServerEnvironment.newBuilder()
+  .under(EnvironmentType.Local, (configuration) => {
+    configuration.use({ deliveryStrategy: UniformAcrossAllShards.forNumber(3) });
+  })
+  .build();
+const application = await Application.newBuilder()
+  .setServerEnvironment(environment)
+  .add(BoundedContext.singleTenant("Tasks"))
+  .build();
+await application.close();
 ```
 
 Aggregates, Process Managers, Agents, and Projections derive their Inbox shard
@@ -1644,9 +1717,8 @@ class OrdersDeliveryStrategy implements DeliveryStrategy {
 ```
 
 Set `deliveryStrategy: new OrdersDeliveryStrategy()` in the existing
-`ServerEnvironment.when(...).use({...})` call before resolving the environment.
-For Orders, that call is in `configureOrdersEnvironment()`. Preserve its storage
-and tenant settings. Select the profile actually used by the process: configuring
+environment builder's `under()` callback before building Application.
+Preserve its storage settings and the Application tenant index. Select the profile actually used by the process: configuring
 `Local` does not configure a process whose `NODE_ENV` is `production`.
 
 The resulting shard sets are:
@@ -1771,17 +1843,15 @@ name and role, separate from domain Event history. Command acceptance
 alone does not promise recipient completion. Processing retries for Inbox rows
 and acknowledgement recovery remain separate Delivery behavior.
 
-`Environment` resolves the Node `local` or `production` profile once from
-`NODE_ENV`. `ServerEnvironment` resolves configured facilities once for that
-profile and exposes its `storageFactory`, `tenantIndex`, `nodeId`, and
-`close()` lifecycle. A healthy close with active contexts rejects without
-teardown; after required startup failure, close joins automatic cleanup and
-reports the original cause plus cleanup failures. After explicit
-`completeSetup()`, its `delivery` property
-is the usable shared public `Delivery` facade. A Bounded Context cannot build
-before setup, and a server does not start setup on the application's behalf.
-Neither API authenticates requests or supplies remote topology or a deployment
-policy.
+`Environment` resolves the Node `local` or `production` profile from `NODE_ENV`.
+Each ServerEnvironment captures that profile's configured services independently.
+It exposes storage, schema lookup, node identity, and shared Delivery. Application
+build performs setup; Application close releases these services after its Bounded
+Contexts and tenant index. Closing an environment with active Bounded Contexts
+rejects without tearing down live services. After required startup failure,
+environment close retries unfinished cleanup and still reports the original
+startup failure. Successfully closed services are not closed again. Environment
+configuration does not authenticate requests or select a remote topology.
 
 `ServerEnvironmentDelivery` supplies an optional remote facility with `open()`,
 `inbox`, and `workRegistry` ports. Setup opens it once before creating the

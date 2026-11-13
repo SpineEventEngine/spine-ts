@@ -26,8 +26,23 @@ import {
   type UserId,
 } from "@spine-event-engine/proto";
 
-import { BoundedContext, boundedContextIntegrationAccess } from "../context/bounded-context.js";
+import {
+  BoundedContext,
+  boundedContextAccess,
+  boundedContextIntegrationAccess,
+  type BoundedContextBuilder,
+} from "../context/bounded-context.js";
 import { ServerEnvironment } from "../server/server-environment.js";
+import { InMemorySubscriptionRegistry } from "../stand/subscription-registry.js";
+
+const declarations = new WeakMap<
+  ThirdPartyContext,
+  {
+    readonly builder: BoundedContextBuilder;
+    readonly attach: (context: BoundedContext, environment: ServerEnvironment) => void;
+    readonly isAttached: () => boolean;
+  }
+>();
 
 /**
  * Represents a hidden bounded context that imports third-party events through its private broker.
@@ -36,40 +51,58 @@ import { ServerEnvironment } from "../server/server-environment.js";
  * publishes generated events, observes availability, and closes it.
  */
 export class ThirdPartyContext {
-  readonly #context: BoundedContext;
+  #context: BoundedContext | undefined;
+
+  #environment: ServerEnvironment | undefined;
 
   readonly #multitenant: boolean;
 
   #closed = false;
 
   /**
-   * Stores the integration context and its tenant policy.
-   * @param context The bounded context that receives imported Events.
+   * Stores the declaration builder and tenant policy until Application assembly.
+   * @param builder Builds the hidden Bounded Context after attachment.
    * @param multitenant Whether importing actors must include a tenant.
    */
-  private constructor(context: BoundedContext, multitenant: boolean) {
-    this.#context = context;
+  private constructor(builder: BoundedContextBuilder, multitenant: boolean) {
     this.#multitenant = multitenant;
+    declarations.set(this, {
+      builder,
+      attach: (context, environment) => {
+        if (this.#context !== undefined) throw new Error("ThirdPartyContext is already attached.");
+        this.#context = context;
+        this.#environment = environment;
+      },
+      isAttached: () => this.#context !== undefined,
+    });
   }
 
   /**
    * Creates a third-party context that forbids actor tenants.
    *
    * @param name Identifies the hidden bounded context.
-   * @returns Resolves to an open single-tenant context.
+   * @returns An unattached single-tenant declaration.
    */
-  static async singleTenant(name: string): Promise<ThirdPartyContext> {
-    return new ThirdPartyContext(await BoundedContext.singleTenant(name).build(), false);
+  static singleTenant(name: string): ThirdPartyContext {
+    return new ThirdPartyContext(
+      BoundedContext.singleTenant(name).withSubscriptionRegistry(
+        new InMemorySubscriptionRegistry(),
+      ),
+      false,
+    );
   }
 
   /**
-   * Creates a third-party context that requires actor tenants.
+   * Creates an unattached declaration requiring tenant identities on imported Events.
    *
-   * @param name Identifies the hidden bounded context.
-   * @returns Resolves to an open multitenant context.
+   * @param name Names the hidden Bounded Context.
+   * @returns A declaration to add to an Application.
    */
-  static async multitenant(name: string): Promise<ThirdPartyContext> {
-    return new ThirdPartyContext(await BoundedContext.multitenant(name).build(), true);
+  static multiTenant(name: string): ThirdPartyContext {
+    return new ThirdPartyContext(
+      BoundedContext.multiTenant(name).withSubscriptionRegistry(new InMemorySubscriptionRegistry()),
+      true,
+    );
   }
 
   /* eslint-disable @typescript-eslint/unified-signatures --
@@ -103,7 +136,10 @@ export class ThirdPartyContext {
    * @returns Completes when the private broker accepts the imported event.
    */
   async emittedEvent(event: Message, actor: ActorContext | UserId): Promise<void> {
-    if (this.#closed) throw new Error("ThirdPartyContext is closed.");
+    const context = this.#context;
+    if (context === undefined)
+      throw new Error("ThirdPartyContext is not attached to an Application.");
+    if (!this.isOpen()) throw new Error("ThirdPartyContext is closed.");
     const actorContext = this.#actorContext(actor);
     const typeName = event.$typeName;
     if (typeof typeName !== "string" || typeName.length === 0) {
@@ -117,11 +153,11 @@ export class ThirdPartyContext {
         origin: { case: "importContext", value: actorContext },
         producerId: AnyPacker.pack(
           BoundedContextNameSchema,
-          create(BoundedContextNameSchema, { value: this.#context.name.value }),
+          create(BoundedContextNameSchema, { value: context.name.value }),
         ),
       }),
     });
-    await boundedContextIntegrationAccess.publishImported(this.#context, envelope);
+    await boundedContextIntegrationAccess.publishImported(context, envelope);
   }
   /* eslint-enable @typescript-eslint/unified-signatures */
 
@@ -131,7 +167,9 @@ export class ThirdPartyContext {
    * @returns `true` until a successful close; `false` after it closes.
    */
   isOpen(): boolean {
-    return !this.#closed;
+    return (
+      this.#context !== undefined && !this.#closed && !boundedContextAccess.isClosing(this.#context)
+    );
   }
 
   /**
@@ -141,6 +179,7 @@ export class ThirdPartyContext {
    */
   async close(): Promise<void> {
     if (this.#closed) return;
+    if (this.#context === undefined) return;
     await this.#context.close();
     this.#closed = true;
   }
@@ -167,8 +206,55 @@ export class ThirdPartyContext {
   }
 
   #schema(typeName: string) {
-    const metadata = ServerEnvironment.instance().typeRegistry.findByFullName(typeName);
+    const metadata = this.#environment?.typeRegistry.findByFullName(typeName);
     if (metadata === undefined) throw new TypeError(`ThirdPartyContext does not know ${typeName}.`);
     return metadata.schema;
   }
 }
+
+/**
+ * Exposes declaration attachment only to Application assembly.
+ *
+ * @internal
+ */
+export const thirdPartyAccess: Readonly<{
+  /**
+   * Returns the hidden Bounded Context builder.
+   */
+  builder(context: ThirdPartyContext): BoundedContextBuilder;
+
+  /**
+   * Reports whether an Application has attached the declaration.
+   */
+  isAttached(context: ThirdPartyContext): boolean;
+
+  /**
+   * Attaches a hidden context after successful Application startup.
+   */
+  attach(context: ThirdPartyContext, built: BoundedContext, environment: ServerEnvironment): void;
+}> = Object.freeze({
+  /**
+   * Returns the hidden Bounded Context builder.
+   */
+  builder(context: ThirdPartyContext): BoundedContextBuilder {
+    const declaration = declarations.get(context);
+    if (declaration === undefined) throw new TypeError("Expected a ThirdPartyContext.");
+    return declaration.builder;
+  },
+
+  /**
+   * Reports whether an Application has attached the declaration.
+   */
+  isAttached(context: ThirdPartyContext): boolean {
+    return declarations.get(context)?.isAttached() ?? false;
+  },
+
+  /**
+   * Attaches a hidden context after successful Application startup.
+   */
+  attach(context: ThirdPartyContext, built: BoundedContext, environment: ServerEnvironment): void {
+    const declaration = declarations.get(context);
+    if (declaration === undefined) throw new TypeError("Expected a ThirdPartyContext.");
+    declaration.attach(built, environment);
+  },
+});

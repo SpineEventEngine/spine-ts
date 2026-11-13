@@ -19,13 +19,8 @@ import { ActorContextSchema } from "@spine-event-engine/proto";
 import { ConversationIdSchema } from "@spine-event-engine/proto/agent";
 import { QueryIdSchema } from "@spine-event-engine/proto/client";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { ServerTests } from "@spine-event-engine/server/testing";
 import { AiTestBackend, BlackBox } from "@spine-event-engine/testing";
-import { afterEach, describe, expect, it } from "vitest";
-
-afterEach(async () => {
-  await ServerTests.resetEnvironment();
-});
+import { describe, expect, it } from "vitest";
 
 import {
   DraftSupportReplySchema,
@@ -59,8 +54,9 @@ function registry(backend: AiTestBackend): AiRegistry {
 }
 
 async function started(backend: AiTestBackend) {
-  const context = await SupportContext.create(registry(backend), new InMemoryStorageFactory());
-  const box = await BlackBox.from(context);
+  const box = await BlackBox.from(SupportContext.create(registry(backend)), {
+    storageFactory: new InMemoryStorageFactory(),
+  });
   const scope = box.asGuest();
   const opened = await scope.post(
     OpenSupportTicketSchema,
@@ -79,7 +75,7 @@ async function started(backend: AiTestBackend) {
     }),
   );
   expect(posted.kind).toBe("ok");
-  return { box, context, scope };
+  return { box, scope };
 }
 
 function reviewQuery() {

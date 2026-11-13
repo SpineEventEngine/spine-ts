@@ -40,6 +40,7 @@ import {
 } from "@spine-event-engine/proto/client";
 import {
   Aggregate,
+  Application,
   BoundedContext,
   EnvironmentType,
   Repository,
@@ -48,10 +49,9 @@ import {
   PersistentTenantIndex,
   type BoundedContext as BuiltContext,
 } from "@spine-event-engine/server";
-import { ServerTests } from "@spine-event-engine/server/testing";
 import { StorageGroup, type StorageFactory } from "@spine-event-engine/storage";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-import { afterEach, expect, it, onTestFinished } from "vitest";
+import { expect, it, onTestFinished } from "vitest";
 
 import {
   ProjectIdSchema,
@@ -78,8 +78,6 @@ const tenantBUrl = process.env.SPINE_TS_POSTGRESQL_TENANT_B_URL;
  * Provides a domain-correct Project state registration for the native proof.
  */
 class Project extends Aggregate<ProjectId, typeof ProjectStateSchema> {}
-
-afterEach(async () => ServerTests.resetEnvironment());
 
 /**
  * Attempts every native test resource close and reports all cleanup failures.
@@ -108,23 +106,34 @@ it.skipIf(url === undefined)(
     let created = false;
     let factory: StorageFactory | undefined;
     let environment: ServerEnvironment | undefined;
+    let application: Application | undefined;
     let context: BuiltContext | undefined;
     try {
       await cleanup.query(`CREATE SCHEMA "${schema}"`);
       created = true;
-      factory = await PostgresStorageFactory.newBuilder()
+      const selectedFactory = await PostgresStorageFactory.newBuilder()
         .setOptions({ url, schema })
         .setStringifierRegistry(stringifiers)
         .build();
-      ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
-      environment = ServerEnvironment.instance();
-      await environment.completeSetup();
+      factory = selectedFactory;
+      environment = ServerEnvironment.newBuilder()
+        .under(EnvironmentType.Local, (setting) => {
+          setting.use({ storageFactory: selectedFactory });
+        })
+        .build();
       const name = `NativePrep_${randomUUID().replaceAll("-", "")}`;
-      context = await BoundedContext.singleTenant(name)
-        .add(new Repository({ entityType: Project, schema: ProjectStateSchema }))
+      application = await Application.newBuilder()
+        .setServerEnvironment(environment)
+        .add(
+          BoundedContext.singleTenant(name).add(
+            new Repository({ entityType: Project, schema: ProjectStateSchema }),
+          ),
+        )
         .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
-      await context.runtime.createStorageStructures();
-      await environment.checkStructureCompatibility();
+      context = application.contexts()[0];
+      if (context === undefined) throw new Error("Expected native preparation Bounded Context.");
+      await application.createStorageStructures();
+      await application.checkStructureCompatibility();
       const id = projectWorkflowIds(name, 1).project;
       await context.stand().update(
         ProjectStateSchema,
@@ -140,8 +149,7 @@ it.skipIf(url === undefined)(
       });
     } finally {
       await closeNativeResources([
-        () => context?.close(),
-        () => environment?.close() ?? factory?.close(),
+        () => application?.close() ?? environment?.close() ?? factory?.close(),
         async () => {
           if (!created) return;
           await cleanup.query(`DROP SCHEMA "${schema}" CASCADE`);
@@ -188,6 +196,7 @@ it
     const created: Pool[] = [];
     let factory: StorageFactory | undefined;
     let environment: ServerEnvironment | undefined;
+    let application: Application | undefined;
     let tenantIndex: PersistentTenantIndex | undefined;
     let context: BuiltContext | undefined;
     let running: Awaited<ReturnType<Server["start"]>> | undefined;
@@ -196,32 +205,36 @@ it
     const activationAbort = new AbortController();
     let cleanupPromise: Promise<void> | undefined;
     const cleanup = (): Promise<void> => {
-      cleanupPromise ??= closeNativeResources([
-        () => {
-          activationAbort.abort();
-          return Promise.resolve();
-        },
-        async () => {
-          await iterator?.return?.();
-        },
-        async () => {
-          await cancelSubscription?.();
-        },
-        () => running?.close(),
-        () => context?.close(),
-        () => tenantIndex?.close(),
-        () => environment?.close() ?? factory?.close(),
-        ...pools.map((pool) => async () => {
-          if (!created.includes(pool)) return;
-          await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
-          const result = await pool.query<{ name: string | null }>(
-            "SELECT to_regnamespace($1)::text AS name",
-            [schema],
-          );
-          expect(result.rows[0]?.name).toBeNull();
-        }),
-        ...pools.map((pool) => () => pool.end()),
-      ]);
+      cleanupPromise ??= (async () => {
+        await closeNativeResources([
+          () => {
+            activationAbort.abort();
+            return Promise.resolve();
+          },
+          async () => {
+            await iterator?.return?.();
+          },
+          async () => {
+            await cancelSubscription?.();
+          },
+          () => running?.close(),
+        ]);
+        await closeNativeResources([
+          () => application?.close() ?? tenantIndex?.close(),
+          () =>
+            application === undefined ? (environment?.close() ?? factory?.close()) : undefined,
+          ...pools.map((pool) => async () => {
+            if (!created.includes(pool)) return;
+            await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
+            const result = await pool.query<{ name: string | null }>(
+              "SELECT to_regnamespace($1)::text AS name",
+              [schema],
+            );
+            expect(result.rows[0]?.name).toBeNull();
+          }),
+          ...pools.map((pool) => () => pool.end()),
+        ]);
+      })();
       return cleanupPromise;
     };
     onTestFinished(cleanup);
@@ -230,7 +243,7 @@ it
         await pool.query(`CREATE SCHEMA "${schema}"`);
         created.push(pool);
       }
-      factory = await PostgresStorageFactory.newBuilder()
+      const selectedFactory = await PostgresStorageFactory.newBuilder()
         .setOptions({ url, schema })
         .setTenantOptions([
           { tenantId: tenantA, options: { url: tenantAUrl, schema } },
@@ -238,27 +251,34 @@ it
         ])
         .setStringifierRegistry(stringifiers)
         .build();
+      factory = selectedFactory;
       tenantIndex = await PersistentTenantIndex.create({
         storageFactory: factory,
         group: new StorageGroup(`tenants_${randomUUID().replaceAll("-", "")}`),
       });
       await tenantIndex.keep(tenantA);
       await tenantIndex.keep(tenantB);
-      ServerEnvironment.when(EnvironmentType.Local).use({
-        storageFactory: factory,
-        tenantIndex,
-      });
-      environment = ServerEnvironment.instance();
-      await environment.completeSetup();
+      environment = ServerEnvironment.newBuilder()
+        .under(EnvironmentType.Local, (setting) => {
+          setting.use({ storageFactory: selectedFactory });
+        })
+        .build();
       const name = `NativeSubscription_${randomUUID().replaceAll("-", "")}`;
-      context = await projectWorkflow(name, () => undefined, {
+      const builder = projectWorkflow(name, () => undefined, {
         multitenant: true,
-        build:
+      });
+      application = await Application.newBuilder()
+        .setServerEnvironment(environment)
+        .setTenantIndex(tenantIndex)
+        .add(builder)
+        .build(
           mode === "lazy"
             ? { createStorageStructures: false, startSubscriptionMonitoring: false }
             : {},
-      });
-      running = await new Server({ contexts: [context], port: 0 }).start();
+        );
+      context = application.contexts()[0];
+      if (context === undefined) throw new Error("Expected native subscription Bounded Context.");
+      running = await Server.atPort(0).setApplication(application).start();
       const subscriptionClient = createClient(
         SubscriptionService,
         createGrpcTransport({ baseUrl: running.baseUrl }),

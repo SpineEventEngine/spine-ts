@@ -15,6 +15,9 @@
 import { create } from "@bufbuild/protobuf";
 import {
   ManagedServerApplication,
+  Application,
+  BoundedContext,
+  InMemorySubscriptionRegistry,
   Server,
   ServerEnvironment,
   AppQueryHandler,
@@ -54,7 +57,6 @@ registerSpineMetadata(
   "managed-query-fixture",
 );
 
-await ServerEnvironment.instance().completeSetup();
 const managed = await ManagedServerApplication.run({
   processCount: 1,
   port: 0,
@@ -63,8 +65,16 @@ const managed = await ManagedServerApplication.run({
     direct: { authenticate: () => ({ reader: { principal: { id: "managed-reader" } } }) },
   },
   forwardingProof: { issue: () => "managed-proof" },
-  createServer: async ({ host, port }) =>
-    Server.atPort(port, {
+  createServer: async ({ host, port }) => {
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(
+        BoundedContext.singleTenant("ManagedQueries").withSubscriptionRegistry(
+          new InMemorySubscriptionRegistry(),
+        ),
+      )
+      .build();
+    return Server.atPort(port, {
       host,
       appQueries: [new ManagedOverviewHandler()],
       services: {
@@ -72,7 +82,10 @@ const managed = await ManagedServerApplication.run({
           forwarded: { verify: (_bytes, proof) => proof === "managed-proof" },
         },
       },
-    }).start(),
+    })
+      .setApplication(application)
+      .start();
+  },
 });
 
 if (process.env.SPINE_MANAGED_SERVER_CHILD !== "true") {

@@ -17,17 +17,14 @@ import { Agent } from "node:https";
 import { deleteApp, initializeApp, type Credential } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { Time } from "@spine-event-engine/core";
-import { ServerTests } from "@spine-event-engine/server/testing";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { generateKeyPair, SignJWT } from "jose";
-import { afterEach, expect, it, vi } from "vitest";
+import { expect, it, vi } from "vitest";
 import { FieldnotesHost } from "../src/fieldnotes-host.js";
 import type { FieldnotesSettings } from "../src/host-settings.js";
 
 const projectId = "demo-fieldnotes";
 const origin = "https://localhost:3000";
-
-afterEach(async () => ServerTests.resetEnvironment());
 
 it("returns 503 when official Admin cannot fetch signing certificates", async () => {
   const priorEmulator = process.env.FIREBASE_AUTH_EMULATOR_HOST;

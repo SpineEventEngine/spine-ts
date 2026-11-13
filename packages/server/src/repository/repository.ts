@@ -1049,11 +1049,7 @@ export class Repository<
     return RepositoryRoutingReads.call(this, RepositoryTenants.readEventTenant(event), (reads) =>
       this.#routing.routeEvent(event, reads),
     ).then((route) => {
-      RepositoryRoutes.warnLargeRoute(
-        route.messageFullTypeName,
-        this.stateFullTypeName,
-        route.entityIds.length,
-      );
+      RepositoryRoutes.warnLargeRoute(route.messageFullTypeName, this, route.entityIds.length);
       return route;
     });
   }
@@ -2214,7 +2210,7 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
       if (route !== undefined)
         RepositoryRoutes.warnLargeRoute(
           route.messageFullTypeName,
-          repository.stateSchema.typeName,
+          repository,
           route.entityIds.length,
         );
       return route;
@@ -2482,6 +2478,7 @@ interface RoutingInput<Id> {
  */
 interface RepositoryRuntime {
   readonly context: StorageMode;
+  readonly environment: ServerEnvironment;
   readonly storageFactory: StorageFactory;
   readonly onAdmit: (tenantId: TenantId | undefined) => Promise<void>;
   readonly ai?: AiRegistry;
@@ -9799,15 +9796,17 @@ const RepositoryRoutes = {
    * Records a warning for a large final route without changing its recipients.
    *
    * @param signal Signal type selected by the route.
-   * @param repository Receiving repository state type.
+   * @param repository Receiving repository and its registered environment.
    * @param count Distinct validated recipient count.
    */
-  warnLargeRoute(signal: string, repository: string, count: number): void {
+  warnLargeRoute(signal: string, repository: RepositoryView, count: number): void {
     if (count <= 1_000) return;
+    const environment = repositoryRuntimes.get(repository)?.environment;
+    if (environment === undefined) return;
     emitServerWarning(
-      serverEnvironmentAccess.loggerFor(ServerEnvironment.instance()),
-      `Routing ${signal} to ${String(count)} recipients in repository ${repository}.`,
-      { operation: "repository.route", count, entityType: repository },
+      serverEnvironmentAccess.loggerFor(environment),
+      `Routing ${signal} to ${String(count)} recipients in repository ${repository.stateFullTypeName}.`,
+      { operation: "repository.route", count, entityType: repository.stateFullTypeName },
     );
   },
 
@@ -12779,7 +12778,7 @@ const InboxHandoff = {
     const route = acceptedRoute ?? (await repository.routeCommand(command));
     const commandId = RepositorySignals.requireCommandId(command);
     const deliveryTenantId = RepositoryTenants.requireCommandTenant(runtime.context, command);
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const delivery = serverEnvironmentAccess.coreDelivery(runtime.environment);
 
     await runtime.entityInbox.receive(
       delivery,
@@ -12814,7 +12813,7 @@ const InboxHandoff = {
   ): Promise<void> {
     const eventId = RepositorySignals.requireEventId(event);
     const deliveryTenantId = RepositoryTenants.requireProjectionTenant(runtime.context, event);
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const delivery = serverEnvironmentAccess.coreDelivery(runtime.environment);
 
     await runtime.projectionInbox.receive(
       delivery,
@@ -12849,7 +12848,7 @@ const InboxHandoff = {
   ): Promise<void> {
     const eventId = RepositorySignals.requireEventId(event);
     const deliveryTenantId = RepositoryTenants.requireEntityEventTenant(runtime.context, event);
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const delivery = serverEnvironmentAccess.coreDelivery(runtime.environment);
 
     await runtime.entityInbox.receive(
       delivery,
@@ -12875,7 +12874,7 @@ const InboxHandoff = {
   ): Promise<void> {
     const eventId = RepositorySignals.requireEventId(event);
     const deliveryTenantId = RepositoryTenants.requireEntityEventTenant(runtime.context, event);
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const delivery = serverEnvironmentAccess.coreDelivery(runtime.environment);
     for (let start = 0; start < entityIds.length; start += 1_000) {
       const inputs = entityIds
         .slice(start, start + 1_000)

@@ -8,7 +8,7 @@ This package starts the composed Message Board and announcements Bounded Context
   message.
 - ✅ `BoardViewProjection` and `BoardStatisticsProjection` build Message Board views; the announcements Bounded Context builds its own view.
 - ✅ Bounded Context and Server read filters protect restricted rows, statistics, Events, and author names.
-- ✅ `MessageBoardApplication` builds the context and starts the framework server.
+- ✅ `MessageBoardApplication` builds one Application containing both Bounded Contexts and starts the framework server.
 - ✅ Framework validation rejects missing usernames and messages before a
   handler runs.
 

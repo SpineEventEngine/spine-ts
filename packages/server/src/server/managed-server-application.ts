@@ -18,6 +18,10 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
 import { runningServerAccess, type RunningServer } from "./server.js";
+import {
+  managedApplicationCapture,
+  type ManagedApplicationResource,
+} from "./managed-application-capture.js";
 import { emitServerWarning } from "./server-log.js";
 import {
   NodeCoordinator,
@@ -40,6 +44,22 @@ const closeKillMs = 1_000;
 const endpointMaximumBytes = 256;
 const handleMembers = new WeakMap<ManagedServerApplicationHandle, ManagedServerCoordinator>();
 const managedTestRegistries = new WeakMap<RunningServer, readonly InMemorySubscriptionRegistry[]>();
+const pendingChildCleanup = new Set<() => Promise<void>>();
+
+/**
+ * Resources captured before a managed child factory returns.
+ */
+interface CapturedChildResources {
+  /**
+   * Applications and incomplete builders captured during child assembly.
+   */
+  readonly applications: Set<ManagedApplicationResource>;
+
+  /**
+   * Started endpoints retained until listener cleanup succeeds.
+   */
+  readonly endpoints: Set<RunningServer>;
+}
 const lifecycleLogger: ILogLayer = new LogLayer({
   transport: new StructuredTransport({
     logger: console,
@@ -111,6 +131,12 @@ export interface ManagedServerApplicationOptions {
    * resulting endpoint is available from the started application handle.
    */
   readonly port: number;
+
+  /**
+   * Capacity for updates waiting behind an active parent Coordinator subscription result.
+   * Defaults to the Node Coordinator setting when omitted.
+   */
+  readonly subscriptionQueueCapacity?: number;
 
   /**
    *
@@ -254,6 +280,62 @@ export const ManagedServerApplication: Readonly<{
 
 const ManagedServerValues = Object.freeze({
   /**
+   * Closes Applications captured by one child factory after its endpoints stop.
+   *
+   * @param applications Captured Applications in construction order.
+   * @returns Completion after successful closes, retaining failed entries for retry.
+   */
+  async closeApplications(applications: Set<ManagedApplicationResource>): Promise<void> {
+    const errors: unknown[] = [];
+    for (const application of [...applications].reverse()) {
+      try {
+        await application.close();
+        applications.delete(application);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length > 0) throw new AggregateError(errors, "Managed Application close failed.");
+  },
+
+  /**
+   * Closes successful child endpoints before their Applications.
+   *
+   * @param resources Captured endpoints and Applications.
+   * @returns Completion after endpoint and Application cleanup.
+   */
+  async closeCaptured(resources: CapturedChildResources): Promise<void> {
+    const errors: unknown[] = [];
+    for (const endpoint of [...resources.endpoints].reverse()) {
+      try {
+        await endpoint.close();
+        resources.endpoints.delete(endpoint);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    try {
+      await ManagedServerValues.closeApplications(resources.applications);
+    } catch (error) {
+      errors.push(error);
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, "Managed child cleanup failed.");
+  },
+
+  /**
+   * Retries incomplete child cleanup before another factory starts.
+   *
+   * @returns Completion after all retained cleanup succeeds.
+   */
+  async retryChildCleanup(): Promise<void> {
+    for (const retry of [...pendingChildCleanup]) {
+      await retry();
+      pendingChildCleanup.delete(retry);
+    }
+  },
+
+  /**
    * Validates replica count and port, then starts the parent coordinator or child application.
    *
    * @param options The replica count, listener, child module, and assembly callback.
@@ -279,22 +361,31 @@ const ManagedServerValues = Object.freeze({
    * @returns The active child application handle.
    */
   async child(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
-    const server = await options.createServer({ host: "127.0.0.1", port: 0 });
+    await ManagedServerValues.retryChildCleanup();
+    const resources: CapturedChildResources = {
+      applications: new Set<ManagedApplicationResource>(),
+      endpoints: new Set<RunningServer>(),
+    };
+    let server: RunningServer;
     try {
+      server = await managedApplicationCapture.run(
+        resources.applications,
+        resources.endpoints,
+        () => options.createServer({ host: "127.0.0.1", port: 0 }),
+      );
+      resources.endpoints.add(server);
       ManagedServerValues.requireVolatileRegistries(server);
       await options.synchronize?.();
     } catch (error) {
       try {
-        await server.close();
+        await ManagedServerValues.closeCaptured(resources);
       } catch (cleanup) {
-        throw new AggregateError(
-          [error, cleanup],
-          "Managed child setup and server cleanup failed.",
-        );
+        pendingChildCleanup.add(() => ManagedServerValues.closeCaptured(resources));
+        throw new AggregateError([error, cleanup], "Managed child startup cleanup failed.");
       }
       throw error;
     }
-    return new ManagedChildLifecycle(server).start();
+    return new ManagedChildLifecycle(server, resources).start();
   },
 
   /**
@@ -390,6 +481,8 @@ class ManagedChildLifecycle {
 
   readonly #server: RunningServer;
 
+  readonly #resources: CapturedChildResources;
+
   #activated = false;
 
   #waitForParentClose = false;
@@ -400,9 +493,11 @@ class ManagedChildLifecycle {
    * Creates the lifecycle around an assembled child server.
    *
    * @param server The already assembled and synchronized child server.
+   * @param resources Endpoints and Applications selected by the child factory.
    */
-  constructor(server: RunningServer) {
+  constructor(server: RunningServer, resources: CapturedChildResources) {
     this.#server = server;
+    this.#resources = resources;
   }
 
   /**
@@ -426,14 +521,19 @@ class ManagedChildLifecycle {
     process.once("disconnect", this.#onDisconnect);
     try {
       await this.#notify("synchronizing", this.#server.baseUrl);
+      await this.#activation.promise;
+      await this.#notify("ready", this.#server.baseUrl);
+      return { ready: true, close: () => this.close() };
     } catch (error) {
       this.#serverCloseRelease.resolve(undefined);
-      await this.close();
+      try {
+        await this.close();
+      } catch (cleanup) {
+        pendingChildCleanup.add(() => this.close());
+        throw new AggregateError([error, cleanup], "Managed child activation cleanup failed.");
+      }
       throw error;
     }
-    await this.#activation.promise;
-    await this.#notify("ready", this.#server.baseUrl);
-    return { ready: true, close: () => this.close() };
   }
 
   /**
@@ -491,7 +591,7 @@ class ManagedChildLifecycle {
     // spine-log-boundary: server.managed_replica_delivery_drained_ipc
     void this.#notify("delivery-drained").catch(() => undefined);
     if (this.#waitForParentClose) await this.#serverCloseRelease.promise;
-    await this.#server.close();
+    await ManagedServerValues.closeCaptured(this.#resources);
   }
 
   /**
@@ -691,6 +791,7 @@ export interface ManagedServerCoordinatorDependencies {
     readonly members: ManagedServerCoordinator;
     readonly host?: string;
     readonly port?: number;
+    readonly subscriptionQueueCapacity?: number;
   }) => Promise<NodeCoordinator>;
 }
 
@@ -820,6 +921,9 @@ export class ManagedServerCoordinator {
             : { forwarding: this.#options.forwarding }),
           ...(this.#options.host === undefined ? {} : { host: this.#options.host }),
           ...(this.#options.port === undefined ? {} : { port: this.#options.port }),
+          ...(this.#options.subscriptionQueueCapacity === undefined
+            ? {}
+            : { subscriptionQueueCapacity: this.#options.subscriptionQueueCapacity }),
         });
     } catch (error) {
       try {

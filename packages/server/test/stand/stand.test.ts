@@ -415,8 +415,9 @@ describe("Stand", () => {
       "Observer unsubscribe failed.",
       "Registry close failed.",
     ]);
-    await expect(runtime.close()).rejects.toBe(failure);
-    expect(registry.closeCalls).toBe(1);
+    await expect(runtime.close()).resolves.toBeUndefined();
+    expect(registry.closeCalls).toBe(2);
+    expect(observedEventBusSubscriptions).toHaveLength(10);
     await expect(runtime.consume("detach-one", () => undefined)).rejects.toThrow(
       "Subscription runtime is closing.",
     );
@@ -2011,7 +2012,7 @@ class ClosingRegistry extends InMemorySubscriptionRegistry {
     this.closeCalls++;
     if (!this.observersDetached()) throw new Error("Registry closed before observer detach.");
     await super.close();
-    throw new Error("Registry close failed.");
+    if (this.closeCalls === 1) throw new Error("Registry close failed.");
   }
 }
 

@@ -68,18 +68,22 @@ application `spine-bootstrap.ts` import for bare-decorated classes. Import the
 bootstrap before Bounded Context or Server assembly. Generated directories are
 build output; do not hand-edit or commit them.
 
-Your application assembles a `BoundedContext`, selects storage, and starts a
-`Server`. For a process managed by Spine TS, use `run()`; an embedded
-application uses `start()` and closes the server itself.
+An `Application` assembles your Bounded Contexts using one configured
+`ServerEnvironment`. A `Server` exposes that Application over the network.
+For a process managed by Spine TS, use `run()`; an embedding host uses `start()`
+and closes the endpoint before closing its Application.
 
 <!-- docs-snippet-path: packages/server/test/context/bounded-context.test.ts -->
 
 ```ts
-import { BoundedContext, ServerEnvironment } from "@spine-event-engine/server";
+import { Application, BoundedContext, ServerEnvironment } from "@spine-event-engine/server";
 
-await ServerEnvironment.instance().completeSetup();
-const context = await BoundedContext.singleTenant("MessageBoard").build();
-await context.close();
+const environment = ServerEnvironment.newBuilder().build();
+const application = await Application.newBuilder()
+  .setServerEnvironment(environment)
+  .add(BoundedContext.singleTenant("MessageBoard"))
+  .build();
+await application.close();
 ```
 
 Continue with the [server introduction](../packages/server/README.md) for
@@ -87,20 +91,21 @@ application assembly and lifecycle.
 
 ### Choose tenant membership before building
 
-A single-tenant Bounded Context uses `SINGLE_TENANT`. Omitting the environment
-setting selects it; an application can also set it explicitly. Neither form
-constructs a tenant directory or looks up membership. A multitenant Bounded
-Context requires a live `TenantIndex` in the environment or a local
-`withTenantIndex(index)` override. Register a complete `TenantId` with
-`keep()` before tenant-scoped work. An unknown tenant is rejected before
-business storage preparation.
+A single-tenant Bounded Context uses `SINGLE_TENANT` without tenant membership
+lookups. A multi-tenant Bounded Context uses `application.tenantIndex()`. This
+synchronous getter returns one shared index handle; the default handle opens
+storage only when an asynchronous operation needs it. Register a complete
+`TenantId` with `keep()` before tenant-scoped requests. An unknown tenant is
+rejected before business storage preparation. Administrative preparation with an
+explicit TenantId can run before registration.
 
 For cross-process membership, inject a durable `StorageFactory` and the same
 `StorageGroup` into `PersistentTenantIndex.create()` in each process. The
 provider's database must already exist; index creation prepares only the
 selected record family by default. `createMissingStructures: false` skips
 creation and checks both at construction and later operations. Application
-code closes the index and factory separately. The
+supplies the index through `ApplicationBuilder.setTenantIndex()`. Application
+closes the index; application code closes its separate factory afterward. The
 [server reference](../packages/server/REFERENCE.md) describes exact tenant
 admission and preparation semantics.
 
@@ -269,7 +274,7 @@ weight and adds the result to its stored counter. Register it like this:
 <!-- docs-snippet-path: examples/projects/test/topology.test.ts -->
 
 ```ts
-import { BoundedContext, ServerEnvironment } from "@spine-event-engine/server";
+import { Application, BoundedContext, ServerEnvironment } from "@spine-event-engine/server";
 import { TaskAssignment, type AssignmentWeightService } from "../src/index.js";
 
 // Set up the service once, before the context starts receiving messages.
@@ -282,11 +287,12 @@ const builder = BoundedContext.singleTenant("Assignments").add(TaskAssignment, {
   onCreate: (options) => new TaskAssignment(options, weights),
 });
 
-// Complete environment setup before building this Bounded Context.
-await ServerEnvironment.instance().completeSetup();
-// Importing the application entrypoint registers passive handler metadata before build().
-const context = await builder.build();
-await context.close();
+// Application build sets up services and assembles registered Bounded Contexts.
+const application = await Application.newBuilder()
+  .setServerEnvironment(ServerEnvironment.newBuilder().build())
+  .add(builder)
+  .build();
+await application.close();
 ```
 
 When another message arrives for a saved Process Manager, Spine loads its
@@ -562,7 +568,7 @@ replay, deduplication, or durable queue, so consumers should re-query or make
 effects idempotent when appropriate.
 
 For one process, the default `InMemoryTransportFactory` is sufficient.
-`ServerEnvironment` uses one shared factory for all local contexts and closes it
+`ServerEnvironment` uses one shared factory for its Application's Bounded Contexts and closes it
 once when the environment closes. IntegrationBroker exchange is process-local
 through this message-channel factory. In production, configure
 `ServerEnvironment` with storage, optional `integrationChannelFactory`, and
@@ -570,23 +576,39 @@ the complete application `typeRegistry`.
 
 To import an event from a third-party producer, use `ThirdPartyContext`. The
 single-tenant form forbids an actor tenant, the multitenant form requires one,
-and the actor timestamp is preserved. This assumes `ServerEnvironment` was
-configured first with the complete application `typeRegistry` that contains
-`MessagePosted`:
+and the actor timestamp is preserved. Configure the complete application
+`typeRegistry` containing `MessagePosted`, add the declaration to Application,
+and publish only after Application build succeeds:
 
 <!-- docs-snippet-path: examples/message-board/app/src/index.ts -->
 
 ```ts
-import { ThirdPartyContext } from "@spine-event-engine/server";
+import {
+  Application,
+  EnvironmentType,
+  ServerEnvironment,
+  ThirdPartyContext,
+} from "@spine-event-engine/server";
+import type { TypeRegistryLookup } from "@spine-event-engine/core";
 import type { ActorContext } from "@spine-event-engine/proto";
 import type { MessagePosted } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
 
 declare const messagePosted: MessagePosted;
 declare const actorContext: ActorContext;
+declare const typeRegistry: TypeRegistryLookup;
 
-const imported = await ThirdPartyContext.multitenant("Partner");
+const environment = ServerEnvironment.newBuilder()
+  .under(EnvironmentType.Local, (configuration) => {
+    configuration.use({ typeRegistry });
+  })
+  .build();
+const imported = ThirdPartyContext.multiTenant("Partner");
+const application = await Application.newBuilder()
+  .setServerEnvironment(environment)
+  .add(imported)
+  .build();
 await imported.emittedEvent(messagePosted, actorContext);
-await imported.close();
+await application.close();
 ```
 
 Unknown local generated message schemas fail clearly; a valid event with no interested
@@ -656,8 +678,8 @@ secrets and credential values out of application logs.
 The environment's `deliveryStrategy` selects the shard for each receiving
 Aggregate, Process Manager, Agent, or Projection. The default is one shard. A
 custom strategy can distribute recipients or reserve shard ranges for selected
-receiver state types. Configure it before resolving `ServerEnvironment` and
-building Bounded Contexts; use the same mapping in processes sharing delivery
+receiver state types. Configure it in the environment builder before building
+Application; use the same mapping in processes sharing delivery
 storage. See [receiver-specific shard policies](../packages/server/REFERENCE.md#receiver-specific-shard-policies)
 for a complete example using the Orders Projections.
 

@@ -661,13 +661,17 @@ export class PostgresStorageFactory extends StorageFactory {
     const entries = this.#audits.get(boundary.key) ?? new Map<string, PostgresPreparedAudit>();
     this.#audits.set(boundary.key, entries);
     const current = entries.get(key);
-    if (current?.ready) return;
-    if (current?.pending !== undefined) return current.pending;
-    return this.startAudit(entries, key, boundary, binding, name, mode);
+    if (mode === "create" && current?.ready) return;
+    if (current?.pending !== undefined) {
+      if (current.pendingMode === mode) return current.pending;
+      const retry = () => this.prepareAudit(context, spec, mode);
+      return current.pending.then(retry, retry);
+    }
+    return this.startAudit(entries, key, boundary, binding, name, mode, current);
   }
 
   /**
-   * Starts one Agent index attempt and removes failed evidence for retry.
+   * Starts one Agent index attempt while retaining earlier successful evidence.
    *
    * @param entries Audit readiness for the captured boundary.
    * @param key Physical audit table identity.
@@ -675,6 +679,7 @@ export class PostgresStorageFactory extends StorageFactory {
    * @param binding Resolved destination.
    * @param name Physical audit table name.
    * @param mode Creation or read-only check.
+   * @param prior Earlier successful preparation, if any.
    * @returns Completion after index compatibility.
    */
   private startAudit(
@@ -684,8 +689,14 @@ export class PostgresStorageFactory extends StorageFactory {
     binding: PostgresBoundDatabase,
     name: string,
     mode: StoragePreparationMode,
+    prior?: PostgresPreparedAudit,
   ): Promise<void> {
-    const entry: PostgresPreparedAudit = { ready: false, pending: undefined };
+    const entry: PostgresPreparedAudit = prior ?? {
+      ready: false,
+      pendingMode: mode,
+      pending: undefined,
+    };
+    entry.pendingMode = mode;
     entries.set(key, entry);
     entry.pending = this.attemptAudit(boundary, binding, name, mode)
       .then(
@@ -693,7 +704,7 @@ export class PostgresStorageFactory extends StorageFactory {
           entry.ready = true;
         },
         (error: unknown) => {
-          entries.delete(key);
+          if (!entry.ready && entries.get(key) === entry) entries.delete(key);
           throw error;
         },
       )
@@ -1171,13 +1182,17 @@ export class PostgresStorageFactory extends StorageFactory {
       return Promise.reject(
         new PostgresStorageSchemaError("PostgreSQL table definition conflicts."),
       );
-    if (current?.ready) return Promise.resolve();
-    if (current?.pending !== undefined) return current.pending;
-    return this.startTable(tables, key, signature, boundary, table, mode, customCreate);
+    if (mode === "create" && current?.ready) return Promise.resolve();
+    if (current?.pending !== undefined) {
+      if (current.pendingMode === mode) return current.pending;
+      const retry = () => this.prepareTable(boundary, table, mode, customCreate);
+      return current.pending.then(retry, retry);
+    }
+    return this.startTable(tables, key, signature, boundary, table, mode, customCreate, current);
   }
 
   /**
-   * Starts one table attempt and removes failed evidence for retry.
+   * Starts one table attempt while retaining any earlier successful definition.
    *
    * @param tables Readiness for the captured boundary.
    * @param key Physical table identity.
@@ -1186,6 +1201,7 @@ export class PostgresStorageFactory extends StorageFactory {
    * @param table Canonical physical layout.
    * @param mode Creation or read-only check.
    * @param customCreate Optional create SQL producer.
+   * @param prior Earlier successful preparation, if any.
    * @returns Completion after table compatibility.
    */
   private startTable(
@@ -1196,19 +1212,24 @@ export class PostgresStorageFactory extends StorageFactory {
     table: PostgresTableSpec<unknown, never>,
     mode: StoragePreparationMode,
     customCreate?: () => string,
+    prior?: PostgresPreparedTable,
   ): Promise<void> {
-    const entry: PostgresPreparedTable = { signature, ready: false, pending: undefined };
+    const entry: PostgresPreparedTable = prior ?? {
+      signature,
+      ready: false,
+      pendingMode: mode,
+      pending: undefined,
+    };
+    entry.pendingMode = mode;
     tables.set(key, entry);
-    const attempt = Promise.resolve().then(() =>
-      this.attemptTable(boundary, table, mode, customCreate),
-    );
-    entry.pending = attempt
+    entry.pending = Promise.resolve()
+      .then(() => this.attemptTable(boundary, table, mode, customCreate))
       .then(
         () => {
           entry.ready = true;
         },
         (error: unknown) => {
-          tables.delete(key);
+          if (!entry.ready && tables.get(key) === entry) tables.delete(key);
           throw error;
         },
       )
@@ -1725,6 +1746,7 @@ interface PostgresBoundDatabase {
 interface PostgresPreparedTable {
   readonly signature: string;
   ready: boolean;
+  pendingMode: StoragePreparationMode;
   pending: Promise<void> | undefined;
 }
 

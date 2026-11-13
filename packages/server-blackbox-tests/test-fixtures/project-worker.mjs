@@ -23,6 +23,7 @@ import { create, equals, toBinary } from "@bufbuild/protobuf";
 import { AnyPacker, StringifierRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import {
+  Application,
   ActorContextSchema,
   CommandContextSchema,
   CommandIdSchema,
@@ -64,6 +65,7 @@ import { fileLogger } from "./file-logger.mjs";
 let running;
 let factory;
 let context;
+let application;
 let settings;
 let delivery;
 let commandClient;
@@ -127,50 +129,51 @@ async function start(request) {
   if (settings.deliveryEndpoint !== undefined) {
     delivery = RemoteDelivery.connectTo({ endpoint: settings.deliveryEndpoint });
     environmentSettings.delivery = delivery;
-    ServerEnvironment.when(EnvironmentType.Local).use(environmentSettings);
-  } else {
-    ServerEnvironment.when(EnvironmentType.Local).use(environmentSettings);
   }
-  await ServerEnvironment.instance().completeSetup();
+  const environment = ServerEnvironment.newBuilder()
+    .under(EnvironmentType.Local, (setting) => setting.use(environmentSettings))
+    .build();
   let firstCandidateGated = false;
-  context = projectWorkflow(
-    settings.contextName,
-    (entry) => {
-      appendFileSync(
-        settings.entryLog,
-        `${JSON.stringify({ ...entry, pid: process.pid, at: Date.now() })}\n`,
-        { flush: true },
-      );
-      const gate = (settings.handlerGateCandidates ?? [settings.handlerGate]).find(
-        (candidate) =>
-          candidate !== undefined &&
-          entry.method === candidate.method &&
-          entry.correlation === candidate.correlation &&
-          entry.recipientTypeUrl === candidate.recipientTypeUrl &&
-          entry.recipientIdBase64 === candidate.recipientIdBase64,
-      );
-      if (
-        gate !== undefined &&
-        (settings.handlerGateCandidates === undefined || !firstCandidateGated)
-      ) {
-        firstCandidateGated = true;
-        const deadline = Date.now() + Math.min(gate.timeoutMs, 10_000);
-        return new Promise((resolve, reject) => {
-          const check = () => {
-            if (existsSync(gate.releaseFile)) {
-              resolve(undefined);
-            } else if (Date.now() >= deadline) {
-              reject(new Error(`Project fault gate expired for ${entry.correlation}.`));
-            } else {
-              setTimeout(check, 25);
-            }
-          };
-          check();
-        });
-      }
-    },
-  );
-  running = await Server.atPort(0).add(context).start();
+  const contextBuilder = projectWorkflow(settings.contextName, (entry) => {
+    appendFileSync(
+      settings.entryLog,
+      `${JSON.stringify({ ...entry, pid: process.pid, at: Date.now() })}\n`,
+      { flush: true },
+    );
+    const gate = (settings.handlerGateCandidates ?? [settings.handlerGate]).find(
+      (candidate) =>
+        candidate !== undefined &&
+        entry.method === candidate.method &&
+        entry.correlation === candidate.correlation &&
+        entry.recipientTypeUrl === candidate.recipientTypeUrl &&
+        entry.recipientIdBase64 === candidate.recipientIdBase64,
+    );
+    if (
+      gate !== undefined &&
+      (settings.handlerGateCandidates === undefined || !firstCandidateGated)
+    ) {
+      firstCandidateGated = true;
+      const deadline = Date.now() + Math.min(gate.timeoutMs, 10_000);
+      return new Promise((resolve, reject) => {
+        const check = () => {
+          if (existsSync(gate.releaseFile)) {
+            resolve(undefined);
+          } else if (Date.now() >= deadline) {
+            reject(new Error(`Project fault gate expired for ${entry.correlation}.`));
+          } else {
+            setTimeout(check, 25);
+          }
+        };
+        check();
+      });
+    }
+  });
+  application = await Application.newBuilder()
+    .setServerEnvironment(environment)
+    .add(contextBuilder)
+    .build();
+  context = application.contexts()[0];
+  running = await Server.atPort(0).setApplication(application).start();
   commandClient = createClient(CommandService, createGrpcTransport({ baseUrl: running.baseUrl }));
   return {
     pid: process.pid,
@@ -338,6 +341,5 @@ async function inspectDelivery() {
 
 async function close() {
   if (running !== undefined) await running.close();
-  if (delivery !== undefined) await delivery.close();
-  if (factory !== undefined) await factory.close();
+  if (application !== undefined) await application.close();
 }

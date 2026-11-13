@@ -84,6 +84,9 @@ remote/shared Delivery directly. DRAINING stops accepting new unary calls and sh
 retains subscription relays through active work, and closes the child after the
 final updates. The application selects its Delivery service and shard strategy;
 managed mode does not choose them or check where they came from.
+`ManagedServerApplicationOptions.subscriptionQueueCapacity` configures the
+Coordinator’s waiting queue, independently of each child Application’s environment
+setting. Both retain the existing default of 100.
 Managed close drains Delivery, cancels subscription relays while child listeners
 remain reachable, and then completes child close. Failed cleanup remains
 observable and retryable. Private IPC acknowledgement and process reaping have
@@ -254,33 +257,24 @@ without storing invalid state. Legacy/internal validation failures remain intern
 as `COMMAND_POST_ERROR`; ordinary generated-registry aggregate loading uses the
 latest persisted state. Dispatcher-thrown `ValidationException` values and other unexpected
 command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
-The public entry points mirror Spine JVM's
-`BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
-`ContextSpec` remains an immutable framework value surfaced through
-`builder.spec` and `context.spec`; the builder collects command and event
-dispatchers; the explicitly configured `ServerEnvironment` supplies storage
-for the context event store, repository state storage, and direct read-side
-stand after `completeSetup()`; and `build()` returns a
-`BoundedContext` that contains mutable `CommandBus` and `EventBus` instances
-internally while exposing a post-only `CommandEndpoint` and an event
-listing/posting `EventEndpoint` through `commandBus()` and `eventBus()`, plus a
-direct `Stand` for the context
-through `stand()`. The context builder validates
-non-empty/non-blank names outside the reserved `__spine/` framework namespace
-and records tenant mode. `builder.add(repository)` /
-`builder.remove(repository)` maintain
-the context repository registration list, and `build()` registers those
-repositories with the built context after opening state record storage through
-the context `StorageFactory`; registered repositories also make their entity
-state schemas known to the context `Stand`. Built contexts also create the
-built-in system-pairing metadata. An omitted `tenantIndex` setting selects
-`SINGLE_TENANT` without constructing a directory or consulting a provider catalog.
-Multitenant Bounded Contexts require an application-supplied environment index before
-assembly. `withTenantIndex()` may select another directory for that Bounded Context,
-but it cannot enable multitenancy in a `SINGLE_TENANT` environment. Both public getters return
-`TenantIndexSetting`; callers narrow against the marker before directory methods.
-A single-tenant Bounded Context returns the marker even inside an indexed environment.
-Provider catalogs remain separate provider APIs. The full
+The public declaration entry points mirror Spine JVM:
+`BoundedContext.singleTenant(name)` and `BoundedContext.multiTenant(name)`.
+ContextSpec exposes the validated name, tenant mode, and Event Store metadata.
+Add Entity classes, repositories, or dispatchers to the builder and pass it to
+Application. Application build sets up the configured environment and assembles
+all Bounded Contexts before activating shared integration, monitoring, and Delivery.
+Built Bounded Contexts expose Command and Event endpoints, Stand, and repositories.
+
+Application rejects duplicate Bounded Context names, generated System names, and
+domain Entity state types. Its synchronous contexts() returns the read-only list
+in build order. Internal System pairing adds no separate public list entry.
+All multi-tenant Bounded Contexts use application.tenantIndex(); single-tenant
+Bounded Contexts use SINGLE_TENANT without directory lookups. The Application index
+is a stable, synchronously obtained handle whose default storage initializes on
+first asynchronous use. Custom indexes are configured on Application, including
+indexes using storage separate from the domain provider. Provider catalogs remain
+separate APIs.
+The full
 system-context runtime,
 command-log repositories, system event taxonomy, tracing/monitors/debug UI, and
 broader JVM production runtime remain outside this public surface.
@@ -295,7 +289,8 @@ mutation or storage. Aggregate execution commits traceability and current state
 before attempting one outgoing Event bus handoff. The bus handoff awaits
 recipient Inbox writes; a publication failure is contained and reported without
 rerunning a successful Command. Generated entity-class assembly creates default repositories
-through `add(EntityClass).build()` after importing the generated bootstrap. This
+through an Application containing a Bounded Context builder with `add(EntityClass)`,
+after importing the generated bootstrap. This
 implementation does not invoke query handlers, run durable delivery catch-up, expose a
 broad server lifecycle, or integrate transports. The supported repository Inbox
 handoffs are Process Manager Commands and Events, Aggregate Event reactions, and Projection subscriber
@@ -425,7 +420,7 @@ errors. Family inference trusts same-realm class constructor and instance
 prototype metadata, so alias imports, member expressions, intermediate domain
 base classes, and explicitly reparented ES classes with matching same-realm
 prototype chains are treated as metadata. It opens state record storage only
-through `BoundedContextBuilder.build()`; direct repository registration is not
+during Application build; direct repository registration is not
 public API. Command, event, and state-update routing callbacks receive
 `RepositoryReadQueries<EntityType>` as their third argument while the route runs.
 Its `findIds(query)`, `findStates(query)`, and `find(query)` methods read the
@@ -488,8 +483,8 @@ while single-tenant stands reject tenant options.
 `StandUpdate.previousState` is a detached, filtered prior state, omitted when
 there was no prior state or a policy removed it. Subscribers may retain or
 mutate a delivered prior state without changing storage.
-`SpineServices` adapts built-context command buses and stands to the real
-Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
+`SpineServices` receives an already built Application and adapts its Bounded
+Contexts’ Command buses and Stands to the real Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
 routes. Application query declarations in a `_queries.proto` file generate grouped
 `Query`/`Response` aliases and schema values for each paired operation. Importing the
 generated model companion augments `AppQueryResponseFor<Query>` through the ordinary
@@ -587,42 +582,36 @@ process-local and are not replayed after restart. `InMemorySubscriptionRegistry`
 is valid for development and tests. A context using it emits a warning only
 when attached to a production `ServerEnvironment`.
 `Server`, `ServerOptions`, and `RunningServer` host those routes over Node HTTP/2.
-`Environment`, `EnvironmentType`,
-`ServerEnvironment`, and `ServerEnvironmentSettings` select one process-wide
-storage, integration-channel, optional delivery, and optional tracing facility set through
-`ServerEnvironment.when(type).use(settings)`. Applications await
-`ServerEnvironment.instance().completeSetup()` before building contexts.
-`Server` accepts built contexts and `BoundedContextBuilder` values; all
-builders use the shared environment storage factory.
-`Server.atPort(port)` defaults to local-only `127.0.0.1`; broader hosts are
-explicit through `ServerOptions`. All servers share the lazily resolved
-singleton; production configuration requires `typeRegistry` before first resolution.
-Without a configured `storageFactory`, the environment uses in-memory storage.
-Production selection requires `NODE_ENV=production` before first resolution. `RunningServer` exposes
-`host`, `port`, `baseUrl`, and
-idempotent `close()`. Close stops listener intake and active HTTP/2 sessions,
-closes service intake, drains accepted work, then closes contexts and explicit
-resources. Shared Delivery remains available to sibling contexts until the
-environment closes. Network or context-intake close failure is a hard gate:
-context and dependency cleanup do not begin
-until a later `close()` retry completes that step. After the hard gate,
-remaining phases are attempted in order; failures are combined, and a later
-close retries only unfinished cleanup. The API deliberately hides private child
-listener details, worker/process supervision, durable scheduling, and Java-style
-delivery-topology configuration; it intentionally exposes this one JVM-style
-global process environment configuration.
+`Environment` selects the process profile. `ServerEnvironment.newBuilder()` creates
+an independent configuration using `under(type, callback)` and callback `use(settings)`.
+Its synchronous build opens no connections. Application build performs service setup.
+Storage and integration transport retain memory defaults, including Production;
+Production still requires a complete generated typeRegistry.
 
-`ServerEnvironmentSettings` also accepts the optional `integrationChannelFactory`.
-It is the message-channel factory used by each context's integration broker;
-when omitted, all local contexts use the environment's shared
-`InMemoryTransportFactory`. `typeRegistry` remains the complete application
-schema lookup used by `ThirdPartyContext`. Local/test resolution supplies
-in-memory storage and `spineCoreRegistry` when omitted. Production resolution
-rejects omitted storage or type registry, so production applications must
-register all application message schemas (for example with
-`TypeRegistry.from(...)`). Commands, queries, and subscriptions enter through
-the normal generated services and their Buses; the integration channel factory
-does not provide another application-signal ingress path.
+`Server.atPort(port).setApplication(application).start()` exposes an already built
+Application and defaults to `127.0.0.1`. Broader hosts are explicit ServerOptions.
+RunningServer exposes host, port, baseUrl, and retryable close(). Closing an endpoint
+stops its intake, sessions, subscriptions, and admitted work. It leaves shared Bounded
+Contexts and services available to other endpoints serving the same Application.
+Callers close successful endpoints before Application.close(), which releases shared
+resources in dependency order. Pending-start cleanup remains reachable from
+Application when listener cleanup fails. Process-managed run() coordinates final
+cleanup per Application, counting pending starts, and cannot share an Application
+with manual start().
+
+Application provides createStorageStructures() and checkStructureCompatibility().
+Explicit TenantIds select open multi-tenant Bounded Contexts without requiring
+membership. No arguments include single-tenant Bounded Contexts and current index
+members. Requests still require membership. An administrative preparation failure
+leaves an established Application running. Required startup preparation failure
+prevents startup. Compatibility checks cover declared Bounded Context structures;
+other framework services may prepare their separate storage.
+
+The environment's optional integrationChannelFactory supplies each Bounded Context's
+integration broker. The default factory is shared within that environment and is
+in memory. typeRegistry supplies the complete application schema lookup used by
+ThirdPartyContext. Commands, queries, and subscriptions continue through generated
+services and Buses; integration transport is not another public signal ingress API.
 
 The server root exports `External<T>` (a type-only alias), `HandlerOrigin`,
 `ThirdPartyContext`, `HandlerRegistryIngestor`, and `GeneratedRegistryDiscovery`.
@@ -651,8 +640,8 @@ subscribers consume Events, rejections, or Entity states and produce no signal.
 Entity-state subscriptions arrive through the System Event Bus. Publication of
 produced signals is in-process best effort and makes no exactly-once claim.
 
-`ThirdPartyContext.singleTenant(name)` and `.multitenant(name)` create the
-JVM-aligned hidden import context. `emittedEvent()` accepts a generated event
+`ThirdPartyContext.singleTenant(name)` and `.multiTenant(name)` create unattached
+import declarations. Add them to Application before publishing. `emittedEvent()` accepts a generated event
 and a `UserId` (single-tenant) or `ActorContext` (multitenant), validates actor
 tenancy, and publishes through the private broker. `close()` releases that
 context and its broker resources.
@@ -822,7 +811,8 @@ instance method placement at runtime; generated registry metadata supplies the
 message schemas and handler records.
 Ordinary generated assembly imports `generated/spine-bootstrap.js` once at the
 application entry, then uses
-`await BoundedContext.singleTenant(name).add(EntityClass).build()`.
+`Application.newBuilder().setServerEnvironment(environment)` followed by
+`.add(BoundedContext.singleTenant(name).add(EntityClass)).build()`.
 The bootstrap registers passive `spine-metadata.js` descriptions by exact class
 constructor. Missing descriptions fail before assembly with a generation/import
 hint. The same asynchronous `build()` assembles explicit `add(repository)`
@@ -895,6 +885,7 @@ import {
   type CommandContext,
 } from "@spine-event-engine/proto";
 import {
+  Application,
   BoundedContext,
   Command,
   ServerEnvironment,
@@ -961,8 +952,12 @@ const repository = new Repository({
   schema: CoordinationStateSchema,
   handlers: handlers as EntityHandlersMetadata<ApprovalCoordinator, typeof CoordinationStateSchema>,
 });
-await ServerEnvironment.instance().completeSetup();
-const context = await BoundedContext.singleTenant("Projects").add(repository).build();
+const application = await Application.newBuilder()
+  .setServerEnvironment(ServerEnvironment.newBuilder().build())
+  .add(BoundedContext.singleTenant("Projects").add(repository))
+  .build();
+const [context] = application.contexts();
+if (context === undefined) throw new Error("Projects Bounded Context is missing.");
 await context.commandBus().post(
   SignalEnvelopes.command({
     context: create(CommandContextSchema),

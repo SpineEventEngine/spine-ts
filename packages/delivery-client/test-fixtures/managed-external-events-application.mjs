@@ -22,6 +22,7 @@ import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { TypeRegistry } from "@spine-event-engine/core";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import {
+  Application,
   BoundedContext,
   EnvironmentType,
   EventRouting,
@@ -82,38 +83,41 @@ registerSpineMetadata(
   import.meta.url,
 );
 
-if (isManagedChild) {
-  process.env.NODE_ENV = "production";
-  ServerEnvironment.when(EnvironmentType.Production).use({
-    delivery,
-    deliveryStrategy: strategy,
-    storageFactory: new InMemoryStorageFactory(),
-    typeRegistry: new TypeRegistry([ProjectCreatedSchema]),
-  });
-}
+if (isManagedChild) process.env.NODE_ENV = "production";
 
 const managed = await ManagedServerApplication.run({
   processCount: 2,
   port: 0,
   moduleUrl: import.meta.url,
   createServer: async ({ host, port }) => {
-    await ServerEnvironment.instance().completeSetup();
-    const server = Server.atPort(port, { host });
-    server.add(
-      await createManagedProjectContext({
-        subscriptionRegistry: new InMemorySubscriptionRegistry(),
-      }),
-    );
-    server.add(
-      await BoundedContext.singleTenant("ExternalProjects")
-        .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
-        .add(ExternalProjectProjection, {
-          eventRouting: EventRouting.create().route(ProjectCreatedSchema, (event) => [event.id]),
-        })
-        .build(),
-    );
-    const thirdParty = await ThirdPartyContext.singleTenant("T0210ThirdParty");
-    const running = await server.start();
+    const environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Production, (setting) =>
+        setting.use({
+          delivery,
+          deliveryStrategy: strategy,
+          storageFactory: new InMemoryStorageFactory(),
+          typeRegistry: new TypeRegistry([ProjectCreatedSchema]),
+        }),
+      )
+      .build();
+    const thirdParty = ThirdPartyContext.singleTenant("T0210ThirdParty");
+    const application = await Application.newBuilder()
+      .setServerEnvironment(environment)
+      .add(
+        createManagedProjectContext({
+          subscriptionRegistry: new InMemorySubscriptionRegistry(),
+        }),
+      )
+      .add(
+        BoundedContext.singleTenant("ExternalProjects")
+          .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
+          .add(ExternalProjectProjection, {
+            eventRouting: EventRouting.create().route(ProjectCreatedSchema, (event) => [event.id]),
+          }),
+      )
+      .add(thirdParty)
+      .build();
+    const running = await Server.atPort(port, { host }).setApplication(application).start();
     const close = running.close.bind(running);
     let timer;
     const importThirdParty = async () => {
@@ -141,7 +145,6 @@ const managed = await ManagedServerApplication.run({
     }, 10);
     running.close = async () => {
       clearInterval(timer);
-      await thirdParty.close();
       await close();
     };
     return running;

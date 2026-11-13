@@ -85,9 +85,6 @@ import {
   type ReadyMemberSource,
 } from "../../src/server/node-coordinator.js";
 import { DurableSubscriptionBindings } from "../../src/browser/durable-subscription-bindings.js";
-import { ServerEnvironment } from "../../src/server/server-environment.js";
-import { EnvironmentType } from "../../src/server/environment.js";
-import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import {
@@ -2158,31 +2155,27 @@ describe("NodeCoordinator", () => {
         resolve();
       });
     });
-    await resetServerEnvironmentForTest();
-    ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: -1 });
-    try {
-      await expect(
-        NodeCoordinator.open({ members: new TestReadyMembers([]), port }),
-      ).rejects.toThrow(/subscriptionQueueCapacity/u);
-      const rebound = http2.createServer();
-      await new Promise<void>((resolve) => {
-        rebound.listen(port, "127.0.0.1", resolve);
+    await expect(
+      NodeCoordinator.open({
+        members: new TestReadyMembers([]),
+        port,
+        subscriptionQueueCapacity: -1,
+      }),
+    ).rejects.toThrow(/subscriptionQueueCapacity/u);
+    const rebound = http2.createServer();
+    await new Promise<void>((resolve) => {
+      rebound.listen(port, "127.0.0.1", resolve);
+    });
+    await new Promise<void>((resolve) => {
+      rebound.close(() => {
+        resolve();
       });
-      await new Promise<void>((resolve) => {
-        rebound.close(() => {
-          resolve();
-        });
-      });
-    } finally {
-      await resetServerEnvironmentForTest();
-    }
+    });
   });
 
   it.each([0, 1])(
     "delivers one active and %i waiting managed updates after ACK",
     async (capacity) => {
-      await resetServerEnvironmentForTest();
-      ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: capacity });
       const replica = await backend(`capacity-${capacity.toString()}`, {
         updates: capacity + 1,
         holdActivation: true,
@@ -2192,6 +2185,7 @@ describe("NodeCoordinator", () => {
       const coordinator = await NodeCoordinator.open({
         members: new TestReadyMembers([replica.member]),
         port: 0,
+        subscriptionQueueCapacity: capacity,
       });
       closeables.push(() => coordinator.close());
       const client = createClient(
@@ -2216,14 +2210,11 @@ describe("NodeCoordinator", () => {
         abort.abort();
         await iterator.return?.();
         await coordinator.close();
-        await resetServerEnvironmentForTest();
       }
     },
   );
 
   it.each([0])("overflows after one active plus %i waiting managed updates", async (capacity) => {
-    await resetServerEnvironmentForTest();
-    ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: capacity });
     const replicas = await Promise.all(
       Array.from({ length: capacity + 1 }, (_value, index) =>
         backend(`overflow-${capacity.toString()}-${index.toString()}`, {
@@ -2240,6 +2231,7 @@ describe("NodeCoordinator", () => {
         replicas.map((replica, index) => ({ ...replica.member, slot: index })),
       ),
       port: 0,
+      subscriptionQueueCapacity: capacity,
     });
     closeables.push(() => coordinator.close());
     const client = createClient(
@@ -2264,7 +2256,6 @@ describe("NodeCoordinator", () => {
       abort.abort();
       await iterator.return?.();
       await coordinator.close();
-      await resetServerEnvironmentForTest();
     }
   });
 });

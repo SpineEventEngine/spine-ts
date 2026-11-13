@@ -26,12 +26,10 @@ import {
   type EntityHandlersMetadata,
   HandlerRegistryIngestor,
   Repository,
-  ServerEnvironment,
 } from "@spine-event-engine/server";
-import { ServerTests } from "@spine-event-engine/server/testing";
-import { BlackBox } from "@spine-event-engine/testing";
 import { readAgentHistory } from "@spine-event-engine/server/testing";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
+import { ApplicationTestSession } from "../test-fixtures/application-test-session.js";
 
 import "../dist/generated/spine-bootstrap.js";
 import { spineMetadata } from "../dist/generated/spine-metadata.js";
@@ -106,16 +104,13 @@ function generatedSupportContext(
 }
 
 describe("support reply Agent", () => {
-  beforeEach(async () => ServerEnvironment.instance().completeSetup());
-  afterEach(async () => ServerTests.resetEnvironment());
   it("registers authored handlers through generated Bounded Context discovery", async () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-48" });
-    const context = await generatedSupportContext("Support reply generated")
-      .add(SupportReplyAgent, {
-        ai: { models: [] },
-      })
-      .build();
-    const blackBox = await BlackBox.from(context);
+    const builder = generatedSupportContext("Support reply generated").add(SupportReplyAgent, {
+      ai: { models: [] },
+    });
+    const blackBox = await ApplicationTestSession.open(builder);
+    const context = blackBox.context;
     try {
       const result = await blackBox
         .asGuest()
@@ -137,26 +132,23 @@ describe("support reply Agent", () => {
   it("discards the whole Event draft when a later reactor fails", async () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
     const assignee = new SupportReviewAssignee();
-    const context = await generatedSupportContext("Support reply failed reaction", assignee)
-      .add(
-        new Repository({
-          entityType: SupportReplyAgent,
-          ai: { models: [] },
-          schema: SupportReplyAgentStateSchema,
-          handlers: agentHandlers,
-          events: [SupportReplyDraftedSchema],
-          eventRouting: EventRouting.create().route(SupportTicketUpdatedSchema, () => [agent]),
-        }),
-      )
-      .build();
-    const blackBox = await BlackBox.from(context);
+    const builder = generatedSupportContext("Support reply failed reaction", assignee).add(
+      new Repository({
+        entityType: SupportReplyAgent,
+        ai: { models: [] },
+        schema: SupportReplyAgentStateSchema,
+        handlers: agentHandlers,
+        events: [SupportReplyDraftedSchema],
+        eventRouting: EventRouting.create().route(SupportTicketUpdatedSchema, () => [agent]),
+      }),
+    );
+    const blackBox = await ApplicationTestSession.open(builder);
+    const context = blackBox.context;
     try {
-      await blackBox
-        .asGuest()
-        .postEvent(
-          SupportTicketUpdatedSchema,
-          create(SupportTicketUpdatedSchema, { agent, question: "fail" }),
-        );
+      await blackBox.postEvent(
+        SupportTicketUpdatedSchema,
+        create(SupportTicketUpdatedSchema, { agent, question: "fail" }),
+      );
       await blackBox.eventually(
         () => (SupportReplyAgent as unknown as { failedReactions?: number }).failedReactions,
         (count) => count === 1,
@@ -173,18 +165,17 @@ describe("support reply Agent", () => {
   it("publishes a declared rejection without committing state or domain Events", async () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-45" });
     const subscriber = new SupportRejectionSubscriber();
-    const context = await generatedSupportContext("Support reply rejection", undefined, subscriber)
-      .add(
-        new Repository({
-          entityType: SupportReplyAgent,
-          ai: { models: [] },
-          schema: SupportReplyAgentStateSchema,
-          handlers: agentHandlers,
-          events: [SupportReplyDraftedSchema],
-        }),
-      )
-      .build();
-    const blackBox = await BlackBox.from(context);
+    const builder = generatedSupportContext("Support reply rejection", undefined, subscriber).add(
+      new Repository({
+        entityType: SupportReplyAgent,
+        ai: { models: [] },
+        schema: SupportReplyAgentStateSchema,
+        handlers: agentHandlers,
+        events: [SupportReplyDraftedSchema],
+      }),
+    );
+    const blackBox = await ApplicationTestSession.open(builder);
+    const context = blackBox.context;
     try {
       await blackBox
         .asGuest()
@@ -211,26 +202,23 @@ describe("support reply Agent", () => {
   it("posts a review Command without creating Agent state when reactions return undefined", async () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-44" });
     const assignee = new SupportReviewAssignee();
-    const context = await generatedSupportContext("Support reply no-op", assignee)
-      .add(
-        new Repository({
-          entityType: SupportReplyAgent,
-          ai: { models: [] },
-          schema: SupportReplyAgentStateSchema,
-          handlers: agentHandlers,
-          events: [SupportReplyDraftedSchema],
-          eventRouting: EventRouting.create().route(SupportTicketUpdatedSchema, () => [agent]),
-        }),
-      )
-      .build();
-    const blackBox = await BlackBox.from(context);
+    const builder = generatedSupportContext("Support reply no-op", assignee).add(
+      new Repository({
+        entityType: SupportReplyAgent,
+        ai: { models: [] },
+        schema: SupportReplyAgentStateSchema,
+        handlers: agentHandlers,
+        events: [SupportReplyDraftedSchema],
+        eventRouting: EventRouting.create().route(SupportTicketUpdatedSchema, () => [agent]),
+      }),
+    );
+    const blackBox = await ApplicationTestSession.open(builder);
+    const context = blackBox.context;
     try {
-      await blackBox
-        .asGuest()
-        .postEvent(
-          SupportTicketUpdatedSchema,
-          create(SupportTicketUpdatedSchema, { agent, question: "ignore" }),
-        );
+      await blackBox.postEvent(
+        SupportTicketUpdatedSchema,
+        create(SupportTicketUpdatedSchema, { agent, question: "ignore" }),
+      );
       const commands = await blackBox.eventually(
         () => blackBox.assertCommands(),
         (candidate) => candidate.length === 1,
@@ -267,17 +255,14 @@ describe("support reply Agent", () => {
       events: [SupportReplyDraftedSchema],
       eventRouting: EventRouting.create().route(SupportTicketUpdatedSchema, () => [agent]),
     });
-    const context = await generatedSupportContext("Support reply event", assignee)
-      .add(repository)
-      .build();
-    const blackBox = await BlackBox.from(context);
+    const builder = generatedSupportContext("Support reply event", assignee).add(repository);
+    const blackBox = await ApplicationTestSession.open(builder);
+    const context = blackBox.context;
     try {
-      await blackBox
-        .asGuest()
-        .postEvent(
-          SupportTicketUpdatedSchema,
-          create(SupportTicketUpdatedSchema, { agent, question: "Can I change my address?" }),
-        );
+      await blackBox.postEvent(
+        SupportTicketUpdatedSchema,
+        create(SupportTicketUpdatedSchema, { agent, question: "Can I change my address?" }),
+      );
       const state = await blackBox.eventually(
         () => context.stand().read(SupportReplyAgentStateSchema, agent),
         (candidate) => candidate?.proposedReply === "Answer: Can I change my address? [review]",
@@ -335,18 +320,17 @@ describe("support reply Agent", () => {
 
   it("routes a generated assignment through BlackBox and commits the proposed reply", async () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-42" });
-    const context = await generatedSupportContext("Support reply")
-      .add(
-        new Repository({
-          entityType: SupportReplyAgent,
-          ai: { models: [] },
-          schema: SupportReplyAgentStateSchema,
-          handlers: agentHandlers,
-          events: [SupportReplyDraftedSchema],
-        }),
-      )
-      .build();
-    const blackBox = await BlackBox.from(context);
+    const builder = generatedSupportContext("Support reply").add(
+      new Repository({
+        entityType: SupportReplyAgent,
+        ai: { models: [] },
+        schema: SupportReplyAgentStateSchema,
+        handlers: agentHandlers,
+        events: [SupportReplyDraftedSchema],
+      }),
+    );
+    const blackBox = await ApplicationTestSession.open(builder);
+    const context = blackBox.context;
     try {
       const result = await blackBox
         .asGuest()
@@ -381,8 +365,8 @@ describe("support reply Agent", () => {
       handlers: agentHandlers,
       events: [SupportReplyDraftedSchema],
     });
-    const context = await supportContext("Support history").add(repository).build();
-    const blackBox = await BlackBox.from(context);
+    const builder = supportContext("Support history").add(repository);
+    const blackBox = await ApplicationTestSession.open(builder);
     try {
       const result = await blackBox
         .asGuest()

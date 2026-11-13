@@ -22,7 +22,13 @@ import { AnyPacker } from "@spine-event-engine/core";
 import { Time } from "@spine-event-engine/core/time";
 import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
-import { Inbox, ShardedWorkRegistry, ShardIndex, SignalMetadata } from "@spine-event-engine/server";
+import {
+  Application,
+  Inbox,
+  ShardedWorkRegistry,
+  ShardIndex,
+  SignalMetadata,
+} from "@spine-event-engine/server";
 
 import { CreateOrderSchema } from "../dist/generated/spine/examples/orders/commands_pb.js";
 import { OrderSchema } from "../dist/generated/spine/examples/orders/entities_pb.js";
@@ -88,7 +94,7 @@ async function stage(id, setup) {
     }
     return original.call(this, request);
   };
-  const server = await startOrdersServer();
+  const server = await startOrdersServer(setup);
   const session = new Http2SessionManager(server.baseUrl);
   const transport = createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: session });
   const envelope = command(id, "recovered-sku");
@@ -174,7 +180,7 @@ async function recover(id, setup) {
 async function recoverWithGate(id, newId, newEnvelope, setup, handlerEntered, newReceipt, release) {
   return await withOrdersServer(
     setup,
-    () => startOrdersServer(),
+    () => startOrdersServer(setup),
     async (server) => {
       const session = new Http2SessionManager(server.baseUrl);
       try {
@@ -195,7 +201,21 @@ async function recoverWithGate(id, newId, newEnvelope, setup, handlerEntered, ne
         session.abort();
       }
       await server.close();
-      const after = await createOrdersContext();
+      const inspectionSetup = await configureOrdersEnvironment({
+        storageFactory: await createOrdersPostgresFactory({
+          sharedUrl: process.env.ORDERS_SHARED_DATABASE_URL,
+          northwindUrl: process.env.ORDERS_NORTHWIND_DATABASE_URL,
+          contosoUrl: process.env.ORDERS_CONTOSO_DATABASE_URL,
+        }),
+        tenants: [ordersTenants.northwind, ordersTenants.contoso],
+        membership: "existing",
+      });
+      const inspectionApplication = await Application.newBuilder()
+        .setServerEnvironment(inspectionSetup.environment)
+        .setTenantIndex(inspectionSetup.tenantIndex)
+        .add(createOrdersContext())
+        .build();
+      const after = inspectionApplication.contexts()[0];
       try {
         const tenantId = ordersTenants.northwind;
         const pendingOrder = await after.stand().read(OrderSchema, id, { tenantId });
@@ -210,7 +230,8 @@ async function recoverWithGate(id, newId, newEnvelope, setup, handlerEntered, ne
           newView: newView?.value,
         };
       } finally {
-        await after.close();
+        await inspectionApplication.close();
+        await inspectionSetup.close();
       }
     },
   );

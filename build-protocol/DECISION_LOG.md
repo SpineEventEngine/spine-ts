@@ -7436,3 +7436,26 @@ inferred from loopback or inherited across processes. Existing reader envelopes
 and native gRPC services suffice, so no new dependency or protocol message is
 needed. The accepted contract and scope are recorded in
 [tasks/gateway-network-trust/TASK.md](tasks/gateway-network-trust/TASK.md).
+
+## Application API and lifecycle (2026-11-13)
+
+The human accepted the Application scenario proposal and authorized implementation
+under the build protocol. Follow JVM's explicit environment builder, Application
+assembly, application-wide tenant index, and Server attachment. The accepted
+contract is recorded in [the task requirements](tasks/application-migration/TASK.md).
+
+The seven explicit decisions are: prepare structurally valid supplied tenants before
+registration; preserve request index-membership checks; keep administrative
+preparation failures local to the operation; limit compatibility checks to declared
+Bounded Context structures; remove the inert tracing placeholder; use one index per
+Application with a separately configurable storage provider; preserve existing
+memory defaults without requiring explicit Production selection.
+
+Application's tenantIndex() is synchronous and obtains a stable lazy handle without
+storage I/O. Application build performs asynchronous service setup and assembles
+all shared reads before activating recovered work. Server endpoint cleanup leaves
+shared Application services open. Failed construction and shutdown retain unfinished
+cleanup for retry; safe dependency order takes precedence over releasing resources
+that active work still needs. These asynchronous cleanup rules preserve TS behavior
+where the JVM's synchronous lifetime is insufficient. No migration utilities or
+legacy compatibility API are included.

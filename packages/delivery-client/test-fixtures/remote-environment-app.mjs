@@ -7,7 +7,12 @@ import { AnyPacker, Identifiers, SignalEnvelopes, TypeUrls } from "@spine-event-
 import { CreateProjectSchema } from "@spine-event-engine/server-test-fixtures/entity/project_commands_pb.js";
 import { ProjectStateSchema } from "@spine-event-engine/server-test-fixtures/entity/project_states_pb.js";
 import { createManagedProjectContext } from "./managed-project-context.mjs";
-import { EnvironmentType, ServerEnvironment, ShardIndex } from "@spine-event-engine/server";
+import {
+  Application,
+  EnvironmentType,
+  ServerEnvironment,
+  ShardIndex,
+} from "@spine-event-engine/server";
 import { commitFenced } from "../../server/test-fixtures/internal.mjs";
 import process from "node:process";
 
@@ -42,20 +47,26 @@ const source = {
   },
   releaseExpired: (inactivityMs, options) => delivery.source.releaseExpired(inactivityMs, options),
 };
-ServerEnvironment.when(EnvironmentType.Local).use({
-  delivery: {
-    open: () => delivery.open(),
-    close: () => delivery.close(),
-    get inbox() { return delivery.inbox; },
-    get workRegistry() { return delivery.workRegistry; },
-    source,
-  },
-});
-const environment = ServerEnvironment.instance();
+const environment = ServerEnvironment.newBuilder()
+  .under(EnvironmentType.Local, (setting) =>
+    setting.use({
+      delivery: {
+        open: () => delivery.open(),
+        close: () => delivery.close(),
+        get inbox() {
+          return delivery.inbox;
+        },
+        get workRegistry() {
+          return delivery.workRegistry;
+        },
+        source,
+      },
+    }),
+  )
+  .build();
 let holdFirst = false;
 let releaseFirst = Promise.withResolvers();
-await environment.completeSetup();
-const context = await createManagedProjectContext({
+const contextBuilder = createManagedProjectContext({
   onCreateProject: async (command) => {
     const signalId = command.id;
     if (signalId === "first" && holdFirst) {
@@ -75,6 +86,10 @@ const context = await createManagedProjectContext({
     }
   },
 });
+const application = await Application.newBuilder()
+  .setServerEnvironment(environment)
+  .add(contextBuilder)
+  .build();
 
 process.on("message", async (frame) => {
   if (isControl(frame)) {
@@ -123,12 +138,7 @@ process.on("message", async (frame) => {
 async function close() {
   const failures = [];
   try {
-    await context.close();
-  } catch (error) {
-    failures.push(error);
-  }
-  try {
-    await environment.close();
+    await application.close();
   } catch (error) {
     failures.push(error);
   }

@@ -56,7 +56,15 @@ import { file_spine_system_server_entity_log_events as entityEventsFile } from "
 import { file_spine_ts_agent_history as agentHistoryFile } from "@spine-event-engine/proto/generated/spine/ts/agent/history_pb.js";
 import { file_spine_ts_agent_interaction_events as interactionEventsFile } from "@spine-event-engine/proto/generated/spine/ts/agent/interaction_events_pb.js";
 import { file_spine_ts_agent_content as agentContentFile } from "@spine-event-engine/proto/generated/spine/ts/agent/content_pb.js";
-import { SignalMetadata, SpineServices, type AgentHistoryReader } from "@spine-event-engine/server";
+import {
+  Application,
+  BoundedContext,
+  EnvironmentType,
+  ServerEnvironment,
+  SignalMetadata,
+  SpineServices,
+  type AgentHistoryReader,
+} from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
 import {
@@ -423,22 +431,26 @@ export class ReleaseStudio {
   /**
    * Source Event subscription activated before generation Commands are posted.
    */
-  private sourceSubscription?: {
-    /**
-     * Stops source Event observation.
-     */
-    cancel(): Promise<void>;
-  };
+  private sourceSubscription:
+    | {
+        /**
+         * Stops source Event observation.
+         */
+        cancel(): Promise<void>;
+      }
+    | undefined;
 
   /**
    * Typed rejection observation activated before generation Commands are posted.
    */
-  private rejectionSubscription?: {
-    /**
-     * Stops typed Command rejection observation.
-     */
-    cancel(): Promise<void>;
-  };
+  private rejectionSubscription:
+    | {
+        /**
+         * Stops typed Command rejection observation.
+         */
+        cancel(): Promise<void>;
+      }
+    | undefined;
 
   /**
    * Prevents overlapping selection and generation admission.
@@ -458,7 +470,11 @@ export class ReleaseStudio {
   /**
    * Shared completion for Bounded Context shutdown.
    */
-  private closing?: Promise<void>;
+  private closing: Promise<void> | undefined;
+
+  private clientClosed = false;
+
+  private applicationClosed = false;
 
   /**
    * Stops outcome waits when this in-memory Studio session closes.
@@ -466,9 +482,10 @@ export class ReleaseStudio {
   private readonly lifecycle = new AbortController();
 
   /**
-   * Binds the public client, Bounded Context, and accepted-source maps for one session.
+   * Binds the public client, Application, and accepted-source maps for one session.
    *
    * @param options Fixed worker and account services.
+   * @param application Running release-notes Application.
    * @param context Running release-notes Bounded Context.
    * @param client Public in-process client for Commands and subscriptions.
    * @param registry AI registrations available to this Bounded Context.
@@ -477,7 +494,8 @@ export class ReleaseStudio {
    */
   private constructor(
     private readonly options: StudioStartOptions,
-    private readonly context: Awaited<ReturnType<typeof ReleaseNotesContext.create>>,
+    private readonly application: Application,
+    private readonly context: BoundedContext,
     private readonly client: ReturnType<typeof Client.usingTransport>,
     private readonly registry: AiRegistry,
     private readonly admissions: Map<string, GenerationAdmission>,
@@ -495,25 +513,121 @@ export class ReleaseStudio {
     const admissions = new Map<string, GenerationAdmission>();
     const bySource = new Map<string, GenerationAdmission>();
     ReleaseStudio.registerGit(registry, options, bySource);
-    const context = await ReleaseNotesContext.create(registry, new InMemoryStorageFactory(), {
+    const contextBuilder = ReleaseNotesContext.create(registry, {
       resolveModel: (kind, scope, source) =>
         ReleaseStudio.bindModel(kind, scope, source, admissions, bySource),
     });
-    const services = new SpineServices({ contexts: [context] });
-    const client = Client.usingTransport(
-      createRouterTransport((router) => services.register(router)),
-      // The embedded Node runtime may not expose an IANA system zone.
-      { zoneId: "UTC" },
-    );
-    const studio = new ReleaseStudio(options, context, client, registry, admissions, bySource);
+    const { application, context } = await ReleaseStudio.createApplication(contextBuilder);
+    let client: ReturnType<typeof Client.usingTransport> | undefined;
+    let studio: ReleaseStudio | undefined;
     try {
+      const services = new SpineServices({ application });
+      client = Client.usingTransport(
+        createRouterTransport((router) => services.register(router)),
+        // The embedded Node runtime may not expose an IANA system zone.
+        { zoneId: "UTC" },
+      );
+      studio = new ReleaseStudio(
+        options,
+        application,
+        context,
+        client,
+        registry,
+        admissions,
+        bySource,
+      );
       await studio.startSourceObservation();
       await studio.startRejectionObservation();
       return studio;
     } catch (error) {
-      await studio.close();
-      throw error;
+      return ReleaseStudio.closeStartFailure(error, application, client, studio);
     }
+  }
+
+  /**
+   * Closes resources acquired after Application assembly while preserving the first failure.
+   *
+   * @param error Primary startup failure.
+   * @param application Assembled Application.
+   * @param client Public client, if constructed.
+   * @param studio Trusted session, if constructed.
+   * @returns Never, because startup failed.
+   */
+  private static async closeStartFailure(
+    error: unknown,
+    application: Application,
+    client: ReturnType<typeof Client.usingTransport> | undefined,
+    studio: ReleaseStudio | undefined,
+  ): Promise<never> {
+    const cleanup: unknown[] = [];
+    try {
+      if (studio !== undefined) await studio.close();
+      else await client?.close();
+    } catch (failure) {
+      cleanup.push(failure);
+    }
+    if (studio === undefined) {
+      try {
+        await application.close();
+      } catch (failure) {
+        cleanup.push(failure);
+      }
+    }
+    if (cleanup.length > 0)
+      throw new AggregateError([error, ...cleanup], "Release Studio startup cleanup failed.");
+    throw error;
+  }
+
+  /**
+   * Builds the in-memory Application for one trusted studio session.
+   *
+   * @param contextBuilder Release Notes Bounded Context declaration.
+   * @returns The Application and its registered Bounded Context.
+   */
+  private static async createApplication(
+    contextBuilder: ReturnType<typeof ReleaseNotesContext.create>,
+  ): Promise<{ application: Application; context: BoundedContext }> {
+    const environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (setting) => {
+        setting.use({ storageFactory: new InMemoryStorageFactory() });
+      })
+      .build();
+    const builder = Application.newBuilder().setServerEnvironment(environment);
+    let application: Application;
+    try {
+      application = await builder.add(contextBuilder).build();
+    } catch (error) {
+      return ReleaseStudio.closeAfterFailure(error, async () => {
+        await builder.close();
+        await environment.close();
+      });
+    }
+    try {
+      const context = application.contexts()[0];
+      if (context === undefined) throw new Error("Expected a Bounded Context in the Application.");
+      return { application, context };
+    } catch (error) {
+      return ReleaseStudio.closeAfterFailure(error, () => application.close());
+    }
+  }
+
+  /**
+   * Closes a partially acquired Application resource after startup fails.
+   *
+   * @param error Primary startup failure.
+   * @param close Closes the acquired resource.
+   * @returns Never, because startup failed.
+   */
+  private static async closeAfterFailure(
+    error: unknown,
+    close: () => Promise<void>,
+  ): Promise<never> {
+    try {
+      await close();
+    } catch (cleanup) {
+      throw new AggregateError([error, cleanup], "Release Studio startup cleanup failed.");
+    }
+    throw error;
   }
 
   /**
@@ -574,7 +688,7 @@ export class ReleaseStudio {
     kind: string,
     scope: AiScope,
     source: Parameters<
-      NonNullable<NonNullable<Parameters<typeof ReleaseNotesContext.create>[2]>["resolveModel"]>
+      NonNullable<NonNullable<Parameters<typeof ReleaseNotesContext.create>[1]>["resolveModel"]>
     >[2],
     admissions: ReadonlyMap<string, GenerationAdmission>,
     bySource: Map<string, GenerationAdmission>,
@@ -1860,7 +1974,7 @@ export class ReleaseStudio {
   }
 
   /**
-   * Closes the client and Bounded Context without persisting session drafts.
+   * Closes the client and Application without persisting session drafts.
    *
    * @returns Completion after the source subscription and runtime close.
    */
@@ -1868,24 +1982,46 @@ export class ReleaseStudio {
     this.acceptClose();
     this.closing ??= (async () => {
       this.lifecycle.abort();
-      const cancellations = await Promise.allSettled([
-        this.sourceSubscription?.cancel(),
-        this.rejectionSubscription?.cancel(),
-      ]);
-      let failure = cancellations.find((item) => item.status === "rejected");
-      try {
-        await this.client.close();
-      } catch (error) {
-        failure ??= { status: "rejected", reason: error };
+      let failure = await this.cancelSubscriptions();
+      if (!this.clientClosed) {
+        try {
+          await this.client.close();
+          this.clientClosed = true;
+        } catch (error) {
+          failure ??= { status: "rejected", reason: error };
+        }
       }
-      try {
-        await this.context.close();
-      } catch (error) {
-        failure ??= { status: "rejected", reason: error };
+      if (!this.applicationClosed) {
+        try {
+          await this.application.close();
+          this.applicationClosed = true;
+        } catch (error) {
+          failure ??= { status: "rejected", reason: error };
+        }
       }
       if (failure?.status === "rejected") throw failure.reason;
     })();
-    await this.closing;
+    try {
+      await this.closing;
+    } catch (error) {
+      this.closing = undefined;
+      throw error;
+    }
+  }
+
+  /**
+   * Cancels active subscriptions and retains failed cancellations for retry.
+   *
+   * @returns The first cancellation failure, if any.
+   */
+  private async cancelSubscriptions(): Promise<PromiseRejectedResult | undefined> {
+    const cancellations = await Promise.allSettled([
+      this.sourceSubscription?.cancel(),
+      this.rejectionSubscription?.cancel(),
+    ]);
+    if (cancellations[0].status === "fulfilled") this.sourceSubscription = undefined;
+    if (cancellations[1].status === "fulfilled") this.rejectionSubscription = undefined;
+    return cancellations.find((item): item is PromiseRejectedResult => item.status === "rejected");
   }
 
   /**

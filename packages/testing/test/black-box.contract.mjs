@@ -1,7 +1,7 @@
 /* global AbortController, clearTimeout, setTimeout */
 
 import { Time } from "@spine-event-engine/core/time";
-import { BoundedContext, SINGLE_TENANT } from "@spine-event-engine/server";
+import { BoundedContext } from "@spine-event-engine/server";
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
@@ -292,8 +292,7 @@ export function registerBlackBoxContract(test, testing) {
       .addEventDispatcher({
         messageSchemas: () => [ProjectObservedSchema],
         dispatch: () => Promise.resolve(),
-      })
-      .build();
+      });
     const blackBox = await BlackBox.from(context);
     try {
       const canceled = Promise.withResolvers();
@@ -369,8 +368,7 @@ export function registerBlackBoxContract(test, testing) {
         .addEventDispatcher({
           messageSchemas: () => [ProjectObservedSchema],
           dispatch: () => Promise.resolve(),
-        })
-        .build();
+        });
       const blackBox = await BlackBox.from(context);
       try {
         const abort = new AbortController();
@@ -818,15 +816,15 @@ export function registerBlackBoxContract(test, testing) {
       /single-tenant context rejects a tenant/,
     );
     await assertRejects(
-      BlackBox.from(BoundedContext.multitenant("Multi")),
+      BlackBox.from(BoundedContext.multiTenant("Multi")),
       /multitenant context requires a tenant/,
     );
     await assertRejects(
-      BlackBox.from(BoundedContext.multitenant("EmptyStringTenant"), { tenant: "" }),
+      BlackBox.from(BoundedContext.multiTenant("EmptyStringTenant"), { tenant: "" }),
       /tenant must not be empty/,
     );
     await assertRejects(
-      BlackBox.from(BoundedContext.multitenant("EmptyMessageTenant"), {
+      BlackBox.from(BoundedContext.multiTenant("EmptyMessageTenant"), {
         tenant: create(TenantIdSchema),
       }),
       /tenant must not be empty/,
@@ -845,17 +843,7 @@ export function registerBlackBoxContract(test, testing) {
 
   test("snapshots mutable options before a deferred context build", async () => {
     const contexts = [];
-    let release;
-    const gate = new Promise((resolve) => {
-      release = resolve;
-    });
-    const builder = {
-      isMultitenant: () => true,
-      build: async () => {
-        await gate;
-        return capturingContext("Deferred", contexts, true, ["before"]);
-      },
-    };
+    const builder = capturingContext("Deferred", contexts, true);
     const tenant = create(TenantIdSchema, { kind: { case: "value", value: "before" } });
     const zone = create(ZoneIdSchema, { value: "Europe/Lisbon" });
     const options = { tenant, zoneId: zone, timeoutMs: 25, intervalMs: 1 };
@@ -864,7 +852,6 @@ export function registerBlackBoxContract(test, testing) {
     zone.value = "after";
     options.timeoutMs = 0;
     options.intervalMs = 0;
-    release();
     const blackBox = await opening;
     try {
       await blackBox
@@ -936,8 +923,7 @@ function projectContext() {
           builder.subscribe(ProjectCreatedSchema, "projectCreated"),
         ]),
       }),
-    )
-    .build();
+    );
 }
 
 /**
@@ -967,51 +953,32 @@ function projectAggregateHandlers() {
 }
 
 function projectEventContext() {
-  return BoundedContext.singleTenant("Events")
-    .addEventDispatcher({
-      messageSchemas: () => [ProjectObservedSchema, ProjectCreatedSchema],
-      dispatch: () => Promise.resolve(),
-    })
-    .build();
+  return BoundedContext.singleTenant("Events").addEventDispatcher({
+    messageSchemas: () => [ProjectObservedSchema, ProjectCreatedSchema],
+    dispatch: () => Promise.resolve(),
+  });
 }
-async function capturingContext(name, contexts, multitenant, tenants = ["tenant-a"]) {
+function capturingContext(name, contexts, multitenant) {
   const builder = multitenant
-    ? BoundedContext.multitenant(name)
+    ? BoundedContext.multiTenant(name)
     : BoundedContext.singleTenant(name);
-  const context = await builder
-    .addEventDispatcher({
-      messageSchemas: () => [ProjectObservedSchema],
-      dispatch: (event) => {
-        contexts.push(event.context);
-        return Promise.resolve();
-      },
-    })
-    .build();
-  if (multitenant) {
-    const directory = context.tenantIndex;
-    if (directory === SINGLE_TENANT)
-      throw new Error("Multitenant BlackBox fixture requires a tenant directory.");
-    for (const value of tenants)
-      await directory.keep(create(TenantIdSchema, { kind: { case: "value", value } }));
-  }
-  return context;
+  return builder.addEventDispatcher({
+    messageSchemas: () => [ProjectObservedSchema],
+    dispatch: (event) => {
+      contexts.push(event.context);
+      return Promise.resolve();
+    },
+  });
 }
-async function externalCapturingContext(name, contexts) {
-  const context = await BoundedContext.multitenant(name)
-    .addEventDispatcher({
-      messageSchemas: () => [ProjectObservedSchema],
-      externalEventSchemas: () => [ProjectObservedSchema],
-      dispatch: (event) => {
-        contexts.push(event.context);
-        return Promise.resolve();
-      },
-    })
-    .build();
-  const directory = context.tenantIndex;
-  if (directory === SINGLE_TENANT)
-    throw new Error("External BlackBox fixture requires a tenant directory.");
-  await directory.keep(create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }));
-  return context;
+function externalCapturingContext(name, contexts) {
+  return BoundedContext.multiTenant(name).addEventDispatcher({
+    messageSchemas: () => [ProjectObservedSchema],
+    externalEventSchemas: () => [ProjectObservedSchema],
+    dispatch: (event) => {
+      contexts.push(event.context);
+      return Promise.resolve();
+    },
+  });
 }
 function query(id) {
   return create(QuerySchema, {

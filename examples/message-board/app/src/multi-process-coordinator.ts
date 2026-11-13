@@ -20,7 +20,6 @@ import { MessageBoardDeployment } from "./deployment-config.js";
 import { managedReplicaOptions } from "./multi-process-replica.js";
 
 const config = MessageBoardDeployment.managed(process.env);
-MessageBoardDeployment.configureManagedCoordinator();
 await ManagedServerApplication.run({
   processCount: config.processCount,
   host: config.host,

@@ -69,6 +69,7 @@ import { InMemoryTransportFactory } from "@spine-event-engine/transport";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  Application,
   BoundedContext,
   Projection,
   Repository,
@@ -77,6 +78,7 @@ import {
   ServerEnvironment,
   type RunningServer,
   type ServerEnvironmentCloseable,
+  type ServerEnvironmentSettings,
 } from "../../src/index.js";
 import { ReadSideFilter, type ReadSideContext } from "../../src/stand/read-side-filter.js";
 import {
@@ -90,7 +92,6 @@ import {
   type StandaloneBrowserServerOptions,
 } from "../../src/browser/index.js";
 import { browserServerTestAccess as BrowserServer } from "../../src/browser/browser-server.js";
-import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import { runningServerAccess, serverBuilderAccess } from "../../src/server/server.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { attachDurableSubscriptionCleanup } from "../../src/browser/durable-subscription-bindings.js";
@@ -156,8 +157,27 @@ function openStandalone(options: StandaloneBrowserServerOptions) {
   return BrowserHost.open(undefined, options);
 }
 
-function openCombined(native: Server, options: BrowserServerOptions) {
-  return native.start().then((running) => BrowserHost.open(running, options));
+async function openCombined(native: Server, options: BrowserServerOptions): Promise<RunningServer> {
+  const application = await Application.newBuilder()
+    .setServerEnvironment(ServerEnvironment.newBuilder().build())
+    .add(BoundedContext.singleTenant("BrowserNative"))
+    .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+  try {
+    const running = await native.setApplication(application).start();
+    const browser = await BrowserHost.open(running, options);
+    return {
+      host: browser.host,
+      port: browser.port,
+      baseUrl: browser.baseUrl,
+      close: async () => {
+        await browser.close();
+        await application.close();
+      },
+    };
+  } catch (error) {
+    await application.close();
+    throw error;
+  }
 }
 
 async function rawBrowserResponse(
@@ -199,17 +219,55 @@ async function rawBrowserResponse(
   });
 }
 
-async function configureEnvironment(
-  type: EnvironmentType,
-  settings: Parameters<ReturnType<typeof ServerEnvironment.when>["use"]>[0],
-): Promise<void> {
-  await resetServerEnvironmentForTest();
+async function createTestApplication(
+  settings: ServerEnvironmentSettings = {},
+  type = EnvironmentType.Local,
+): Promise<Application> {
   EnvironmentTests.use(type);
-  ServerEnvironment.when(type).use(settings);
-  await ServerEnvironment.instance().completeSetup();
+  const environment = ServerEnvironment.newBuilder()
+    .under(type, (setting) => {
+      setting.use(settings);
+    })
+    .build();
+  return Application.newBuilder()
+    .setServerEnvironment(environment)
+    .add(BoundedContext.singleTenant("ServerTest"))
+    .build();
+}
+
+async function startTestServer(builder: Server, application?: Application): Promise<RunningServer> {
+  const app = application ?? (await createTestApplication());
+  let endpoint: RunningServer;
+  try {
+    endpoint = await builder.setApplication(app).start();
+  } catch (error) {
+    try {
+      await app.close();
+    } catch (cleanup) {
+      throw new AggregateError([error, cleanup], "Test Server startup cleanup failed.");
+    }
+    throw error;
+  }
+  return {
+    host: endpoint.host,
+    port: endpoint.port,
+    baseUrl: endpoint.baseUrl,
+    close: async () => {
+      await endpoint.close();
+      await app.close();
+    },
+  };
+}
+
+async function runTestServer(builder: Server, application?: Application): Promise<RunningServer> {
+  const app = application ?? (await createTestApplication());
+  return builder.setApplication(app).run();
 }
 
 describe("Server", () => {
+  afterEach(() => {
+    EnvironmentTests.reset();
+  });
   it("recognizes only exact IPv4 and IPv6 loopback hosts for browser composition", () => {
     for (const host of ["127.0.0.1", "127.12.34.255", "::1", "::ffff:127.0.0.1"]) {
       expect(serverBuilderAccess.isLoopback(Server.atPort(0, { host }))).toBe(true);
@@ -226,13 +284,14 @@ describe("Server", () => {
       "loopback native listener",
     );
 
-    const running = await native.start();
+    const running = await startTestServer(native);
     await running.close();
   });
 
   it("starts and closes a loopback combined browser host without standalone forwarding", async () => {
     const native = Server.atPort(0, { host: "127.0.0.1" });
-    const running = await BrowserHost.run(native, browserGateway());
+    const application = await createTestApplication();
+    const running = await BrowserHost.run(native.setApplication(application), browserGateway());
 
     expect(running.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:/u);
     await running.close();
@@ -317,8 +376,11 @@ describe("Server", () => {
   });
 
   it("exposes subscription registry facts only for framework-owned running servers", async () => {
-    const context = await BoundedContext.singleTenant("RegistryFacts").build();
-    const running = await Server.atPort(0).add(context).start();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(BoundedContext.singleTenant("RegistryFacts"))
+      .build();
+    const running = await Server.atPort(0).setApplication(application).start();
 
     try {
       expect(runningServerAccess.subscriptionRegistries(running)).toEqual([{ persistent: true }]);
@@ -333,6 +395,7 @@ describe("Server", () => {
       await expect(runningServerAccess.drainDelivery(running)).resolves.toBeUndefined();
     } finally {
       await running.close();
+      await application.close();
     }
   });
 
@@ -344,9 +407,21 @@ describe("Server", () => {
       }),
     };
     const logger = { child: vi.fn(() => child) };
-    await configureEnvironment(EnvironmentType.Local, { logger: logger as unknown as ILogLayer });
-    const context = await BoundedContext.singleTenant("Tasks").build();
-    const server = await Server.atPort(0).add(context).start();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(
+        ServerEnvironment.newBuilder()
+          .under(EnvironmentType.Local, (setting) => {
+            setting.use({
+              logger: logger as unknown as ILogLayer,
+            });
+          })
+          .build(),
+      )
+      .add(BoundedContext.singleTenant("Tasks"))
+      .build();
+    const context = application.contexts()[0];
+    if (context === undefined) throw new Error("Expected logger test Bounded Context.");
+    const server = await Server.atPort(0).setApplication(application).start();
     expect(logger.child).toHaveBeenCalledTimes(1);
     expect(
       (
@@ -358,6 +433,7 @@ describe("Server", () => {
     expect("recordDispatchFailure" in boundedContextAccess).toBe(false);
     expect(errors).toEqual([]);
     await server.close();
+    await application.close();
   });
 
   it("maps discovered TLS authority to the Node HTTP/2 server name", () => {
@@ -419,14 +495,8 @@ describe("Server", () => {
     ).rejects.toThrow("recovery failed");
     expect(closed).toBe(true);
   });
-  beforeEach(async () => {
-    await resetServerEnvironmentForTest();
-    await ServerEnvironment.instance().completeSetup();
+  beforeEach(() => {
     observeHttp2Server.mockReset();
-  });
-
-  afterEach(async () => {
-    await resetServerEnvironmentForTest();
   });
 
   it("accepts every non-empty unique canonical standalone backend origin in configured order", () => {
@@ -752,24 +822,31 @@ describe("Server", () => {
   });
 
   it("rejects production browser bindings before context assembly or listener startup", async () => {
-    await configureEnvironment(EnvironmentType.Production, {
-      storageFactory: new InMemoryStorageFactory(),
-      integrationChannelFactory: new InMemoryTransportFactory(),
-      typeRegistry: spineCoreRegistry,
-    });
+    const application = await createTestApplication(
+      {
+        storageFactory: new InMemoryStorageFactory(),
+        integrationChannelFactory: new InMemoryTransportFactory(),
+        typeRegistry: spineCoreRegistry,
+      },
+      EnvironmentType.Production,
+    );
     let resourceClosed = false;
 
-    await expect(
-      BrowserHost.run(
-        new Server().addResource({
-          close: () => {
-            resourceClosed = true;
-          },
-        }),
-        { port: 0, ...browserGateway() },
-      ),
-    ).rejects.toThrow("requires durable subscription bindings");
-    expect(resourceClosed).toBe(false);
+    try {
+      await expect(
+        BrowserHost.run(
+          new Server().setApplication(application).addResource({
+            close: () => {
+              resourceClosed = true;
+            },
+          }),
+          { port: 0, ...browserGateway() },
+        ),
+      ).rejects.toThrow("requires durable subscription bindings");
+      expect(resourceClosed).toBe(false);
+    } finally {
+      await application.close();
+    }
   });
 
   it("rejects an invalid standalone backend before context assembly or listener startup", async () => {
@@ -821,7 +898,7 @@ describe("Server", () => {
     });
     await gateway.close();
     expect(closed).toBe(false);
-    await native.start().then((running) => running.close());
+    await startTestServer(native).then((running) => running.close());
     expect(closed).toBe(true);
   });
 
@@ -850,7 +927,7 @@ describe("Server", () => {
         },
       },
     });
-    const running = await native.start();
+    const running = await startTestServer(native);
     const client = createClient(QueryService, createGrpcTransport({ baseUrl: running.baseUrl }));
     const pending = client.read(create(QuerySchema)).then(
       () => undefined,
@@ -1006,6 +1083,7 @@ describe("Server", () => {
   });
 
   it("does not attach a standalone browser gateway to a native server environment", async () => {
+    const environment = ServerEnvironment.newBuilder().build();
     const server = await openStandalone({
       port: 0,
       ...browserGateway(),
@@ -1014,7 +1092,7 @@ describe("Server", () => {
     });
 
     try {
-      await expect(ServerEnvironment.instance().close()).resolves.toBeUndefined();
+      await expect(environment.close()).resolves.toBeUndefined();
     } finally {
       await server.close();
     }
@@ -1023,6 +1101,7 @@ describe("Server", () => {
   it("uses discovery-only browser hosting without a local environment attachment", async () => {
     let watches = 0;
     let stops = 0;
+    const environment = ServerEnvironment.newBuilder().build();
     const server = await openStandalone({
       port: 0,
       ...browserGateway(),
@@ -1039,7 +1118,7 @@ describe("Server", () => {
 
     try {
       expect(watches).toBe(1);
-      await expect(ServerEnvironment.instance().close()).resolves.toBeUndefined();
+      await expect(environment.close()).resolves.toBeUndefined();
     } finally {
       await server.close();
     }
@@ -1126,22 +1205,32 @@ describe("Server", () => {
         return state;
       }
     }
-    const context = await BoundedContext.singleTenant("GatewayNetworkReader")
-      .add(new Repository({ entityType: NetworkProjection, schema: ProjectOverviewStateSchema }))
-      .addReadSideFilter(new NetworkFilter())
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(
+        BoundedContext.singleTenant("GatewayNetworkReader")
+          .add(
+            new Repository({ entityType: NetworkProjection, schema: ProjectOverviewStateSchema }),
+          )
+          .addReadSideFilter(new NetworkFilter()),
+      )
       .build();
+    const context = application.contexts()[0];
+    if (context === undefined) throw new Error("Expected network reader Bounded Context.");
     await context
       .stand()
       .update(
         ProjectOverviewStateSchema,
         create(ProjectOverviewStateSchema, { id: "project-1", name: "Visible" }),
       );
-    const app = await new Server({
-      contexts: [context],
-      services: {
-        readerAdmission: "trusted-network",
-      },
-    }).start();
+    const app = await startTestServer(
+      new Server({
+        services: {
+          readerAdmission: "trusted-network",
+        },
+      }),
+      application,
+    );
     const gateway = await openStandalone({
       ...browserGateway(),
       backend: { baseUrl: app.baseUrl },
@@ -2402,16 +2491,17 @@ describe("Server", () => {
   });
 
   it("uses one validated route and name snapshot across pending native startup", async () => {
-    const native = Server.atPort(0, { host: "127.0.0.1" });
-    const originalStart = native.start.bind(native);
+    const application = await createTestApplication();
+    const native = Server.atPort(0, { host: "127.0.0.1" }).setApplication(application);
+    const originalRun = native.run.bind(native);
     let entered!: () => void;
     let release!: () => void;
     const waiting = new Promise<void>((resolve) => (entered = resolve));
     const blocked = new Promise<void>((resolve) => (release = resolve));
-    vi.spyOn(native, "start").mockImplementation(async () => {
+    vi.spyOn(native, "run").mockImplementation(async () => {
       entered();
       await blocked;
-      return originalStart();
+      return originalRun();
     });
     const admission = {
       csrfHeaderNames: [] as string[],
@@ -3196,7 +3286,7 @@ describe("Server", () => {
   });
 
   it("starts on 127.0.0.1 by default and exposes its local base URL", async () => {
-    const server = await Server.atPort(0).start();
+    const server = await startTestServer(Server.atPort(0));
 
     try {
       expect(server.host).toBe("127.0.0.1");
@@ -3209,10 +3299,10 @@ describe("Server", () => {
 
   it("runs a server under process-owned signal shutdown", async () => {
     const withMetadata = vi.fn(() => ({ warn: vi.fn(), error: vi.fn() }));
-    await configureEnvironment(EnvironmentType.Local, {
+    const application = await createTestApplication({
       logger: { child: () => ({ withMetadata }) } as never,
     });
-    const server = await Server.atPort(0).run();
+    const server = await runTestServer(Server.atPort(0), application);
     const session = http2.connect(server.baseUrl);
     session.on("error", () => undefined);
     await once(session, "remoteSettings");
@@ -3230,7 +3320,7 @@ describe("Server", () => {
   it("keeps a standalone discovery gateway signal-managed without retiring its environment", async () => {
     const closed: string[] = [];
     let stops = 0;
-    await configureEnvironment(EnvironmentType.Local, {
+    const application = await createTestApplication({
       storageFactory: new CloseTrackingStorageFactory(closed),
     });
     const gateway = await BrowserHost.run({
@@ -3249,15 +3339,16 @@ describe("Server", () => {
 
     expect(closed).toEqual([]);
     await gateway.close();
+    await application.close();
   });
 
   it("retires the last local environment owner while a standalone gateway remains running", async () => {
     const closed: string[] = [];
     let stops = 0;
-    await configureEnvironment(EnvironmentType.Local, {
+    const app = await createTestApplication({
       storageFactory: new CloseTrackingStorageFactory(closed),
     });
-    const application = await Server.atPort(0).run();
+    const application = await runTestServer(Server.atPort(0), app);
     const gateway = await BrowserHost.run({
       port: 0,
       ...browserGateway(),
@@ -3280,7 +3371,7 @@ describe("Server", () => {
   it("coalesces concurrent run calls before process lifecycle admission", async () => {
     const sigintListeners = process.listenerCount("SIGINT");
     const sigtermListeners = process.listenerCount("SIGTERM");
-    const server = Server.atPort(0);
+    const server = Server.atPort(0).setApplication(await createTestApplication());
 
     const [first, second] = await Promise.all([server.run(), server.run()]);
 
@@ -3297,27 +3388,25 @@ describe("Server", () => {
   });
 
   it("starts a fresh managed server after the earlier handle closes", async () => {
-    const server = Server.atPort(0);
+    const server = Server.atPort(0).setApplication(await createTestApplication());
     const running = await server.run();
 
     await running.close();
-    await expect(server.run()).rejects.toThrow("ServerEnvironment is closed.");
-    await resetServerEnvironmentForTest();
-    await ServerEnvironment.instance().completeSetup();
+    await expect(server.run()).rejects.toThrow("Application is closed.");
 
-    const restarted = await Server.atPort(0).run();
+    const restarted = await runTestServer(Server.atPort(0));
     expect(restarted).not.toBe(running);
     await restarted.close();
   });
 
   it("closes process-owned servers in reverse successful-start order", async () => {
     const closed: string[] = [];
-    const first = await Server.atPort(0)
-      .addResource({ close: () => closed.push("first") })
-      .run();
-    const second = await Server.atPort(0)
-      .addResource({ close: () => closed.push("second") })
-      .run();
+    const first = await runTestServer(
+      Server.atPort(0).addResource({ close: () => closed.push("first") }),
+    );
+    const second = await runTestServer(
+      Server.atPort(0).addResource({ close: () => closed.push("second") }),
+    );
 
     process.emit("SIGINT");
 
@@ -3327,13 +3416,13 @@ describe("Server", () => {
 
   it("shares close work when an explicit close races a process signal", async () => {
     let closes = 0;
-    const server = await Server.atPort(0)
-      .addResource({
+    const server = await runTestServer(
+      Server.atPort(0).addResource({
         close: () => {
           closes += 1;
         },
-      })
-      .run();
+      }),
+    );
     const closing = server.close();
     process.emit("SIGTERM");
     await closing;
@@ -3348,18 +3437,19 @@ describe("Server", () => {
         error: (message: string) => errors.push({ message, facts }),
       }),
     };
-    await configureEnvironment(EnvironmentType.Local, {
+    const application = await createTestApplication({
       logger: { child: () => child } as unknown as ILogLayer,
     });
     let attempts = 0;
-    const server = await Server.atPort(0)
-      .addResource({
+    const server = await runTestServer(
+      Server.atPort(0).addResource({
         close: () => {
           attempts += 1;
           if (attempts === 1) throw new Error("close failed");
         },
-      })
-      .run();
+      }),
+      application,
+    );
     try {
       process.emit("SIGTERM");
       process.emit("SIGINT");
@@ -3388,10 +3478,10 @@ describe("Server", () => {
     const storageError = new Error("storage close failed once");
     const sigintListeners = process.listenerCount("SIGINT");
     const sigtermListeners = process.listenerCount("SIGTERM");
-    await configureEnvironment(EnvironmentType.Local, {
+    const application = await createTestApplication({
       storageFactory: new FlakyCloseStorageFactory(closed, storageError),
     });
-    const server = await Server.atPort(0).run();
+    const server = await runTestServer(Server.atPort(0), application);
 
     try {
       process.emit("SIGTERM");
@@ -3421,7 +3511,9 @@ describe("Server", () => {
     }
 
     try {
-      await expect(Server.atPort(address.port).run()).rejects.toMatchObject({ code: "EADDRINUSE" });
+      await expect(runTestServer(Server.atPort(address.port))).rejects.toMatchObject({
+        code: "EADDRINUSE",
+      });
       expect(process.listenerCount("SIGINT")).toBe(sigintListeners);
       expect(process.listenerCount("SIGTERM")).toBe(sigtermListeners);
     } finally {
@@ -3436,16 +3528,16 @@ describe("Server", () => {
       );
     }
 
-    const callerManaged = await Server.atPort(0).start();
+    const callerManaged = await startTestServer(Server.atPort(0));
     await callerManaged.close();
   });
 
   it("allows a run-managed sibling while a caller-managed server is active", async () => {
-    const callerManaged = await Server.atPort(0).start();
+    const callerManaged = await startTestServer(Server.atPort(0));
     const siblingPort = await unusedPort();
 
     try {
-      const sibling = await Server.atPort(siblingPort).run();
+      const sibling = await runTestServer(Server.atPort(siblingPort));
       expect(sibling.port).toBe(siblingPort);
       await sibling.close();
     } finally {
@@ -3454,11 +3546,11 @@ describe("Server", () => {
   });
 
   it("allows a caller-managed sibling while a run-managed server is active", async () => {
-    const runManaged = await Server.atPort(0).run();
+    const runManaged = await runTestServer(Server.atPort(0));
     const siblingPort = await unusedPort();
 
     try {
-      const sibling = await Server.atPort(siblingPort).start();
+      const sibling = await startTestServer(Server.atPort(siblingPort));
       expect(sibling.port).toBe(siblingPort);
       await sibling.close();
     } finally {
@@ -3466,13 +3558,16 @@ describe("Server", () => {
     }
   });
 
-  it("keeps a run-managed sibling usable and closes singleton facilities after the last retires", async () => {
+  it("keeps a run-managed sibling usable while each Application closes its facilities", async () => {
     const closed: string[] = [];
-    await configureEnvironment(EnvironmentType.Local, {
+    const firstApp = await createTestApplication({
       storageFactory: new CloseTrackingStorageFactory(closed),
     });
-    const first = await Server.atPort(0).run();
-    const second = await Server.atPort(0).run();
+    const secondApp = await createTestApplication({
+      storageFactory: new CloseTrackingStorageFactory(closed),
+    });
+    const first = await runTestServer(Server.atPort(0), firstApp);
+    const second = await runTestServer(Server.atPort(0), secondApp);
 
     await first.close();
     const session = http2.connect(second.baseUrl);
@@ -3480,28 +3575,32 @@ describe("Server", () => {
     await once(session, "remoteSettings");
     session.close();
     await once(session, "close");
-    expect(closed).toEqual([]);
+    expect(closed).toEqual(["storage"]);
 
     await second.close();
-    expect(closed).toEqual(["storage"]);
+    expect(closed).toEqual(["storage", "storage"]);
   });
 
   it("retries a failed final run-managed environment close without repeating server cleanup", async () => {
     const closed: string[] = [];
     const storageError = new Error("storage close failed once");
     let resourceCloses = 0;
-    await configureEnvironment(EnvironmentType.Local, {
+    const application = await createTestApplication({
       storageFactory: new FlakyCloseStorageFactory(closed, storageError),
     });
-    const server = await Server.atPort(0)
-      .addResource({
+    const server = await runTestServer(
+      Server.atPort(0).addResource({
         close() {
           resourceCloses += 1;
         },
-      })
-      .run();
+      }),
+      application,
+    );
 
-    await expect(server.close()).rejects.toMatchObject({ errors: [storageError] });
+    await expect(server.close()).rejects.toMatchObject({
+      message: "Application close failed.",
+      errors: [{ message: "ServerEnvironment close failed.", errors: [storageError] }],
+    });
     expect(resourceCloses).toBe(1);
     await expect(server.close()).resolves.toBeUndefined();
     expect(resourceCloses).toBe(1);
@@ -4037,7 +4136,7 @@ describe("Server", () => {
   });
 
   it("rolls back the private native server when the public browser port is unavailable", async () => {
-    const occupied = await Server.atPort(0).start();
+    const occupied = await startTestServer(Server.atPort(0));
     const closed: string[] = [];
     try {
       await expect(
@@ -4053,7 +4152,7 @@ describe("Server", () => {
   });
 
   it("aggregates admitted browser cleanup failures when its listener cannot bind", async () => {
-    const occupied = await Server.atPort(0).start();
+    const occupied = await startTestServer(Server.atPort(0));
     const bindingFailure = new Error("binding cleanup failed");
     const discoveryFailure = new Error("discovery cleanup failed");
     const nativeFailure = new Error("native cleanup failed");
@@ -4102,7 +4201,7 @@ describe("Server", () => {
   });
 
   it("releases framework-owned public gateway resources when its listener cannot bind", async () => {
-    const occupied = await Server.atPort(0).start();
+    const occupied = await startTestServer(Server.atPort(0));
     const aborted = vi.fn();
 
     try {
@@ -4224,7 +4323,7 @@ describe("Server", () => {
   });
 
   it("honors an explicit host and port", async () => {
-    const server = await new Server({ host: "127.0.0.1", port: 0 }).start();
+    const server = await startTestServer(new Server({ host: "127.0.0.1", port: 0 }));
 
     try {
       expect(server.host).toBe("127.0.0.1");
@@ -4257,13 +4356,13 @@ describe("Server", () => {
         session.on("close", () => order.push("session"));
       });
     });
-    const server = await Server.atPort(0)
-      .addResource({
+    const server = await startTestServer(
+      Server.atPort(0).addResource({
         close() {
           order.push("resource");
         },
-      })
-      .start();
+      }),
+    );
     const session = http2.connect(server.baseUrl);
     session.on("error", () => undefined);
     const clientClosed = once(session, "close");
@@ -4276,16 +4375,18 @@ describe("Server", () => {
   });
 
   it("destroys non-draining HTTP/2 streams and still closes owned resources", async () => {
-    const context = await BoundedContext.singleTenant("Tasks").build();
+    const application = await createTestApplication();
+    const context = application.contexts()[0];
+    if (context === undefined) throw new Error("Expected stream test Bounded Context.");
     const closed: string[] = [];
-    const server = await Server.atPort(0)
-      .add(context)
-      .addResource({
+    const server = await startTestServer(
+      Server.atPort(0).addResource({
         close() {
           closed.push("resource");
         },
-      })
-      .start();
+      }),
+      application,
+    );
     const session = http2.connect(server.baseUrl);
     session.on("error", () => undefined);
     const request = session.request({
@@ -4322,7 +4423,7 @@ describe("Server", () => {
   });
 
   it("ignores sessions already destroyed before server shutdown", async () => {
-    const server = await Server.atPort(0).start();
+    const server = await startTestServer(Server.atPort(0));
     const session = http2.connect(server.baseUrl);
     session.on("error", () => undefined);
     await once(session, "remoteSettings");
@@ -4335,26 +4436,27 @@ describe("Server", () => {
     const firstError = new Error("first close failed");
     const closed: string[] = [];
     let firstAttempts = 0;
-    const server = await Server.atPort(0)
-      .addResource({
-        close() {
-          firstAttempts += 1;
-          closed.push("first");
-          if (firstAttempts === 1) {
-            throw firstError;
-          }
-        },
-      })
-      .addResource({
-        close() {
-          closed.push("second");
-        },
-      })
-      .start();
+    const server = await startTestServer(
+      Server.atPort(0)
+        .addResource({
+          close() {
+            firstAttempts += 1;
+            closed.push("first");
+            if (firstAttempts === 1) {
+              throw firstError;
+            }
+          },
+        })
+        .addResource({
+          close() {
+            closed.push("second");
+          },
+        }),
+    );
 
     await expect(server.close()).rejects.toMatchObject({
       errors: [firstError],
-      message: "Server close failed while closing owned contexts/resources.",
+      message: "Server close failed while closing listener resources.",
     });
     await expect(server.close()).resolves.toBeUndefined();
     expect(closed).toEqual(["first", "second", "first"]);
@@ -4364,36 +4466,45 @@ describe("Server", () => {
     const firstError = new Error("first nested close failed");
     const secondError = new Error("second nested close failed");
     const closed: string[] = [];
-    const server = await new Server({
-      resources: [
-        null as unknown as { close(): unknown },
-        {} as { close(): unknown },
-        {
-          close() {
-            throw new AggregateError([firstError, secondError], "Nested close failed.");
+    const server = await startTestServer(
+      new Server({
+        resources: [
+          null as unknown as { close(): unknown },
+          {} as { close(): unknown },
+          {
+            close() {
+              throw new AggregateError([firstError, secondError], "Nested close failed.");
+            },
           },
-        },
-        {
-          close() {
-            closed.push("after aggregate");
+          {
+            close() {
+              closed.push("after aggregate");
+            },
           },
-        },
-      ],
-    }).start();
+        ],
+      }),
+    );
 
     await expect(server.close()).rejects.toMatchObject({
       errors: [firstError, secondError],
-      message: "Server close failed while closing owned contexts/resources.",
+      message: "Server close failed while closing listener resources.",
     });
     expect(closed).toEqual(["after aggregate"]);
   });
 
-  it("closes built bounded contexts and rejects later context work", async () => {
-    const context = await BoundedContext.singleTenant("Tasks").build();
-    const server = await Server.atPort(0).add(context).start();
+  it("closes Bounded Contexts after the Application closes", async () => {
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(BoundedContext.singleTenant("Tasks"))
+      .build();
+    const context = application.contexts()[0];
+    if (context === undefined) throw new Error("Expected lifecycle test Bounded Context.");
+    const server = await Server.atPort(0).setApplication(application).start();
 
     await server.close();
     await server.close();
+    expect(context.stand().stateTypes()).toEqual([]);
+    await application.close();
 
     await expect(context.commandBus().post(create(CommandSchema))).rejects.toMatchObject({
       operation: "enqueue",
@@ -4402,42 +4513,61 @@ describe("Server", () => {
     expect(() => context.stand().stateTypes()).toThrow("Stand is closed.");
   });
 
-  it("builds added context builders with the server environment storage factory", async () => {
+  it("builds Application Bounded Contexts with their environment storage factory", async () => {
     const storageFactory = new TrackingStorageFactory();
-    await configureEnvironment(EnvironmentType.Local, { storageFactory });
-    const server = await new Server({
-      contexts: [BoundedContext.singleTenant("Tasks")],
-    }).start();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(
+        ServerEnvironment.newBuilder()
+          .under(EnvironmentType.Local, (setting) => {
+            setting.use({ storageFactory });
+          })
+          .build(),
+      )
+      .add(BoundedContext.singleTenant("Tasks"))
+      .build();
+    const server = await Server.atPort(0).setApplication(application).start();
 
     try {
       expect(storageFactory.contextNames()).toContain("Tasks:subscriptions");
     } finally {
       await server.close();
+      await application.close();
     }
 
     expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
   });
 
-  it("uses one configured storage factory for every added context builder", async () => {
+  it("uses one configured storage factory for every Application Bounded Context", async () => {
     const storageFactory = new TrackingStorageFactory();
-    await configureEnvironment(EnvironmentType.Local, { storageFactory });
-    await ServerEnvironment.instance().completeSetup();
-    const server = await Server.atPort(0)
+    const application = await Application.newBuilder()
+      .setServerEnvironment(
+        ServerEnvironment.newBuilder()
+          .under(EnvironmentType.Local, (setting) => {
+            setting.use({ storageFactory });
+          })
+          .build(),
+      )
       .add(BoundedContext.singleTenant("Tasks"))
       .add(BoundedContext.singleTenant("Projects"))
-      .start();
+      .build();
+    const server = await Server.atPort(0).setApplication(application).start();
 
     try {
       expect(storageFactory.contextNames()).toContain("Tasks:subscriptions");
       expect(storageFactory.contextNames()).toContain("Projects:subscriptions");
     } finally {
       await server.close();
+      await application.close();
     }
   });
 
-  it("closes contexts built earlier in the same start attempt when a later builder fails", async () => {
+  it("closes Bounded Contexts built earlier when later Application assembly fails", async () => {
     const storageFactory = new TrackingStorageFactory();
-    await configureEnvironment(EnvironmentType.Local, { storageFactory });
+    const environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (setting) => {
+        setting.use({ storageFactory });
+      })
+      .build();
     const brokenBuilder = BoundedContext.singleTenant("Broken").addEventDispatcher({
       messageSchemas() {
         throw new Error("Cannot read event schemas.");
@@ -4446,26 +4576,29 @@ describe("Server", () => {
     });
 
     await expect(
-      Server.atPort(0).add(BoundedContext.singleTenant("Tasks")).add(brokenBuilder).start(),
+      Application.newBuilder()
+        .setServerEnvironment(environment)
+        .add(BoundedContext.singleTenant("Tasks"))
+        .add(brokenBuilder)
+        .build(),
     ).rejects.toThrow("Cannot read event schemas.");
 
     expect(storageFactory.contextNames()).toContain("Tasks:subscriptions");
     expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
   });
 
-  it("leaves singleton facilities open when a server closes", async () => {
+  it("leaves Application facilities open when its endpoint closes", async () => {
     const closed: string[] = [];
-    await configureEnvironment(EnvironmentType.Local, {
+    const application = await createTestApplication({
       storageFactory: new CloseTrackingStorageFactory(closed),
     });
-    const environment = ServerEnvironment.instance();
-    const server = await Server.atPort(0).start();
+    const server = await Server.atPort(0).setApplication(application).start();
 
     await server.close();
 
     expect(closed).toEqual([]);
 
-    await environment.close();
+    await application.close();
 
     expect(closed).toEqual(["storage"]);
   });
@@ -4473,10 +4606,11 @@ describe("Server", () => {
   it("retries failed environment facility closes without rerunning successful closes", async () => {
     const closed: string[] = [];
     const storageError = new Error("storage close failed once");
-    await configureEnvironment(EnvironmentType.Local, {
-      storageFactory: new FlakyCloseStorageFactory(closed, storageError),
-    });
-    const environment = ServerEnvironment.instance();
+    const environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (setting) => {
+        setting.use({ storageFactory: new FlakyCloseStorageFactory(closed, storageError) });
+      })
+      .build();
 
     await expect(environment.close()).rejects.toMatchObject({
       errors: [storageError],
@@ -4487,24 +4621,31 @@ describe("Server", () => {
     expect(closed).toEqual(["storage", "storage"]);
   });
 
-  it("closes configured optional singleton facilities", async () => {
+  it("closes configured optional Application environment facilities", async () => {
     const closed: string[] = [];
-    await configureEnvironment(EnvironmentType.Local, {
-      delivery: new CloseTrackingCloseable(closed, "delivery") satisfies ServerEnvironmentCloseable,
-      tracerFactory: new CloseTrackingCloseable(closed, "tracer"),
-    });
+    const environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (setting) => {
+        setting.use({
+          delivery: new CloseTrackingCloseable(
+            closed,
+            "delivery",
+          ) satisfies ServerEnvironmentCloseable,
+          storageFactory: new CloseTrackingStorageFactory(closed),
+        });
+      })
+      .build();
 
-    await ServerEnvironment.instance().close();
-    expect(closed).toEqual(["delivery", "tracer"]);
+    await environment.close();
+    expect(closed).toEqual(["delivery", "storage"]);
   });
 
-  it("closes resources before singleton facilities and disconnects clients", async () => {
+  it("closes endpoint resources before Application facilities and disconnects clients", async () => {
     const closed: string[] = [];
-    await configureEnvironment(EnvironmentType.Local, {
+    const application = await createTestApplication({
       storageFactory: new CloseTrackingStorageFactory(closed),
     });
-    const environment = ServerEnvironment.instance();
     const server = await Server.atPort(0)
+      .setApplication(application)
       .addResource({
         close() {
           closed.push("resource");
@@ -4521,22 +4662,23 @@ describe("Server", () => {
     // The client close event may follow server-side network and resource cleanup.
     expect(closed.filter((event) => event !== "session")).toEqual(["resource"]);
     await clientClosed;
-    await environment.close();
+    await application.close();
     expect(closed.filter((event) => event !== "session")).toEqual(["resource", "storage"]);
     expect(closed.filter((event) => event === "session")).toEqual(["session"]);
   });
 
-  it("cleans up owned resources but leaves the singleton open when listener open fails", async () => {
+  it("cleans up listener resources while another Application remains open", async () => {
     const closed: string[] = [];
-    await configureEnvironment(EnvironmentType.Local, {
+    const firstApplication = await createTestApplication({
       storageFactory: new CloseTrackingStorageFactory(closed),
     });
-    const environment = ServerEnvironment.instance();
-    const first = await Server.atPort(0).start();
+    const first = await Server.atPort(0).setApplication(firstApplication).start();
+    const failedApplication = await createTestApplication();
 
     try {
       await expect(
         Server.atPort(first.port)
+          .setApplication(failedApplication)
           .addResource({
             close() {
               closed.push("resource");
@@ -4547,10 +4689,11 @@ describe("Server", () => {
 
       expect(closed).toEqual(["resource"]);
       await first.close();
-      await environment.close();
+      await firstApplication.close();
       expect(closed).toEqual(["resource", "storage"]);
     } finally {
       await first.close();
+      await failedApplication.close();
     }
   });
 });

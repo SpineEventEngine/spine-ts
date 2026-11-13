@@ -15,7 +15,6 @@
 export {
   BoundedContext,
   BoundedContextBuilder,
-  type BoundedContextBuildOptions,
   type BoundedContextRuntime,
   type BoundedContextName,
   BoundedContextNameError,
@@ -31,6 +30,11 @@ export {
   type TenantMode,
 } from "./context/bounded-context.js";
 export { ThirdPartyContext } from "./integration/third-party-context.js";
+export {
+  Application,
+  ApplicationBuilder,
+  type ApplicationBuildOptions,
+} from "./server/application.js";
 export type {
   TenantIndex,
   TenantIndexSetting,
@@ -93,6 +97,7 @@ export {
 export { Environment, EnvironmentType } from "./server/environment.js";
 export {
   ServerEnvironment,
+  ServerEnvironmentBuilder,
   type ServerEnvironmentCloseable,
   type ServerEnvironmentDelivery,
   type ServerEnvironmentSettings,

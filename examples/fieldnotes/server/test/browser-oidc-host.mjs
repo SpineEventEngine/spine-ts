@@ -15,7 +15,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createServer, request as httpRequest } from "node:http";
 import { createOidcProvider } from "@spine-event-engine/auth";
-import { ServerTests } from "@spine-event-engine/server/testing";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { fieldnotesProtoModule } from "@spine-event-engine/example-fieldnotes-model";
@@ -32,7 +31,8 @@ const keys = await generateKeyPair("RS256");
 const jwk = await exportJWK(keys.publicKey);
 Object.assign(jwk, { kid: "browser-test", alg: "RS256", use: "sig" });
 const authorizations = new Map();
-const authenticationMode = process.env.FIELDNOTES_BROWSER_AUTH_MODE === "firebase" ? "firebase" : "google";
+const authenticationMode =
+  process.env.FIELDNOTES_BROWSER_AUTH_MODE === "firebase" ? "firebase" : "google";
 let interruptedStreams = 0;
 
 const fixture = createServer((request, response) => {
@@ -47,10 +47,17 @@ const fixture = createServer((request, response) => {
       const state = url.searchParams.get("state");
       const nonce = url.searchParams.get("nonce");
       const challenge = url.searchParams.get("code_challenge");
-      if (!state || !nonce || !challenge) { response.writeHead(400).end(); return; }
+      if (!state || !nonce || !challenge) {
+        response.writeHead(400).end();
+        return;
+      }
       authorizations.set(state, { nonce, challenge });
       response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify({ callback: `${webOrigin}/auth/google/callback?state=${encodeURIComponent(state)}&code=${encodeURIComponent(state)}&iss=${encodeURIComponent(issuer)}` }));
+      response.end(
+        JSON.stringify({
+          callback: `${webOrigin}/auth/google/callback?state=${encodeURIComponent(state)}&code=${encodeURIComponent(state)}&iss=${encodeURIComponent(issuer)}`,
+        }),
+      );
       return;
     }
     if (url.pathname === "/test/shutdown" && request.method === "POST") {
@@ -64,7 +71,8 @@ const fixture = createServer((request, response) => {
       return;
     }
     if (url.pathname !== "/oidc/token" || request.method !== "POST") {
-      response.writeHead(404).end(); return;
+      response.writeHead(404).end();
+      return;
     }
     const chunks = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
@@ -73,16 +81,24 @@ const fixture = createServer((request, response) => {
     const pending = authorizations.get(state);
     const verifier = body.get("code_verifier") ?? "";
     const challenge = createHash("sha256").update(verifier, "ascii").digest("base64url");
-    if (!pending || pending.challenge !== challenge ||
-        body.get("redirect_uri") !== `${webOrigin}/auth/google/callback` ||
-        !request.headers.authorization?.startsWith("Basic ")) {
-      response.writeHead(400).end(); return;
+    if (
+      !pending ||
+      pending.challenge !== challenge ||
+      body.get("redirect_uri") !== `${webOrigin}/auth/google/callback` ||
+      !request.headers.authorization?.startsWith("Basic ")
+    ) {
+      response.writeHead(400).end();
+      return;
     }
     authorizations.delete(state);
     const signed = await new SignJWT({ nonce: pending.nonce })
       .setProtectedHeader({ alg: "RS256", kid: "browser-test", typ: "JWT" })
-      .setIssuer(issuer).setAudience("browser-client").setSubject("browser-author")
-      .setIssuedAt().setExpirationTime("5m").sign(keys.privateKey);
+      .setIssuer(issuer)
+      .setAudience("browser-client")
+      .setSubject("browser-author")
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(keys.privateKey);
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify({ id_token: signed }));
   })().catch(() => response.writeHead(500).end());
@@ -93,10 +109,14 @@ const transport = (url, init) => {
   return fetch(`http://127.0.0.1:${fixturePort}${parsed.pathname}${parsed.search}`, init);
 };
 const provider = createOidcProvider({
-  issuer, authorizationEndpoint: `${issuer}/o/oauth2/v2/auth`,
-  tokenEndpoint: `${issuer}/oidc/token`, jwksEndpoint: `${issuer}/oidc/keys`,
-  clientId: "browser-client", clientSecret: "browser-secret",
-  clientAuthentication: "client_secret_basic", fetch: transport,
+  issuer,
+  authorizationEndpoint: `${issuer}/o/oauth2/v2/auth`,
+  tokenEndpoint: `${issuer}/oidc/token`,
+  jwksEndpoint: `${issuer}/oidc/keys`,
+  clientId: "browser-client",
+  clientSecret: "browser-secret",
+  clientAuthentication: "client_secret_basic",
+  fetch: transport,
 });
 const databaseUrl = process.env.FIELDNOTES_DATABASE_URL;
 const schema = databaseUrl ? `fieldnotes_browser_${randomUUID().replaceAll("-", "")}` : undefined;
@@ -109,34 +129,49 @@ if (admin && schema && databaseUrl) {
   const stringifiers = new StringifierRegistry();
   stringifiers.setTypeRegistry(TypeRegistry.from(fieldnotesProtoModule));
   factory = await PostgresStorageFactory.newBuilder()
-    .setOptions({ url: databaseUrl, schema }).setStringifierRegistry(stringifiers).build();
+    .setOptions({ url: databaseUrl, schema })
+    .setStringifierRegistry(stringifiers)
+    .build();
 }
-const host = await FieldnotesHost.open({
-  postgresUrl: databaseUrl ?? "postgres://localhost/fieldnotes-browser-unused",
-  publicOrigin: webOrigin,
-  sessionPassword: randomBytes(32).toString("base64url"),
-  csrfSecret: randomBytes(32), readerProofSecret: randomBytes(32),
-  sessionTtlMilliseconds: 3_600_000, authRouteTimeoutMs: 10_000,
-  authRouteMaxBytes: 65_536,
-}, {
-  storageFactory: factory ?? new InMemoryStorageFactory(), gatewayPort,
-  authentication: authenticationMode === "firebase" ?
-    { mode: "firebase", projectId: "demo-fieldnotes", recentLoginMilliseconds: 300_000 } :
-    { mode: "google", clientId: "browser-client", clientSecret: "browser-secret" },
-  ...(authenticationMode === "google" ? { googleProvider: provider } : {}),
-});
+const host = await FieldnotesHost.open(
+  {
+    postgresUrl: databaseUrl ?? "postgres://localhost/fieldnotes-browser-unused",
+    publicOrigin: webOrigin,
+    sessionPassword: randomBytes(32).toString("base64url"),
+    csrfSecret: randomBytes(32),
+    readerProofSecret: randomBytes(32),
+    sessionTtlMilliseconds: 3_600_000,
+    authRouteTimeoutMs: 10_000,
+    authRouteMaxBytes: 65_536,
+  },
+  {
+    storageFactory: factory ?? new InMemoryStorageFactory(),
+    gatewayPort,
+    authentication:
+      authenticationMode === "firebase"
+        ? { mode: "firebase", projectId: "demo-fieldnotes", recentLoginMilliseconds: 300_000 }
+        : { mode: "google", clientId: "browser-client", clientSecret: "browser-secret" },
+    ...(authenticationMode === "google" ? { googleProvider: provider } : {}),
+  },
+);
 const relay = createServer((request, response) => {
-  const upstream = httpRequest(`${host.gateway.baseUrl}${request.url ?? "/"}`, {
-    method: request.method,
-    headers: { ...request.headers, host: `127.0.0.1:${gatewayPort}` },
-  }, (received) => {
-    response.writeHead(received.statusCode ?? 502, received.headers);
-    received.pipe(response);
-    received.once("close", () => {
-      if (!received.complete) interruptedStreams++;
-    });
+  const upstream = httpRequest(
+    `${host.gateway.baseUrl}${request.url ?? "/"}`,
+    {
+      method: request.method,
+      headers: { ...request.headers, host: `127.0.0.1:${gatewayPort}` },
+    },
+    (received) => {
+      response.writeHead(received.statusCode ?? 502, received.headers);
+      received.pipe(response);
+      received.once("close", () => {
+        if (!received.complete) interruptedStreams++;
+      });
+    },
+  );
+  response.once("close", () => {
+    if (!response.writableFinished) upstream.destroy();
   });
-  response.once("close", () => { if (!response.writableFinished) upstream.destroy(); });
   upstream.once("error", () => {
     if (!response.headersSent) response.writeHead(502);
     response.end();
@@ -155,28 +190,66 @@ function releaseResources() {
 async function releaseHostResources() {
   const failures = [];
   let released = true;
-  for (const close of [() => {
-    relay.closeAllConnections();
-    return new Promise((resolve, reject) => relay.close((error) => error ? reject(error) : resolve()));
-  }, () => host.close(), () => ServerTests.resetEnvironment()]) {
-    try { await close(); } catch (error) { failures.push(error); released = false; }
+  for (const close of [
+    () => {
+      relay.closeAllConnections();
+      return new Promise((resolve, reject) =>
+        relay.close((error) => (error ? reject(error) : resolve())),
+      );
+    },
+    () => host.close(),
+  ]) {
+    try {
+      await close();
+    } catch (error) {
+      failures.push(error);
+      released = false;
+    }
   }
   if (admin) {
     if (schemaCreated && released && schema) {
-      try { await admin.query(`DROP SCHEMA "${schema}" CASCADE`); } catch (error) { failures.push(error); }
+      try {
+        await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
+      } catch (error) {
+        failures.push(error);
+      }
     }
-    try { await admin.end(); } catch (error) { failures.push(error); }
+    try {
+      await admin.end();
+    } catch (error) {
+      failures.push(error);
+    }
   }
-  if (failures.length) throw new AggregateError(failures, "Fieldnotes browser fixture cleanup failed.");
+  if (failures.length)
+    throw new AggregateError(failures, "Fieldnotes browser fixture cleanup failed.");
 }
 async function shutdown() {
   const failures = [];
-  try { await releaseResources(); } catch (error) { failures.push(error); }
+  try {
+    await releaseResources();
+  } catch (error) {
+    failures.push(error);
+  }
   fixture.closeAllConnections();
   try {
-    await new Promise((resolve, reject) => fixture.close((error) => error ? reject(error) : resolve()));
-  } catch (error) { failures.push(error); }
-  if (failures.length) throw new AggregateError(failures, "Fieldnotes browser fixture shutdown failed.");
+    await new Promise((resolve, reject) =>
+      fixture.close((error) => (error ? reject(error) : resolve())),
+    );
+  } catch (error) {
+    failures.push(error);
+  }
+  if (failures.length)
+    throw new AggregateError(failures, "Fieldnotes browser fixture shutdown failed.");
 }
-process.once("SIGINT", () => { void shutdown().then(() => process.exit(), () => process.exit(1)); });
-process.once("SIGTERM", () => { void shutdown().then(() => process.exit(), () => process.exit(1)); });
+process.once("SIGINT", () => {
+  void shutdown().then(
+    () => process.exit(),
+    () => process.exit(1),
+  );
+});
+process.once("SIGTERM", () => {
+  void shutdown().then(
+    () => process.exit(),
+    () => process.exit(1),
+  );
+});
