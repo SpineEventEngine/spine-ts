@@ -65,6 +65,12 @@ successful `check`, later ordinary use must not auto-create the checked
 structures. A `create` callback verifies its result. Each callback cleans up
 resources it partially acquires if preparation fails.
 
+Each explicit native compatibility check repeats the metadata-access probe, even
+after creation or an earlier check succeeded. Concurrent calls in the same mode
+share an active attempt. A call in the other mode waits for that attempt to settle,
+then performs its requested operation. Completed creation readiness is retained
+for ordinary use; checks still do not create empty kinds or deploy indexes.
+
 Native record preparation validates local `RecordSpec.indexes` shapes limited
 to the storage ID and one declared single-valued property (optionally followed
 by the ID). It does not deploy Datastore indexes or prove cloud index readiness.

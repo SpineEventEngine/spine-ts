@@ -511,7 +511,7 @@ describe("MysqlStorageFactory builder contract", () => {
     await factory.close();
   });
 
-  it("does not escalate a pending read-only check and retries its missing table later", async () => {
+  it("runs creation after a pending read-only check fails", async () => {
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
     let missing = true;
@@ -551,11 +551,11 @@ describe("MysqlStorageFactory builder contract", () => {
       cause: { message: "MySQL table google_protobuf_StringValue lacks ID." },
     });
     await expect(creating).rejects.toThrow(/schema is incompatible/i);
-    expect(sql.some((statement) => statement.includes("CREATE"))).toBe(false);
+    expect(sql.some((statement) => statement.includes("CREATE"))).toBe(true);
     missing = false;
     await preparation.prepareRecord(context, spec, undefined, "create");
-    expect(sql.filter((statement) => statement.includes("CREATE"))).toHaveLength(1);
-    expect(end).toHaveBeenCalledTimes(3);
+    expect(sql.filter((statement) => statement.includes("CREATE"))).toHaveLength(2);
+    expect(end).toHaveBeenCalledTimes(4);
     await factory.close();
   });
 
@@ -595,6 +595,100 @@ describe("MysqlStorageFactory builder contract", () => {
     await pending;
     await closing;
     expect(end).toHaveBeenCalledTimes(2);
+  });
+
+  it("inspects a table again when a check follows successful creation", async () => {
+    const query = vi.fn(mysqlQuery);
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(mysqlConnection(query))),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/prepared" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "recheck", multitenant: false } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    await preparation.prepareRecord(context, spec, undefined, "create");
+    const before = query.mock.calls.filter(([sql]) =>
+      sql.includes("information_schema.columns"),
+    ).length;
+    await preparation.prepareRecord(context, spec, undefined, "check");
+    expect(
+      query.mock.calls.filter(([sql]) => sql.includes("information_schema.columns")),
+    ).toHaveLength(before + 1);
+    await factory.close();
+  });
+
+  it("runs a queued check after concurrent creation", async () => {
+    const query = vi.fn(mysqlQuery);
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(mysqlConnection(query))),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/prepared" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "concurrent-recheck", multitenant: false } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    await Promise.all([
+      preparation.prepareRecord(context, spec, undefined, "create"),
+      preparation.prepareRecord(context, spec, undefined, "check"),
+      preparation.prepareRecord(context, spec, undefined, "check"),
+    ]);
+    expect(
+      query.mock.calls.filter(([sql]) => sql.includes("information_schema.columns")),
+    ).toHaveLength(2);
+    await factory.close();
+  });
+
+  it("detects missing columns on a later explicit check", async () => {
+    let missing = false;
+    const query = vi.fn((sql: string) =>
+      missing && sql.includes("information_schema.columns")
+        ? Promise.resolve([[], []])
+        : mysqlQuery(sql),
+    );
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(mysqlConnection(query))),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/prepared" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "drift", multitenant: false } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    await preparation.prepareRecord(context, spec, undefined, "check");
+    missing = true;
+    await expect(preparation.prepareRecord(context, spec, undefined, "check")).rejects.toThrow();
+    const beforeConflict = query.mock.calls.length;
+    const conflicting = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "int32",
+      extractId: () => 1,
+    });
+    await expect(
+      preparation.prepareRecord(context, conflicting, undefined, "check"),
+    ).rejects.toThrow(/conflict/i);
+    expect(query).toHaveBeenCalledTimes(beforeConflict);
+    missing = false;
+    await preparation.prepareRecord(context, spec, undefined, "check");
+    expect(query.mock.calls.length).toBeGreaterThan(beforeConflict);
+    await factory.close();
   });
 
   it("reuses equivalent reordered Task columns and rejects a conflicting declaration", async () => {

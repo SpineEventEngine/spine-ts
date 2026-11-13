@@ -1107,14 +1107,19 @@ export class MysqlStorageFactory extends StorageFactory {
     mode: StoragePreparationMode,
   ): Promise<void> {
     const create = this.createOperation;
-    return this.prepareRequirement(boundary, table.tableName, this.tableSignature(table), () =>
-      this.attemptPreparation(boundary, table.tableName, (connection) =>
-        new MysqlTableInitializer(
-          { tableName: table.tableName },
-          table,
-          create === undefined ? undefined : () => create(table).sql,
-        ).prepare(connection, mode),
-      ),
+    return this.prepareRequirement(
+      boundary,
+      table.tableName,
+      this.tableSignature(table),
+      mode,
+      () =>
+        this.attemptPreparation(boundary, table.tableName, (connection) =>
+          new MysqlTableInitializer(
+            { tableName: table.tableName },
+            table,
+            create === undefined ? undefined : () => create(table).sql,
+          ).prepare(connection, mode),
+        ),
     );
   }
 
@@ -1141,6 +1146,7 @@ export class MysqlStorageFactory extends StorageFactory {
       boundary,
       `${table.tableName}\0${name}`,
       JSON.stringify(columns),
+      mode,
       () =>
         this.attemptPreparation(boundary, table.tableName, (connection) =>
           new MysqlTableInitializer({ tableName: table.tableName }, table).ensureHistoryIndex(
@@ -1159,6 +1165,7 @@ export class MysqlStorageFactory extends StorageFactory {
    * @param boundary Captured tenant scope.
    * @param key Physical table or index identity.
    * @param signature Complete requirement declaration.
+   * @param mode Creation or read-only check.
    * @param run One physical attempt.
    * @returns Shared completion.
    */
@@ -1166,6 +1173,7 @@ export class MysqlStorageFactory extends StorageFactory {
     boundary: TenantBoundary,
     key: string,
     signature: string,
+    mode: StoragePreparationMode,
     run: () => Promise<void>,
   ): Promise<void> {
     const entries = this.#prepared.get(boundary.key) ?? new Map<string, MysqlPreparedRequirement>();
@@ -1173,9 +1181,41 @@ export class MysqlStorageFactory extends StorageFactory {
     const prior = entries.get(key);
     if (prior !== undefined && prior.signature !== signature)
       return Promise.reject(new MysqlStorageSchemaError("MySQL table definition conflicts."));
-    if (prior?.ready) return Promise.resolve();
-    if (prior?.pending !== undefined) return prior.pending;
-    const entry: MysqlPreparedRequirement = { signature, ready: false, pending: undefined };
+    if (mode === "create" && prior?.ready) return Promise.resolve();
+    if (prior?.pending !== undefined) {
+      if (prior.pendingMode === mode) return prior.pending;
+      const retry = () => this.prepareRequirement(boundary, key, signature, mode, run);
+      return prior.pending.then(retry, retry);
+    }
+    return this.startRequirement(entries, key, signature, mode, run, prior);
+  }
+
+  /**
+   * Starts one attempt while retaining any earlier successful definition.
+   *
+   * @param entries Requirements for the captured tenant boundary.
+   * @param key Physical table or index identity.
+   * @param signature Complete requirement declaration.
+   * @param mode Creation or read-only check.
+   * @param run One physical attempt.
+   * @param prior Earlier successful preparation, if any.
+   * @returns Completion after the requirement is established.
+   */
+  private startRequirement(
+    entries: Map<string, MysqlPreparedRequirement>,
+    key: string,
+    signature: string,
+    mode: StoragePreparationMode,
+    run: () => Promise<void>,
+    prior?: MysqlPreparedRequirement,
+  ): Promise<void> {
+    const entry: MysqlPreparedRequirement = prior ?? {
+      signature,
+      ready: false,
+      pendingMode: mode,
+      pending: undefined,
+    };
+    entry.pendingMode = mode;
     entries.set(key, entry);
     entry.pending = Promise.resolve()
       .then(run)
@@ -1184,7 +1224,7 @@ export class MysqlStorageFactory extends StorageFactory {
           entry.ready = true;
         },
         (error: unknown) => {
-          entries.delete(key);
+          if (!entry.ready && entries.get(key) === entry) entries.delete(key);
           throw error;
         },
       )
@@ -1717,6 +1757,7 @@ interface MysqlDatabaseConfig {
 interface MysqlPreparedRequirement {
   readonly signature: string;
   ready: boolean;
+  pendingMode: StoragePreparationMode;
   pending: Promise<void> | undefined;
 }
 
