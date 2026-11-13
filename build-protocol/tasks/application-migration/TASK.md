@@ -283,3 +283,29 @@ Revised estimate for this follow-up was 45–90 minutes; substantial defects or
 CI queue delays are reported separately. The explanation is prepared during
 review, with focused verification for corrections and no repeated full local
 suite for a comment-only change.
+
+### CI coverage correction
+
+Current-head CI on b5a49905e passed all 7,318 tests but reported 89.99% branch
+coverage, below the unchanged 90% requirement. Earlier CI on unchanged executable
+code passed at 90.00%. Compare the exact coverage reports, then cover the differing
+public behavior deterministically. Do not lower thresholds or retry merely to
+obtain a lucky pass. The retained mechanical verification function uses explicit
+gpt-6-luna / low for report comparison; the existing implementation role will
+receive the concrete affected path. Expected additional work is 30–60 minutes
+including focused correction, preflight and CI waiting.
+
+The log comparison isolates the changed branch percentage to Message Board
+view handlers. The existing `application_caller_corrections` implementer
+(gpt-6-sol / medium, explicit original dispatch) is assigned only the relevant
+example tests: make earliest-Event timestamp behavior deterministic, including
+nanoseconds within one second. The retained mechanical function checks the
+affected preflight; the existing reliability reviewer checks the test correction.
+No production contract or coverage threshold changes are planned.
+
+The test now sends five explicitly timed Events and verifies the earliest
+second/nanosecond value in both public query results. All 12 affected tests pass;
+focused LCOV confirms all equal-second comparison branches execute. The complete
+affected preflight passes, and the retained reliability reviewer accepts the
+correction. Production behavior, thresholds and exclusions are unchanged. Final
+remote acceptance is the Build workflow on this branch after this correction.

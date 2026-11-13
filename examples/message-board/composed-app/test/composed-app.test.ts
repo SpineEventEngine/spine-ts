@@ -150,13 +150,13 @@ describe("multi-package Message Board", () => {
     }
   });
 
-  it("retains the earliest accepted Event time when announcements arrive out of timestamp order", async () => {
+  it("retains the earliest accepted Event time across seconds and nanoseconds", async () => {
     const application = await new ComposedBoardApplication().create(environment);
     const running = await application.server.start();
     const client = Client.connectTo(running.baseUrl);
-    let seconds = 30n;
+    let occurred = { seconds: 30n, nanos: 500_000_000 };
     const previousTime = Time.setProvider({
-      currentTime: () => create(TimestampSchema, { seconds }),
+      currentTime: () => create(TimestampSchema, occurred),
     });
     const query = create(ReadBoardStats.querySchema, {
       board: create(BoardIdSchema, { value: "announcements" }),
@@ -166,14 +166,16 @@ describe("multi-package Message Board", () => {
       timestamp: create(TimestampSchema, { seconds: 1n }),
     });
     try {
-      for (const [index, [id, author, occurred]] of (
+      for (const [index, [id, author, timestamp]] of (
         [
-          ["later", "writer-1", 30n],
-          ["earlier", "writer-1", 10n],
-          ["last", "writer-2", 20n],
+          ["later", "writer-1", { seconds: 30n, nanos: 500_000_000 }],
+          ["earlier-second", "writer-1", { seconds: 10n, nanos: 800_000_000 }],
+          ["earlier-nanos", "writer-2", { seconds: 10n, nanos: 200_000_000 }],
+          ["later-nanos", "writer-2", { seconds: 10n, nanos: 900_000_000 }],
+          ["last", "writer-2", { seconds: 20n, nanos: 100_000_000 }],
         ] as const
       ).entries()) {
-        seconds = occurred;
+        occurred = timestamp;
         await expect(
           client.asGuest().post(
             PostMessageSchema,
@@ -195,12 +197,18 @@ describe("multi-package Message Board", () => {
       }
       await vi.waitFor(async () => {
         const response = await application.server.query(query, { actorContext });
-        expect(response.board?.messageCount).toBe(3n);
+        expect(response.board?.messageCount).toBe(5n);
         expect(response.board?.authorCount).toBe(2n);
-        expect(response.board?.firstPostedAt?.seconds).toBe(10n);
-        expect(response.announcements?.messageCount).toBe(3n);
+        expect(response.board?.firstPostedAt).toMatchObject({
+          seconds: 10n,
+          nanos: 200_000_000,
+        });
+        expect(response.announcements?.messageCount).toBe(5n);
         expect(response.announcements?.authorCount).toBe(2n);
-        expect(response.announcements?.firstPostedAt?.seconds).toBe(10n);
+        expect(response.announcements?.firstPostedAt).toMatchObject({
+          seconds: 10n,
+          nanos: 200_000_000,
+        });
       });
       await expect(
         application.announcements
