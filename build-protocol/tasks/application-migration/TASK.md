@@ -250,39 +250,36 @@ clean release gate and focused review. Participating assignments have completed.
 ## Human-requested follow-up
 
 The human created [PR #26](https://github.com/SpineEventEngine/spine-ts/pull/26).
-Do not create or edit PRs without an explicit instruction. Prepare the beginner
-scenario explanation and detailed review/fix report only in chat, with before/after
-code and reasons. Do not use documentation-writing skills or create proposal files.
-Run three sequential fresh no-memory code review rounds, fix relevant findings
-before the next round, then fix any failing CI and verify the final commit.
+Do not create or edit PRs without an explicit instruction. The beginner scenario
+explanation and full review report are delivered only in chat. No documentation
+writing skills or proposal files are used.
 
-Revised estimate: 45–90 minutes, with substantial defects or CI queue delays
-reported separately. Draft the explanation during review. Use focused checks
-after fixes and one final verification run after convergence.
+Three sequential fresh no-memory reviews are complete. Every dispatch explicitly
+set gpt-6-sol / medium and inherited no turns. Agents made no edits and spawned no
+children. Runtime introspection was unavailable; configured profiles were explicit.
 
-Round 1: `application_fresh_review_1`, existing performance_reliability_reviewer,
-explicit gpt-6-sol / medium, fresh context with no inherited turns. Read-only
-whole-branch review with emphasis on Application assembly, cleanup, concurrency,
-tenants and storage preparation. No child agents. Runtime introspection is not
-exposed; explicit dispatch fields provide configured-profile evidence.
+| Round                         | Existing role                    | Result                                                                                                                                          |
+| ----------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1, application_fresh_review_1 | performance_reliability_reviewer | No confirmed runtime finding after checking reachable startup, cleanup, tenant and preparation paths.                                           |
+| 2, application_fresh_review_2 | typescript_api_docs_reviewer     | Two BoundedContextRuntime parameter comments incorrectly implied explicit IDs must be registered. Corrected and accepted in affected re-review. |
+| 3, application_fresh_review_3 | performance_reliability_reviewer | No confirmed runtime finding in independent failure-path and resource-lifetime review.                                                          |
 
-Round 1 completed with no confirmed P0–P2 finding. Candidate shutdown/browser
-issues were rejected after checking actual continuation order and preflight
-validation; concurrent managed closure was also exercised through the public API.
-Round 2: `application_fresh_review_2`, existing typescript_api_docs_reviewer,
-explicit gpt-6-sol / medium, fresh context without inherited turns. Review
-public contracts, maintained callers, storage preparation and lifecycle behavior
-across the branch. No prior review findings supplied, no children or edits.
+The round-2 wording predates this branch, but the changed explicit-preparation
+contract makes it inaccurate. The parent therefore accepted it as task-related
+rather than excluding it as baseline debt. Both comments now distinguish
+caller-supplied IDs, which require no index membership, from no-ID preparation,
+which enumerates registered tenants. The existing implementer corrected these
+comments using its explicit gpt-6-sol / medium profile. Scoped formatting, lint,
+TSDoc and whitespace checks pass; no runtime behavior changed.
 
-Round 2 completed with no confirmed P0–P2 finding in public contracts and
-maintained callers. Round 3: `application_fresh_review_3`, existing
-performance_reliability_reviewer, explicit gpt-6-sol / medium, fresh context
-without inherited turns. Independently review the complete changed behavior,
-emphasizing failure paths, shared lifetimes, tenant operations and example
-cleanup. Do not supply earlier findings. No children or edits.
+Suspected concurrent managed-Server retirement and invalid browser-capacity
+startup leaks were rejected after checking synchronous continuation order and
+preflight validation. A public concurrent-close reproduction confirmed storage
+closed. No speculative runtime changes were made. The previously passing local
+release result remains applicable to the unchanged executable code. Required
+remote evidence is the Build workflow for PR #26's current head.
 
-Round 3 completed with no confirmed P0–P2 finding. All three reviews were
-sequential, fresh and read-only, with explicit profiles and no inherited turns.
-No production correction was justified; runtime code remains at 15c562ccd.
-The scenario explanation and full review report are delivered in chat, not as
-repository documents. Final acceptance waits for current-head PR CI.
+Revised estimate for this follow-up was 45–90 minutes; substantial defects or
+CI queue delays are reported separately. The explanation is prepared during
+review, with focused verification for corrections and no repeated full local
+suite for a comment-only change.

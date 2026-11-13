@@ -1007,20 +1007,24 @@ let constructContextSpec:
 export interface BoundedContextRuntime {
   /**
    * Creates declared storage structures for current or selected tenants.
-   * With no IDs, a multitenant context pages its current index; a single-tenant
-   * context prepares its neutral destination. Database-backed providers require
+   * With no IDs, a multitenant Bounded Context pages its current index; a single-tenant
+   * Bounded Context prepares its neutral destination. Database-backed providers require
    * an existing database; this method does not provision one.
-   * @param tenantIds Optional registered complete tenant identities.
+   * Explicit complete tenant IDs do not require index membership.
+   *
+   * @param tenantIds Optional caller-supplied complete tenant IDs.
    * @returns Completion after required structures are ready; malformed IDs reject the promise.
    */
   createStorageStructures(...tenantIds: TenantId[]): Promise<void>;
 
   /**
    * Checks declared structures without creating them.
-   * With no IDs, a multitenant context pages its current index; a single-tenant
-   * context checks its neutral destination. Database-backed providers require
+   * With no IDs, a multitenant Bounded Context pages its current index; a single-tenant
+   * Bounded Context checks its neutral destination. Database-backed providers require
    * an existing database; this method does not provision one.
-   * @param tenantIds Optional registered complete tenant identities.
+   * Explicit complete tenant IDs do not require index membership.
+   *
+   * @param tenantIds Optional caller-supplied complete tenant IDs.
    * @returns Completion after read-only compatibility checks; malformed IDs reject the promise.
    */
   checkStructureCompatibility(...tenantIds: TenantId[]): Promise<void>;
