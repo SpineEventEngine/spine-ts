@@ -6,8 +6,10 @@ The human accepted the scenario proposal and authorized implementation on 2026-1
 Introduce Application, make ServerEnvironment independent per instance, move
 application-wide storage preparation and tenant indexing to Application, and adapt
 Server and maintained callers. Follow the task's accepted lifecycle and cleanup
-requirements. Independent review, release verification, versioning, and final-SHA
-CI remain. No GitHub PR or issue changes are authorized.
+requirements. Implementation, initial independent reviews, local release verification and
+versioning are complete. The human created PR #26. Three additional fresh, sequential reviews are complete
+with no confirmed defect requiring code changes. The beginner explanation and
+review report are provided in chat. Final-SHA CI remains. No GitHub PR or issue changes are authorized.
 
 Previous example revision: [Orders and Fieldnotes](tasks/tenant-auth-storage/EXAMPLES.md).
 Implement both demonstrations in PR #22 and retain only required API adaptation

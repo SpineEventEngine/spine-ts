@@ -247,8 +247,42 @@ Selected final profile: `verify:release`, because this changes shared runtime,
 public contracts and maintained callers. Local acceptance is complete after the
 clean release gate and focused review. Participating assignments have completed.
 
-Remaining work:
+## Human-requested follow-up
 
-1. Obtain only the approval needed for required PR-only CI. The Build workflow
-   runs on pull requests; no final-SHA Build run or open task PR exists. No PR or
-   issue mutation is authorized. Finish local work before requesting publication.
+The human created [PR #26](https://github.com/SpineEventEngine/spine-ts/pull/26).
+Do not create or edit PRs without an explicit instruction. Prepare the beginner
+scenario explanation and detailed review/fix report only in chat, with before/after
+code and reasons. Do not use documentation-writing skills or create proposal files.
+Run three sequential fresh no-memory code review rounds, fix relevant findings
+before the next round, then fix any failing CI and verify the final commit.
+
+Revised estimate: 45–90 minutes, with substantial defects or CI queue delays
+reported separately. Draft the explanation during review. Use focused checks
+after fixes and one final verification run after convergence.
+
+Round 1: `application_fresh_review_1`, existing performance_reliability_reviewer,
+explicit gpt-6-sol / medium, fresh context with no inherited turns. Read-only
+whole-branch review with emphasis on Application assembly, cleanup, concurrency,
+tenants and storage preparation. No child agents. Runtime introspection is not
+exposed; explicit dispatch fields provide configured-profile evidence.
+
+Round 1 completed with no confirmed P0–P2 finding. Candidate shutdown/browser
+issues were rejected after checking actual continuation order and preflight
+validation; concurrent managed closure was also exercised through the public API.
+Round 2: `application_fresh_review_2`, existing typescript_api_docs_reviewer,
+explicit gpt-6-sol / medium, fresh context without inherited turns. Review
+public contracts, maintained callers, storage preparation and lifecycle behavior
+across the branch. No prior review findings supplied, no children or edits.
+
+Round 2 completed with no confirmed P0–P2 finding in public contracts and
+maintained callers. Round 3: `application_fresh_review_3`, existing
+performance_reliability_reviewer, explicit gpt-6-sol / medium, fresh context
+without inherited turns. Independently review the complete changed behavior,
+emphasizing failure paths, shared lifetimes, tenant operations and example
+cleanup. Do not supply earlier findings. No children or edits.
+
+Round 3 completed with no confirmed P0–P2 finding. All three reviews were
+sequential, fresh and read-only, with explicit profiles and no inherited turns.
+No production correction was justified; runtime code remains at 15c562ccd.
+The scenario explanation and full review report are delivered in chat, not as
+repository documents. Final acceptance waits for current-head PR CI.
