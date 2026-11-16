@@ -72,6 +72,7 @@ const maxClientSideScan = 1_000;
 interface NativePreparation {
   signature: string;
   pending: Promise<void> | undefined;
+  pendingMode: StoragePreparationMode | undefined;
   ready: boolean;
   declared: boolean;
 }
@@ -510,7 +511,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
       supportsRecordIndexes: true,
       prepareRecord: (context, spec, group, mode) => this.prepareRecord(context, spec, group, mode),
       prepareEntity: (input, mode) => this.prepareEntity(input, mode),
-      prepareAgentHistory: (input) => this.prepareAgentHistory(input),
+      prepareAgentHistory: (input, mode) => this.prepareAgentHistory(input, mode),
       prepareAgentCommit: (input, mode) => this.prepareAgentCommit(input, mode),
     });
     EntityCommitStorageFactories.register(this, {
@@ -627,7 +628,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
         return Promise.reject(new Error("Custom Datastore record preparation is required."));
       return prepare(context, spec, this.#client, mode);
     }
-    return this.prepareNative(context, spec, group, resolved.layout?.kind);
+    return this.prepareNative(context, spec, group, resolved.layout?.kind, mode);
   }
 
   /**
@@ -676,9 +677,13 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
    * Prepares the surviving Agent audit family.
    * @typeParam I Agent identifier type.
    * @param input Agent state and complete tenant context.
+   * @param mode Creation or read-only metadata check.
    * @returns Completion after audit record compatibility is checked.
    */
-  private prepareAgentHistory<I>(input: AgentHistoryStorageInput<I>): Promise<void> {
+  private prepareAgentHistory<I>(
+    input: AgentHistoryStorageInput<I>,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
     return this.admit(() => {
       TenantBoundary.of(input.context);
       if (!input.stateType.trim()) throw new TypeError("Agent state type is required.");
@@ -688,6 +693,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
         spec,
         AgentHistoryRecords.group,
         "spine_agent_history",
+        mode,
       );
     });
   }
@@ -727,27 +733,33 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
         mode,
         false,
       );
-      await this.prepareAgentMetadata(input.context);
+      await this.prepareAgentMetadata(input.context, mode);
     });
   }
 
   /**
    * Checks the two native Agent audit families after current Entity declarations.
    * @param context Complete tenant context.
+   * @param mode Creation or read-only metadata check.
    * @returns Completion after both families are accessible.
    */
-  private async prepareAgentMetadata(context: StorageContext): Promise<void> {
+  private async prepareAgentMetadata(
+    context: StorageContext,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
     await this.prepareNative(
       context,
       AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
       AgentHistoryRecords.group,
       "spine_agent_history",
+      mode,
     );
     await this.prepareNative(
       context,
       AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
       AgentModelPreferences.group,
       "spine_agent_model_preferences",
+      mode,
     );
   }
 
@@ -759,6 +771,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
    * @param spec The declared record family.
    * @param group Optional physical group.
    * @param explicitKind Configured or fixed native kind.
+   * @param mode Creation or read-only metadata check.
    * @returns Completion after a compatible namespace read.
    */
   private prepareNative<I, R extends Message>(
@@ -766,6 +779,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     spec: RecordSpec<I, R>,
     group?: StorageGroup,
     explicitKind?: string,
+    mode: StoragePreparationMode = "create",
   ): Promise<void> {
     const { namespace, kind, signature } = this.nativeDefinition(
       context,
@@ -777,16 +791,21 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     const prior = this.#prepared.get(family);
     if (prior !== undefined && prior.signature !== signature)
       throw new Error(`Datastore kind "${kind}" has an incompatible record definition.`);
-    if (prior?.ready) return Promise.resolve();
-    if (prior?.pending !== undefined) return prior.pending;
+    if (mode === "create" && prior?.ready) return Promise.resolve();
+    if (prior?.pending !== undefined) {
+      if (prior.pendingMode === mode) return prior.pending;
+      const retry = () => this.prepareNative(context, spec, group, explicitKind, mode);
+      return prior.pending.then(retry, retry);
+    }
     const entry = prior ?? {
       signature,
       ready: false,
       declared: false,
       pending: undefined as Promise<void> | undefined,
+      pendingMode: undefined as StoragePreparationMode | undefined,
     };
     if (prior === undefined) this.#prepared.set(family, entry);
-    return this.probePrepared(namespace, family, entry);
+    return this.probePrepared(namespace, family, entry, mode);
   }
 
   /**
@@ -794,21 +813,27 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
    * @param namespace Native namespace to inspect.
    * @param family Canonical physical family key.
    * @param entry Existing compatible physical declaration.
+   * @param mode Creation or read-only metadata check.
    * @returns Completion after the read-only metadata check.
    */
   private probePrepared(
     namespace: string,
     family: string,
     entry: NativePreparation,
+    mode: StoragePreparationMode,
   ): Promise<void> {
+    entry.pendingMode = mode;
     const pending = this.probe(namespace).then(
       () => {
         entry.ready = true;
         entry.pending = undefined;
+        entry.pendingMode = undefined;
       },
       (error: unknown) => {
         entry.pending = undefined;
-        if (!entry.declared && this.#prepared.get(family) === entry) this.#prepared.delete(family);
+        entry.pendingMode = undefined;
+        if (!entry.ready && !entry.declared && this.#prepared.get(family) === entry)
+          this.#prepared.delete(family);
         throw error;
       },
     );
@@ -845,7 +870,13 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     if (prior !== undefined && prior.signature !== signature)
       throw new Error(`Datastore kind "${kind}" has an incompatible record definition.`);
     if (prior === undefined)
-      this.#prepared.set(family, { signature, ready: false, declared: true, pending: undefined });
+      this.#prepared.set(family, {
+        signature,
+        ready: false,
+        declared: true,
+        pending: undefined,
+        pendingMode: undefined,
+      });
     else prior.declared = true;
   }
 

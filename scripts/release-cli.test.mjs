@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { spawnSync } from "node:child_process";
 import { Buffer } from "node:buffer";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -22,6 +22,11 @@ const packed = {
   integrity: "sha512-YQ==",
   dependencies: [],
 };
+
+beforeEach(() => {
+  vi.stubEnv("GITHUB_RUN_ATTEMPT", "1");
+  vi.stubEnv("GITHUB_RUN_ID", undefined);
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();

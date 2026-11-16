@@ -16,11 +16,12 @@ import type { Message } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { TimeProvider } from "@spine-event-engine/core/time";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
 import { CommandSchema } from "@spine-event-engine/proto";
 
 import * as serverRoot from "../src/index.js";
 import {
+  Application,
   BoundedContext,
   CommandBus,
   type CommandDispatcher,
@@ -98,7 +99,6 @@ import {
   type SignalMetadataOptions,
   SingleProcessServerRuntime,
 } from "../src/index.js";
-import { ServerTests } from "../src/testing/index.js";
 import {
   type CreateProject,
   CreateProjectSchema,
@@ -145,32 +145,34 @@ class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof ProjectStateS
 }
 
 describe("@spine-event-engine/server", () => {
-  const contexts: BoundedContext[] = [];
-
-  beforeEach(async () => ServerEnvironment.instance().completeSetup());
+  const applications: Application[] = [];
 
   afterEach(async () => {
-    const closing = await Promise.allSettled(contexts.splice(0).map((context) => context.close()));
+    const closing = await Promise.allSettled(
+      applications.splice(0).map((application) => application.close()),
+    );
     const failures = closing.flatMap((result): unknown[] =>
       result.status === "rejected" ? [result.reason as unknown] : [],
     );
-    const reset = await ServerTests.resetEnvironment().then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-    if (reset !== undefined) failures.push(reset);
     if (failures.length > 0) throw new AggregateError(failures, "API smoke cleanup failed.");
   });
 
   it("exports the descriptor-derived entity and handler metadata surface", async () => {
-    const exportsContext = await BoundedContext.singleTenant("Exports").build();
-    contexts.push(exportsContext);
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(BoundedContext.singleTenant("Exports"))
+      .build();
+    applications.push(application);
+    const [exportsContext] = application.contexts();
+    if (exportsContext === undefined) throw new Error("Expected Exports Bounded Context.");
     expect(Object.keys(serverRoot).sort()).toEqual(
       [
         "AbstractAssignee",
         "AbstractCommander",
         "AbstractEventReactor",
         "AbstractEventSubscriber",
+        "Application",
+        "ApplicationBuilder",
         "Agent",
         "Aggregate",
         "AlreadyPickedUp",
@@ -223,6 +225,7 @@ describe("@spine-event-engine/server", () => {
         "RepositoryIdentityError",
         "Server",
         "ServerEnvironment",
+        "ServerEnvironmentBuilder",
         "ServerRuntimeStateError",
         "ShardIndex",
         "ShardSession",
@@ -295,7 +298,7 @@ describe("@spine-event-engine/server", () => {
       };
     }>().toExtend<ServerEnvironmentSettings>();
     expect(Environment.instance()).toBe(Environment.instance());
-    expect(ServerEnvironment.when.bind(ServerEnvironment)).toBeTypeOf("function");
+    expect(ServerEnvironment.newBuilder()).toBeDefined();
     expect(EnvironmentType.Local).toBe("local");
     expect(exportsContext.name.value).toBe("Exports");
     expect(new StandStateTypeError("Unknown", "read")).toBeInstanceOf(StandStateTypeError);
@@ -440,8 +443,13 @@ describe("@spine-event-engine/server", () => {
       entityType: PublicRuntimeSmokeAggregate,
       schema: ProjectStateSchema,
     });
-    const context = await BoundedContext.singleTenant("PublicRuntimeSmoke").add(repository).build();
-    contexts.push(context);
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(BoundedContext.singleTenant("PublicRuntimeSmoke").add(repository))
+      .build();
+    applications.push(application);
+    const [context] = application.contexts();
+    if (context === undefined) throw new Error("Expected PublicRuntimeSmoke Bounded Context.");
     const handlers = EntityHandlers.define(
       PublicRuntimeSmokeAggregate,
       ProjectStateSchema,

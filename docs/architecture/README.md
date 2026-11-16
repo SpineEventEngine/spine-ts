@@ -418,7 +418,7 @@ names. This is a metadata boundary, not a sandbox boundary: same-realm code that
 explicitly reparents an ES class onto an entity family is trusted as an entity
 constructor. The snapshot surface records only immutable identity facts:
 constructor identity, family, state schema, descriptor metadata, state full type
-name, and ID-field metadata. `BoundedContextBuilder.build()` creates repository
+name, and ID-field metadata. Application build creates repository
 registration, rejects duplicate entity or state identities, opens state record
 storage through the context `StorageFactory`, and exposes registered
 repositories as frozen snapshot-backed `RepositoryView` values. Direct
@@ -481,7 +481,7 @@ Bounded-context scope is intentionally limited to a small assembly
 surface:
 
 - `BoundedContext.singleTenant(name)` and
-  `BoundedContext.multitenant(name)` are the only public entry points for
+  `BoundedContext.multiTenant(name)` are the only public entry points for
   starting context assembly;
 - `ContextSpec` is an immutable framework value exposed through
   `builder.spec` and `context.spec`; it carries the validated bounded-context
@@ -490,13 +490,13 @@ surface:
 - `BoundedContextBuilder.addCommandDispatcher()` /
   `removeCommandDispatcher()` and `addEventDispatcher()` /
   `removeEventDispatcher()` collect dispatchers for the context being built;
-- `ServerEnvironment.when(type).use({ storageFactory })` selects the shared
-  `StorageFactory` used for context `EventStore`, repository state storage, and
-  direct `Stand` reads after explicit environment setup;
+- `ServerEnvironment.newBuilder().under(type, callback).build()` selects the
+  StorageFactory for an Application's Event Stores, repositories, and Stand reads;
+  Application performs asynchronous setup;
 - `BoundedContextBuilder.add(repository)` and `remove(repository)` maintain the
   context repository registration list;
-- `BoundedContextBuilder.build()` is the only supported path for constructing a
-  built `BoundedContext`; and
+- Application build constructs the registered Bounded Context builders and
+  installs shared reads before activating work; and
 - built contexts expose name, tenant mode, spec, a copy-safe small snapshot,
   frozen snapshot-backed `RepositoryView` values, a post-only `commandBus()`
   endpoint, an event listing/posting `eventBus()` endpoint backed by the
@@ -678,27 +678,20 @@ built contexts, command payload validation and rejection/Ack mapping through
 lifecycle/queue capability. The package also exports `Server` as a small HTTP/2
 owner over `SpineServices`: it defaults to `127.0.0.1`, returns
 `host`/`port`/`baseUrl`, and builds its service routing once when `start()` is
-called. `Environment` and `ServerEnvironment` are one lazy process singleton
-graph for storage, an integration message-channel factory, optional delivery,
-and optional tracing. Local environments get in-memory storage and a shared
-in-memory channel factory. A production process must set `NODE_ENV=production`
-before the first environment or server resolution, then configure storage through
-`ServerEnvironment.when(EnvironmentType.Production).use(...)` before that
-resolution. `Server` builds added `BoundedContextBuilder` values before listener
-open and uses the singleton storage factory unless the builder chose one
-explicitly. `start()` is caller-managed: it neither installs process signal
-handlers nor closes the environment. `run()` is process-managed: concurrent
-same-builder calls coalesce, run-managed siblings share one active generation,
-and the last run-managed retirement closes that environment. Mixed active
-caller-managed/run-managed admission rejects before listener open. A failed
-final close stays reachable for explicit or later-signal retry without
-rerunning completed close hooks. This ordinary `Server` lifecycle still does
-not export a production transport endpoint runner, durable retry owner, event
-storage policy beyond existing seams, retained active-stream/update replay
-storage, or worker topology. `ManagedServerApplication` is the separate
-Node-only process supervisor for complete replicas: it owns bounded replacement
-and its front-facing unary Coordinator while leaving child listener topology
-private.
+called. Environment selects a global profile; ServerEnvironment instances provide
+separate configured services. Storage and transport default to memory, including
+Production. Production still requires the complete generated schema registry.
+Application assembles its Bounded Contexts and one tenant index, installs shared
+reads, then activates integration, monitoring, and recovered Delivery. Server
+attaches to an already built Application.
+
+Caller-managed start() installs no process signal handlers. Closing its endpoint
+leaves the Application running; callers close all successful endpoints before
+Application.close(). Multiple endpoints can serve the same Application.
+Process-managed run() coordinates cleanup per Application and accounts for pending
+starts. Manual and managed endpoints cannot share one Application. A failed final
+close retains unfinished cleanup for retry. ManagedServerApplication supervises
+complete child replicas while keeping their listener topology private.
 
 The same local runtime boundary provides a narrow generated-signal metadata
 policy through `SignalMetadata`. Repository-produced commands/events

@@ -902,11 +902,12 @@ describe("spine proto model tooling", () => {
       join(app, "src/main.ts"),
       [
         'import "../generated/spine-bootstrap.js";',
-        'import { BoundedContext, ServerEnvironment } from "@spine-event-engine/server";',
+        'import { Application, BoundedContext, ServerEnvironment } from "@spine-event-engine/server";',
         'import { Chat } from "./chat.js";',
-        "await ServerEnvironment.instance().completeSetup();",
-        'const context = await BoundedContext.singleTenant("MessageBoard").add(Chat).build();',
-        "await context.close();",
+        "const environment = ServerEnvironment.newBuilder().build();",
+        "const application = await Application.newBuilder().setServerEnvironment(environment)",
+        '  .add(BoundedContext.singleTenant("MessageBoard").add(Chat)).build();',
+        "await application.close();",
         "",
       ].join("\n"),
     );
@@ -1174,13 +1175,14 @@ describe("spine proto model tooling", () => {
       join(app, "src/main.ts"),
       [
         'import "../generated/spine-bootstrap.js";',
-        'import { BoundedContext, ServerEnvironment } from "@spine-event-engine/server";',
+        'import { Application, BoundedContext, ServerEnvironment } from "@spine-event-engine/server";',
         'import { Chat } from "@acme/handler-bridge";',
         'import { ChatViewProjection } from "@acme/chat-projection";',
-        "await ServerEnvironment.instance().completeSetup();",
-        'const context = await BoundedContext.singleTenant("MessageBoard")',
-        "  .add(Chat).add(ChatViewProjection).build();",
-        "await context.close();",
+        "const environment = ServerEnvironment.newBuilder().build();",
+        "const application = await Application.newBuilder().setServerEnvironment(environment)",
+        '  .add(BoundedContext.singleTenant("MessageBoard").add(Chat).add(ChatViewProjection))',
+        "  .build();",
+        "await application.close();",
       ].join("\n"),
     );
     HandlerGeneration.generate(app);

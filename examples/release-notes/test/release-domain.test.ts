@@ -23,17 +23,17 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { SignalMetadata } from "@spine-event-engine/server";
+import {
+  Application,
+  EnvironmentType,
+  ServerEnvironment,
+  SignalMetadata,
+} from "@spine-event-engine/server";
 import { ConversationIdSchema } from "@spine-event-engine/proto/agent";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { AiTestBackend, BlackBox } from "@spine-event-engine/testing";
+import { AiTestBackend } from "@spine-event-engine/testing";
 import type { BoundedContext } from "@spine-event-engine/server";
-import { afterEach, describe, expect, it } from "vitest";
-import { ServerTests } from "@spine-event-engine/server/testing";
-
-afterEach(async () => {
-  await ServerTests.resetEnvironment();
-});
+import { describe, expect, it } from "vitest";
 
 import {
   CancelReleaseGenerationSchema,
@@ -65,6 +65,7 @@ import {
   RepositorySelectionIdSchema,
 } from "../generated/spine/examples/releasenotes/types_pb.js";
 import { ReleaseNotesAgent, ReleaseNotesContext } from "../dist/src/domain/index.js";
+import { ReleaseTestSession } from "./release-test-session.js";
 
 const id = create(ReleaseDraftIdSchema, { value: "release-1" });
 const comparison = create(ReleaseComparisonSchema, {
@@ -103,8 +104,12 @@ function registry(): AiRegistry {
 
 describe("release notes through BlackBox", () => {
   it("rejects an unaccepted Request after its ignored Cancel advances Version", async () => {
-    const context = await ReleaseNotesContext.create(registry(), new InMemoryStorageFactory());
-    const box = await BlackBox.from(context, { timeoutMs: 5_000 });
+    const box = await ReleaseTestSession.open(
+      ReleaseNotesContext.create(registry()),
+      new InMemoryStorageFactory(),
+      5_000,
+    );
+    const context = box.context;
     const scope = box.asGuest();
     try {
       expect(
@@ -193,18 +198,32 @@ describe("release notes through BlackBox", () => {
   });
 
   it("assembles a registered Agent repository for trusted history reads", async () => {
-    const context = await ReleaseNotesContext.create(registry(), new InMemoryStorageFactory());
+    const environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (setting) => {
+        setting.use({ storageFactory: new InMemoryStorageFactory() });
+      })
+      .build();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(environment)
+      .add(ReleaseNotesContext.create(registry()))
+      .build();
+    const context = application.contexts()[0];
+    if (context === undefined) throw new Error("Expected a Bounded Context in the Application.");
     try {
       const agentRepository = context.getRepository(ReleaseNotesAgent);
       const history = await agentRepository.agentHistory(id, {}).fullHistory({ pageSize: 1 });
       expect(history.items).toEqual([]);
     } finally {
-      await context.close();
+      await application.close();
     }
   });
   it("rejects duplicate opening without replacing the repository or accepted generation receipt", async () => {
-    const context = await ReleaseNotesContext.create(registry(), new InMemoryStorageFactory());
-    const box = await BlackBox.from(context, { timeoutMs: 5_000 });
+    const box = await ReleaseTestSession.open(
+      ReleaseNotesContext.create(registry()),
+      new InMemoryStorageFactory(),
+      5_000,
+    );
+    const context = box.context;
     const scope = box.asGuest();
     try {
       expect(
@@ -296,8 +315,12 @@ describe("release notes through BlackBox", () => {
   });
 
   it("opens a draft and projects its authoritative initial state", async () => {
-    const context = await ReleaseNotesContext.create(registry(), new InMemoryStorageFactory());
-    const box = await BlackBox.from(context, { timeoutMs: 5_000 });
+    const box = await ReleaseTestSession.open(
+      ReleaseNotesContext.create(registry()),
+      new InMemoryStorageFactory(),
+      5_000,
+    );
+    const context = box.context;
     try {
       const posted = await box.asGuest().post(
         OpenReleaseDraftSchema,

@@ -99,6 +99,15 @@ export class TestTenantIndex implements TenantIndex {
   }
 
   /**
+   * Closes the selected test catalog.
+   *
+   * @returns Completion after catalog resources close.
+   */
+  async close(): Promise<void> {
+    await this.catalog.close();
+  }
+
+  /**
    * Rejects a single-tenant boundary in a multitenant directory.
    *
    * @param boundary Catalog entry.

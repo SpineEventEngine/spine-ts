@@ -15,7 +15,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { Time } from "@spine-event-engine/core";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { ServerTests } from "@spine-event-engine/server/testing";
 import { AuthErrorCode, FirebaseAuthError } from "firebase-admin/auth";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FieldnotesHost } from "../src/fieldnotes-host.js";
@@ -36,9 +35,8 @@ const settings = (): FieldnotesSettings => ({
 });
 
 describe("Fieldnotes real Firebase auth routes", () => {
-  afterEach(async () => {
+  afterEach(() => {
     vi.restoreAllMocks();
-    await ServerTests.resetEnvironment();
   });
 
   it("releases finite bootstrap monitors while keeping the credential valid", async () => {
@@ -331,8 +329,6 @@ describe("Fieldnotes real Firebase auth routes", () => {
 });
 
 describe("Fieldnotes direct Google auth routes", () => {
-  afterEach(async () => ServerTests.resetEnvironment());
-
   it("keeps the grant in a completion fragment and consumes it once with browser PKCE", async () => {
     const issuer = "https://issuer.example";
     const exchange = vi.fn().mockResolvedValue({ issuer, subject: "google-user" });

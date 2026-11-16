@@ -22,9 +22,11 @@ import {
 } from "@spine-event-engine/example-message-board-view-handlers";
 import { clone } from "@bufbuild/protobuf";
 import {
+  Application,
   BoundedContext,
   EventRouting,
   Server,
+  type ServerEnvironment,
   type StandSubscriptionRegistry,
   type SpineServicesOptions,
 } from "@spine-event-engine/server";
@@ -52,6 +54,11 @@ import {
  * Exposes the two Bounded Contexts and Server assembled by this application.
  */
 export interface ComposedBoard {
+  /**
+   * Keeps both Bounded Contexts and their shared facilities active.
+   */
+  readonly application: Application;
+
   /**
    * Contains message commands and their Projection rows from separate packages.
    */
@@ -104,38 +111,107 @@ export class ComposedBoardApplication {
   /**
    * Builds contexts from dependency handlers and registers the selected query handler.
    *
+   * @param environment Configured facilities for both Bounded Contexts.
    * @param options Context and listener settings.
    * @returns The locally configured contexts and Server.
    */
-  async create(options: ComposedBoardOptions = {}): Promise<ComposedBoard> {
-    const messagesBuilder = BoardContextBuilders.messages(options);
-    const announcementsBuilder = BoardContextBuilders.announcements(options);
-    let messages: BoundedContext | undefined;
-    let announcements: BoundedContext | undefined;
+  async create(
+    environment: ServerEnvironment,
+    options: ComposedBoardOptions = {},
+  ): Promise<ComposedBoard> {
+    let server: Server;
     try {
-      messages = await messagesBuilder.build();
-      announcements = await announcementsBuilder.build();
-      const server = new Server({
-        ...(options.host === undefined ? {} : { host: options.host }),
-        ...(options.port === undefined ? {} : { port: options.port }),
-        contexts: [messages, announcements],
-        appQueries: [new ReadBoardStatsHandler()],
-        ...(this.readerAdmission === undefined
-          ? {}
-          : { services: { readerAdmission: this.readerAdmission } }),
-        readSideFilters: [
-          new AggregateAuthorRedaction(),
-          new MessageAuthorRedaction(),
-          new EventAuthorRedaction(),
-          new BoardStatisticsDisclosure(),
-          new AnnouncementDisclosure(),
-        ],
-      });
-      return { messages, announcements, server };
+      server = this.#server(options);
     } catch (error) {
-      await Promise.allSettled([announcements?.close(), messages?.close()]);
-      throw error;
+      return ComposedBoardApplication.closeAfterFailure(error, () => environment.close());
     }
+    const application = await ComposedBoardApplication.buildApplication(environment, options);
+    const [messages, announcements] = application.contexts();
+    if (messages === undefined || announcements === undefined) {
+      return ComposedBoardApplication.closeAfterFailure(
+        new Error("Expected both Message Board Bounded Contexts."),
+        () => application.close(),
+      );
+    }
+    try {
+      server.setApplication(application);
+    } catch (error) {
+      return ComposedBoardApplication.closeAfterFailure(error, () => application.close());
+    }
+    return {
+      application,
+      messages,
+      announcements,
+      server,
+    };
+  }
+
+  /**
+   * Builds both Bounded Contexts after native options have been validated.
+   *
+   * @param environment Selected Message Board facilities.
+   * @param options Bounded Context options.
+   * @returns Assembled Application.
+   */
+  private static async buildApplication(
+    environment: ServerEnvironment,
+    options: ComposedBoardOptions,
+  ): Promise<Application> {
+    const builder = Application.newBuilder().setServerEnvironment(environment);
+    try {
+      return await builder
+        .add(BoardContextBuilders.messages(options))
+        .add(BoardContextBuilders.announcements(options))
+        .build();
+    } catch (error) {
+      return ComposedBoardApplication.closeAfterFailure(error, async () => {
+        await builder.close();
+        await environment.close();
+      });
+    }
+  }
+
+  /**
+   * Closes a partially assembled Message Board while retaining the original failure.
+   *
+   * @param error The assembly failure.
+   * @param close Closes the acquired environment or Application.
+   * @returns Never, because assembly failed.
+   */
+  private static async closeAfterFailure(
+    error: unknown,
+    close: () => Promise<void>,
+  ): Promise<never> {
+    try {
+      await close();
+    } catch (cleanup) {
+      throw new AggregateError([error, cleanup], "Message Board assembly cleanup failed.");
+    }
+    throw error;
+  }
+
+  /**
+   * Configures one native endpoint for the assembled Application.
+   *
+   * @param application Shared Message Board Application.
+   * @param options Native listener and registry settings.
+   * @returns The native Server builder.
+   */
+  #server(options: ComposedBoardOptions): Server {
+    return Server.atPort(options.port ?? 0, {
+      host: options.host ?? "127.0.0.1",
+      appQueries: [new ReadBoardStatsHandler()],
+      ...(this.readerAdmission === undefined
+        ? {}
+        : { services: { readerAdmission: this.readerAdmission } }),
+      readSideFilters: [
+        new AggregateAuthorRedaction(),
+        new MessageAuthorRedaction(),
+        new EventAuthorRedaction(),
+        new BoardStatisticsDisclosure(),
+        new AnnouncementDisclosure(),
+      ],
+    });
   }
 }
 

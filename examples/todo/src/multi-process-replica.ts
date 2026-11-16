@@ -20,6 +20,7 @@ import { Datastore } from "@google-cloud/datastore";
 import { TypeRegistry } from "@spine-event-engine/core";
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import {
+  Application,
   EnvironmentType,
   InMemorySubscriptionRegistry,
   Server,
@@ -69,20 +70,22 @@ export async function createTodoReplica(
     .build();
   const delivery = RemoteDelivery.connectTo({ endpoint: settings.deliveryServerUrl });
   const deliveryStrategy = UniformAcrossAllShards.forNumber(settings.deliveryShardCount);
-  ServerEnvironment.when(EnvironmentType.Production).use({
-    storageFactory,
-    typeRegistry,
-    delivery,
-    deliveryStrategy,
-  });
-  const server = await Server.atPort(endpoint.port, { host: endpoint.host })
-    .add(
-      await createTodoContext({
+  const environment = ServerEnvironment.newBuilder()
+    .under(EnvironmentType.Production, (setting) => {
+      setting.use({
         storageFactory,
+        typeRegistry,
+        delivery,
         deliveryStrategy,
-        subscriptionRegistry: new InMemorySubscriptionRegistry(),
-      }),
-    )
+      });
+    })
+    .build();
+  const application = await Application.newBuilder()
+    .setServerEnvironment(environment)
+    .add(createTodoContext({ subscriptionRegistry: new InMemorySubscriptionRegistry() }))
+    .build();
+  const server = await Server.atPort(endpoint.port, { host: endpoint.host })
+    .setApplication(application)
     .start();
   return {
     server,

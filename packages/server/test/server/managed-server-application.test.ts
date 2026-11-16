@@ -29,6 +29,7 @@ import {
   SubscriptionSchema,
 } from "@spine-event-engine/proto/client";
 import { ActorContextSchema } from "@spine-event-engine/proto";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import {
   GetProjectOverview_QuerySchema,
   GetProjectOverview_ResponseSchema,
@@ -37,11 +38,17 @@ import { ProjectIdSchema } from "../../test-fixtures/generated/repository-routin
 
 import {
   InMemorySubscriptionRegistry,
+  Application,
+  BoundedContext,
+  EnvironmentType,
   ManagedServerApplication,
+  Server,
+  ServerEnvironment,
   type RunningServer,
 } from "../../src/index.js";
 import {
   ManagedServerCoordinator,
+  type ManagedServerCoordinatorDependencies,
   managedServerApplicationAccess,
   managedServerCoordinatorAccess,
 } from "../../src/server/managed-server-application.js";
@@ -189,6 +196,52 @@ const acknowledgeFakeChildClose = (child: ChildProcess, incarnation: string, slo
 };
 
 describe("ManagedServerApplication", () => {
+  it("passes configured subscription queue capacity to the parent Coordinator", async () => {
+    const child = fakeChild(1);
+    let incarnation = "";
+    const openCoordinator = vi.fn<
+      NonNullable<ManagedServerCoordinatorDependencies["openCoordinator"]>
+    >(() =>
+      Promise.resolve({
+        beginDrain: () => Promise.resolve(),
+        closeSubscriptions: () => Promise.resolve(),
+        close: () => Promise.resolve(),
+      } as NodeCoordinator),
+    );
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+        subscriptionQueueCapacity: 0,
+        manageProcessSignals: false,
+      },
+      {
+        clock: new FakeClock(),
+        spawn: (_url, _slot, value) => {
+          incarnation = value;
+          return child;
+        },
+        openCoordinator,
+      },
+    );
+    const starting = coordinator.start();
+    child.emit("message", {
+      type: "ready",
+      slot: "0",
+      incarnation,
+      endpoint: "http://127.0.0.1:1",
+    });
+    const handle = await starting;
+    expect(openCoordinator).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subscriptionQueueCapacity: 0,
+      }),
+    );
+    acknowledgeFakeChildClose(child, incarnation);
+    await handle.close();
+  });
+
   it("rejects conflicting child forwarding choices before starting managed children", () => {
     expect(
       () =>
@@ -1793,6 +1846,54 @@ describe("ManagedServerApplication", () => {
     }
   });
 
+  it("closes a child after its READY notification rejects", async () => {
+    const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
+    const priorMessages = new Set(process.listeners("message"));
+    const priorSend = Object.getOwnPropertyDescriptor(process, "send");
+    const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
+    const priorDisconnect = Object.getOwnPropertyDescriptor(process, "disconnect");
+    const send = vi.fn((message: { type: string }, callback: (error: Error | null) => void) => {
+      callback(message.type === "ready" ? new Error("READY rejected") : null);
+      return true;
+    });
+    const disconnect = vi.fn();
+    Object.defineProperty(process, "send", { configurable: true, value: send });
+    Object.defineProperty(process, "connected", { configurable: true, value: true });
+    Object.defineProperty(process, "disconnect", { configurable: true, value: disconnect });
+    process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+    const close = vi.fn(() => Promise.resolve());
+    try {
+      const starting = ManagedServerApplication.run({
+        processCount: 1,
+        port: 50_051,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.resolve(localRunningServer(close)),
+      });
+      await vi.waitFor(() => {
+        expect(send).toHaveBeenCalledWith(
+          expect.objectContaining({ type: "synchronizing" }),
+          expect.any(Function),
+        );
+      });
+      managedMessageListener(priorMessages)({ type: "activate" }, undefined);
+      await expect(starting).rejects.toThrow("READY rejected");
+      expect(close).toHaveBeenCalledOnce();
+      expect(disconnect).toHaveBeenCalledOnce();
+    } finally {
+      if (priorSend === undefined) delete (process as { send?: unknown }).send;
+      else Object.defineProperty(process, "send", priorSend);
+      if (priorConnected === undefined) delete (process as { connected?: unknown }).connected;
+      else Object.defineProperty(process, "connected", priorConnected);
+      if (priorDisconnect === undefined) delete (process as { disconnect?: unknown }).disconnect;
+      else Object.defineProperty(process, "disconnect", priorDisconnect);
+      for (const listener of process.listeners("message")) {
+        if (!priorMessages.has(listener)) process.off("message", listener);
+      }
+      if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
+      else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
+    }
+  });
+
   it("rejects a child start when its private parent IPC rejects READY", async () => {
     const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
     const priorSend = Object.getOwnPropertyDescriptor(process, "send");
@@ -1969,6 +2070,197 @@ describe("ManagedServerApplication", () => {
       else Object.defineProperty(process, "send", priorSend);
       if (priorConnected === undefined) delete (process as { connected?: unknown }).connected;
       else Object.defineProperty(process, "connected", priorConnected);
+      if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
+      else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
+    }
+  });
+
+  it("closes a started endpoint before its Application when the child callback throws", async () => {
+    const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
+    process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+    const order: string[] = [];
+    const storage = new InMemoryStorageFactory();
+    const originalClose = storage.close.bind(storage);
+    vi.spyOn(storage, "close").mockImplementation(async () => {
+      order.push("storage");
+      await originalClose();
+    });
+    try {
+      await expect(
+        ManagedServerApplication.run({
+          processCount: 1,
+          port: 50_051,
+          moduleUrl: import.meta.url,
+          createServer: async () => {
+            const application = await Application.newBuilder()
+              .setServerEnvironment(
+                ServerEnvironment.newBuilder()
+                  .under(EnvironmentType.Local, (setting) => {
+                    setting.use({ storageFactory: storage });
+                  })
+                  .build(),
+              )
+              .add(BoundedContext.singleTenant("Child"))
+              .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+            await Server.atPort(0)
+              .setApplication(application)
+              .addResource({
+                close: () => {
+                  order.push("endpoint");
+                },
+              })
+              .start();
+            throw new Error("callback failed after listener start");
+          },
+        }),
+      ).rejects.toThrow(/callback failed after listener start/);
+      expect(order).toEqual(["endpoint", "storage"]);
+    } finally {
+      if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
+      else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
+    }
+  });
+
+  it("retries retained child endpoint cleanup before another callback starts", async () => {
+    const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
+    process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+    const storage = new InMemoryStorageFactory();
+    const closeStorage = vi.spyOn(storage, "close");
+    const closeEndpointResource = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("endpoint resource close failed"))
+      .mockResolvedValueOnce(undefined);
+    const base = {
+      processCount: 1,
+      port: 50_051,
+      moduleUrl: import.meta.url,
+    };
+    try {
+      await expect(
+        ManagedServerApplication.run({
+          ...base,
+          createServer: async () => {
+            const application = await Application.newBuilder()
+              .setServerEnvironment(
+                ServerEnvironment.newBuilder()
+                  .under(EnvironmentType.Local, (setting) => {
+                    setting.use({ storageFactory: storage });
+                  })
+                  .build(),
+              )
+              .add(BoundedContext.singleTenant("RetryChild"))
+              .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+            await Server.atPort(0)
+              .setApplication(application)
+              .addResource({ close: closeEndpointResource })
+              .start();
+            throw new Error("callback failed");
+          },
+        }),
+      ).rejects.toThrow(/Managed child startup cleanup failed/);
+      expect(closeStorage).not.toHaveBeenCalled();
+      const nextFactory = vi.fn(() => Promise.reject(new Error("next callback")));
+      await expect(
+        ManagedServerApplication.run({ ...base, createServer: nextFactory }),
+      ).rejects.toThrow("next callback");
+      expect(closeEndpointResource).toHaveBeenCalledTimes(2);
+      expect(closeStorage).toHaveBeenCalledOnce();
+      expect(nextFactory).toHaveBeenCalledOnce();
+    } finally {
+      if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
+      else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
+    }
+  });
+
+  it("closes an independent Application when a sibling endpoint close fails", async () => {
+    const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
+    process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+    const firstStorage = new InMemoryStorageFactory();
+    const secondStorage = new InMemoryStorageFactory();
+    const closeFirstStorage = vi.spyOn(firstStorage, "close");
+    const closeSecondStorage = vi.spyOn(secondStorage, "close");
+    const closeFirstEndpoint = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("first endpoint close failed"))
+      .mockResolvedValueOnce(undefined);
+    const options = { processCount: 1, port: 50_051, moduleUrl: import.meta.url };
+    const startEndpoint = async (
+      name: string,
+      storage: InMemoryStorageFactory,
+      close: () => Promise<void>,
+    ) => {
+      const application = await Application.newBuilder()
+        .setServerEnvironment(
+          ServerEnvironment.newBuilder()
+            .under(EnvironmentType.Local, (setting) => {
+              setting.use({ storageFactory: storage });
+            })
+            .build(),
+        )
+        .add(BoundedContext.singleTenant(name))
+        .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+      await Server.atPort(0).setApplication(application).addResource({ close }).start();
+    };
+    try {
+      await expect(
+        ManagedServerApplication.run({
+          ...options,
+          createServer: async () => {
+            await startEndpoint("FirstChild", firstStorage, closeFirstEndpoint);
+            await startEndpoint("SecondChild", secondStorage, () => Promise.resolve());
+            throw new Error("callback failed after two starts");
+          },
+        }),
+      ).rejects.toThrow(/Managed child startup cleanup failed/);
+      expect(closeFirstStorage).not.toHaveBeenCalled();
+      expect(closeSecondStorage).toHaveBeenCalledOnce();
+      const nextFactory = vi.fn(() => Promise.reject(new Error("next callback")));
+      await expect(
+        ManagedServerApplication.run({ ...options, createServer: nextFactory }),
+      ).rejects.toThrow("next callback");
+      expect(closeFirstEndpoint).toHaveBeenCalledTimes(2);
+      expect(closeFirstStorage).toHaveBeenCalledOnce();
+      expect(closeSecondStorage).toHaveBeenCalledOnce();
+      expect(nextFactory).toHaveBeenCalledOnce();
+    } finally {
+      if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
+      else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
+    }
+  });
+
+  it("closes a Server.run wrapper when its child callback throws", async () => {
+    const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
+    const priorInt = new Set(process.listeners("SIGINT"));
+    const priorTerm = new Set(process.listeners("SIGTERM"));
+    process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+    const storage = new InMemoryStorageFactory();
+    const closeStorage = vi.spyOn(storage, "close");
+    try {
+      await expect(
+        ManagedServerApplication.run({
+          processCount: 1,
+          port: 50_051,
+          moduleUrl: import.meta.url,
+          createServer: async () => {
+            const application = await Application.newBuilder()
+              .setServerEnvironment(
+                ServerEnvironment.newBuilder()
+                  .under(EnvironmentType.Local, (setting) => {
+                    setting.use({ storageFactory: storage });
+                  })
+                  .build(),
+              )
+              .add(BoundedContext.singleTenant("ManagedWrapper"))
+              .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+            await Server.atPort(0).setApplication(application).run();
+            throw new Error("callback failed after managed start");
+          },
+        }),
+      ).rejects.toThrow("callback failed after managed start");
+      expect(closeStorage).toHaveBeenCalledOnce();
+      expect(new Set(process.listeners("SIGINT"))).toEqual(priorInt);
+      expect(new Set(process.listeners("SIGTERM"))).toEqual(priorTerm);
+    } finally {
       if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
       else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
     }

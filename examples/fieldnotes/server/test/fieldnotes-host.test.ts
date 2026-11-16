@@ -14,6 +14,7 @@
 
 import { randomBytes } from "node:crypto";
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:net";
 import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport, createGrpcTransport } from "@connectrpc/connect-node";
@@ -35,8 +36,7 @@ import {
   CoordinatesSchema,
   PlaceIdSchema,
 } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/types_pb.js";
-import { ServerTests } from "@spine-event-engine/server/testing";
-import { EnvironmentType } from "@spine-event-engine/server";
+import { Application, EnvironmentType } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FieldnotesHost } from "../src/fieldnotes-host.js";
@@ -55,7 +55,22 @@ const settings = (): FieldnotesSettings => ({
 });
 
 describe("Fieldnotes host private Connect boundary", () => {
-  afterEach(async () => ServerTests.resetEnvironment());
+  afterEach(() => {
+    EnvironmentTests.reset();
+  });
+
+  it("closes its Application after both listeners", async () => {
+    const closeApplication = vi.spyOn(Application.prototype, "close");
+    const host = await FieldnotesHost.open(settings(), {
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    try {
+      await host.close();
+      expect(closeApplication).toHaveBeenCalledOnce();
+    } finally {
+      closeApplication.mockRestore();
+    }
+  });
 
   it("closes the selected storage after startup connection failure", async () => {
     const factory = new InMemoryStorageFactory();
@@ -87,6 +102,31 @@ describe("Fieldnotes host private Connect boundary", () => {
     ).rejects.toThrow();
     expect(closed).toHaveBeenCalledTimes(1);
     expect(factory.isOpen()).toBe(false);
+  });
+
+  it("closes the native Application when the browser listener cannot start", async () => {
+    const listener = createServer();
+    await new Promise<void>((resolve) => listener.listen(0, "127.0.0.1", resolve));
+    const address = listener.address();
+    if (address === null || typeof address === "string")
+      throw new Error("Expected a browser listener port.");
+    const factory = new InMemoryStorageFactory();
+    const closeApplication = vi.spyOn(Application.prototype, "close");
+    try {
+      await expect(
+        FieldnotesHost.open(settings(), { storageFactory: factory, gatewayPort: address.port }),
+      ).rejects.toThrow();
+      expect(closeApplication).toHaveBeenCalledOnce();
+      expect(factory.isOpen()).toBe(false);
+    } finally {
+      closeApplication.mockRestore();
+      await new Promise<void>((resolve, reject) => {
+        listener.close((error) => {
+          if (error === undefined) resolve();
+          else reject(error);
+        });
+      });
+    }
   });
 
   it("rejects production test injection, missing provider launch and emulator configuration", async () => {
@@ -134,6 +174,25 @@ describe("Fieldnotes host private Connect boundary", () => {
       });
     } finally {
       failing.mockRestore();
+    }
+  });
+
+  it("retains the Application when browser listener close fails, then retries cleanup", async () => {
+    const factory = new InMemoryStorageFactory();
+    const host = await FieldnotesHost.open(settings(), { storageFactory: factory });
+    const gatewayClose = host.gateway.close.bind(host.gateway);
+    const close = vi.spyOn(host.gateway, "close").mockImplementationOnce(async () => {
+      await gatewayClose();
+      throw new Error("browser listener close failed");
+    });
+    try {
+      await expect(host.close()).rejects.toThrow("Fieldnotes listener close failed");
+      expect(factory.isOpen()).toBe(true);
+      await expect(host.close()).resolves.toBeUndefined();
+      expect(factory.isOpen()).toBe(false);
+    } finally {
+      close.mockRestore();
+      if (factory.isOpen()) await host.close();
     }
   });
 

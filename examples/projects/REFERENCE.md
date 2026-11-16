@@ -5,6 +5,11 @@ with the [Projects README](README.md).
 
 ## Topology
 
+`createProjectManagementContext()` synchronously returns a Bounded Context builder.
+`startProjectManagementServer()` assembles an Application and returns a host handle
+with `host`, `port`, `baseUrl`, and `close()`. That handle closes its endpoint before
+its Application, retaining storage when endpoint shutdown fails.
+
 The fixed registry contains three Aggregates (`Project`, `Task`, and `Person`),
 twenty Projections, and ten Process Managers: thirty-three repositories. Proto
 and handler registries are generated artifacts and must not be edited.

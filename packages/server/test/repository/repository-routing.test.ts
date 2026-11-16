@@ -106,13 +106,15 @@ import {
   EventDispatchedToSubscriberSchema,
   EventDispatchedToReactorSchema,
 } from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
-import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, onTestFinished, vi } from "vitest";
 import type { ILogLayer } from "loglayer";
 
 import {
   Aggregate,
   Agent,
+  Application,
   BoundedContext,
+  type BoundedContextBuilder,
   CommandRouting,
   EventRouting,
   ProcessManager,
@@ -134,9 +136,9 @@ import {
   StateUpdateRouting,
 } from "../../src/index.js";
 import {
-  ServerEnvironmentLifecycle,
   serverEnvironmentAccess,
   type ServerEnvironmentDelivery,
+  type ServerEnvironmentSettings,
 } from "../../src/server/server-environment.js";
 import {
   SupportReplyDraftedSchema,
@@ -265,18 +267,97 @@ import {
   ProjectSubmissionStateSchema,
 } from "../../test-fixtures/generated/repository-routing/project_validation_states_pb.js";
 
-beforeEach(async () => {
-  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: new TestTenantIndex() });
-  await ServerEnvironment.instance().completeSetup();
-});
+interface TestSetup {
+  settings: ServerEnvironmentSettings;
+  index: TestTenantIndex;
+  seedTenants: boolean;
+  seeded: boolean;
+  readonly applications: Application[];
+  readonly environments: ServerEnvironment[];
+  readonly expectedCloseFailures: Set<Application>;
+}
 
-afterEach(async () => {
-  const environment = ServerEnvironment.instance();
-  for (const context of serverEnvironmentAccess.openContexts(environment)) await context.close();
-  await ServerEnvironmentLifecycle.resetForTest();
-});
+function createTestSetup(seedTenants: boolean): TestSetup {
+  const setup: TestSetup = {
+    settings: {},
+    index: new TestTenantIndex(),
+    seedTenants,
+    seeded: false,
+    applications: [],
+    environments: [],
+    expectedCloseFailures: new Set(),
+  };
+  onTestFinished(async () => {
+    for (const application of setup.applications.reverse()) {
+      if (!setup.expectedCloseFailures.has(application)) await application.close();
+    }
+  });
+  return setup;
+}
+
+function environmentFor(setup: TestSetup): ServerEnvironment {
+  const environment = setup.environments.at(-1);
+  if (environment === undefined) throw new Error("Expected a built test Application.");
+  return environment;
+}
+
+async function expectFailedApplicationClose(setup: TestSetup): Promise<void> {
+  const application = setup.applications.at(-1);
+  if (application === undefined) throw new Error("Expected an Application to close.");
+  await expect(application.close()).rejects.toThrow("Application context close failed.");
+  setup.expectedCloseFailures.add(application);
+}
+
+async function buildContext(
+  builder: BoundedContextBuilder,
+  setup: TestSetup,
+): Promise<BoundedContext> {
+  if (setup.seedTenants && !setup.seeded) {
+    await Promise.all(
+      [
+        "first",
+        "second",
+        "tenant-a",
+        "tenant-b",
+        "tenant-command",
+        "tenant-transform",
+        "tenant-other",
+        "pm-tenant",
+        " tenant-a ",
+        "a",
+        "b",
+      ].map((value) => setup.index.keep(createTenantId(value))),
+    );
+    await setup.index.keep(createTenantId("example.com", "domain"));
+    await setup.index.keep(createTenantId("owner@example.com", "email"));
+    setup.seeded = true;
+  }
+  const environment = ServerEnvironment.newBuilder()
+    .under(EnvironmentType.Local, (configuration) => {
+      configuration.use(setup.settings);
+    })
+    .build();
+  const applicationBuilder = Application.newBuilder()
+    .setServerEnvironment(environment)
+    .setTenantIndex(setup.index)
+    .add(builder);
+  let application: Application;
+  try {
+    application = await applicationBuilder.build();
+  } catch (error) {
+    await applicationBuilder.close();
+    await environment.close();
+    throw error;
+  }
+  setup.applications.push(application);
+  setup.environments.push(environment);
+  const [context] = application.contexts();
+  if (context === undefined) throw new Error("Expected a repository Bounded Context.");
+  return context;
+}
 
 async function expectMonitoredReception(
+  setup: TestSetup,
   post: () => Promise<unknown>,
   message: RegExp,
 ): Promise<void> {
@@ -289,7 +370,7 @@ async function expectMonitoredReception(
     });
   try {
     await expect(post()).resolves.toBeUndefined();
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     expect(failures).toHaveLength(1);
     expect(failures[0]).toBeInstanceOf(Error);
     expect((failures[0] as Error).message).toMatch(message);
@@ -298,13 +379,12 @@ async function expectMonitoredReception(
   }
 }
 
-async function configureStorage(factory: InMemoryStorageFactory): Promise<void> {
-  await ServerEnvironmentLifecycle.resetForTest();
-  ServerEnvironment.when(EnvironmentType.Local).use({
-    storageFactory: factory,
-    tenantIndex: new TestTenantIndex(),
-  });
-  await ServerEnvironment.instance().completeSetup();
+async function configureStorage(setup: TestSetup, factory: InMemoryStorageFactory): Promise<void> {
+  setup.settings = { storageFactory: factory };
+  setup.index = new TestTenantIndex();
+  setup.seedTenants = false;
+  setup.seeded = false;
+  await Promise.resolve();
 }
 
 const GeneratedTaskIdSchema = TodoIdSchema;
@@ -2148,28 +2228,6 @@ class SplitRouteProcessManager extends ProcessManager<string, typeof ProjectQueu
 }
 
 describe("repository signal routing", () => {
-  beforeEach(async () => {
-    const environment = ServerEnvironment.instance();
-    await environment.completeSetup();
-    const index = requireTenantDirectory(environment.tenantIndex);
-    await Promise.all(
-      [
-        "first",
-        "second",
-        "tenant-a",
-        "tenant-b",
-        "tenant-command",
-        "tenant-transform",
-        "tenant-other",
-        "pm-tenant",
-        " tenant-a ",
-        "a",
-        "b",
-      ].map((value) => index.keep(createTenantId(value))),
-    );
-    await index.keep(createTenantId("example.com", "domain"));
-    await index.keep(createTenantId("owner@example.com", "email"));
-  });
   it("rejects class-aware routes attached to a different Entity constructor", () => {
     const wrongCommand = CommandRouting.create(InjectedProjectAggregate).route(
       CreateProjectSchema,
@@ -2256,6 +2314,7 @@ describe("repository signal routing", () => {
   });
 
   it("binds class-aware Command query reads to one route and closes escaped access", async () => {
+    const setup = createTestSetup(true);
     const query = ProjectStateQuery.create().name().is("chosen").build();
     let retainedRead: (() => Promise<readonly string[]>) | undefined;
     const routing = CommandRouting.create(ProjectAggregate).route(
@@ -2276,7 +2335,10 @@ describe("repository signal routing", () => {
       },
     );
     const repository = createRoutingRepository(routing);
-    const context = await BoundedContext.singleTenant("RouteReads").add(repository).build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("RouteReads").add(repository),
+      setup,
+    );
     try {
       await context
         .stand()
@@ -2360,6 +2422,7 @@ describe("repository signal routing", () => {
   });
 
   it("keeps concurrent Command route reads in their signal tenants", async () => {
+    const setup = createTestSetup(true);
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -2378,7 +2441,10 @@ describe("repository signal routing", () => {
       },
     );
     const repository = createRoutingRepository(routing);
-    const context = await BoundedContext.multitenant("ConcurrentRoutes").add(repository).build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("ConcurrentRoutes").add(repository),
+      setup,
+    );
     try {
       for (const [tenant, id] of [
         ["first", "first-target"],
@@ -2407,6 +2473,7 @@ describe("repository signal routing", () => {
   });
 
   it("drains a slow accepted Command route before closing its repository", async () => {
+    const setup = createTestSetup(true);
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -2426,7 +2493,10 @@ describe("repository signal routing", () => {
       },
     );
     const repository = createRoutingRepository(declarations);
-    const context = await BoundedContext.singleTenant("SlowRoute").add(repository).build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("SlowRoute").add(repository),
+      setup,
+    );
     await context
       .stand()
       .update(ProjectStateSchema, create(ProjectStateSchema, { id: "selected", name: "Stored" }));
@@ -2446,6 +2516,7 @@ describe("repository signal routing", () => {
   });
 
   it("drains a slow EventBus route before closing its repository", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -2462,7 +2533,10 @@ describe("repository signal routing", () => {
         return ["event-target"];
       }),
     );
-    const context = await BoundedContext.singleTenant("SlowEventRoute").add(repository).build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("SlowEventRoute").add(repository),
+      setup,
+    );
     const posted = context
       .eventBus()
       .post(createProjectCreated("slow-event-route", "event-target"));
@@ -2482,6 +2556,7 @@ describe("repository signal routing", () => {
   });
 
   it("fails an asynchronous Command route before Inbox handoff and accepts the next route", async () => {
+    const setup = createTestSetup(true);
     let fail = true;
     const routing = CommandRouting.create<string>().route(CreateProjectSchema, (message) => {
       if (fail) throw new Error("query route failed");
@@ -2489,11 +2564,14 @@ describe("repository signal routing", () => {
     });
     const repository = createRoutingRepository(routing);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("RouteFailure").add(repository).build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("RouteFailure").add(repository),
+      setup,
+    );
     const dispatcher = repositoryAccess.commandDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected Command dispatcher.");
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
     try {
       await expect(
         dispatcher.dispatch(createAggregateCommand("failed-route", "target")),
@@ -2514,6 +2592,7 @@ describe("repository signal routing", () => {
   });
 
   it("reads complete repository states and application instances without routing handlers", async () => {
+    const setup = createTestSetup(true);
     const callsBefore = InjectedProjectAggregate.calls;
     const service: ProjectLabelService = { label: (name) => `${name} injected` };
     const repository = new Repository({
@@ -2522,8 +2601,11 @@ describe("repository signal routing", () => {
       onCreate: (options) => new InjectedProjectAggregate(options, service),
     });
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("RepositoryReads").add(repository).build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("RepositoryReads").add(repository),
+      setup,
+    );
     try {
       await context
         .stand()
@@ -2607,9 +2689,10 @@ describe("repository signal routing", () => {
   });
 
   it("reads every match beyond 10,000 records and finds a late sparse match", async () => {
+    const setup = createTestSetup(true);
     const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
     const factory = new ObservedReadStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const spec = SpecScanner.scan(ProjectAggregate);
     expect(spec.columns.map((column) => column.name)).toContain("name");
     expect(
@@ -2625,9 +2708,10 @@ describe("repository signal routing", () => {
         )
         .columns.get("name"),
     ).toBe("Indexed");
-    const context = await BoundedContext.singleTenant("LargeRepositoryReads")
-      .add(repository)
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("LargeRepositoryReads").add(repository),
+      setup,
+    );
     const storage = factory.createEntityStorage(
       entityStorageDescriptor(
         { name: "LargeRepositoryReads", multitenant: false },
@@ -2710,10 +2794,14 @@ describe("repository signal routing", () => {
   });
 
   it("accepts more than 1,000 explicit IDs in every repository read method", async () => {
+    const setup = createTestSetup(true);
     const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("ManyRepositoryIds").add(repository).build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("ManyRepositoryIds").add(repository),
+      setup,
+    );
     const storage = factory.createEntityStorage(
       entityStorageDescriptor(
         { name: "ManyRepositoryIds", multitenant: false },
@@ -2756,13 +2844,15 @@ describe("repository signal routing", () => {
   });
 
   it("reads a repository without public query visibility", async () => {
+    const setup = createTestSetup(true);
     const repository = createRegisteredProjectAggregateRepository();
     expect(repository.metadata.visibility).toBe("none");
     const factory = new ObservedReadStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("PrivateRepositoryReads")
-      .add(repository)
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("PrivateRepositoryReads").add(repository),
+      setup,
+    );
     const id = create(ProjectIdSchema, { value: "private" });
     const handle = factory.createEntityStorage(
       entityStorageDescriptor(
@@ -2809,15 +2899,16 @@ describe("repository signal routing", () => {
   });
 
   it("binds independent tenant reads and rejects missing runtime or tenant identity", async () => {
+    const setup = createTestSetup(true);
     const unbound = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
     expect(() => repositoryReadAccess.bind(unbound)).toThrow("runtime binding");
     const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.multitenant("TenantRepositoryReads")
-      .add(repository)
-      .withTenantIndex(new TestTenantIndex())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.multiTenant("TenantRepositoryReads").add(repository),
+      setup,
+    );
     try {
       expect(() => repositoryReadAccess.bind(repository)).toThrow("requires tenantId");
       const firstTenant = createTenantId("first");
@@ -2869,12 +2960,14 @@ describe("repository signal routing", () => {
   });
 
   it("propagates current-record provider failures from repository reads", async () => {
+    const setup = createTestSetup(true);
     const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
     const factory = new FailingReadStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("FailingRepositoryReads")
-      .add(repository)
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("FailingRepositoryReads").add(repository),
+      setup,
+    );
     try {
       const reads = repositoryReadAccess.bind(repository);
       await expect(reads.findIds(ProjectStateQuery.create().build())).rejects.toThrow(
@@ -2890,12 +2983,14 @@ describe("repository signal routing", () => {
   });
 
   it("retains a read-only Entity handle across query invocations until context close", async () => {
+    const setup = createTestSetup(true);
     const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
     const factory = new ObservedReadStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("RetainedRepositoryReads")
-      .add(repository)
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("RetainedRepositoryReads").add(repository),
+      setup,
+    );
     const query = ProjectStateQuery.create().build();
     try {
       const first = repositoryReadAccess.bind(repository);
@@ -2913,17 +3008,24 @@ describe("repository signal routing", () => {
   });
 
   it("uses a fresh storage lifetime after the same repository is rebound", async () => {
+    const setup = createTestSetup(true);
     const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
     const factory = new ObservedReadStorageFactory();
-    await configureStorage(factory);
-    const firstContext = await BoundedContext.singleTenant("ReboundReads").add(repository).build();
+    await configureStorage(setup, factory);
+    const firstContext = await buildContext(
+      BoundedContext.singleTenant("ReboundReads").add(repository),
+      setup,
+    );
     const oldReads = repositoryReadAccess.bind(repository);
     const query = ProjectStateQuery.create().build();
     expect(await oldReads.findIds(query)).toEqual([]);
     await firstContext.close();
     expect(factory).toMatchObject({ readOpens: 1, readCloses: 1 });
 
-    const nextContext = await BoundedContext.singleTenant("ReboundReads").add(repository).build();
+    const nextContext = await buildContext(
+      BoundedContext.singleTenant("ReboundReads").add(repository),
+      setup,
+    );
     try {
       await expect(oldReads.findIds(query)).rejects.toThrow("finished");
       const nextReads = repositoryReadAccess.bind(repository);
@@ -2938,12 +3040,14 @@ describe("repository signal routing", () => {
   });
 
   it("drains an admitted direct query after repository close fences new reads", async () => {
+    const setup = createTestSetup(true);
     const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
     const factory = new GatedRepositoryReadFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("GatedRepositoryReads")
-      .add(repository)
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("GatedRepositoryReads").add(repository),
+      setup,
+    );
     const reads = repositoryReadAccess.bind(repository);
     const query = ProjectStateQuery.create().build();
     const admitted = reads.findIds(query);
@@ -2963,12 +3067,14 @@ describe("repository signal routing", () => {
   });
 
   it("reports idle rollback cleanup failure once after closing retained read storage", async () => {
+    const setup = createTestSetup(true);
     const factory = new RetainedEntityStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
-    const context = await BoundedContext.singleTenant("IdleRepositoryCleanup")
-      .add(repository)
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("IdleRepositoryCleanup").add(repository),
+      setup,
+    );
     const reads = repositoryReadAccess.bind(repository);
     await reads.findIds(ProjectStateQuery.create().build());
     factory.failEntityClose = true;
@@ -2981,15 +3087,19 @@ describe("repository signal routing", () => {
     expect(factory.entityCloses).toBe(1);
     await expect(context.close()).rejects.toThrow("BoundedContext close failed");
     expect(factory.entityCloses).toBe(1);
+    factory.failEntityClose = false;
+    await expectFailedApplicationClose(setup);
   });
 
   it("closes idle retained read storage once across repeated rollback cleanup", async () => {
+    const setup = createTestSetup(true);
     const factory = new RetainedEntityStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
-    const context = await BoundedContext.singleTenant("IdleRepositorySuccess")
-      .add(repository)
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("IdleRepositorySuccess").add(repository),
+      setup,
+    );
     await repositoryReadAccess.bind(repository).findIds(ProjectStateQuery.create().build());
     repositoryAccess.clearRuntimeIdle(repository);
     repositoryAccess.clearRuntimeIdle(repository);
@@ -2998,10 +3108,11 @@ describe("repository signal routing", () => {
   });
 
   it("filters retained Entity state and Event payloads without changing their stored history", async () => {
+    const setup = createTestSetup(true);
     const operations: ReadSideContext["operation"][] = [];
     const producers: ReadSideContext["producingContext"][] = [];
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     class StatePolicy extends ReadSideFilter<typeof ProjectStateSchema> {
       constructor() {
         super(ProjectStateSchema);
@@ -3026,15 +3137,17 @@ describe("repository signal routing", () => {
     }
     const repository = createExecutingRepository();
     repository.setStateHistoryEnabled(true);
-    const context = await BoundedContext.singleTenant("FilteredEntityHistory")
-      .add(repository)
-      .addReadSideFilter(new StatePolicy())
-      .addReadSideFilter(new EventPolicy())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("FilteredEntityHistory")
+        .add(repository)
+        .addReadSideFilter(new StatePolicy())
+        .addReadSideFilter(new EventPolicy()),
+      setup,
+    );
     await context
       .commandBus()
       .post(createAggregateCommand("filtered-history-command", "history-entity"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     const entity = ExecutingProjectAggregate.latest;
     if (entity === undefined) throw new Error("Expected restored Aggregate.");
     const states = await entity.readStateHistory(1);
@@ -3065,8 +3178,9 @@ describe("repository signal routing", () => {
   });
 
   it("omits policy-hidden retained state and Event history without erasing the source", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     class HideHistoryState extends ReadSideFilter<typeof ProjectStateSchema> {
       constructor() {
         super(ProjectStateSchema);
@@ -3085,14 +3199,16 @@ describe("repository signal routing", () => {
     }
     const repository = createExecutingRepository();
     repository.setStateHistoryEnabled(true);
-    const context = await BoundedContext.singleTenant("HiddenHistory")
-      .add(repository)
-      .addReadSideFilter(new HideHistoryState())
-      .addReadSideFilter(new HideHistoryEvent())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("HiddenHistory")
+        .add(repository)
+        .addReadSideFilter(new HideHistoryState())
+        .addReadSideFilter(new HideHistoryEvent()),
+      setup,
+    );
     try {
       await context.commandBus().post(createAggregateCommand("hidden-history", "hidden-entity"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       const entity = ExecutingProjectAggregate.latest;
       if (entity === undefined) throw new Error("Expected restored Aggregate.");
       expect(await entity.readStateHistory(1)).toEqual([]);
@@ -3115,6 +3231,7 @@ describe("repository signal routing", () => {
   });
 
   it("passes the admitted tenant to each protected retained-history policy", async () => {
+    const setup = createTestSetup(true);
     const observed: ReadSideContext[] = [];
     class TenantState extends ReadSideFilter<typeof ProjectStateSchema> {
       constructor() {
@@ -3135,20 +3252,22 @@ describe("repository signal routing", () => {
       }
     }
     const index = new TestTenantIndex();
+    setup.index = index;
     const repository = createExecutingRepository();
     repository.setStateHistoryEnabled(true);
-    const context = await BoundedContext.multitenant("TenantHistoryPolicies")
-      .withTenantIndex(index)
-      .add(repository)
-      .addReadSideFilter(new TenantState())
-      .addReadSideFilter(new TenantEvent())
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("TenantHistoryPolicies")
+        .add(repository)
+        .addReadSideFilter(new TenantState())
+        .addReadSideFilter(new TenantEvent()),
+      setup,
+    );
     try {
       await index.keep(createTenantId("history-tenant"));
       await context
         .commandBus()
         .post(createAggregateCommand("tenant-history", "tenant-entity", "Task", "history-tenant"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       const entity = ExecutingProjectAggregate.latest;
       if (entity === undefined) throw new Error("Expected restored Aggregate.");
       await entity.readStateAt(create(TimestampSchema, { seconds: 4_000_000_000n }));
@@ -3170,6 +3289,7 @@ describe("repository signal routing", () => {
   });
 
   it("passes current handler actor metadata to protected history without inventing a principal", async () => {
+    const setup = createTestSetup(true);
     const observed: ReadSideContext[] = [];
     class StatePolicy extends ReadSideFilter<typeof ProjectStateSchema> {
       constructor() {
@@ -3180,22 +3300,24 @@ describe("repository signal routing", () => {
         return state;
       }
     }
-    await configureStorage(new InMemoryStorageFactory());
+    await configureStorage(setup, new InMemoryStorageFactory());
     const repository = createExecutingRepository();
     repository.setStateHistoryEnabled(true);
-    const context = await BoundedContext.singleTenant("ActorHistory")
-      .add(repository)
-      .addReadSideFilter(new StatePolicy())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("ActorHistory")
+        .add(repository)
+        .addReadSideFilter(new StatePolicy()),
+      setup,
+    );
     try {
       await context
         .commandBus()
         .post(createAggregateCommand("actor-history-first", "actor-entity"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await context
         .commandBus()
         .post(createAggregateCommand("actor-history-second", "actor-entity", "History actor"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(ExecutingProjectAggregate.handlerHistory).toBeDefined();
       await ExecutingProjectAggregate.handlerHistory;
       expect(observed).toHaveLength(1);
@@ -3208,13 +3330,17 @@ describe("repository signal routing", () => {
   });
 
   it("drains admitted bound Entity history reads before closing retained storage", async () => {
+    const setup = createTestSetup(true);
     const repository = createExecutingRepository();
     repository.setStateHistoryEnabled(true);
     const factory = new GatedEntityHistoryFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("GatedEntityHistory").add(repository).build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("GatedEntityHistory").add(repository),
+      setup,
+    );
     await context.commandBus().post(createAggregateCommand("history-drain", "history-drain"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     const entity = ExecutingProjectAggregate.latest;
     if (entity === undefined) throw new Error("Expected a restored Aggregate.");
     const admitted = entity.readStateHistory(1);
@@ -3227,9 +3353,10 @@ describe("repository signal routing", () => {
     await expect(closing).resolves.toBeUndefined();
     expect(factory.readCloses).toBe(1);
     await context.close();
-    const nextContext = await BoundedContext.singleTenant("GatedEntityHistory")
-      .add(repository)
-      .build();
+    const nextContext = await buildContext(
+      BoundedContext.singleTenant("GatedEntityHistory").add(repository),
+      setup,
+    );
     try {
       await expect(entity.readStateHistory(1)).rejects.toThrow("active runtime");
     } finally {
@@ -3238,18 +3365,20 @@ describe("repository signal routing", () => {
   });
 
   it("rejects a bound history read after its tenant leaves the live index", async () => {
+    const setup = createTestSetup(true);
     const index = new TestTenantIndex();
+    setup.index = index;
     const repository = createExecutingRepository();
     repository.setStateHistoryEnabled(true);
-    const context = await BoundedContext.multitenant("HistoryMembers")
-      .withTenantIndex(index)
-      .add(repository)
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("HistoryMembers").add(repository),
+      setup,
+    );
     await index.keep(createTenantId("history-tenant"));
     await context
       .commandBus()
       .post(createAggregateCommand("history-member", "history-entity", "Task", "history-tenant"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     const entity = ExecutingProjectAggregate.latest;
     if (entity === undefined) throw new Error("Expected a restored Aggregate.");
     vi.spyOn(index, "contains").mockResolvedValue(false);
@@ -3259,16 +3388,18 @@ describe("repository signal routing", () => {
   });
 
   it("drains bound stateAt and Event-history reads and rejects old callbacks after rebind", async () => {
+    const setup = createTestSetup(true);
     for (const kind of ["stateAt", "events"] as const) {
       const repository = createExecutingRepository();
       repository.setStateHistoryEnabled(true);
       const factory = new GatedEntityHistoryFactory(kind);
-      await configureStorage(factory);
-      const context = await BoundedContext.singleTenant(`GatedBound${kind}`)
-        .add(repository)
-        .build();
+      await configureStorage(setup, factory);
+      const context = await buildContext(
+        BoundedContext.singleTenant(`GatedBound${kind}`).add(repository),
+        setup,
+      );
       await context.commandBus().post(createAggregateCommand(`bound-${kind}`, `bound-${kind}`));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       const entity = ExecutingProjectAggregate.latest;
       if (entity === undefined) throw new Error("Expected a restored Aggregate.");
       const read = () =>
@@ -3285,9 +3416,10 @@ describe("repository signal routing", () => {
       await closing;
       expect(factory.readCloses).toBe(1);
       await context.close();
-      const rebound = await BoundedContext.singleTenant(`GatedBound${kind}`)
-        .add(repository)
-        .build();
+      const rebound = await buildContext(
+        BoundedContext.singleTenant(`GatedBound${kind}`).add(repository),
+        setup,
+      );
       try {
         await expect(read()).rejects.toThrow("active runtime");
       } finally {
@@ -3297,19 +3429,21 @@ describe("repository signal routing", () => {
   });
 
   it("drains bound state and Event maintenance and rejects stale Entity instances", async () => {
+    const setup = createTestSetup(true);
     for (const kind of ["trim", "stateTruncate", "eventTruncate"] as const) {
       const repository = createExecutingRepository();
       repository.setStateHistoryEnabled(true);
       const factory = new GatedEntityHistoryFactory(kind);
-      await configureStorage(factory);
+      await configureStorage(setup, factory);
       factory.armed = false;
-      const context = await BoundedContext.singleTenant(`GatedMaintenance${kind}`)
-        .add(repository)
-        .build();
+      const context = await buildContext(
+        BoundedContext.singleTenant(`GatedMaintenance${kind}`).add(repository),
+        setup,
+      );
       await context
         .commandBus()
         .post(createAggregateCommand(`maintain-${kind}`, `maintain-${kind}`));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       factory.armed = true;
       const entity = ExecutingProjectAggregate.latest;
       if (entity === undefined) throw new Error("Expected restored Aggregate.");
@@ -3326,9 +3460,10 @@ describe("repository signal routing", () => {
       await admitted;
       await closing;
       await context.close();
-      const rebound = await BoundedContext.singleTenant(`GatedMaintenance${kind}`)
-        .add(repository)
-        .build();
+      const rebound = await buildContext(
+        BoundedContext.singleTenant(`GatedMaintenance${kind}`).add(repository),
+        setup,
+      );
       try {
         await expect(maintain()).rejects.toThrow("active runtime");
       } finally {
@@ -3337,6 +3472,7 @@ describe("repository signal routing", () => {
     }
   });
   it("keeps constructor services separate for the same Entity class in two contexts", async () => {
+    const setup = createTestSetup(true);
     const handlers = HandlerMetadataValues.defineArity(
       InjectedProjectAggregate,
       ProjectStateSchema,
@@ -3352,8 +3488,8 @@ describe("repository signal routing", () => {
     );
     const firstService: ProjectLabelService = { label: (name) => `${name} first` };
     const secondService: ProjectLabelService = { label: (name) => `${name} second` };
-    const first = await BoundedContext.singleTenant("First")
-      .add(
+    const first = await buildContext(
+      BoundedContext.singleTenant("First").add(
         new Repository({
           entityType: InjectedProjectAggregate,
           schema: ProjectStateSchema,
@@ -3361,19 +3497,20 @@ describe("repository signal routing", () => {
           events: [ProjectCreatedSchema],
           onCreate: (options) => new InjectedProjectAggregate(options, firstService),
         }),
-      )
-      .build();
+      ),
+      setup,
+    );
     try {
       await first.commandBus().post(createAggregateCommand("first-client", "first-id"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await expect(first.stand().read(ProjectStateSchema, "first-id")).resolves.toMatchObject({
         name: "Task first",
       });
     } finally {
       await first.close();
     }
-    const second = await BoundedContext.singleTenant("Second")
-      .add(
+    const second = await buildContext(
+      BoundedContext.singleTenant("Second").add(
         new Repository({
           entityType: InjectedProjectAggregate,
           schema: ProjectStateSchema,
@@ -3381,12 +3518,13 @@ describe("repository signal routing", () => {
           events: [ProjectCreatedSchema],
           onCreate: (options) => new InjectedProjectAggregate(options, secondService),
         }),
-      )
-      .build();
+      ),
+      setup,
+    );
 
     try {
       await second.commandBus().post(createAggregateCommand("second-client", "second-id"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await expect(second.stand().read(ProjectStateSchema, "second-id")).resolves.toMatchObject({
         name: "Task second",
       });
@@ -3395,6 +3533,7 @@ describe("repository signal routing", () => {
     }
   });
   it("passes fresh state, Version, and lifecycle to a rebuilt deleted projection", async () => {
+    const setup = createTestSetup(true);
     const seen: { version: number; deleted: boolean; name: string }[] = [];
     const service: ProjectLabelService = { label: (name) => `${name} rebuilt` };
     const repository = new Repository({
@@ -3414,7 +3553,7 @@ describe("repository signal routing", () => {
         return new InjectedProjectProjection(options, service);
       },
     });
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
 
     try {
       await context
@@ -3423,7 +3562,7 @@ describe("repository signal routing", () => {
       await context
         .eventBus()
         .post(createProjectCreated("rebuild-2", "rebuild-id", { name: "delete-lifecycle" }));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await repositoryAccess.dispatchProjectionDirect(
         repository,
         createProjectCreated("rebuild-3", "rebuild-id", { name: "After" }),
@@ -3442,6 +3581,7 @@ describe("repository signal routing", () => {
     }
   });
   it("rejects a different Entity returned by onCreate before its handler runs", async () => {
+    const setup = createTestSetup(true);
     let unrelatedCalls = 0;
     class UnrelatedAggregate extends Aggregate<string, typeof ProjectStateSchema> {
       createProject(command: CreateProject): ProjectCreated {
@@ -3460,14 +3600,14 @@ describe("repository signal routing", () => {
       ]),
       onCreate: (options) => new UnrelatedAggregate(options) as never,
     });
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
 
     try {
       await expect(
         context.commandBus().post(createAggregateCommand("factory-unrelated", "unrelated-id")),
       ).resolves.toBeUndefined();
       await expect(
-        serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance()),
+        serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup)),
       ).rejects.toThrow();
       expect(unrelatedCalls).toBe(0);
       await expect(
@@ -3479,6 +3619,7 @@ describe("repository signal routing", () => {
   });
 
   it("rejects a Promise returned by onCreate before its handler runs", async () => {
+    const setup = createTestSetup(true);
     const service: ProjectLabelService = { label: (name) => name };
     const beforeCalls = InjectedProjectAggregate.calls;
     const repository = new Repository({
@@ -3490,14 +3631,14 @@ describe("repository signal routing", () => {
       onCreate: (options) =>
         Promise.resolve(new InjectedProjectAggregate(options, service)) as never,
     });
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
 
     try {
       await expect(
         context.commandBus().post(createAggregateCommand("factory-promise", "promise-id")),
       ).resolves.toBeUndefined();
       await expect(
-        serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance()),
+        serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup)),
       ).rejects.toThrow();
       expect(InjectedProjectAggregate.calls).toBe(beforeCalls);
       await expect(context.stand().read(ProjectStateSchema, "promise-id")).resolves.toBeUndefined();
@@ -3506,6 +3647,7 @@ describe("repository signal routing", () => {
     }
   });
   it("stops dispatch before handlers and persistence when onCreate throws", async () => {
+    const setup = createTestSetup(true);
     const failure = new Error("service unavailable");
     const repository = new Repository({
       entityType: InjectedProjectAggregate,
@@ -3518,8 +3660,8 @@ describe("repository signal routing", () => {
       },
     });
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -3533,7 +3675,7 @@ describe("repository signal routing", () => {
         context.commandBus().post(createAggregateCommand("factory-throw", "factory-id")),
       ).resolves.toBeUndefined();
       await expect(
-        serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance()),
+        serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup)),
       ).rejects.toThrow();
       expect(InjectedProjectAggregate.calls).toBe(beforeCalls);
       await expect(storage.readCurrent("factory-id")).resolves.toBeUndefined();
@@ -3544,6 +3686,7 @@ describe("repository signal routing", () => {
     }
   });
   it("passes a service to new and restored projection instances", async () => {
+    const setup = createTestSetup(true);
     const seen: number[] = [];
     const service: ProjectLabelService = { label: (name) => `${name} projected` };
     const repository = new Repository({
@@ -3559,7 +3702,7 @@ describe("repository signal routing", () => {
         return new InjectedProjectProjection(options, service);
       },
     });
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
 
     try {
       await expect(
@@ -3572,7 +3715,7 @@ describe("repository signal routing", () => {
       await context
         .eventBus()
         .post(createProjectCreated("projection-injected-2", "injected-projection"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(seen).toEqual([0, 1]);
       await expect(
         context.stand().read(ProjectOverviewStateSchema, "injected-projection"),
@@ -3583,6 +3726,7 @@ describe("repository signal routing", () => {
   });
 
   it("passes a service to new and restored process-manager instances", async () => {
+    const setup = createTestSetup(true);
     const seen: number[] = [];
     const service: ProjectLabelService = { label: (name) => `${name} managed` };
     const repository = new Repository({
@@ -3607,7 +3751,7 @@ describe("repository signal routing", () => {
         return new ProjectCreation(options, service);
       },
     });
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
 
     try {
       await context
@@ -3616,7 +3760,7 @@ describe("repository signal routing", () => {
       await context
         .commandBus()
         .post(createAggregateCommand("manager-injected-2", "injected-manager"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(seen).toEqual([0, 1]);
       await expect(
         context.stand().read(ProjectQueueStateSchema, "injected-manager"),
@@ -3626,6 +3770,7 @@ describe("repository signal routing", () => {
     }
   });
   it("passes one shared service to new and restored aggregate instances", async () => {
+    const setup = createTestSetup(true);
     const service: ProjectLabelService = { label: (name) => `${name} through service` };
     const seen: number[] = [];
     const beforeCalls = InjectedProjectAggregate.calls;
@@ -3651,13 +3796,13 @@ describe("repository signal routing", () => {
         return new InjectedProjectAggregate(options, service);
       },
     });
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
 
     try {
       await context
         .commandBus()
         .post(createAggregateCommand("injected-1", "project-injected", "First"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(InjectedProjectAggregate.calls).toBe(beforeCalls + 1);
       await expect(
         context.stand().read(ProjectStateSchema, "project-injected"),
@@ -3668,7 +3813,7 @@ describe("repository signal routing", () => {
       await context
         .commandBus()
         .post(createAggregateCommand("injected-2", "project-injected", "Second"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(seen).toEqual([0, 1]);
       await expect(
         context.stand().read(ProjectStateSchema, "project-injected"),
@@ -3682,6 +3827,7 @@ describe("repository signal routing", () => {
   });
 
   it("binds retained history on an injected restored aggregate", async () => {
+    const setup = createTestSetup(true);
     const service: ProjectLabelService = { label: (name) => `${name} retained` };
     const versions: number[] = [];
     const previousTrace = InjectedProjectAggregate.retainedNames;
@@ -3709,9 +3855,10 @@ describe("repository signal routing", () => {
       },
     });
     repository.setStateHistoryEnabled(true);
-    const context = await BoundedContext.singleTenant("HistoryInjectedTasks")
-      .add(repository)
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("HistoryInjectedTasks").add(repository),
+      setup,
+    );
 
     try {
       await context
@@ -3720,7 +3867,7 @@ describe("repository signal routing", () => {
       await context
         .commandBus()
         .post(createAggregateCommand("history-injected-2", "history-injected", "Second"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(versions).toEqual([0, 1]);
       expect(InjectedProjectAggregate.retainedNames).toEqual([[], ["First retained"]]);
@@ -3770,21 +3917,24 @@ describe("repository signal routing", () => {
   });
 
   it("executes aggregate commands through a built bounded-context command bus", async () => {
+    const setup = createTestSetup(true);
     ExecutingProjectAggregate.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const observed: string[] = [];
     const repository = createExecutingRepository();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(repository)
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectCreatedSchema],
-        dispatch: (event) => {
-          observed.push(event.id?.value ?? "missing");
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(repository)
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectCreatedSchema],
+          dispatch: (event) => {
+            observed.push(event.id?.value ?? "missing");
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -3801,7 +3951,7 @@ describe("repository signal routing", () => {
     expect(observed).toEqual([]);
 
     await completion;
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(ExecutingProjectAggregate.assigneeCalls).toBe(1);
     expect(ExecutingProjectAggregate.directUpdateCalls).toBe(1);
@@ -3819,11 +3969,13 @@ describe("repository signal routing", () => {
   });
 
   it("keeps state-history retention disabled by default across repository families", async () => {
+    const setup = createTestSetup(true);
     const aggregateFactory = new InMemoryStorageFactory();
-    await configureStorage(aggregateFactory);
-    const aggregateContext = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .build();
+    await configureStorage(setup, aggregateFactory);
+    const aggregateContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createExecutingRepository()),
+      setup,
+    );
     const aggregateStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: aggregateFactory,
@@ -3840,10 +3992,11 @@ describe("repository signal routing", () => {
     }
 
     const projectionFactory = new InMemoryStorageFactory();
-    await configureStorage(projectionFactory);
-    const projectionContext = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .build();
+    await configureStorage(setup, projectionFactory);
+    const projectionContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createExecutingProjectionRepository()),
+      setup,
+    );
     const projectionStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: projectionFactory,
@@ -3860,10 +4013,11 @@ describe("repository signal routing", () => {
     }
 
     const processManagerFactory = new InMemoryStorageFactory();
-    await configureStorage(processManagerFactory);
-    const processManagerContext = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerReactRepository())
-      .build();
+    await configureStorage(setup, processManagerFactory);
+    const processManagerContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createProcessManagerReactRepository()),
+      setup,
+    );
     const processManagerStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: processManagerFactory,
@@ -3881,11 +4035,12 @@ describe("repository signal routing", () => {
   });
 
   it("keeps aggregate persistence committed when a Stand subscriber throws", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createExecutingRepository();
     repository.setStateHistoryEnabled(true);
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -3907,7 +4062,7 @@ describe("repository signal routing", () => {
       await expect(
         context.commandBus().post(createAggregateCommand("command-subscriber", "subscriber-id")),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(attempts).toBe(1);
       await expect(storage.readCurrent("subscriber-id")).resolves.toMatchObject({
         version: 1n,
@@ -3928,10 +4083,12 @@ describe("repository signal routing", () => {
   });
 
   it("keeps committed process-manager command transitions usable when a Stand subscriber throws", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createProcessManagerAssignRepository()),
+      setup,
+    );
     let notifications = 0;
     const subscriberErrors: Error[] = [];
     context.stand().subscribe(ProjectQueueStateSchema, {
@@ -3955,7 +4112,7 @@ describe("repository signal routing", () => {
           .commandBus()
           .post(createAggregateCommand("command-pm-subscriber-2", "pm-subscriber", "Follow-up")),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(RoutingProcessManager.commandCalls).toBe(2);
       expect(notifications).toBe(1);
@@ -3974,11 +4131,13 @@ describe("repository signal routing", () => {
   });
 
   it("delivers deferred aggregate updates only to subscribers present at the current write", async () => {
+    const setup = createTestSetup(true);
     const factory = new GatedAggregateEventStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createExecutingRepository()),
+      setup,
+    );
     let original = 0;
     let late = 0;
     context.stand().subscribe(ProjectStateSchema, {
@@ -3998,7 +4157,7 @@ describe("repository signal routing", () => {
     factory.release();
     try {
       await command;
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(original).toBe(1);
       expect(late).toBe(0);
     } finally {
@@ -4007,13 +4166,15 @@ describe("repository signal routing", () => {
   });
 
   it("retains state history while enabled and preserves existing rows after disablement", async () => {
+    const setup = createTestSetup(true);
     const aggregateFactory = new InMemoryStorageFactory();
-    await configureStorage(aggregateFactory);
+    await configureStorage(setup, aggregateFactory);
     const aggregateRepository = createExecutingRepository();
     aggregateRepository.setStateHistoryEnabled(true);
-    const aggregateContext = await BoundedContext.singleTenant("Tasks")
-      .add(aggregateRepository)
-      .build();
+    const aggregateContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(aggregateRepository),
+      setup,
+    );
     const aggregateStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: aggregateFactory,
@@ -4031,7 +4192,7 @@ describe("repository signal routing", () => {
             "History first",
           ),
         );
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       aggregateRepository.setStateHistoryEnabled(false);
       await aggregateContext
         .commandBus()
@@ -4042,7 +4203,7 @@ describe("repository signal routing", () => {
             "History second",
           ),
         );
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await expect(aggregateStorage.readStates("history-aggregate")).resolves.toMatchObject([
         { version: 1n, state: { name: "History first (applied)" } },
       ]);
@@ -4051,12 +4212,13 @@ describe("repository signal routing", () => {
     }
 
     const projectionFactory = new InMemoryStorageFactory();
-    await configureStorage(projectionFactory);
+    await configureStorage(setup, projectionFactory);
     const projectionRepository = createExecutingProjectionRepository();
     projectionRepository.setStateHistoryEnabled(true);
-    const projectionContext = await BoundedContext.singleTenant("Tasks")
-      .add(projectionRepository)
-      .build();
+    const projectionContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(projectionRepository),
+      setup,
+    );
     const projectionStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: projectionFactory,
@@ -4068,12 +4230,12 @@ describe("repository signal routing", () => {
       await projectionContext
         .eventBus()
         .post(createProjectCreated("event-history-enabled-projection", "history-projection"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       projectionRepository.setStateHistoryEnabled(false);
       await projectionContext
         .eventBus()
         .post(createProjectCreated("event-history-disabled-projection", "history-projection"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await expect(projectionStorage.readStates("history-projection")).resolves.toMatchObject([
         { version: 1n, state: { name: "Task (projected)" } },
       ]);
@@ -4082,12 +4244,13 @@ describe("repository signal routing", () => {
     }
 
     const processManagerFactory = new InMemoryStorageFactory();
-    await configureStorage(processManagerFactory);
+    await configureStorage(setup, processManagerFactory);
     const processManagerRepository = createProcessManagerReactRepository();
     processManagerRepository.setStateHistoryEnabled(true);
-    const processManagerContext = await BoundedContext.singleTenant("Tasks")
-      .add(processManagerRepository)
-      .build();
+    const processManagerContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(processManagerRepository),
+      setup,
+    );
     const processManagerStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: processManagerFactory,
@@ -4099,12 +4262,12 @@ describe("repository signal routing", () => {
       await processManagerContext
         .eventBus()
         .post(createProjectCreated("event-history-enabled-pm", "history-pm"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       processManagerRepository.setStateHistoryEnabled(false);
       await processManagerContext
         .eventBus()
         .post(createProjectCreated("event-history-disabled-pm", "history-pm"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await expect(processManagerStorage.readStates("history-pm")).resolves.toMatchObject([
         { version: 1n, state: { queue: "Task reacted" } },
       ]);
@@ -4114,10 +4277,11 @@ describe("repository signal routing", () => {
   });
 
   it("opens fresh history storage when aggregate retention is enabled after an initial store", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createExecutingRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -4129,13 +4293,13 @@ describe("repository signal routing", () => {
       await context
         .commandBus()
         .post(createAggregateCommand("history-off", "history-transition", "First"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await expect(storage.readStates("history-transition")).resolves.toEqual([]);
       repository.setStateHistoryEnabled(true);
       await context
         .commandBus()
         .post(createAggregateCommand("history-on", "history-transition", "Second"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await expect(storage.readStates("history-transition")).resolves.toMatchObject([
         { version: 2n, state: { name: "Second (applied)" } },
       ]);
@@ -4143,7 +4307,7 @@ describe("repository signal routing", () => {
       await context
         .commandBus()
         .post(createAggregateCommand("history-off-again", "history-transition", "Third"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await expect(storage.readStates("history-transition")).resolves.toHaveLength(1);
     } finally {
       await context.close();
@@ -4151,10 +4315,11 @@ describe("repository signal routing", () => {
   });
 
   it("uses the captured history setting during a gated commit and reuses both configurations", async () => {
+    const setup = createTestSetup(true);
     const factory = new GatedStandReadStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createExecutingRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -4170,22 +4335,22 @@ describe("repository signal routing", () => {
       repository.setStateHistoryEnabled(true);
       factory.release();
       await first;
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(await storage.readStates("captured-history")).toEqual([]);
       await context
         .commandBus()
         .post(createAggregateCommand("captured-history-on", "captured-history", "Second"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       repository.setStateHistoryEnabled(false);
       await context
         .commandBus()
         .post(createAggregateCommand("captured-history-off-again", "captured-history", "Third"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       repository.setStateHistoryEnabled(true);
       await context
         .commandBus()
         .post(createAggregateCommand("captured-history-on-again", "captured-history", "Fourth"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect((await storage.readStates("captured-history")).map((row) => row.version)).toEqual([
         4n,
         2n,
@@ -4206,12 +4371,14 @@ describe("repository signal routing", () => {
   });
 
   it("packs aggregate-returned domain events and owns the aggregate transaction", async () => {
+    const setup = createTestSetup(true);
     ManagedProjectAggregate.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createManagedRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createManagedRepository()),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -4222,7 +4389,7 @@ describe("repository signal routing", () => {
     await context
       .commandBus()
       .post(createAggregateCommand("command-managed", "task-managed", "Managed"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(ManagedProjectAggregate.assigneeCalls).toBe(1);
     await expect(eventStore.read()).resolves.toMatchObject([
@@ -4241,16 +4408,19 @@ describe("repository signal routing", () => {
   });
 
   it("preserves a pre-existing managed aggregate when a command is rejected", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createManagedRepository();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(repository)
-      .addEventDispatcher({
-        messageSchemas: () => [TaskAlreadyDoneSchema],
-        dispatch: () => Promise.reject(new Error("rejection event dispatch failed")),
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(repository)
+        .addEventDispatcher({
+          messageSchemas: () => [TaskAlreadyDoneSchema],
+          dispatch: () => Promise.reject(new Error("rejection event dispatch failed")),
+        }),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -4262,7 +4432,7 @@ describe("repository signal routing", () => {
     await context
       .commandBus()
       .post(createAggregateCommand("command-existing", "task-rejected", "Persisted"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     const currentBeforeRejection = await storage.readCurrent("task-rejected");
     const eventsBeforeRejection = await eventStore.read();
 
@@ -4328,15 +4498,17 @@ describe("repository signal routing", () => {
   });
 
   it("posts a rejected aggregate command without directly updating or persisting output", async () => {
+    const setup = createTestSetup(true);
     const rejection = TaskAlreadyDone.create({
       id: create(GeneratedTaskIdSchema, { value: "task-direct-update-rejected" }),
     });
     ExecutingProjectAggregate.reset(rejection);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createExecutingRepository()),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -4378,13 +4550,15 @@ describe("repository signal routing", () => {
   ])(
     "treats $label as failed aggregate reception without a rejection event",
     async ({ failure }) => {
+      const setup = createTestSetup(true);
       const thrown = failure();
       ManagedProjectAggregate.reset(thrown);
       const factory = new InMemoryStorageFactory();
-      await configureStorage(factory);
-      const context = await BoundedContext.singleTenant("Tasks")
-        .add(createManagedRepository())
-        .build();
+      await configureStorage(setup, factory);
+      const context = await buildContext(
+        BoundedContext.singleTenant("Tasks").add(createManagedRepository()),
+        setup,
+      );
       const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
       await expect(
@@ -4397,23 +4571,26 @@ describe("repository signal routing", () => {
   );
 
   it("uses the typed message-valued entity ID as the rejection producer", async () => {
+    const setup = createTestSetup(true);
     RejectionObservingProjection.reset();
     ProjectIdRejectingAggregate.failure = TaskAlreadyDone.create({
       id: create(GeneratedTaskIdSchema, { value: "task-message-id" }),
     });
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProjectIdRejectingRepository())
-      .add(
-        createRejectionObservingRepository(
-          EventRouting.create<string>().route(TaskAlreadyDoneSchema, (message) => {
-            if (message.id === undefined) throw new Error("Expected a Task ID.");
-            return [message.id.value];
-          }),
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProjectIdRejectingRepository())
+        .add(
+          createRejectionObservingRepository(
+            EventRouting.create<string>().route(TaskAlreadyDoneSchema, (message) => {
+              if (message.id === undefined) throw new Error("Expected a Task ID.");
+              return [message.id.value];
+            }),
+          ),
         ),
-      )
-      .build();
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(
@@ -4430,10 +4607,12 @@ describe("repository signal routing", () => {
   });
 
   it("passes CommandContext to generated-registry two-argument command assignees", async () => {
+    const setup = createTestSetup(true);
     GeneratedTwoArgAggregate.reset();
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createGeneratedTwoArgAggregateRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks").add(createGeneratedTwoArgAggregateRepository()),
+      setup,
+    );
 
     await context
       .commandBus()
@@ -4446,7 +4625,7 @@ describe("repository signal routing", () => {
         ),
       );
 
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     expect(GeneratedTwoArgAggregate.argumentCounts).toEqual([2]);
     expect(GeneratedTwoArgAggregate.contexts).toHaveLength(1);
     expect(GeneratedTwoArgAggregate.contexts[0]?.actorContext?.actor).toEqual(
@@ -4458,24 +4637,28 @@ describe("repository signal routing", () => {
   });
 
   it("passes the admitted CommandContext to generated two-argument assignees", async () => {
+    const setup = createTestSetup(true);
     GeneratedTwoArgAggregate.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedTwoArgAggregateRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createGeneratedTwoArgAggregateRepository()),
+      setup,
+    );
 
     const command = createGeneratedCreateProject("command-context", "task-context");
     await context.commandBus().post(command);
 
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     expect(GeneratedTwoArgAggregate.argumentCounts).toEqual([2]);
     expect(GeneratedTwoArgAggregate.contexts).toEqual([command.context]);
   });
 
   it("loads the committed state for each later generated Aggregate command", async () => {
+    const setup = createTestSetup(true);
     GeneratedTwoArgAggregate.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedTwoArgAggregateRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createGeneratedTwoArgAggregateRepository()),
+      setup,
+    );
 
     await context
       .commandBus()
@@ -4483,27 +4666,30 @@ describe("repository signal routing", () => {
     await context
       .commandBus()
       .post(createGeneratedCreateProject("command-second", "same-id", "Second"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(GeneratedTwoArgAggregate.observedStateNames).toEqual(["", "First (generated)"]);
   });
 
   it("processes concurrent same-ID generated commands FIFO and rejects the rehydrated duplicate", async () => {
+    const setup = createTestSetup(true);
     GeneratedTwoArgAggregate.reset();
     GeneratedTwoArgAggregate.rejectWhenStatePresent = true;
     const published: string[] = [];
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedTwoArgAggregateRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectCreatedSchema],
-        dispatch: (event) => {
-          published.push(event.id?.value ?? "missing");
-          return Promise.resolve();
-        },
-      })
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createGeneratedTwoArgAggregateRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectCreatedSchema],
+          dispatch: (event) => {
+            published.push(event.id?.value ?? "missing");
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(
@@ -4517,7 +4703,7 @@ describe("repository signal routing", () => {
       ]),
     ).resolves.toEqual([undefined, undefined]);
 
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     expect(GeneratedTwoArgAggregate.observedStateNames).toEqual(["", "First (generated)"]);
     await expect(
       context.stand().readVersioned(ProjectStateSchema, "duplicate"),
@@ -4537,10 +4723,12 @@ describe("repository signal routing", () => {
   });
 
   it("rehydrates archived and deleted lifecycle flags for generated Aggregate handlers", async () => {
+    const setup = createTestSetup(true);
     GeneratedTwoArgAggregate.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedTwoArgAggregateRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createGeneratedTwoArgAggregateRepository()),
+      setup,
+    );
     await context
       .stand()
       .update(
@@ -4555,7 +4743,7 @@ describe("repository signal routing", () => {
     await context
       .commandBus()
       .post(createGeneratedCreateProject("command-lifecycle", "lifecycle-id"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(GeneratedTwoArgAggregate.observedStateNames).toEqual(["Stored"]);
     expect(GeneratedTwoArgAggregate.observedLifecycles).toEqual([
@@ -4564,10 +4752,12 @@ describe("repository signal routing", () => {
   });
 
   it("rehydrates the same Aggregate ID independently in each tenant", async () => {
+    const setup = createTestSetup(true);
     GeneratedTwoArgAggregate.reset();
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createGeneratedTwoArgAggregateRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks").add(createGeneratedTwoArgAggregateRepository()),
+      setup,
+    );
     await context
       .commandBus()
       .post(createGeneratedCreateProject("tenant-a-first", "same", "A", "tenant-a"));
@@ -4580,7 +4770,7 @@ describe("repository signal routing", () => {
     await context
       .commandBus()
       .post(createGeneratedCreateProject("tenant-b-next", "same", "B2", "tenant-b"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(GeneratedTwoArgAggregate.observedStateNames).toEqual([
       "",
@@ -4591,17 +4781,20 @@ describe("repository signal routing", () => {
   });
 
   it("keeps lifecycle System event context tenant-scoped", async () => {
+    const setup = createTestSetup(true);
     const changes: SpineEvent[] = [];
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema],
-        dispatch: (event) => {
-          changes.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks")
+        .add(createExecutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema],
+          dispatch: (event) => {
+            changes.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       await context
         .commandBus()
@@ -4623,18 +4816,21 @@ describe("repository signal routing", () => {
   });
 
   it("dispatches events committed by accepted command work before close resolves", async () => {
+    const setup = createTestSetup(true);
     GeneratedTwoArgAggregate.reset({ pauseAssignee: true });
     const observed: string[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedTwoArgAggregateRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectCreatedSchema],
-        dispatch: (event) => {
-          observed.push(event.id?.value ?? "missing");
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createGeneratedTwoArgAggregateRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectCreatedSchema],
+          dispatch: (event) => {
+            observed.push(event.id?.value ?? "missing");
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     const post = context
       .commandBus()
@@ -4654,20 +4850,23 @@ describe("repository signal routing", () => {
   });
 
   it("runs generated aggregate event reactors and wraps returned domain events after commit", async () => {
+    const setup = createTestSetup(true);
     ProjectRegistrationReactorAggregate.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const observed: string[] = [];
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createGeneratedReactorRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectRegisteredSchema],
-        dispatch: (event) => {
-          observed.push(event.id?.value ?? "missing");
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks")
+        .add(createGeneratedReactorRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectRegisteredSchema],
+          dispatch: (event) => {
+            observed.push(event.id?.value ?? "missing");
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-b"));
     const storage = new CurrentRecordTestStorage({
       context: {
@@ -4689,7 +4888,7 @@ describe("repository signal routing", () => {
         actorId: "reactor-reader",
       }),
     );
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(ProjectRegistrationReactorAggregate.argumentCounts).toEqual([2]);
     expect(ProjectRegistrationReactorAggregate.actorIds).toEqual(["reactor-reader"]);
@@ -4740,6 +4939,7 @@ describe("repository signal routing", () => {
   });
 
   it("accepts an Event-only Aggregate Inbox row before its reactor finishes", async () => {
+    const setup = createTestSetup(true);
     ProjectRegistrationReactorAggregate.reset();
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
@@ -4750,11 +4950,12 @@ describe("repository signal routing", () => {
       release: release.promise,
     };
     const repository = createGeneratedReactorRepository();
-    const context = await BoundedContext.singleTenant("AggregateEventInbox")
-      .add(repository)
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("AggregateEventInbox").add(repository),
+      setup,
+    );
     const signalId = "aggregate-event-inbox";
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
     try {
       await expect(
         context.eventBus().post(createProjectCreated(signalId, "reactor-target")),
@@ -4774,7 +4975,7 @@ describe("repository signal routing", () => {
         }),
       );
       release.resolve(undefined);
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(ProjectRegistrationReactorAggregate.argumentCounts).toEqual([2]);
       await expect(
         context.stand().read(ProjectStateSchema, "reactor-target"),
@@ -4789,11 +4990,13 @@ describe("repository signal routing", () => {
   });
 
   it("delivers an Aggregate Event to its stored Inbox target without rerouting", async () => {
+    const setup = createTestSetup(true);
     ProjectRegistrationReactorAggregate.reset();
     const repository = createGeneratedReactorRepository();
-    const context = await BoundedContext.singleTenant("StoredAggregateEvent")
-      .add(repository)
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("StoredAggregateEvent").add(repository),
+      setup,
+    );
     const delivery = new Delivery({
       context: { name: "StoredAggregateEvent", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -4820,11 +5023,13 @@ describe("repository signal routing", () => {
   });
 
   it("rejects a foreign tenant before Aggregate Event Inbox execution", async () => {
+    const setup = createTestSetup(true);
     ProjectRegistrationReactorAggregate.reset();
     const repository = createGeneratedReactorRepository();
-    const context = await BoundedContext.multitenant("TenantAggregateEvent")
-      .add(repository)
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("TenantAggregateEvent").add(repository),
+      setup,
+    );
     const tenantId = createTenantId("tenant-a");
     const foreignTenantId = createTenantId("tenant-b");
     await requireTenantDirectory(context.tenantIndex).keep(tenantId);
@@ -4857,12 +5062,14 @@ describe("repository signal routing", () => {
   });
 
   it("keeps a failed Aggregate Event Inbox reaction eligible for retry", async () => {
+    const setup = createTestSetup(true);
     const failure = new Error("reactor unavailable");
     ProjectRegistrationReactorAggregate.reset(failure);
     const repository = createGeneratedReactorRepository();
-    const context = await BoundedContext.singleTenant("FailedAggregateEvent")
-      .add(repository)
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("FailedAggregateEvent").add(repository),
+      setup,
+    );
     const delivery = new Delivery({
       context: { name: "FailedAggregateEvent", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -4896,10 +5103,11 @@ describe("repository signal routing", () => {
   });
 
   it("retries a failed state-only Aggregate reaction without exposing or duplicating state", async () => {
+    const setup = createTestSetup(true);
     const factory = new FailingSourceDiagnosticStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createCountingReactorRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const source = createProjectCreated("event-count-retry", "task-count-retry");
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -4946,12 +5154,14 @@ describe("repository signal routing", () => {
   });
 
   it("uses one committed version for every event and state from an aggregate event reaction", async () => {
+    const setup = createTestSetup(true);
     ProjectRegistrationReactorAggregate.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedReactorRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createGeneratedReactorRepository()),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -4965,7 +5175,7 @@ describe("repository signal routing", () => {
           name: "two events",
         }),
       );
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       const stored = await eventStore.read();
       expect(
@@ -4985,19 +5195,22 @@ describe("repository signal routing", () => {
   });
 
   it("emits a System reactor-dispatch diagnostic after aggregate reactor admission", async () => {
+    const setup = createTestSetup(true);
     ProjectRegistrationReactorAggregate.reset();
     const diagnostics: SpineEvent[] = [];
     const event = createProjectCreated("aggregate-reactor-diagnostic", "aggregate-reactor-id");
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedReactorRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EventDispatchedToReactorSchema],
-        dispatch: (diagnostic) => {
-          diagnostics.push(diagnostic);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createGeneratedReactorRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EventDispatchedToReactorSchema],
+          dispatch: (diagnostic) => {
+            diagnostics.push(diagnostic);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       await context.eventBus().post(event);
@@ -5028,21 +5241,24 @@ describe("repository signal routing", () => {
   });
 
   it("retains one reactor diagnostic when an admitted reactor fails", async () => {
+    const setup = createTestSetup(true);
     const failure = new Error("admitted reactor failed");
     const diagnostics: SpineEvent[] = [];
     const event = createProjectCreated("aggregate-reactor-failure", "aggregate-reactor-failure", {
       actorId: "failed-reactor-reader",
     });
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedReactorRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EventDispatchedToReactorSchema],
-        dispatch: (diagnostic) => {
-          diagnostics.push(diagnostic);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createGeneratedReactorRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EventDispatchedToReactorSchema],
+          dispatch: (diagnostic) => {
+            diagnostics.push(diagnostic);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       ProjectRegistrationReactorAggregate.reset(failure);
@@ -5067,10 +5283,14 @@ describe("repository signal routing", () => {
   });
 
   it("releases an Event actor when Aggregate transaction setup fails", async () => {
+    const setup = createTestSetup(true);
     ProjectRegistrationReactorAggregate.reset();
     ProjectRegistrationReactorAggregate.failStart = true;
     const repository = createGeneratedReactorRepository();
-    const context = await BoundedContext.singleTenant("FailedReactorSetup").add(repository).build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("FailedReactorSetup").add(repository),
+      setup,
+    );
     const delivery = new Delivery({
       context: { name: "FailedReactorSetup", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -5100,18 +5320,21 @@ describe("repository signal routing", () => {
   });
 
   it("does not emit reactor diagnostics for an event without a matching route", async () => {
+    const setup = createTestSetup(true);
     ProjectRegistrationReactorAggregate.reset();
     const diagnostics: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedReactorRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EventDispatchedToReactorSchema],
-        dispatch: (diagnostic) => {
-          diagnostics.push(diagnostic);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createGeneratedReactorRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EventDispatchedToReactorSchema],
+          dispatch: (diagnostic) => {
+            diagnostics.push(diagnostic);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       await expect(
@@ -5136,19 +5359,22 @@ describe("repository signal routing", () => {
   });
 
   it("drains produced reactor events and later external posts on close", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const observed: string[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedReactorRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectRegisteredSchema],
-        dispatch: (event) => {
-          observed.push(event.id?.value ?? "missing");
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createGeneratedReactorRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectRegisteredSchema],
+          dispatch: (event) => {
+            observed.push(event.id?.value ?? "missing");
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     await context.eventBus().post(createProjectCreated("event-follow-up-source", "task-follow-up"));
     await context
@@ -5163,21 +5389,24 @@ describe("repository signal routing", () => {
   });
 
   it("runs generated command reactions and wraps returned domain commands after event intake", async () => {
+    const setup = createTestSetup(true);
     GeneratedCommandingProcessManager.reset();
     const commands: SpineCommand[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedCommandingRepository())
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateFollowUpProjectSchema],
-        dispatch: (command) => {
-          commands.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createGeneratedCommandingRepository())
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateFollowUpProjectSchema],
+          dispatch: (command) => {
+            commands.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     await context.eventBus().post(createProjectCreated("event-command-source", "task-command"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(GeneratedCommandingProcessManager.argumentCounts).toEqual([2]);
     expect(commands).toHaveLength(1);
@@ -5197,21 +5426,24 @@ describe("repository signal routing", () => {
   });
 
   it("hands off a Process Manager Event reaction Command before its Inbox callback settles", async () => {
+    const setup = createTestSetup(true);
     GeneratedCommandingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createGeneratedCommandingRepository();
     const commands: SpineCommand[] = [];
-    const context = await BoundedContext.singleTenant("Event reaction handoff")
-      .add(repository)
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateFollowUpProjectSchema],
-        dispatch: (command) => {
-          commands.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Event reaction handoff")
+        .add(repository)
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateFollowUpProjectSchema],
+          dispatch: (command) => {
+            commands.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       const delivery = new Delivery({
         context: { name: "Event reaction handoff", multitenant: false },
@@ -5234,6 +5466,7 @@ describe("repository signal routing", () => {
   });
 
   it("monitors a generated invalid Command without publishing it", async () => {
+    const setup = createTestSetup(true);
     GeneratedCommandingProcessManager.reset();
     const failures: unknown[] = [];
     const commands: SpineCommand[] = [];
@@ -5243,16 +5476,18 @@ describe("repository signal routing", () => {
         failures.push(reception.error);
         return reception.markDelivered();
       });
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedCommandingRepository())
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateFollowUpProjectSchema],
-        dispatch: (command) => {
-          commands.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createGeneratedCommandingRepository())
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateFollowUpProjectSchema],
+          dispatch: (command) => {
+            commands.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       await expect(
@@ -5262,7 +5497,7 @@ describe("repository signal routing", () => {
           }),
         ),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(GeneratedCommandingProcessManager.commandProjectionStarted).toBe(1);
       expect(failures).toHaveLength(1);
       expect(commands).toEqual([]);
@@ -5273,17 +5508,20 @@ describe("repository signal routing", () => {
   });
 
   it("wraps commands from generated command reactions with the source event origin", async () => {
+    const setup = createTestSetup(true);
     const commands: SpineCommand[] = [];
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createGeneratedCommandingRepository())
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateFollowUpProjectSchema],
-        dispatch: (command) => {
-          commands.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks")
+        .add(createGeneratedCommandingRepository())
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateFollowUpProjectSchema],
+          dispatch: (command) => {
+            commands.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     const sourceEvent = createProjectCreated("event-command-origin", "task-command-origin", {
       pastMessageTenantId: "tenant-command",
     });
@@ -5299,7 +5537,7 @@ describe("repository signal routing", () => {
     });
 
     await context.eventBus().post(sourceEvent);
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(commands[0]?.context?.actorContext).toEqual(sourceActorContext);
     expect(commands[0]?.context?.origin).toEqual(
@@ -5318,18 +5556,21 @@ describe("repository signal routing", () => {
   });
 
   it("keeps command bus open until event-side command reactions drain during close", async () => {
+    const setup = createTestSetup(true);
     GeneratedCommandingProcessManager.reset({ pauseCommandProjection: true });
     const commands: SpineCommand[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedCommandingRepository())
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateFollowUpProjectSchema],
-        dispatch: (command) => {
-          commands.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createGeneratedCommandingRepository())
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateFollowUpProjectSchema],
+          dispatch: (command) => {
+            commands.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     const post = context
       .eventBus()
@@ -5349,11 +5590,13 @@ describe("repository signal routing", () => {
   });
 
   it("assigns one producer version to all events from an aggregate dispatch", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createMultiManagedRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createMultiManagedRepository()),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -5364,7 +5607,7 @@ describe("repository signal routing", () => {
     await context
       .commandBus()
       .post(createAggregateCommand("command-managed-multi", "task-managed-multi", "Multi"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     const storedEvents = await eventStore.read();
     expect(storedEvents).toHaveLength(2);
@@ -5382,10 +5625,11 @@ describe("repository signal routing", () => {
   });
 
   it("copies the full pre-dispatch Aggregate Version to produced Events", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createExecutingRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -5405,20 +5649,23 @@ describe("repository signal routing", () => {
     await context.stand().update(ProjectStateSchema, state, { version });
 
     await context.commandBus().post(createAggregateCommand("producer-command", "producer-version"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     const [event] = await new EventStore({ name: "Tasks", multitenant: false }, factory).read();
     expect(event?.context?.version).toEqual(version);
   });
 
   it("monitors managed aggregate handlers that return no domain event", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createEmptyManagedRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createEmptyManagedRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expectMonitoredReception(
+      setup,
       () => context.commandBus().post(createAggregateCommand("command-empty", "task-empty")),
       /must return at least one event/,
     );
@@ -5427,17 +5674,20 @@ describe("repository signal routing", () => {
   });
 
   it("monitors empty Process Manager assignment before state and event commit", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     RoutingProcessManager.emptyAssignment = true;
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectCreatedSchema],
-        dispatch: () => Promise.resolve(),
-      })
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerAssignRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectCreatedSchema],
+          dispatch: () => Promise.resolve(),
+        }),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -5445,6 +5695,7 @@ describe("repository signal routing", () => {
     });
     try {
       await expectMonitoredReception(
+        setup,
         () => context.commandBus().post(createAggregateCommand("empty-pm-assignment", "empty-pm")),
         /must return a signal/,
       );
@@ -5462,14 +5713,16 @@ describe("repository signal routing", () => {
   });
 
   it("monitors concrete Projection subscriber returns before committing state", async () => {
+    const setup = createTestSetup(true);
     for (const result of [null, [], [undefined]]) {
       ManagedTaskProjection.reset();
       ManagedTaskProjection.result = result;
       const factory = new InMemoryStorageFactory();
-      await configureStorage(factory);
-      const context = await BoundedContext.singleTenant("Tasks")
-        .add(createManagedProjection())
-        .build();
+      await configureStorage(setup, factory);
+      const context = await buildContext(
+        BoundedContext.singleTenant("Tasks").add(createManagedProjection()),
+        setup,
+      );
       const storage = new CurrentRecordTestStorage({
         context: { name: "Tasks", multitenant: false },
         storageFactory: factory,
@@ -5477,6 +5730,7 @@ describe("repository signal routing", () => {
       });
       try {
         await expectMonitoredReception(
+          setup,
           () =>
             context.eventBus().post(createProjectCreated("subscriber-value", "subscriber-target")),
           /must not return signals/,
@@ -5492,15 +5746,18 @@ describe("repository signal routing", () => {
   });
 
   it("monitors framework event envelopes returned by managed aggregate handlers", async () => {
+    const setup = createTestSetup(true);
     EnvelopeManagedAggregate.payloadMode = "declared";
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createEnvelopeManagedRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createEnvelopeManagedRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expectMonitoredReception(
+      setup,
       () => context.commandBus().post(createAggregateCommand("command-envelope", "task-envelope")),
       /undeclared message/,
     );
@@ -5511,15 +5768,18 @@ describe("repository signal routing", () => {
   });
 
   it("monitors an undeclared Event payload inside an Aggregate handler envelope", async () => {
+    const setup = createTestSetup(true);
     EnvelopeManagedAggregate.payloadMode = "undeclared";
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createEnvelopeManagedRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createEnvelopeManagedRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
     try {
       await expectMonitoredReception(
+        setup,
         () =>
           context
             .commandBus()
@@ -5537,15 +5797,18 @@ describe("repository signal routing", () => {
   });
 
   it("monitors a malformed packed Event payload before Aggregate commit", async () => {
+    const setup = createTestSetup(true);
     EnvelopeManagedAggregate.payloadMode = "malformed";
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createEnvelopeManagedRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createEnvelopeManagedRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
     try {
       await expectMonitoredReception(
+        setup,
         () =>
           context
             .commandBus()
@@ -5563,30 +5826,36 @@ describe("repository signal routing", () => {
   });
 
   it("keeps an already registered repository executable after a failed second registration", async () => {
+    const setup = createTestSetup(true);
     ExecutingProjectAggregate.reset();
     const repository = createExecutingRepository();
-    const firstContext = await BoundedContext.singleTenant("Tasks").add(repository).build();
-
-    await expect(BoundedContext.singleTenant("OtherTasks").add(repository).build()).rejects.toThrow(
-      "already registered with Bounded Context",
+    const firstContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(repository),
+      setup,
     );
+
+    await expect(
+      buildContext(BoundedContext.singleTenant("OtherTasks").add(repository), setup),
+    ).rejects.toThrow("already registered with Bounded Context");
 
     await firstContext
       .commandBus()
       .post(createAggregateCommand("command-after-registration-failure", "task-after-failure"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(ExecutingProjectAggregate.assigneeCalls).toBe(1);
     expect(ExecutingProjectAggregate.directUpdateCalls).toBe(1);
   });
 
   it("uses one committed version for every event and state from an aggregate command dispatch", async () => {
+    const setup = createTestSetup(true);
     ExecutingProjectAggregate.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createExecutingRepository()),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -5594,7 +5863,7 @@ describe("repository signal routing", () => {
     });
 
     await context.commandBus().post(createAggregateCommand("command-multi", "task-multi", "Multi"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
@@ -5610,11 +5879,13 @@ describe("repository signal routing", () => {
   });
 
   it("awaits async aggregate command assignees before storing produced events", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createAsyncAssigneeRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createAsyncAssigneeRepository()),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -5632,7 +5903,7 @@ describe("repository signal routing", () => {
 
     AsyncAssigneeAggregate.resolveCommand?.("Async");
     await completion;
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     await expect(storage.readCurrent("task-async")).resolves.toMatchObject({
       entityId: "task-async",
@@ -5642,12 +5913,14 @@ describe("repository signal routing", () => {
   });
 
   it("rolls back a rejected async aggregate assignment without publishing output", async () => {
+    const setup = createTestSetup(true);
     RejectedAsyncAssigneeAggregate.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createRejectedAsyncAssigneeRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createRejectedAsyncAssigneeRepository()),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -5671,12 +5944,14 @@ describe("repository signal routing", () => {
   });
 
   it("serializes same-aggregate commands until each async assignment settles", async () => {
+    const setup = createTestSetup(true);
     SerialAsyncAssigneeAggregate.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createSerialAsyncAssigneeRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createSerialAsyncAssigneeRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
     const first = context
       .commandBus()
@@ -5697,7 +5972,7 @@ describe("repository signal routing", () => {
     });
     SerialAsyncAssigneeAggregate.releaseNext();
     await Promise.all([first, second]);
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     const events = await eventStore.read();
     expect(events).toHaveLength(2);
@@ -5706,20 +5981,23 @@ describe("repository signal routing", () => {
   });
 
   it("resolves aggregate command execution after commit when stored-event dispatch later throws", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const dispatchAttempted = createSignal();
     const dispatchFailure = new Error("dispatch failed after commit");
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectCreatedSchema],
-        dispatch: () => {
-          dispatchAttempted.resolve();
-          return Promise.reject(dispatchFailure);
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectCreatedSchema],
+          dispatch: () => {
+            dispatchAttempted.resolve();
+            return Promise.reject(dispatchFailure);
+          },
+        }),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -5732,7 +6010,7 @@ describe("repository signal routing", () => {
         .commandBus()
         .post(createAggregateCommand("command-dispatch-failure", "task-dispatch")),
     ).resolves.toBeUndefined();
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     const events = await eventStore.read();
     expect(events).toHaveLength(1);
@@ -5750,43 +6028,46 @@ describe("repository signal routing", () => {
   });
 
   it("allows a causally nested command while the outer stored-event follow-up remains pending", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const nestedGate = createSignal();
     const nestedPosted = createSignal();
     const nestedFinished = createSignal();
     const contextRef: { current?: BoundedContext } = {};
 
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectCreatedSchema],
-        dispatch: async (event) => {
-          const name =
-            event.message === undefined
-              ? undefined
-              : AnyPacker.tryUnpack(event.message, ProjectCreatedSchema)?.name;
-          if (name === "Outer") {
-            nestedPosted.resolve();
-            const currentContext = contextRef.current;
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectCreatedSchema],
+          dispatch: async (event) => {
+            const name =
+              event.message === undefined
+                ? undefined
+                : AnyPacker.tryUnpack(event.message, ProjectCreatedSchema)?.name;
+            if (name === "Outer") {
+              nestedPosted.resolve();
+              const currentContext = contextRef.current;
 
-            if (currentContext === undefined) {
-              throw new Error("Bounded context is not ready.");
+              if (currentContext === undefined) {
+                throw new Error("Bounded context is not ready.");
+              }
+
+              await currentContext
+                .commandBus()
+                .post(createAggregateCommand("command-inner", "task-inner", "Inner"));
+              nestedFinished.resolve();
+              return;
             }
 
-            await currentContext
-              .commandBus()
-              .post(createAggregateCommand("command-inner", "task-inner", "Inner"));
-            nestedFinished.resolve();
-            return;
-          }
-
-          if (name === "Inner") {
-            await nestedGate.promise;
-          }
-        },
-      })
-      .build();
+            if (name === "Inner") {
+              await nestedGate.promise;
+            }
+          },
+        }),
+      setup,
+    );
     contextRef.current = context;
 
     let outerResolved = false;
@@ -5807,11 +6088,13 @@ describe("repository signal routing", () => {
   });
 
   it("executes managed aggregate commands when only event reaction metadata is registered", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createReactionMetadataRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createReactionMetadataRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(
@@ -5819,7 +6102,7 @@ describe("repository signal routing", () => {
         .commandBus()
         .post(createAggregateCommand("command-reaction-metadata", "task-reaction-metadata")),
     ).resolves.toBeUndefined();
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     await expect(eventStore.read()).resolves.toMatchObject([
       {
         context: { version: { number: 0 } },
@@ -5829,8 +6112,9 @@ describe("repository signal routing", () => {
   });
 
   it("monitors a returned framework envelope without a typed Event payload", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const failures: unknown[] = [];
     const monitor = vi
       .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
@@ -5838,16 +6122,17 @@ describe("repository signal routing", () => {
         failures.push(reception.error);
         return reception.markDelivered();
       });
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createMalformedEventRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createMalformedEventRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     try {
       await expect(
         context.commandBus().post(createAggregateCommand("command-malformed", "task-malformed")),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(failures).toHaveLength(1);
       expect(failures[0]).toBeInstanceOf(Error);
       await expect(eventStore.read()).resolves.toEqual([]);
@@ -5858,12 +6143,14 @@ describe("repository signal routing", () => {
   });
 
   it("rejects invalid aggregate command payloads before durable aggregate work", async () => {
+    const setup = createTestSetup(true);
     ValidatingProjectAggregate.reset();
     const factory = new ObservingStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createValidatingRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createValidatingRepository()),
+      setup,
+    );
     await expect(
       context.commandBus().post(createValidatedCommand("command-invalid", "task-invalid", "")),
     ).rejects.toThrow(/validation/i);
@@ -5872,6 +6159,7 @@ describe("repository signal routing", () => {
   });
 
   it("monitors an invalid produced Event without persisting the Aggregate", async () => {
+    const setup = createTestSetup(true);
     ValidatingProjectAggregate.reset();
     const failures: unknown[] = [];
     const counts: number[] = [];
@@ -5886,9 +6174,10 @@ describe("repository signal routing", () => {
       .mockImplementation((statistics) => {
         counts.push(statistics.failed);
       });
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createValidatingRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createValidatingRepository()),
+      setup,
+    );
 
     try {
       await expect(
@@ -5902,12 +6191,12 @@ describe("repository signal routing", () => {
             ),
           ),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(ValidatingProjectAggregate.assigneeCalls).toBe(1);
       expect(failures).toHaveLength(1);
       expect(failures[0]).toBeInstanceOf(Error);
       expect((failures[0] as Error).message).toContain("returned undeclared message");
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(counts).toContain(1);
       await expect(
         context.stand().read(ProjectSubmissionStateSchema, "invalid-output"),
@@ -5920,8 +6209,9 @@ describe("repository signal routing", () => {
   });
 
   it("monitors state-transition validation failures before storing aggregate output", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const failures: unknown[] = [];
     const monitor = vi
       .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
@@ -5929,9 +6219,10 @@ describe("repository signal routing", () => {
         failures.push(reception.error);
         return reception.markDelivered();
       });
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createTransitionViolatingRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createTransitionViolatingRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
@@ -5945,7 +6236,7 @@ describe("repository signal routing", () => {
           .commandBus()
           .post(createAggregateCommand("command-transition-invalid", "task-transition-invalid")),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(failures).toHaveLength(1);
       expect(failures[0]).toMatchObject({
         name: "TransitionValidationError",
@@ -5959,6 +6250,7 @@ describe("repository signal routing", () => {
   });
 
   it("monitors a post-handler invalid state once and continues the same shard", async () => {
+    const setup = createTestSetup(true);
     TransitionViolatingAggregate.calls = 0;
     TransitionViolatingAggregate.rejectOnce = false;
     const failures: unknown[] = [];
@@ -5974,23 +6266,24 @@ describe("repository signal routing", () => {
       .mockImplementation((statistics) => {
         counts.push(statistics.failed);
       });
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createTransitionViolatingRepository())
-      .build();
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createTransitionViolatingRepository()),
+      setup,
+    );
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
 
     try {
       await expect(
         context.commandBus().post(createAggregateCommand("invalid-state-first", "same-shard")),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await expect(context.stand().read(ProjectStateSchema, "same-shard")).resolves.toBeUndefined();
       await expect(
         context
           .commandBus()
           .post(createAggregateCommand("valid-state-next", "same-shard", "Valid follow-up")),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await expect(context.stand().read(ProjectStateSchema, "same-shard")).resolves.toMatchObject({
         name: "Valid follow-up",
       });
@@ -6008,6 +6301,7 @@ describe("repository signal routing", () => {
   });
 
   it("lets the reception monitor repeat a post-handler transition rejection", async () => {
+    const setup = createTestSetup(true);
     TransitionViolatingAggregate.calls = 0;
     TransitionViolatingAggregate.rejectOnce = true;
     const failures: unknown[] = [];
@@ -6017,9 +6311,10 @@ describe("repository signal routing", () => {
         failures.push(reception.error);
         return reception.repeatDispatching();
       });
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createTransitionViolatingRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createTransitionViolatingRepository()),
+      setup,
+    );
 
     try {
       await expect(
@@ -6027,7 +6322,7 @@ describe("repository signal routing", () => {
           .commandBus()
           .post(createAggregateCommand("repeat-invalid-state", "repeat-id", "Repeat")),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(failures).toHaveLength(1);
       expect(TransitionViolatingAggregate.calls).toBe(2);
       await expect(context.stand().read(ProjectStateSchema, "repeat-id")).resolves.toMatchObject({
@@ -6041,11 +6336,13 @@ describe("repository signal routing", () => {
   });
 
   it("clears rejected transition markers when a fresh transaction succeeds", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createRecoveringTransitionRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createRecoveringTransitionRepository()),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -6057,7 +6354,7 @@ describe("repository signal routing", () => {
         .commandBus()
         .post(createAggregateCommand("command-transition-recovers", "task-recovers")),
     ).resolves.toBeUndefined();
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     await expect(storage.readCurrent("task-recovers")).resolves.toMatchObject({
       entityId: "task-recovers",
@@ -6067,11 +6364,13 @@ describe("repository signal routing", () => {
   });
 
   it("keeps stored aggregate history tenant-scoped for multitenant command execution", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createExecutingRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks").add(createExecutingRepository()),
+      setup,
+    );
     await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-a"));
     await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-b"));
     const tenantAStorage = new CurrentRecordTestStorage({
@@ -6091,7 +6390,7 @@ describe("repository signal routing", () => {
     await context
       .commandBus()
       .post(createAggregateCommand("command-tenant-b", "shared-task", "TenantB", "tenant-b"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     await expect(tenantAStorage.readCurrent("shared-task")).resolves.toMatchObject({
       entityId: "shared-task",
@@ -6106,9 +6405,11 @@ describe("repository signal routing", () => {
   });
 
   it("rejects multitenant aggregate command execution without tenant context", async () => {
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createExecutingRepository())
-      .build();
+    const setup = createTestSetup(true);
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks").add(createExecutingRepository()),
+      setup,
+    );
 
     await expect(
       context
@@ -6118,10 +6419,12 @@ describe("repository signal routing", () => {
   });
 
   it("rehydrates repository-executed aggregates with Spine Versions", async () => {
+    const setup = createTestSetup(true);
     SpineVersionAggregate.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createSpineVersionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createSpineVersionRepository()),
+      setup,
+    );
 
     await context
       .commandBus()
@@ -6129,14 +6432,15 @@ describe("repository signal routing", () => {
     await context
       .commandBus()
       .post(createAggregateCommand("command-bigint-2", "task-bigint", "Two"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(SpineVersionAggregate.observedVersions).toMatchObject([{ number: 0 }, { number: 1 }]);
   });
 
   it("rejects produced aggregate versions outside the protobuf int32 range", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -6153,7 +6457,7 @@ describe("repository signal routing", () => {
       lifecycle: { archived: false, deleted: false },
     });
     const repository = createExecutingRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -6176,53 +6480,60 @@ describe("repository signal routing", () => {
   });
 
   it("stores produced aggregate events with a readable producer ID", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createExecutingRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await context
       .commandBus()
       .post(createAggregateCommand("command-producer-id", "task-producer-id"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     const [stored] = await eventStore.read();
     expect(readReadableProducerId(stored)).toBe("task-producer-id");
   });
 
   it("packs a message aggregate ID into its produced event producer ID", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProjectIdProducingRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createProjectIdProducingRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
     const taskId = create(TaskIdSchema, { value: "message-produced-task" });
 
     await context.commandBus().post(createCreateProject("command-message-producer", taskId.value));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     const [stored] = await eventStore.read();
     expect(AnyPacker.tryUnpack(stored?.context?.producerId as never, TaskIdSchema)).toEqual(taskId);
   });
 
   it("hands off a committed Aggregate Event before its Inbox callback settles", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createExecutingRepository();
     const events: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Aggregate Event handoff")
-      .add(repository)
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectCreatedSchema],
-        dispatch: (event) => {
-          events.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Aggregate Event handoff")
+        .add(repository)
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectCreatedSchema],
+          dispatch: (event) => {
+            events.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       const delivery = new Delivery({
         context: { name: "Aggregate Event handoff", multitenant: false },
@@ -6249,23 +6560,26 @@ describe("repository signal routing", () => {
   });
 
   it("hands off a declared rejection Event before the Aggregate Inbox callback settles", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createManagedRepository();
     const events: SpineEvent[] = [];
     ManagedProjectAggregate.reset(
       TaskAlreadyDone.create({ id: create(GeneratedTaskIdSchema, { value: "rejected-target" }) }),
     );
-    const context = await BoundedContext.singleTenant("Aggregate rejection handoff")
-      .add(repository)
-      .addEventDispatcher({
-        messageSchemas: () => [TaskAlreadyDoneSchema],
-        dispatch: (event) => {
-          events.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Aggregate rejection handoff")
+        .add(repository)
+        .addEventDispatcher({
+          messageSchemas: () => [TaskAlreadyDoneSchema],
+          dispatch: (event) => {
+            events.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       const delivery = new Delivery({
         context: { name: "Aggregate rejection handoff", multitenant: false },
@@ -6293,17 +6607,20 @@ describe("repository signal routing", () => {
   });
 
   it("routes command substitutions within their tenant and preserves command lineage", async () => {
+    const setup = createTestSetup(true);
     const produced: SpineCommand[] = [];
-    const context = await BoundedContext.multitenant("Command substitutions")
-      .add(createCommandSubstitutingProcessManagerRepository())
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateFollowUpProjectSchema],
-        dispatch: (command) => {
-          produced.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("Command substitutions")
+        .add(createCommandSubstitutingProcessManagerRepository())
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateFollowUpProjectSchema],
+          dispatch: (command) => {
+            produced.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     const tenant = createTenantId("tenant-transform");
     const actorContext = create(ActorContextSchema, {
       actor: create(UserIdSchema, { value: "transformer" }),
@@ -6373,20 +6690,23 @@ describe("repository signal routing", () => {
   });
 
   it("hands off a committed Process Manager Command before its Inbox callback settles", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createCommandSubstitutingProcessManagerRepository();
     const published: SpineCommand[] = [];
-    const context = await BoundedContext.singleTenant("Committed substitution handoff")
-      .add(repository)
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateFollowUpProjectSchema],
-        dispatch: (command) => {
-          published.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Committed substitution handoff")
+        .add(repository)
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateFollowUpProjectSchema],
+          dispatch: (command) => {
+            published.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       const command = create(CommandSchema, {
         id: create(CommandIdSchema, { uuid: "committed-substitution" }),
@@ -6420,16 +6740,17 @@ describe("repository signal routing", () => {
   });
 
   it("delivers a nonzero same-shard Process Manager Command through an Aggregate Event", async () => {
+    const setup = createTestSetup(true);
     SameShardChainProcessManager.reset();
     SameShardChainAggregate.assignments = 0;
     const shard = new ShardIndex(2, 3);
-    await ServerEnvironmentLifecycle.resetForTest();
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    setup.settings = {
       storageFactory: new InMemoryStorageFactory(),
-      tenantIndex: new TestTenantIndex(),
       deliveryStrategy: { shardCount: 3, shardFor: () => shard },
-    });
-    await ServerEnvironment.instance().completeSetup();
+    };
+    setup.index = new TestTenantIndex();
+    setup.seedTenants = false;
+    setup.seeded = false;
     const processManager = new Repository({
       entityType: SameShardChainProcessManager,
       schema: ProjectQueueStateSchema,
@@ -6470,10 +6791,10 @@ describe("repository signal routing", () => {
         ],
       ),
     });
-    const context = await BoundedContext.singleTenant("Same shard chain")
-      .add(processManager)
-      .add(aggregate)
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Same shard chain").add(processManager).add(aggregate),
+      setup,
+    );
     try {
       await context.commandBus().post(
         create(CommandSchema, {
@@ -6490,7 +6811,7 @@ describe("repository signal routing", () => {
         }),
       );
       await withTimeout(SameShardChainProcessManager.observed.promise, "same-shard Event X");
-      const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+      const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
       await withTimeout(delivery.whenIdle(), "same-shard delivery idle");
 
       expect(SameShardChainProcessManager.assignments).toBe(1);
@@ -6513,13 +6834,15 @@ describe("repository signal routing", () => {
   });
 
   it("rejects a substitution output declared only by its neighboring handler", async () => {
+    const setup = createTestSetup(true);
     CommandSubstitutingProcessManager.wrongOutput = true;
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createCommandSubstitutingProcessManagerRepository();
-    const context = await BoundedContext.singleTenant("Undeclared substitution output")
-      .add(repository)
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Undeclared substitution output").add(repository),
+      setup,
+    );
     try {
       const command = create(CommandSchema, {
         id: create(CommandIdSchema, { uuid: "neighbor-output" }),
@@ -6552,23 +6875,26 @@ describe("repository signal routing", () => {
   });
 
   it("starts every sibling produced command in declaration order when one child rejects", async () => {
+    const setup = createTestSetup(true);
     CommandSubstitutingProcessManager.siblingOutputs = true;
     const observed: string[] = [];
     const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
-    const context = await BoundedContext.singleTenant("Command substitution siblings")
-      .add(createCommandSubstitutingProcessManagerRepository())
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateFollowUpProjectSchema],
-        dispatch: (command) => {
-          if (command.message === undefined) throw new Error("Expected a produced payload.");
-          const message = AnyPacker.tryUnpack(command.message, CreateFollowUpProjectSchema);
-          if (message === undefined) throw new Error("Expected a produced command.");
-          observed.push(message.name);
-          if (message.name === "Siblings follow-up") throw new Error("first child failed");
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Command substitution siblings")
+        .add(createCommandSubstitutingProcessManagerRepository())
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateFollowUpProjectSchema],
+          dispatch: (command) => {
+            if (command.message === undefined) throw new Error("Expected a produced payload.");
+            const message = AnyPacker.tryUnpack(command.message, CreateFollowUpProjectSchema);
+            if (message === undefined) throw new Error("Expected a produced command.");
+            observed.push(message.name);
+            if (message.name === "Siblings follow-up") throw new Error("first child failed");
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     boundedContextAccess.installLogger(context, {
       withMetadata: (facts: Record<string, unknown>) => ({
         error: (message: string) => errors.push({ message, facts }),
@@ -6608,6 +6934,7 @@ describe("repository signal routing", () => {
   });
 
   it("routes commands to one aggregate ID by the first command field", async () => {
+    const setup = createTestSetup(true);
     const repository = createRoutingRepository();
     const command = createAggregateCommand("command-1", "task-1");
     const route = await repository.routeCommand(command);
@@ -6619,7 +6946,7 @@ describe("repository signal routing", () => {
     });
     expectTypeOf(route.entityId).toEqualTypeOf<string>();
 
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     await context.close();
   });
 
@@ -6970,18 +7297,20 @@ describe("repository signal routing", () => {
   });
 
   it("rejects a validation-invalid custom message Command ID before durable dispatch", async () => {
+    const setup = createTestSetup(true);
     ProjectSubmissionIdRouteAggregate.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Project submission ID")
-      .add(
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Project submission ID").add(
         createProjectSubmissionIdRouteRepository(
           CommandRouting.create<ProjectSubmissionId>().route(CreateProjectSubmissionSchema, () =>
             create(ProjectSubmissionIdSchema, { value: "" }),
           ),
         ),
-      )
-      .build();
+      ),
+      setup,
+    );
     const eventStore = new EventStore(
       { name: "Project submission ID", multitenant: false },
       factory,
@@ -7062,6 +7391,7 @@ describe("repository signal routing", () => {
   });
 
   it("prefers a compatible producer ID and falls back for an incompatible producer type", async () => {
+    const setup = createTestSetup(true);
     const repository = createRoutingRepository();
 
     const producerRoute = await repository.routeEvent(
@@ -7093,7 +7423,7 @@ describe("repository signal routing", () => {
     expectTypeOf(producerRoute.entityIds).toEqualTypeOf<readonly string[]>();
     expect(firstFieldRoute.entityIds).toEqual(["field-task"]);
 
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
 
     await expect(
       context.eventBus().post(createProjectCreated("event-3", "posted-task")),
@@ -7191,6 +7521,7 @@ describe("repository signal routing", () => {
   });
 
   it("delivers recorded query recipients after receiving repository data changes", async () => {
+    const setup = createTestSetup(true);
     SplitRouteProcessManager.reset();
     let routeCalls = 0;
     const routing = EventRouting.create(SplitRouteProcessManager).route(
@@ -7202,10 +7533,11 @@ describe("repository signal routing", () => {
     );
     const repository = createSplitPmRepo(routing);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("RecordedQueryTargets")
-      .add(repository)
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("RecordedQueryTargets").add(repository),
+      setup,
+    );
     try {
       await context
         .stand()
@@ -7214,7 +7546,7 @@ describe("repository signal routing", () => {
           create(ProjectQueueStateSchema, { id: "original", queue: "Before" }),
         );
       await context.eventBus().post(createProjectCreated("recorded-query", "source"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(routeCalls).toBe(1);
       await context
         .stand()
@@ -7222,7 +7554,7 @@ describe("repository signal routing", () => {
           ProjectQueueStateSchema,
           create(ProjectQueueStateSchema, { id: "later", queue: "After" }),
         );
-      const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+      const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
       const rows = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
       const recorded = rows.find((row) => row.signalId === "recorded-query");
       if (recorded === undefined) throw new Error("Expected recorded Process Manager row.");
@@ -7240,11 +7572,16 @@ describe("repository signal routing", () => {
   it.each([0, 1, 1_000, 1_001, 10_001])(
     "keeps %i distinct Event recipients and warns only above 1,000",
     async (count) => {
+      const setup = createTestSetup(true);
       const recipients = Array.from({ length: count }, (_, index) => `target-${String(index)}`);
       const route = EventRouting.create<string>().route(ProjectCreatedSchema, () =>
         Promise.resolve([...recipients, ...recipients.slice(0, 1)]),
       );
       const repository = createRoutingRepository(undefined, route);
+      const context = await buildContext(
+        BoundedContext.singleTenant(`LargeEventRoute${String(count)}`).add(repository),
+        setup,
+      );
       const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
       try {
         const result = await repository.routeEvent(
@@ -7258,11 +7595,13 @@ describe("repository signal routing", () => {
         }
       } finally {
         warning.mockRestore();
+        await context.close();
       }
     },
   );
 
   it("does not warn when application filtering leaves two of 1,001 query matches", async () => {
+    const setup = createTestSetup(true);
     let queried = 0;
     const routing = EventRouting.create(ProjectAggregate).route(
       ProjectCreatedSchema,
@@ -7274,10 +7613,11 @@ describe("repository signal routing", () => {
     );
     const repository = createRoutingRepository(undefined, routing);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("FilteredRouteWarning")
-      .add(repository)
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("FilteredRouteWarning").add(repository),
+      setup,
+    );
     const storage = factory.createEntityStorage(
       entityStorageDescriptor(
         { name: "FilteredRouteWarning", multitenant: false },
@@ -7312,6 +7652,7 @@ describe("repository signal routing", () => {
   });
 
   it("deduplicates and delivers a message target containing an int64 value", async () => {
+    const setup = createTestSetup(true);
     SequencedProjectOverview.calls = 0;
     let routeCalls = 0;
     const eventRouting = EventRouting.create<ProjectSequenceId>().route(
@@ -7323,9 +7664,9 @@ describe("repository signal routing", () => {
       },
     );
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createSequencedProjectOverviewRepository(eventRouting);
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const id = create(ProjectSequenceIdSchema, { value: 42n });
     const event = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-int64-message-id" }),
@@ -7341,10 +7682,10 @@ describe("repository signal routing", () => {
       expect(routeCalls).toBe(1);
 
       await context.eventBus().post(event);
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(routeCalls).toBe(2);
 
-      const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+      const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
       const rows = await delivery.inbox.read(ShardIndex.single(), {
         statuses: ["TO_DELIVER", "DELIVERED"],
       });
@@ -7360,6 +7701,7 @@ describe("repository signal routing", () => {
   });
 
   it("hands off, delivers, and rehydrates composite Process Manager IDs without rerouting", async () => {
+    const setup = createTestSetup(true);
     ProjectMilestoneProcessManager.reset();
     let routeCalls = 0;
     const routing = EventRouting.create<ProjectMilestoneId>().route(
@@ -7371,9 +7713,9 @@ describe("repository signal routing", () => {
       },
     );
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createProjectMilestoneProcessManagerRepository(routing);
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const idA = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "reader" }),
       number: 1,
@@ -7402,9 +7744,9 @@ describe("repository signal routing", () => {
     try {
       await context.eventBus().post(eventA);
       await context.eventBus().post(eventB);
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
-      const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+      const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
       const rows = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
       const rowA = rows.find((row) => row.signalId === "event-composite-inbox-a");
       const rowB = rows.find((row) => row.signalId === "event-composite-inbox-b");
@@ -7432,9 +7774,12 @@ describe("repository signal routing", () => {
       await context.close();
     }
 
-    const rehydrated = await BoundedContext.singleTenant("Tasks")
-      .add(createProjectMilestoneProcessManagerRepository(routing))
-      .build();
+    const rehydrated = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(
+        createProjectMilestoneProcessManagerRepository(routing),
+      ),
+      setup,
+    );
     try {
       await expect(
         rehydrated.stand().read(ProjectMilestoneWorkflowStateSchema, idA),
@@ -7448,11 +7793,15 @@ describe("repository signal routing", () => {
   });
 
   it("packs the complete composite Process Manager ID into produced event context", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProjectMilestoneProcessManagerRepository(undefined, { produces: true }))
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(
+        createProjectMilestoneProcessManagerRepository(undefined, { produces: true }),
+      ),
+      setup,
+    );
     const id = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "producer" }),
       number: 7,
@@ -7480,11 +7829,12 @@ describe("repository signal routing", () => {
   });
 
   it("rejects malformed composite Entity Inbox targets before invoking the Process Manager", async () => {
+    const setup = createTestSetup(true);
     ProjectMilestoneProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createProjectMilestoneProcessManagerRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -7540,6 +7890,7 @@ describe("repository signal routing", () => {
   });
 
   it("guards multi-target composite Process Manager delivery by complete ID", async () => {
+    const setup = createTestSetup(true);
     ProjectMilestoneProcessManager.reset();
     let routeCalls = 0;
     const idA = create(ProjectMilestoneIdSchema, {
@@ -7558,8 +7909,8 @@ describe("repository signal routing", () => {
       { doubleDispatchGuard: true },
     );
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined)
       throw new Error("Expected a composite Process Manager dispatcher.");
@@ -7592,7 +7943,7 @@ describe("repository signal routing", () => {
       await dispatcher.dispatch(duplicate);
       await dispatcher.dispatch(duplicate);
       await dispatcher.dispatch(distinct);
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(routeCalls).toBe(3);
       expect(ProjectMilestoneProcessManager.ids).toEqual([idA, idB, idA, idB]);
@@ -7693,6 +8044,7 @@ describe("repository signal routing", () => {
   });
 
   it("suppresses Projection delivery when custom Event routing returns no targets", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     let routeCalls = 0;
     const repository = createExecutingProjectionRepository(
@@ -7701,7 +8053,7 @@ describe("repository signal routing", () => {
         return [];
       }),
     );
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
 
     try {
       await context.eventBus().post(createProjectCreated("event-no-delivery", "ignored"));
@@ -7763,6 +8115,7 @@ describe("repository signal routing", () => {
   });
 
   it("uses one custom Event plan for every Aggregate target", async () => {
+    const setup = createTestSetup(true);
     GuardedAggregate.reset();
     let routeCalls = 0;
     const repository = createGuardedAggregateRepository(
@@ -7771,11 +8124,11 @@ describe("repository signal routing", () => {
         return ["aggregate-one", "aggregate-two"];
       }),
     );
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
 
     try {
       await context.eventBus().post(createProjectCreated("event-aggregate-many", "ignored"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(routeCalls).toBe(1);
       expect(GuardedAggregate.calls).toBe(2);
@@ -8165,23 +8518,26 @@ describe("repository signal routing", () => {
   });
 
   it("executes process-manager command handlers and stores mutated state in Stand", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const observed: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectCreatedSchema],
-        dispatch: (event) => {
-          observed.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerAssignRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectCreatedSchema],
+          dispatch: (event) => {
+            observed.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     await context
       .commandBus()
       .post(createAggregateCommand("command-pm", "pm-task", "ProcessManager"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(RoutingProcessManager.commandCalls).toBe(1);
     await expect(context.stand().read(ProjectQueueStateSchema, "pm-task")).resolves.toEqual(
@@ -8206,6 +8562,7 @@ describe("repository signal routing", () => {
   });
 
   it("retains one command diagnostic when an admitted Process Manager assignment fails", async () => {
+    const setup = createTestSetup(true);
     const failure = new Error("admitted Process Manager assignment failed");
     const monitored: unknown[] = [];
     const monitor = vi
@@ -8216,16 +8573,18 @@ describe("repository signal routing", () => {
       });
     const diagnostics: SpineEvent[] = [];
     const command = createAggregateCommand("pm-command-diagnostic-failure", "pm-command-failure");
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [CommandDispatchedToHandlerSchema],
-        dispatch: (diagnostic) => {
-          diagnostics.push(diagnostic);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerAssignRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [CommandDispatchedToHandlerSchema],
+          dispatch: (diagnostic) => {
+            diagnostics.push(diagnostic);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       RoutingProcessManager.reset(failure);
@@ -8249,18 +8608,21 @@ describe("repository signal routing", () => {
   });
 
   it("emits a System command-dispatch diagnostic after aggregate handler admission", async () => {
+    const setup = createTestSetup(true);
     const diagnostics: SpineEvent[] = [];
     const command = createAggregateCommand("command-diagnostic", "diagnostic-id", "Diagnostic");
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [CommandDispatchedToHandlerSchema],
-        dispatch: (event) => {
-          diagnostics.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [CommandDispatchedToHandlerSchema],
+          dispatch: (event) => {
+            diagnostics.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       await context.commandBus().post(command);
@@ -8289,6 +8651,7 @@ describe("repository signal routing", () => {
   });
 
   it("retains one command diagnostic when an admitted handler fails", async () => {
+    const setup = createTestSetup(true);
     const failure = new Error("admitted command handler failed");
     const monitored: unknown[] = [];
     const monitor = vi
@@ -8299,16 +8662,18 @@ describe("repository signal routing", () => {
       });
     const diagnostics: SpineEvent[] = [];
     const command = createAggregateCommand("command-diagnostic-failure", "diagnostic-failure");
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [CommandDispatchedToHandlerSchema],
-        dispatch: (diagnostic) => {
-          diagnostics.push(diagnostic);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [CommandDispatchedToHandlerSchema],
+          dispatch: (diagnostic) => {
+            diagnostics.push(diagnostic);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       ExecutingProjectAggregate.reset(failure);
@@ -8329,17 +8694,20 @@ describe("repository signal routing", () => {
   });
 
   it("does not emit command diagnostics for refused or unroutable commands", async () => {
+    const setup = createTestSetup(true);
     const diagnostics: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createValidatingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [CommandDispatchedToHandlerSchema],
-        dispatch: (event) => {
-          diagnostics.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createValidatingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [CommandDispatchedToHandlerSchema],
+          dispatch: (event) => {
+            diagnostics.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       await expect(
@@ -8357,28 +8725,33 @@ describe("repository signal routing", () => {
   });
 
   it("preserves tenant context for aggregate and process-manager command diagnostics", async () => {
+    const setup = createTestSetup(true);
     const aggregateDiagnostics: SpineEvent[] = [];
-    const aggregate = await BoundedContext.multitenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [CommandDispatchedToHandlerSchema],
-        dispatch: (event) => {
-          aggregateDiagnostics.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const aggregate = await buildContext(
+      BoundedContext.multiTenant("Tasks")
+        .add(createExecutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [CommandDispatchedToHandlerSchema],
+          dispatch: (event) => {
+            aggregateDiagnostics.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     const processManagerDiagnostics: SpineEvent[] = [];
-    const processManager = await BoundedContext.multitenant("ProcessManagers")
-      .add(createProcessManagerAssignRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [CommandDispatchedToHandlerSchema],
-        dispatch: (event) => {
-          processManagerDiagnostics.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const processManager = await buildContext(
+      BoundedContext.multiTenant("ProcessManagers")
+        .add(createProcessManagerAssignRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [CommandDispatchedToHandlerSchema],
+          dispatch: (event) => {
+            processManagerDiagnostics.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       await aggregate.commandBus().post(createAggregateCommand("diagnostic-a", "same", "A", "a"));
@@ -8407,24 +8780,27 @@ describe("repository signal routing", () => {
   });
 
   it("isolates command diagnostic publication failure from admitted handler work", async () => {
+    const setup = createTestSetup(true);
     ExecutingProjectAggregate.reset();
     const diagnostics: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [CommandDispatchedToHandlerSchema],
-        dispatch: (event) => {
-          diagnostics.push(event);
-          return Promise.reject(new Error("diagnostic dispatch failed"));
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [CommandDispatchedToHandlerSchema],
+          dispatch: (event) => {
+            diagnostics.push(event);
+            return Promise.reject(new Error("diagnostic dispatch failed"));
+          },
+        }),
+      setup,
+    );
 
     try {
       await expect(
         context.commandBus().post(createAggregateCommand("diagnostic-failure", "failure-id")),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(ExecutingProjectAggregate.assigneeCalls).toBe(1);
       await expect(context.stand().read(ProjectStateSchema, "failure-id")).resolves.toMatchObject({
@@ -8438,26 +8814,29 @@ describe("repository signal routing", () => {
   });
 
   it("writes process-manager commands to a durable inbox before local delivery", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const observed: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectCreatedSchema],
-        dispatch: (event) => {
-          observed.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerAssignRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectCreatedSchema],
+          dispatch: (event) => {
+            observed.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     const command = createAggregateCommand("command-pm-inbox", "pm-inbox", "ProcessManager");
 
     await context.commandBus().post(command);
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
 
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
@@ -8507,10 +8886,12 @@ describe("repository signal routing", () => {
   });
 
   it("rejects a process-manager command with a missing domain ID before handler code", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createProcessManagerAssignRepository()),
+      setup,
+    );
 
     await expect(
       context.commandBus().post(createAggregateCommand("command-pm-missing-id", "")),
@@ -8520,10 +8901,12 @@ describe("repository signal routing", () => {
   });
 
   it("rejects idless process-manager commands before route, handler, or Stand write", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createIdlessCommandProcessManagerRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createIdlessCommandProcessManagerRepository()),
+      setup,
+    );
 
     await expect(
       context.commandBus().post(createIdlessAggregateCommand("pm-idless", "Idless")),
@@ -8535,10 +8918,12 @@ describe("repository signal routing", () => {
   });
 
   it("rejects blank process-manager command ids before handler or Stand write", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createProcessManagerAssignRepository()),
+      setup,
+    );
 
     await expect(
       context.commandBus().post(createAggregateCommand("   ", "pm-blank-id", "BlankId")),
@@ -8550,15 +8935,17 @@ describe("repository signal routing", () => {
   });
 
   it("stores process-manager command state in the command tenant", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks").add(createProcessManagerAssignRepository()),
+      setup,
+    );
 
     await context
       .commandBus()
       .post(createAggregateCommand("command-pm-tenant", "pm-tenant", "Tenant PM", "tenant-a"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     await expect(
       context
@@ -8578,12 +8965,14 @@ describe("repository signal routing", () => {
   });
 
   it("rejects multitenant process-manager handoff without a tenant before inbox write", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new ObservingStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks").add(createProcessManagerAssignRepository()),
+      setup,
+    );
     await expect(
       context
         .commandBus()
@@ -8594,18 +8983,33 @@ describe("repository signal routing", () => {
   });
 
   it("keeps process-manager handoff pending when another worker holds the shard", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    await configureStorage(setup, factory);
+    const held = new Delivery({
+      context: { name: "__System_Delivery__", multitenant: false },
+      storageFactory: factory,
+    });
     const shard = ShardIndex.single();
-    const session = await delivery.shards.pickUp(
+    const session = await held.shards.pickUp(
       shard,
       create(WorkerIdSchema, { nodeId: { value: "node-a" }, value: "worker-a" }),
     );
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .build();
+    setup.settings = {
+      storageFactory: factory,
+      delivery: {
+        open: () => undefined,
+        close: () => held.close(),
+        inbox: held.inbox,
+        workRegistry: held.shards,
+      } satisfies ServerEnvironmentDelivery,
+    };
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createProcessManagerAssignRepository()),
+      setup,
+    );
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
 
     try {
       await expect(
@@ -8629,12 +9033,14 @@ describe("repository signal routing", () => {
   });
 
   it("delivers the exact process-manager row despite older pending backlog", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createProcessManagerAssignRepository()),
+      setup,
+    );
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -8660,7 +9066,7 @@ describe("repository signal routing", () => {
         .commandBus()
         .post(createAggregateCommand("command-pm-page-target", "pm-page-target", "Page target")),
     ).resolves.toBeUndefined();
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     await expect(context.stand().read(ProjectQueueStateSchema, "pm-page-target")).resolves.toEqual(
       create(ProjectQueueStateSchema, {
@@ -8677,11 +9083,12 @@ describe("repository signal routing", () => {
   });
 
   it("rejects Entity Inbox delivery when the stored command tenant mismatches delivery tenant", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createProcessManagerAssignRepository();
-    await BoundedContext.multitenant("Tasks").add(repository).build();
+    await buildContext(BoundedContext.multiTenant("Tasks").add(repository), setup);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -8705,11 +9112,12 @@ describe("repository signal routing", () => {
   });
 
   it("uses the persisted Entity Inbox target without rerouting the command", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createProcessManagerAssignRepository();
-    await BoundedContext.singleTenant("Tasks").add(repository).build();
+    await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const delivery = new Delivery({
       context: { name: "Manual delivery", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -8752,6 +9160,7 @@ describe("repository signal routing", () => {
   });
 
   it("does not call Command interface routing again during delivery", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     let routeCalls = 0;
     const token = MessageInterfaces.define<object, readonly [typeof CreateProjectSchema]>([
@@ -8762,9 +9171,9 @@ describe("repository signal routing", () => {
       return message.id;
     });
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createProcessManagerAssignRepository(routing);
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     try {
       const delivery = new Delivery({
         context: { name: "Tasks", multitenant: false },
@@ -8798,6 +9207,7 @@ describe("repository signal routing", () => {
   });
 
   it("does not call custom Aggregate routing again for a stored message ID", async () => {
+    const setup = createTestSetup(true);
     let routeCalls = 0;
     const routing = CommandRouting.create<TaskId>().route(CreateTaskSchema, (message) => {
       routeCalls += 1;
@@ -8805,9 +9215,9 @@ describe("repository signal routing", () => {
       return message.id;
     });
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createProjectIdProducingRepository(routing);
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     try {
       const delivery = new Delivery({
         context: { name: "Tasks", multitenant: false },
@@ -8816,7 +9226,7 @@ describe("repository signal routing", () => {
       const target = requireEntityInboxTarget(repository);
       const command = createCreateProject("command-message-count", "message-count", "Counted");
       await context.commandBus().post(command);
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await expect(
         context.stand().read(TaskSchema, create(TaskIdSchema, { value: "message-count" })),
       ).resolves.toBeDefined();
@@ -8849,6 +9259,7 @@ describe("repository signal routing", () => {
   });
 
   it("hands off and delivers a composite Command target without rerouting", async () => {
+    const setup = createTestSetup(true);
     const id = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "command-reader" }),
       number: 42,
@@ -8863,13 +9274,16 @@ describe("repository signal routing", () => {
       },
     );
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createProjectMilestoneProcessManagerRepository(
       undefined,
       { produces: true },
       commandRouting,
     );
-    const context = await BoundedContext.singleTenant("Composite command").add(repository).build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Composite command").add(repository),
+      setup,
+    );
     const command = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "command-composite-handoff" }),
       context: admittedCommandContext(),
@@ -8880,9 +9294,9 @@ describe("repository signal routing", () => {
     });
     try {
       await context.commandBus().post(command);
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
-      const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+      const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
       const rows = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
       const stored = rows.find((row) => row.signalId === "command-composite-handoff");
       if (stored === undefined)
@@ -8906,11 +9320,15 @@ describe("repository signal routing", () => {
   });
 
   it("rejects an empty implicit Command ID during durable Aggregate delivery", async () => {
+    const setup = createTestSetup(true);
     DraftProjectAggregate.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createDraftProjectAggregateRepository();
-    const context = await BoundedContext.singleTenant("Implicit delivery").add(repository).build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Implicit delivery").add(repository),
+      setup,
+    );
     try {
       const delivery = new Delivery({
         context: { name: "Implicit delivery", multitenant: false },
@@ -8937,15 +9355,20 @@ describe("repository signal routing", () => {
   });
 
   it("rejects empty implicit state IDs before every Entity-family commit", async () => {
+    const setup = createTestSetup(true);
     BlankStateIdAggregate.calls = 0;
     BlankStateIdProcessManager.calls = 0;
     BlankStateIdProjection.calls = 0;
 
-    const aggregate = await BoundedContext.singleTenant("Blank aggregate ID")
-      .add(createBlankStateIdAggregateRepository())
-      .build();
+    const aggregate = await buildContext(
+      BoundedContext.singleTenant("Blank aggregate ID").add(
+        createBlankStateIdAggregateRepository(),
+      ),
+      setup,
+    );
     try {
       await expectMonitoredReception(
+        setup,
         () =>
           aggregate.commandBus().post(createAggregateCommand("blank-aggregate", "aggregate-id")),
         /Command state transition validation failed/,
@@ -8958,11 +9381,13 @@ describe("repository signal routing", () => {
       await aggregate.close();
     }
 
-    const processManager = await BoundedContext.singleTenant("Blank PM ID")
-      .add(createBlankStateIdProcessManagerRepository())
-      .build();
+    const processManager = await buildContext(
+      BoundedContext.singleTenant("Blank PM ID").add(createBlankStateIdProcessManagerRepository()),
+      setup,
+    );
     try {
       await expectMonitoredReception(
+        setup,
         () => processManager.commandBus().post(createAggregateCommand("blank-pm", "pm-id")),
         /must return a signal/,
       );
@@ -8974,11 +9399,15 @@ describe("repository signal routing", () => {
       await processManager.close();
     }
 
-    const projection = await BoundedContext.singleTenant("Blank projection ID")
-      .add(createBlankStateIdProjectionRepository())
-      .build();
+    const projection = await buildContext(
+      BoundedContext.singleTenant("Blank projection ID").add(
+        createBlankStateIdProjectionRepository(),
+      ),
+      setup,
+    );
     try {
       await expectMonitoredReception(
+        setup,
         () => projection.eventBus().post(createProjectCreated("blank-projection", "projection-id")),
         /state transition validation failed/,
       );
@@ -8992,12 +9421,14 @@ describe("repository signal routing", () => {
   });
 
   it("reconstructs stored int32 and int64 targets without rerouting", async () => {
+    const setup = createTestSetup(true);
     const int32Factory = new InMemoryStorageFactory();
-    await configureStorage(int32Factory);
+    await configureStorage(setup, int32Factory);
     const int32Repository = createInt32RoutingRepository();
-    const int32Context = await BoundedContext.singleTenant("Numeric int32")
-      .add(int32Repository)
-      .build();
+    const int32Context = await buildContext(
+      BoundedContext.singleTenant("Numeric int32").add(int32Repository),
+      setup,
+    );
     const int32Command = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "command-numeric-int32" }),
       context: create(CommandContextSchema),
@@ -9027,9 +9458,9 @@ describe("repository signal routing", () => {
     await int32Context.close();
 
     const int64Factory = new InMemoryStorageFactory();
-    await configureStorage(int64Factory);
+    await configureStorage(setup, int64Factory);
     const int64Repository = createInt64RoutingRepository();
-    await BoundedContext.singleTenant("Numeric int64").add(int64Repository).build();
+    await buildContext(BoundedContext.singleTenant("Numeric int64").add(int64Repository), setup);
     const int64Command = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "command-numeric-int64" }),
       context: create(CommandContextSchema),
@@ -9059,28 +9490,33 @@ describe("repository signal routing", () => {
   });
 
   it("publishes descriptor-typed numeric Entity IDs in system event contexts", async () => {
+    const setup = createTestSetup(true);
     const int32Events: SpineEvent[] = [];
-    const int32Context = await BoundedContext.singleTenant("Numeric int32 producer")
-      .add(createInt32RoutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema],
-        dispatch: (event) => {
-          int32Events.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const int32Context = await buildContext(
+      BoundedContext.singleTenant("Numeric int32 producer")
+        .add(createInt32RoutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema],
+          dispatch: (event) => {
+            int32Events.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     const int64Events: SpineEvent[] = [];
-    const int64Context = await BoundedContext.singleTenant("Numeric int64 producer")
-      .add(createInt64RoutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema],
-        dispatch: (event) => {
-          int64Events.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const int64Context = await buildContext(
+      BoundedContext.singleTenant("Numeric int64 producer")
+        .add(createInt64RoutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema],
+          dispatch: (event) => {
+            int64Events.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       await int32Context.commandBus().post(
@@ -9147,11 +9583,12 @@ describe("repository signal routing", () => {
   });
 
   it("rejects Entity Inbox delivery for UPDATE_SUBSCRIBER messages before handler code", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createProcessManagerAssignRepository();
-    await BoundedContext.singleTenant("Tasks").add(repository).build();
+    await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -9175,11 +9612,12 @@ describe("repository signal routing", () => {
   });
 
   it("rejects Entity Inbox delivery without a signal as invalid payload before handler code", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createProcessManagerAssignRepository();
-    await BoundedContext.singleTenant("Tasks").add(repository).build();
+    await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -9210,11 +9648,12 @@ describe("repository signal routing", () => {
   });
 
   it("rejects multitenant Entity Inbox delivery without delivery tenant", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createProcessManagerAssignRepository();
-    await BoundedContext.multitenant("Tasks").add(repository).build();
+    await buildContext(BoundedContext.multiTenant("Tasks").add(repository), setup);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -9238,11 +9677,12 @@ describe("repository signal routing", () => {
   });
 
   it("rejects multitenant Entity Inbox delivery when stored command tenant metadata is missing", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createProcessManagerAssignRepository();
-    await BoundedContext.multitenant("Tasks").add(repository).build();
+    await buildContext(BoundedContext.multiTenant("Tasks").add(repository), setup);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -9267,11 +9707,12 @@ describe("repository signal routing", () => {
   });
 
   it("rejects invalid stored process-manager command payloads before handler code", async () => {
+    const setup = createTestSetup(true);
     ValidatingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createValidatingProcessManagerRepository();
-    await BoundedContext.singleTenant("Tasks").add(repository).build();
+    await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -9293,11 +9734,12 @@ describe("repository signal routing", () => {
   });
 
   it("rejects idless Entity Inbox delivery before handler or Stand write", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createIdlessCommandProcessManagerRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -9319,11 +9761,12 @@ describe("repository signal routing", () => {
   });
 
   it("rejects blank Entity Inbox delivery command ids before handler or Stand write", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createProcessManagerAssignRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -9346,26 +9789,29 @@ describe("repository signal routing", () => {
   });
 
   it("appends process-manager command-produced events and records later dispatch failures", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const dispatchAttempted = createSignal();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectCreatedSchema],
-        dispatch: () => {
-          dispatchAttempted.resolve();
-          return Promise.reject(new Error("process-manager command event dispatch failed"));
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerAssignRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectCreatedSchema],
+          dispatch: () => {
+            dispatchAttempted.resolve();
+            return Promise.reject(new Error("process-manager command event dispatch failed"));
+          },
+        }),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(
       context.commandBus().post(createAggregateCommand("command-pm-dispatch", "pm-dispatch")),
     ).resolves.toBeUndefined();
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(RoutingProcessManager.commandCalls).toBe(1);
     await expect(context.stand().read(ProjectQueueStateSchema, "pm-dispatch")).resolves.toEqual(
@@ -9404,23 +9850,25 @@ describe("repository signal routing", () => {
   });
 
   it("does not commit a Process Manager Command state when its produced Event append fails", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new FailingProcessManagerProducedEventFactory(
       TypeUrls.derive(ProjectCreatedSchema),
     );
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createProcessManagerAssignRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(
       context.commandBus().post(createAggregateCommand("command-pm-fault", "pm-fault")),
     ).resolves.toBeUndefined();
     await withTimeout(factory.failed, "produced Process Manager Event append failure");
-    await expect(
-      serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance()),
-    ).rejects.toThrow("forced produced Event append failure");
+    await expect(serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup))).rejects.toThrow(
+      "forced produced Event append failure",
+    );
 
     expect(RoutingProcessManager.commandCalls).toBe(1);
     await expect(
@@ -9430,12 +9878,14 @@ describe("repository signal routing", () => {
   });
 
   it("copies the full pre-dispatch Process Manager Version to produced Events", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createProcessManagerAssignRepository()),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -9455,25 +9905,27 @@ describe("repository signal routing", () => {
     await context.stand().update(ProjectQueueStateSchema, state, { version });
 
     await context.commandBus().post(createAggregateCommand("pm-producer", "pm-producer-version"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     const [event] = await new EventStore({ name: "Tasks", multitenant: false }, factory).read();
     expect(event?.context?.version).toEqual(version);
   });
 
   it("preserves a pre-existing process manager when a command is rejected", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createProcessManagerAssignRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
 
     await context
       .commandBus()
       .post(createAggregateCommand("command-pm-existing", "pm-rejected", "Persisted"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     const stateBeforeRejection = await context
       .stand()
       .readVersioned(ProjectQueueStateSchema, "pm-rejected");
@@ -9499,7 +9951,7 @@ describe("repository signal routing", () => {
         .commandBus()
         .post(createAggregateCommand("command-pm-rejected", "pm-rejected", "Already done")),
     ).resolves.toBeUndefined();
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     await expect(
       context.stand().readVersioned(ProjectQueueStateSchema, "pm-rejected"),
@@ -9535,20 +9987,22 @@ describe("repository signal routing", () => {
   });
 
   it("marks failed process-manager reception delivered by default", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset(new Error("technical process-manager failure"));
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createProcessManagerAssignRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
 
     try {
       await expect(
         context.commandBus().post(createAggregateCommand("command-pm-technical", "pm-technical")),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       await expect(
         context.stand().read(ProjectQueueStateSchema, "pm-technical"),
@@ -9570,11 +10024,15 @@ describe("repository signal routing", () => {
   });
 
   it("stores process-manager event inbox rows before invoking event reactors", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createInboxCheckRepo()),
+      setup,
+    );
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
     InboxCheckingProcessManager.reset(delivery);
-    const context = await BoundedContext.singleTenant("Tasks").add(createInboxCheckRepo()).build();
 
     await delivery.inbox.receive({
       inboxId: {
@@ -9594,7 +10052,7 @@ describe("repository signal routing", () => {
       await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).toContainEqual(expect.objectContaining({ signalId: "event-older", status: "TO_DELIVER" }));
     await context.eventBus().post(createProjectCreated("event-pm-inbox-first", "pm-inbox-first"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(InboxCheckingProcessManager.eventCalls).toBe(2);
     expect(InboxCheckingProcessManager.sawPendingRow).toBe(true);
@@ -9617,14 +10075,15 @@ describe("repository signal routing", () => {
   });
 
   it("deduplicates duplicate live process-manager event delivery locally", async () => {
+    const setup = createTestSetup(true);
     BlockingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createBlockingPmRepo();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     const event = createProjectCreated("event-pm-duplicate", "pm-duplicate");
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
 
     if (dispatcher === undefined) {
       throw new Error("Expected a process-manager event dispatcher.");
@@ -9641,7 +10100,7 @@ describe("repository signal routing", () => {
     BlockingProcessManager.release();
 
     await expect(Promise.all([first, duplicate])).resolves.toEqual([undefined, undefined]);
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     expect(BlockingProcessManager.startedCalls).toBe(1);
     expect(BlockingProcessManager.completedCalls).toBe(1);
     await expect(context.stand().read(ProjectQueueStateSchema, "pm-duplicate")).resolves.toEqual(
@@ -9662,12 +10121,12 @@ describe("repository signal routing", () => {
   });
 
   it("exact-drains later process-manager event rows after a failed receptor is marked delivered", async () => {
+    const setup = createTestSetup(true);
     SplitRouteProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createSplitPmRepo();
     const routeEvent = repository.routeEvent.bind(repository);
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
 
     Object.assign(repository, {
       async routeEvent(event: SpineEvent) {
@@ -9679,7 +10138,8 @@ describe("repository signal routing", () => {
       },
     });
 
-    await BoundedContext.singleTenant("Tasks").add(repository).build();
+    await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
     const dispatcher = repositoryAccess.eventDispatcher(repository);
 
     if (dispatcher === undefined) {
@@ -9689,7 +10149,7 @@ describe("repository signal routing", () => {
     const posted = dispatcher.dispatch(createProjectCreated("event-pm-split", "pm-source"));
 
     await expect(posted).resolves.toBeUndefined();
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     expect(SplitRouteProcessManager.startedIds).toEqual(["pm-fail", "pm-later"]);
     expect(SplitRouteProcessManager.completedIds).toEqual(["pm-later"]);
 
@@ -9719,6 +10179,7 @@ describe("repository signal routing", () => {
   });
 
   it("records the first Process Manager recipient batch before a later handoff fails", async () => {
+    const setup = createTestSetup(true);
     SplitRouteProcessManager.reset();
     const ids = Array.from({ length: 1_001 }, (_, index) => `batch-${String(index)}`);
     const routing = EventRouting.create<string>().route(ProjectCreatedSchema, () => ids);
@@ -9737,7 +10198,6 @@ describe("repository signal routing", () => {
           : value;
       },
     });
-    await ServerEnvironmentLifecycle.resetForTest();
     const remoteFacility: ServerEnvironmentDelivery = {
       open: () => undefined,
       close: () => sourceDelivery.close(),
@@ -9751,15 +10211,20 @@ describe("repository signal routing", () => {
         releaseExpired: () => Promise.resolve([]),
       },
     };
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    setup.settings = {
       storageFactory: factory,
       delivery: remoteFacility,
-    });
-    await ServerEnvironment.instance().completeSetup();
-    const context = await BoundedContext.singleTenant("BatchFailure").add(repository).build();
+    };
+    setup.index = new TestTenantIndex();
+    setup.seedTenants = false;
+    setup.seeded = false;
+    const context = await buildContext(
+      BoundedContext.singleTenant("BatchFailure").add(repository),
+      setup,
+    );
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected Process Manager dispatcher.");
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
     // The supervised source retains the first batch while another process holds its shard.
     // eslint-disable-next-line @typescript-eslint/unbound-method -- The spy calls it with the original Inbox instance.
     const receiveAll = LocalEntityInbox.prototype.receiveAll;
@@ -9833,6 +10298,7 @@ describe("repository signal routing", () => {
   });
 
   it("sends the bounded remote Process Manager batch and preserves earlier rows on failure", async () => {
+    const setup = createTestSetup(true);
     SplitRouteProcessManager.reset();
     const ids = Array.from({ length: 1_001 }, (_, index) => `remote-${String(index)}`);
     const routing = EventRouting.create<string>().route(ProjectCreatedSchema, () => ids);
@@ -9866,7 +10332,6 @@ describe("repository signal routing", () => {
           : value;
       },
     });
-    await ServerEnvironmentLifecycle.resetForTest();
     const remoteFacility: ServerEnvironmentDelivery = {
       open: () => undefined,
       close: () => remote.close(),
@@ -9880,12 +10345,17 @@ describe("repository signal routing", () => {
         releaseExpired: () => Promise.resolve([]),
       },
     };
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    setup.settings = {
       storageFactory: localFactory,
       delivery: remoteFacility,
-    });
-    await ServerEnvironment.instance().completeSetup();
-    const context = await BoundedContext.singleTenant("RemoteBatch").add(repository).build();
+    };
+    setup.index = new TestTenantIndex();
+    setup.seedTenants = false;
+    setup.seeded = false;
+    const context = await buildContext(
+      BoundedContext.singleTenant("RemoteBatch").add(repository),
+      setup,
+    );
     const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected Process Manager dispatcher.");
@@ -9913,32 +10383,34 @@ describe("repository signal routing", () => {
   });
 
   it("guards each target of a multi-target Process Manager route independently", async () => {
+    const setup = createTestSetup(true);
     SplitRouteProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createGuardedSplitPmRepo(
       EventRouting.create<string>().route(ProjectCreatedSchema, () => ["pm-one", "pm-two"]),
     );
-    await BoundedContext.singleTenant("Tasks").add(repository).build();
+    await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected a process-manager event dispatcher.");
 
     const event = createProjectCreated("event-pm-guarded-many", "pm-source");
     await dispatcher.dispatch(event);
     await dispatcher.dispatch(event);
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(SplitRouteProcessManager.startedIds).toEqual(["pm-one", "pm-two"]);
     expect(SplitRouteProcessManager.completedIds).toEqual(["pm-one", "pm-two"]);
   });
 
   it("guards repeated Agent dispatch in one running repository without optional PM history", async () => {
+    const setup = createTestSetup(true);
     GuardedSupportAgent.reactions = 0;
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-guard" });
     expect(() => createGuardedSupportAgentRepository(agent, false)).not.toThrow();
 
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const event = SignalEnvelopes.event({
       schema: SupportTicketUpdatedSchema,
       message: create(SupportTicketUpdatedSchema, { agent, question: "Delivery?" }),
@@ -9948,26 +10420,28 @@ describe("repository signal routing", () => {
       }),
     });
     const repository = createGuardedSupportAgentRepository(agent, false);
-    const context = await BoundedContext.singleTenant("SupportGuard")
-      .add(repository)
-      .withAi(
-        AiRegistry.create({
-          defaultModels: {},
-          invocationLimits: {
-            operations: 1,
-            modelRequests: 1,
-            toolCalls: 0,
-            recordedReads: 0,
-            deadlineMs: 1_000,
-            totalInputBytes: 4_000,
-            totalOutputBytes: 4_000,
-          },
-          concurrentOperations: 1,
-          queuedOperations: 0,
-        }),
-      )
-      .persistSystemEvents()
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("SupportGuard")
+        .add(repository)
+        .withAi(
+          AiRegistry.create({
+            defaultModels: {},
+            invocationLimits: {
+              operations: 1,
+              modelRequests: 1,
+              toolCalls: 0,
+              recordedReads: 0,
+              deadlineMs: 1_000,
+              totalInputBytes: 4_000,
+              totalOutputBytes: 4_000,
+            },
+            concurrentOperations: 1,
+            queuedOperations: 0,
+          }),
+        )
+        .persistSystemEvents(),
+      setup,
+    );
     try {
       const dispatcher = repositoryAccess.eventDispatcher(repository);
       if (dispatcher === undefined) throw new Error("Expected Agent Event dispatcher.");
@@ -9982,9 +10456,10 @@ describe("repository signal routing", () => {
   });
 
   it("suppresses a duplicate Aggregate Event using its delivered Inbox receipt", async () => {
+    const setup = createTestSetup(true);
     GuardedAggregate.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createGuardedAggregateRepository();
     const routeEvent = repository.routeEvent.bind(repository);
     Object.assign(repository, {
@@ -9996,7 +10471,7 @@ describe("repository signal routing", () => {
         return { ...(await routeEvent(event)), entityIds: Object.freeze(entityIds) };
       },
     });
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
 
@@ -10006,25 +10481,29 @@ describe("repository signal routing", () => {
       createProjectCreated("event-aggregate-guarded-other", "aggregate-other"),
     );
     await dispatcher.dispatch(event);
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(GuardedAggregate.calls).toBe(3);
     await context.close();
   });
 
   it("retains multi-target Aggregate Event receipts across context replacement", async () => {
+    const setup = createTestSetup(true);
     ProducingGuardedAggregate.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const event = createProjectCreated("event-aggregate-restart", "aggregate-restart-source");
 
     const firstRepository = createProducingGuardedAggregateRepository();
     routeAggregateTargets(firstRepository, ["aggregate-restart-one", "aggregate-restart-two"]);
-    const firstContext = await BoundedContext.singleTenant("Tasks").add(firstRepository).build();
+    const firstContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(firstRepository),
+      setup,
+    );
     const firstDispatcher = repositoryAccess.eventDispatcher(firstRepository);
     if (firstDispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
     await firstDispatcher.dispatch(event);
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     const firstChildren = (
       await new EventStore({ name: "Tasks", multitenant: false }, factory).read()
     ).filter((stored) => UUID_PATTERN.test(stored.id?.value ?? ""));
@@ -10040,23 +10519,28 @@ describe("repository signal routing", () => {
 
     const secondRepository = createProducingGuardedAggregateRepository();
     routeAggregateTargets(secondRepository, ["aggregate-restart-one", "aggregate-restart-two"]);
-    const secondContext = await BoundedContext.singleTenant("Tasks").add(secondRepository).build();
+    const secondContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(secondRepository),
+      setup,
+    );
     const secondDispatcher = repositoryAccess.eventDispatcher(secondRepository);
     if (secondDispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
     await expect(secondDispatcher.dispatch(event)).resolves.toBeUndefined();
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(ProducingGuardedAggregate.calls).toBe(2);
     await secondContext.close();
   });
 
   it("closes guard probe handles for both entity kinds on success, duplicates, and failures", async () => {
+    const setup = createTestSetup(true);
     const aggregateFactory = new CountingProbeStorageFactory();
-    await configureStorage(aggregateFactory);
+    await configureStorage(setup, aggregateFactory);
     const aggregateRepository = createGuardedAggregateRepository();
-    const aggregateContext = await BoundedContext.singleTenant("Tasks")
-      .add(aggregateRepository)
-      .build();
+    const aggregateContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(aggregateRepository),
+      setup,
+    );
     const aggregateDispatcher = repositoryAccess.eventDispatcher(aggregateRepository);
     if (aggregateDispatcher === undefined)
       throw new Error("Expected an aggregate event dispatcher.");
@@ -10074,9 +10558,12 @@ describe("repository signal routing", () => {
     expect(aggregateFactory.closedProbes).toBe(1);
 
     const pmFactory = new CountingProbeStorageFactory();
-    await configureStorage(pmFactory);
+    await configureStorage(setup, pmFactory);
     const pmRepository = createGuardedProcessManagerReactRepository(1);
-    const pmContext = await BoundedContext.singleTenant("Tasks").add(pmRepository).build();
+    const pmContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(pmRepository),
+      setup,
+    );
     const pmDispatcher = repositoryAccess.eventDispatcher(pmRepository);
     if (pmDispatcher === undefined) throw new Error("Expected a process-manager event dispatcher.");
     const pmEvent = createProjectCreated("event-pm-probe", "pm-probe");
@@ -10091,11 +10578,12 @@ describe("repository signal routing", () => {
     expect(pmFactory.closedProbes).toBe(1);
 
     const failingFactory = new CountingProbeStorageFactory(true);
-    await configureStorage(failingFactory);
+    await configureStorage(setup, failingFactory);
     const failingRepository = createGuardedAggregateRepository();
-    const failingContext = await BoundedContext.singleTenant("Tasks")
-      .add(failingRepository)
-      .build();
+    const failingContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(failingRepository),
+      setup,
+    );
     const failingDispatcher = repositoryAccess.eventDispatcher(failingRepository);
     if (failingDispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
 
@@ -10104,26 +10592,27 @@ describe("repository signal routing", () => {
         createProjectCreated("event-aggregate-probe-fail", "aggregate-probe-fail"),
       ),
     ).resolves.toBeUndefined();
-    await expect(
-      serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance()),
-    ).rejects.toThrow("guard probe read failed");
+    await expect(serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup))).rejects.toThrow(
+      "guard probe read failed",
+    );
     expect(failingFactory).toMatchObject({ opened: 1, closed: 0, closedProbes: 0 });
     await failingContext.close();
     expect(failingFactory).toMatchObject({ opened: 1, closed: 1, closedProbes: 1 });
   });
 
   it("retains one Entity storage across repeated repository dispatch and closes it with the context", async () => {
+    const setup = createTestSetup(true);
     const factory = new RetainedEntityStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createRoutingRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
 
     try {
       await dispatcher.dispatch(createProjectCreated("retained-event-1", "retained-project"));
       await dispatcher.dispatch(createProjectCreated("retained-event-2", "retained-project"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(factory.commitCreations).toBe(1);
     } finally {
       await context.close();
@@ -10132,10 +10621,11 @@ describe("repository signal routing", () => {
   });
 
   it("upgrades the repository read handle while Stand opens its separate current-read handle", async () => {
+    const setup = createTestSetup(true);
     const factory = new RetainedEntityStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createRoutingRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const reads = repositoryReadAccess.bind(repository);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
@@ -10143,7 +10633,7 @@ describe("repository signal routing", () => {
       expect(await reads.findIds(ProjectStateQuery.create().build())).toEqual([]);
       expect(factory).toMatchObject({ entityOpens: 1, entityCloses: 0, commitCreations: 0 });
       await dispatcher.dispatch(createProjectCreated("read-before-write", "read-before-write"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(factory).toMatchObject({ entityOpens: 2, entityCloses: 0, commitCreations: 1 });
       expect(factory.openedStorageScopes).toEqual([
         `${ProjectStateSchema.typeName}:false`,
@@ -10158,10 +10648,11 @@ describe("repository signal routing", () => {
   });
 
   it("keeps an existing read handle after commit acquisition fails and retries upgrade", async () => {
+    const setup = createTestSetup(true);
     const factory = new RetainedEntityStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createRoutingRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const reads = repositoryReadAccess.bind(repository);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
@@ -10171,13 +10662,13 @@ describe("repository signal routing", () => {
       await expect(
         dispatcher.dispatch(createProjectCreated("upgrade-fail", "upgrade-id")),
       ).resolves.toBeUndefined();
-      await expect(
-        serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance()),
-      ).rejects.toThrow("commit acquisition failed");
+      await expect(serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup))).rejects.toThrow(
+        "commit acquisition failed",
+      );
       expect(factory).toMatchObject({ entityOpens: 1, entityCloses: 0, commitCreations: 1 });
       expect(await reads.findIds(ProjectStateQuery.create().build())).toEqual([]);
       await dispatcher.dispatch(createProjectCreated("upgrade-retry", "upgrade-id"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(factory).toMatchObject({ entityOpens: 2, entityCloses: 0, commitCreations: 2 });
     } finally {
       reads.close();
@@ -10187,10 +10678,11 @@ describe("repository signal routing", () => {
   });
 
   it("retains separate Entity storage per tenant during concurrent dispatch", async () => {
+    const setup = createTestSetup(true);
     const factory = new RetainedEntityStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createRoutingRepository();
-    const context = await BoundedContext.multitenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.multiTenant("Tasks").add(repository), setup);
     await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-a"));
     await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-b"));
     const dispatcher = repositoryAccess.eventDispatcher(repository);
@@ -10208,7 +10700,7 @@ describe("repository signal routing", () => {
           ),
         ),
       );
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(factory.commitCreations).toBe(2);
     } finally {
       await context.close();
@@ -10217,10 +10709,11 @@ describe("repository signal routing", () => {
   });
 
   it("closes a partially acquired Entity storage and retries on the next dispatch", async () => {
+    const setup = createTestSetup(true);
     const factory = new RetainedEntityStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createRoutingRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
     factory.failCommitOnce = true;
@@ -10229,14 +10722,14 @@ describe("repository signal routing", () => {
       await expect(
         dispatcher.dispatch(createProjectCreated("retained-failure-1", "retry-project")),
       ).resolves.toBeUndefined();
-      await expect(
-        serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance()),
-      ).rejects.toThrow("commit acquisition failed");
+      await expect(serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup))).rejects.toThrow(
+        "commit acquisition failed",
+      );
       expect(factory.entityCloses).toBe(factory.entityOpens);
       await expect(
         dispatcher.dispatch(createProjectCreated("retained-failure-2", "retry-project")),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(factory.commitCreations).toBe(2);
     } finally {
       await context.close();
@@ -10245,25 +10738,29 @@ describe("repository signal routing", () => {
   });
 
   it("closes Entity storage when its retained commit handle fails to close", async () => {
+    const setup = createTestSetup(true);
     const factory = new RetainedEntityStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createRoutingRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
     await dispatcher.dispatch(createProjectCreated("retained-close-1", "close-project"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     factory.failCommitClose = true;
 
     await expect(context.close()).rejects.toThrow();
     expect(factory.entityCloses).toBe(factory.entityOpens);
+    factory.failCommitClose = false;
+    await expectFailedApplicationClose(setup);
   });
 
   it("reports commit acquisition and Entity cleanup failures together", async () => {
+    const setup = createTestSetup(true);
     const factory = new RetainedEntityStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createRoutingRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
     factory.failCommitOnce = true;
@@ -10274,7 +10771,7 @@ describe("repository signal routing", () => {
       .catch((error: unknown) => error);
     expect(failure).toBeUndefined();
     const processingFailure = await serverEnvironmentAccess
-      .whenDeliveryIdle(ServerEnvironment.instance())
+      .whenDeliveryIdle(environmentFor(setup))
       .catch((error: unknown) => error);
     expect(processingFailure).toBeInstanceOf(AggregateError);
     expect(
@@ -10286,14 +10783,15 @@ describe("repository signal routing", () => {
   });
 
   it("attempts Entity close after commit and Entity close both fail", async () => {
+    const setup = createTestSetup(true);
     const factory = new RetainedEntityStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createRoutingRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
     await dispatcher.dispatch(createProjectCreated("retained-close-both", "close-both"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     factory.failCommitClose = true;
     factory.failEntityClose = true;
 
@@ -10303,15 +10801,22 @@ describe("repository signal routing", () => {
       expect.arrayContaining(["commit close failed", "Entity close failed"]),
     );
     expect(factory.entityCloses).toBe(factory.entityOpens);
+    factory.failCommitClose = false;
+    factory.failEntityClose = false;
+    await expectFailedApplicationClose(setup);
   });
 
   it.each([false, true])(
     "attempts every tenant port close after sync commit failure %s",
     async (syncClose) => {
+      const setup = createTestSetup(true);
       const factory = new RetainedEntityStorageFactory();
-      await configureStorage(factory);
+      await configureStorage(setup, factory);
       const repository = createRoutingRepository();
-      const context = await BoundedContext.multitenant("Tasks").add(repository).build();
+      const context = await buildContext(
+        BoundedContext.multiTenant("Tasks").add(repository),
+        setup,
+      );
       await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-a"));
       await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-b"));
       const dispatcher = repositoryAccess.eventDispatcher(repository);
@@ -10322,7 +10827,7 @@ describe("repository signal routing", () => {
       await dispatcher.dispatch(
         createProjectCreated("close-tenant-b", "close-b", { importTenantId: "tenant-b" }),
       );
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       factory.failCommitClose = true;
       factory.failCommitCloseSynchronously = syncClose;
       factory.failEntityClose = true;
@@ -10341,34 +10846,40 @@ describe("repository signal routing", () => {
       ]);
       await expect(context.close()).rejects.toThrow();
       expect(factory.entityCloses).toBe(factory.entityOpens);
+      factory.failCommitClose = false;
+      factory.failEntityClose = false;
+      await expectFailedApplicationClose(setup);
     },
   );
 
   it("checks current tenant membership before direct Agent audit history reads", async () => {
+    const setup = createTestSetup(true);
     const index = new TestTenantIndex();
+    setup.index = index;
     const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-tenant-history" });
     const repository = createGuardedSupportAgentRepository(agentId, false);
-    const context = await BoundedContext.multitenant("SupportAudit")
-      .withTenantIndex(index)
-      .add(repository)
-      .withAi(
-        AiRegistry.create({
-          defaultModels: {},
-          invocationLimits: {
-            operations: 1,
-            modelRequests: 1,
-            toolCalls: 0,
-            recordedReads: 0,
-            deadlineMs: 1_000,
-            totalInputBytes: 4_000,
-            totalOutputBytes: 4_000,
-          },
-          concurrentOperations: 1,
-          queuedOperations: 0,
-        }),
-      )
-      .persistSystemEvents()
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("SupportAudit")
+        .add(repository)
+        .withAi(
+          AiRegistry.create({
+            defaultModels: {},
+            invocationLimits: {
+              operations: 1,
+              modelRequests: 1,
+              toolCalls: 0,
+              recordedReads: 0,
+              deadlineMs: 1_000,
+              totalInputBytes: 4_000,
+              totalOutputBytes: 4_000,
+            },
+            concurrentOperations: 1,
+            queuedOperations: 0,
+          }),
+        )
+        .persistSystemEvents(),
+      setup,
+    );
     const tenantId = createTenantId("audit-tenant");
     await expect(
       repositoryAccess.agentHistory(repository, agentId, { kind: "full" }, { count: 1 }, tenantId),
@@ -10419,11 +10930,12 @@ describe("repository signal routing", () => {
   });
 
   it("bounds delivery lanes while delivered Inbox rows suppress a duplicate after lane eviction", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createGuardedProcessManagerReactRepository(1);
-    await BoundedContext.singleTenant("Tasks").add(repository).build();
+    await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected a process-manager event dispatcher.");
 
@@ -10432,17 +10944,21 @@ describe("repository signal routing", () => {
     await dispatcher.dispatch(first);
     await dispatcher.dispatch(second);
     await dispatcher.dispatch(first);
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(RoutingProcessManager.eventCalls).toBe(2);
   });
 
   it("starts a fresh Inbox deduplication lifetime after environment replacement", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const repository = createGuardedProcessManagerReactRepository();
     const firstFactory = new InMemoryStorageFactory();
-    await configureStorage(firstFactory);
-    const firstContext = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    await configureStorage(setup, firstFactory);
+    const firstContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(repository),
+      setup,
+    );
     const event = createProjectCreated("event-guard-rebind", "pm-guard-rebind");
 
     const firstDispatcher = repositoryAccess.eventDispatcher(repository);
@@ -10452,27 +10968,32 @@ describe("repository signal routing", () => {
     await firstContext.close();
 
     const secondFactory = new InMemoryStorageFactory();
-    await configureStorage(secondFactory);
-    const secondContext = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    await configureStorage(setup, secondFactory);
+    const secondContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(repository),
+      setup,
+    );
     const secondDispatcher = repositoryAccess.eventDispatcher(repository);
     if (secondDispatcher === undefined)
       throw new Error("Expected a process-manager event dispatcher.");
     await secondDispatcher.dispatch(event);
     await secondDispatcher.dispatch(event);
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(RoutingProcessManager.eventCalls).toBe(2);
     await secondContext.close();
   });
 
   it("does not write a journal marker for failed handler reception", async () => {
+    const setup = createTestSetup(true);
     const preJournalFactory = new InMemoryStorageFactory();
-    await configureStorage(preJournalFactory);
+    await configureStorage(setup, preJournalFactory);
     const preJournalRepository = createGuardedProcessManagerReactRepository();
     RoutingProcessManager.reset(new Error("handler failed before journal"));
-    const preJournalContext = await BoundedContext.singleTenant("Tasks")
-      .add(preJournalRepository)
-      .build();
+    const preJournalContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(preJournalRepository),
+      setup,
+    );
     const preJournalDispatcher = repositoryAccess.eventDispatcher(preJournalRepository);
     if (preJournalDispatcher === undefined)
       throw new Error("Expected a process-manager event dispatcher.");
@@ -10482,7 +11003,7 @@ describe("repository signal routing", () => {
     );
 
     await expect(preJournalDispatcher.dispatch(preJournalEvent)).resolves.toBeUndefined();
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     const preJournal = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: preJournalFactory,
@@ -10493,25 +11014,27 @@ describe("repository signal routing", () => {
     await preJournalDispatcher.dispatch(
       createProjectCreated("event-guard-before-journal-retry", "pm-guard-before-journal"),
     );
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     expect(RoutingProcessManager.eventCalls).toBe(1);
     await expect(preJournal.readEvents("pm-guard-before-journal")).resolves.toEqual([]);
     await preJournalContext.close();
 
     const postJournalFactory = new InMemoryStorageFactory();
-    await configureStorage(postJournalFactory);
+    await configureStorage(setup, postJournalFactory);
     const postJournalRepository = createGuardedProcessManagerCommandOnlyRepository();
     let publicationAttempts = 0;
-    const postJournalContext = await BoundedContext.singleTenant("Tasks")
-      .add(postJournalRepository)
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateProjectSchema],
-        dispatch: () => {
-          publicationAttempts++;
-          return Promise.reject(new Error("publication failed after journal"));
-        },
-      })
-      .build();
+    const postJournalContext = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(postJournalRepository)
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateProjectSchema],
+          dispatch: () => {
+            publicationAttempts++;
+            return Promise.reject(new Error("publication failed after journal"));
+          },
+        }),
+      setup,
+    );
     const postJournalDispatcher = repositoryAccess.eventDispatcher(postJournalRepository);
     if (postJournalDispatcher === undefined)
       throw new Error("Expected a process-manager event dispatcher.");
@@ -10525,7 +11048,7 @@ describe("repository signal routing", () => {
     await postJournalDispatcher.dispatch(
       createProjectCreated("event-guard-after-journal-retry", "pm-guard-after-journal"),
     );
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     expect(RoutingProcessManager.commandReactionCalls).toBe(2);
     expect(publicationAttempts).toBe(2);
     const postJournal = new CurrentRecordTestStorage({
@@ -10538,13 +11061,14 @@ describe("repository signal routing", () => {
   });
 
   it("runs unrelated guarded entity lanes concurrently", async () => {
+    const setup = createTestSetup(true);
     BlockingProcessManager.reset();
     BlockingProcessManager.blockingId = "pm-guard-lane-one";
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createGuardedBlockingPmRepo();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
     const target = requireEntityInboxTarget(repository);
     const blockedRow = await storeEntityInboxEvent(
       delivery,
@@ -10574,13 +11098,14 @@ describe("repository signal routing", () => {
   });
 
   it("trims completed lanes behind an active lane without breaking its serialization", async () => {
+    const setup = createTestSetup(true);
     BlockingProcessManager.reset();
     BlockingProcessManager.blockingId = "pm-guard-trim-active";
     const factory = new CountingProbeStorageFactory(false, true);
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createGuardedBlockingPmRepo(1);
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
     const target = requireEntityInboxTarget(repository);
     const active = createProjectCreated("event-guard-trim-active", "pm-guard-trim-active");
     const evicted = createProjectCreated("event-guard-trim-evicted", "pm-guard-trim-evicted");
@@ -10629,11 +11154,12 @@ describe("repository signal routing", () => {
   });
 
   it("uses the stored process-manager target and rejects other invalid delivery rows", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createProcessManagerReactRepository();
-    await BoundedContext.singleTenant("Tasks").add(repository).build();
+    await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const delivery = new Delivery({
       context: { name: "Delivery fixture", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -10687,6 +11213,7 @@ describe("repository signal routing", () => {
   });
 
   it("routes a Process Manager Event interface once at admission and not during delivery", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     let routeCalls = 0;
     const token = MessageInterfaces.define<object, readonly [typeof ProjectCreatedSchema]>([
@@ -10697,9 +11224,9 @@ describe("repository signal routing", () => {
       return [message.id];
     });
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createProcessManagerReactRepository(eventRouting);
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
 
     try {
       await context.eventBus().post(createProjectCreated("event-pm-admission", "pm-admission"));
@@ -10728,11 +11255,12 @@ describe("repository signal routing", () => {
   });
 
   it("rejects Process Manager Event delivery with absent or foreign tenant before state changes", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createProcessManagerReactRepository();
-    const context = await BoundedContext.multitenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.multiTenant("Tasks").add(repository), setup);
     const tenantA = createTenantId("tenant-a");
     await requireTenantDirectory(context.tenantIndex).keep(tenantA);
     const delivery = new Delivery({
@@ -10795,12 +11323,13 @@ describe("repository signal routing", () => {
   });
 
   it("guards repeated Process Manager inbox delivery per target with the retained source event", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createGuardedProcessManagerReactRepository();
-    await BoundedContext.singleTenant("Tasks").add(repository).build();
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
     const target = requireEntityInboxTarget(repository);
     const stored = await storeEntityInboxEvent(
       delivery,
@@ -10816,17 +11345,19 @@ describe("repository signal routing", () => {
   });
 
   it("executes process-manager event reactors and stores mutated state in Stand", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerReactRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createProcessManagerReactRepository()),
+      setup,
+    );
 
     await context.eventBus().post(
       createProjectCreated("event-pm-react", "pm-event-react", {
         producerId: "different-producer",
       }),
     );
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(RoutingProcessManager.eventCalls).toBe(1);
     await expect(context.stand().read(ProjectQueueStateSchema, "pm-event-react")).resolves.toEqual(
@@ -10838,6 +11369,7 @@ describe("repository signal routing", () => {
   });
 
   it("retains one reactor diagnostic when an admitted Process Manager reactor fails", async () => {
+    const setup = createTestSetup(true);
     const failure = new Error("admitted Process Manager reactor failed");
     const monitored: unknown[] = [];
     const monitor = vi
@@ -10848,16 +11380,18 @@ describe("repository signal routing", () => {
       });
     const diagnostics: SpineEvent[] = [];
     const event = createProjectCreated("pm-reactor-diagnostic-failure", "pm-reactor-failure");
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerReactRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EventDispatchedToReactorSchema],
-        dispatch: (diagnostic) => {
-          diagnostics.push(diagnostic);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerReactRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EventDispatchedToReactorSchema],
+          dispatch: (diagnostic) => {
+            diagnostics.push(diagnostic);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       RoutingProcessManager.reset(failure);
@@ -10881,18 +11415,21 @@ describe("repository signal routing", () => {
   });
 
   it("emits distinct command and reactor diagnostics for a routed Process Manager", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const diagnostics: SpineEvent[] = [];
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createProcessManagerCommandAndReactRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [CommandDispatchedToHandlerSchema, EventDispatchedToReactorSchema],
-        dispatch: (diagnostic) => {
-          diagnostics.push(diagnostic);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks")
+        .add(createProcessManagerCommandAndReactRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [CommandDispatchedToHandlerSchema, EventDispatchedToReactorSchema],
+          dispatch: (diagnostic) => {
+            diagnostics.push(diagnostic);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     const command = createAggregateCommand(
       "pm-diagnostic-command",
       "pm-diagnostic",
@@ -10905,10 +11442,10 @@ describe("repository signal routing", () => {
 
     try {
       await context.commandBus().post(command);
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await context.eventBus().post(event);
       await waitForCondition(() => diagnostics.length >= 2);
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(diagnosticTenants(diagnostics).every((tenantId) => tenantId === "a")).toBe(true);
       const reactor = diagnostics.find(
@@ -10940,9 +11477,10 @@ describe("repository signal routing", () => {
   it.each([false, true])(
     "keeps System Event publication separate from domain storage when persistence is %s",
     async (persist) => {
+      const setup = createTestSetup(true);
       RoutingProcessManager.reset();
       const factory = new InMemoryStorageFactory();
-      await configureStorage(factory);
+      await configureStorage(setup, factory);
       const received: SpineEvent[] = [];
       let builder = BoundedContext.singleTenant("Tasks")
         .add(createProcessManagerAssignRepository())
@@ -10954,7 +11492,7 @@ describe("repository signal routing", () => {
           },
         });
       if (persist) builder = builder.persistSystemEvents();
-      const context = await builder.build();
+      const context = await buildContext(builder, setup);
       const systemStore = new EventStore(
         { name: "Tasks_System", multitenant: false },
         factory,
@@ -10990,19 +11528,22 @@ describe("repository signal routing", () => {
   );
 
   it("does not append a domain Event passed to persisted System publication", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const received: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .addEventDispatcher({
-        messageSchemas: () => [CommandDispatchedToHandlerSchema],
-        dispatch: (event) => {
-          received.push(event);
-          return Promise.resolve();
-        },
-      })
-      .persistSystemEvents()
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .addEventDispatcher({
+          messageSchemas: () => [CommandDispatchedToHandlerSchema],
+          dispatch: (event) => {
+            received.push(event);
+            return Promise.resolve();
+          },
+        })
+        .persistSystemEvents(),
+      setup,
+    );
     const stored = new EventStore(
       { name: "Tasks_System", multitenant: false },
       factory,
@@ -11025,25 +11566,28 @@ describe("repository signal routing", () => {
   });
 
   it("does not retry a failed System Event append", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new FailingProcessManagerProducedEventFactory(
       TypeUrls.derive(CommandDispatchedToHandlerSchema),
       EventStoreGroups.forContext("Tasks_System", "system").name,
       1,
     );
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const received: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [CommandDispatchedToHandlerSchema],
-        dispatch: (event) => {
-          received.push(event);
-          return Promise.resolve();
-        },
-      })
-      .persistSystemEvents()
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerAssignRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [CommandDispatchedToHandlerSchema],
+          dispatch: (event) => {
+            received.push(event);
+            return Promise.resolve();
+          },
+        })
+        .persistSystemEvents(),
+      setup,
+    );
     const stored = new EventStore(
       { name: "Tasks_System", multitenant: false },
       factory,
@@ -11069,17 +11613,20 @@ describe("repository signal routing", () => {
   });
 
   it("does not emit reactor diagnostics without a matched reactor", async () => {
+    const setup = createTestSetup(true);
     const diagnostics: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EventDispatchedToReactorSchema],
-        dispatch: (diagnostic) => {
-          diagnostics.push(diagnostic);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerAssignRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EventDispatchedToReactorSchema],
+          dispatch: (diagnostic) => {
+            diagnostics.push(diagnostic);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       await context.eventBus().post(createProjectCreated("pm-no-reactor", "pm-no-reactor"));
@@ -11092,24 +11639,27 @@ describe("repository signal routing", () => {
   });
 
   it("isolates reactor diagnostic publication failure from Process Manager work", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const diagnostics: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerReactRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EventDispatchedToReactorSchema],
-        dispatch: (diagnostic) => {
-          diagnostics.push(diagnostic);
-          return Promise.reject(new Error("reactor diagnostic dispatch failed"));
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerReactRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EventDispatchedToReactorSchema],
+          dispatch: (diagnostic) => {
+            diagnostics.push(diagnostic);
+            return Promise.reject(new Error("reactor diagnostic dispatch failed"));
+          },
+        }),
+      setup,
+    );
 
     try {
       await expect(
         context.eventBus().post(createProjectCreated("pm-reactor-failure", "pm-reactor-failure")),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(RoutingProcessManager.eventCalls).toBe(1);
       await expect(
@@ -11125,10 +11675,12 @@ describe("repository signal routing", () => {
   });
 
   it("keeps committed process-manager event transitions usable when a Stand subscriber throws", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerReactRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createProcessManagerReactRepository()),
+      setup,
+    );
     let notifications = 0;
     const subscriberErrors: Error[] = [];
     context.stand().subscribe(ProjectQueueStateSchema, {
@@ -11152,7 +11704,7 @@ describe("repository signal routing", () => {
             createProjectCreated("event-pm-subscriber-2", "pm-subscriber", { name: "Follow-up" }),
           ),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(RoutingProcessManager.eventCalls).toBe(2);
       expect(notifications).toBe(1);
@@ -11171,18 +11723,21 @@ describe("repository signal routing", () => {
   });
 
   it("posts commands produced by process-manager event commanding after state commit", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const commands: SpineCommand[] = [];
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createProcessManagerEventRepository())
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateProjectSchema],
-        dispatch: (command) => {
-          commands.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks")
+        .add(createProcessManagerEventRepository())
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateProjectSchema],
+          dispatch: (command) => {
+            commands.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     const sourceActorContext = create(ActorContextSchema, {
       tenantId: createTenantId("tenant-command"),
     });
@@ -11199,7 +11754,7 @@ describe("repository signal routing", () => {
         pastMessageTenantId: "tenant-command",
       }),
     );
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(RoutingProcessManager.commandReactionCalls).toBe(1);
     await waitForCondition(() => commands.length === 1);
@@ -11229,13 +11784,13 @@ describe("repository signal routing", () => {
   });
 
   it("drains a supervised Process Manager Event before its held same-shard Command", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const borrowed = new Delivery({
       context: { name: "SupervisedPmSource", multitenant: false },
       storageFactory: factory,
     });
-    await ServerEnvironmentLifecycle.resetForTest();
     const remoteFacility: ServerEnvironmentDelivery = {
       open: () => undefined,
       close: () => borrowed.close(),
@@ -11249,11 +11804,13 @@ describe("repository signal routing", () => {
         releaseExpired: () => Promise.resolve([]),
       },
     };
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    setup.settings = {
       storageFactory: factory,
       delivery: remoteFacility,
-    });
-    await ServerEnvironment.instance().completeSetup();
+    };
+    setup.index = new TestTenantIndex();
+    setup.seedTenants = false;
+    setup.seeded = false;
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
     HeldSupervisedPmAggregate.completed = 0;
@@ -11261,20 +11818,22 @@ describe("repository signal routing", () => {
       entered.resolve(undefined);
     };
     HeldSupervisedPmAggregate.release = release.promise;
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerEventRepository())
-      .add(
-        new Repository({
-          entityType: HeldSupervisedPmAggregate,
-          schema: ProjectStateSchema,
-          handlers: EntityHandlers.define(
-            HeldSupervisedPmAggregate,
-            ProjectStateSchema,
-            (builder) => [builder.assign(CreateProjectSchema, "createProject")],
-          ),
-        }),
-      )
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerEventRepository())
+        .add(
+          new Repository({
+            entityType: HeldSupervisedPmAggregate,
+            schema: ProjectStateSchema,
+            handlers: EntityHandlers.define(
+              HeldSupervisedPmAggregate,
+              ProjectStateSchema,
+              (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+            ),
+          }),
+        ),
+      setup,
+    );
     try {
       await context.eventBus().post(createProjectCreated("supervised-pm-event", "supervised-pm"));
       await entered.promise;
@@ -11302,19 +11861,22 @@ describe("repository signal routing", () => {
   });
 
   it("rejects missing source event ids before process-manager command reactions mutate state", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const commands: SpineCommand[] = [];
     const repository = createProcessManagerEventRepository();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(repository)
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateProjectSchema],
-        dispatch: (command) => {
-          commands.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(repository)
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateProjectSchema],
+          dispatch: (command) => {
+            commands.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     const eventDispatcher = repositoryAccess.eventDispatcher(repository);
     const sourceEvent = createProjectCreated("event-unused", "pm-event-command-missing-id");
     const idlessEvent = create(EventSchema, {
@@ -11337,25 +11899,28 @@ describe("repository signal routing", () => {
   });
 
   it("routes process-manager command reactions by the first event field even when producer ID differs", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const commands: SpineCommand[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerCommandOnlyRepository())
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateProjectSchema],
-        dispatch: (command) => {
-          commands.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerCommandOnlyRepository())
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateProjectSchema],
+          dispatch: (command) => {
+            commands.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     await context.eventBus().post(
       createProjectCreated("event-pm-command-producer", "pm-first-field", {
         producerId: "different-producer",
       }),
     );
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(RoutingProcessManager.eventCalls).toBe(0);
     expect(RoutingProcessManager.commandReactionCalls).toBe(1);
@@ -11379,20 +11944,23 @@ describe("repository signal routing", () => {
   });
 
   it("appends process-manager event-produced events and records later dispatch failures", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const dispatchAttempted = createSignal();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerEventProducingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectRegisteredSchema],
-        dispatch: () => {
-          dispatchAttempted.resolve();
-          return Promise.reject(new Error("process-manager event dispatch failed"));
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerEventProducingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectRegisteredSchema],
+          dispatch: () => {
+            dispatchAttempted.resolve();
+            return Promise.reject(new Error("process-manager event dispatch failed"));
+          },
+        }),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
     const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
     boundedContextAccess.installLogger(context, {
@@ -11404,7 +11972,7 @@ describe("repository signal routing", () => {
     await expect(
       context.eventBus().post(createProjectCreated("event-pm-produce", "pm-event-produce")),
     ).resolves.toBeUndefined();
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(RoutingProcessManager.eventCalls).toBe(1);
     await expect(
@@ -11439,18 +12007,21 @@ describe("repository signal routing", () => {
   });
 
   it("does not commit a Process Manager Event reaction state when its produced Event append fails", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new FailingProcessManagerProducedEventFactory(
       TypeUrls.derive(ProjectRegisteredSchema),
     );
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerEventProducingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectRegisteredSchema],
-        dispatch: () => Promise.resolve(),
-      })
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerEventProducingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectRegisteredSchema],
+          dispatch: () => Promise.resolve(),
+        }),
+      setup,
+    );
     const source = createProjectCreated("event-pm-source-fault", "pm-event-fault");
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
@@ -11468,19 +12039,22 @@ describe("repository signal routing", () => {
   });
 
   it("rejects blank source event ids before process-manager event reactions mutate state", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const dispatchedEventIds: string[] = [];
     const repository = createProcessManagerEventProducingRepository();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(repository)
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectRegisteredSchema],
-        dispatch: (event) => {
-          dispatchedEventIds.push(event.id?.value ?? "");
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(repository)
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectRegisteredSchema],
+          dispatch: (event) => {
+            dispatchedEventIds.push(event.id?.value ?? "");
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     const eventDispatcher = repositoryAccess.eventDispatcher(repository);
 
     if (eventDispatcher === undefined) {
@@ -11499,34 +12073,37 @@ describe("repository signal routing", () => {
   });
 
   it("stores process-manager state and produced events when a later produced command fails", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const eventDispatches: string[] = [];
     const commandDispatches: string[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerMixedEventRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectRegisteredSchema],
-        dispatch: (event) => {
-          eventDispatches.push(event.id?.value ?? "");
-          return Promise.resolve();
-        },
-      })
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateProjectSchema],
-        dispatch: (command) => {
-          commandDispatches.push(command.id?.uuid ?? "");
-          return Promise.reject(new Error("mixed process-manager command dispatch failed"));
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerMixedEventRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectRegisteredSchema],
+          dispatch: (event) => {
+            eventDispatches.push(event.id?.value ?? "");
+            return Promise.resolve();
+          },
+        })
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateProjectSchema],
+          dispatch: (command) => {
+            commandDispatches.push(command.id?.uuid ?? "");
+            return Promise.reject(new Error("mixed process-manager command dispatch failed"));
+          },
+        }),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(
       context.eventBus().post(createProjectCreated("event-pm-mixed", "pm-event-mixed")),
     ).resolves.toBeUndefined();
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(RoutingProcessManager.eventCalls).toBe(1);
     expect(RoutingProcessManager.commandReactionCalls).toBe(1);
@@ -11546,24 +12123,27 @@ describe("repository signal routing", () => {
   });
 
   it("rejects a malformed later Process Manager Command before any Event or state persists", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     RoutingProcessManager.malformedProducedCommand = true;
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const emitted: SpineEvent[] = [];
     const repository = createProcessManagerMixedEventRepository();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(repository)
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectRegisteredSchema],
-        dispatch: (event) => {
-          emitted.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(repository)
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectRegisteredSchema],
+          dispatch: (event) => {
+            emitted.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
     const stored = await storeEntityInboxEvent(
       delivery,
       createProjectCreated("event-pm-malformed-command", "pm-malformed-command"),
@@ -11591,17 +12171,19 @@ describe("repository signal routing", () => {
   });
 
   it("executes projection event subscribers and records latest state in Stand", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createExecutingProjectionRepository()),
+      setup,
+    );
 
     await context.eventBus().post(
       createProjectCreated("event-projected", "task-projected", {
         actorId: "projection-reader",
       }),
     );
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
     expect(ExecutingTaskProjection.actorIds).toEqual(["projection-reader"]);
@@ -11621,10 +12203,12 @@ describe("repository signal routing", () => {
   });
 
   it("selects one filtered projection subscriber before its fallback", async () => {
+    const setup = createTestSetup(true);
     FilteredTaskProjection.reset();
-    const context = await BoundedContext.singleTenant("Filtered projections")
-      .add(createFilteredProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Filtered projections").add(createFilteredProjectionRepository()),
+      setup,
+    );
 
     try {
       await context.eventBus().post(
@@ -11637,7 +12221,7 @@ describe("repository signal routing", () => {
         .post(
           createProjectCreated("event-filtered-general", "filtered-general", { name: "general" }),
         );
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(FilteredTaskProjection.calls).toEqual([
         "announcements:announcements",
@@ -11682,14 +12266,17 @@ describe("repository signal routing", () => {
   });
 
   it("selects one filtered Aggregate Event reactor before its fallback", async () => {
+    const setup = createTestSetup(true);
     FilteredEventAggregate.reset();
-    const context = await BoundedContext.singleTenant("Filtered aggregates")
-      .add(createFilteredAggregateRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectRegisteredSchema],
-        dispatch: () => Promise.resolve(),
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Filtered aggregates")
+        .add(createFilteredAggregateRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectRegisteredSchema],
+          dispatch: () => Promise.resolve(),
+        }),
+      setup,
+    );
 
     try {
       await context.eventBus().post(
@@ -11702,7 +12289,7 @@ describe("repository signal routing", () => {
           name: "general",
         }),
       );
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(FilteredEventAggregate.calls).toEqual([
         "announcements:announcements",
@@ -11714,18 +12301,21 @@ describe("repository signal routing", () => {
   });
 
   it("filters Process Manager Event and command reactions independently", async () => {
+    const setup = createTestSetup(true);
     FilteredProcessManager.reset();
     const commands: SpineCommand[] = [];
-    const context = await BoundedContext.singleTenant("Filtered process managers")
-      .add(createFilteredProcessManagerRepository())
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateProjectSchema],
-        dispatch: (command) => {
-          commands.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Filtered process managers")
+        .add(createFilteredProcessManagerRepository())
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateProjectSchema],
+          dispatch: (command) => {
+            commands.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       await context.eventBus().post(
@@ -11738,7 +12328,7 @@ describe("repository signal routing", () => {
         .post(
           createProjectCreated("event-filtered-pm-two", "filtered-pm-two", { name: "general" }),
         );
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(FilteredProcessManager.calls).toEqual([
         "react-announcements:announcements",
@@ -11753,18 +12343,21 @@ describe("repository signal routing", () => {
   });
 
   it("emits a System subscriber-dispatch diagnostic after projection admission", async () => {
+    const setup = createTestSetup(true);
     const diagnostics: SpineEvent[] = [];
     const event = createProjectCreated("subscriber-diagnostic", "subscriber-id");
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EventDispatchedToSubscriberSchema],
-        dispatch: (diagnostic) => {
-          diagnostics.push(diagnostic);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingProjectionRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EventDispatchedToSubscriberSchema],
+          dispatch: (diagnostic) => {
+            diagnostics.push(diagnostic);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       await context.eventBus().post(event);
@@ -11793,6 +12386,7 @@ describe("repository signal routing", () => {
   });
 
   it("retains one subscriber diagnostic when an admitted subscriber fails", async () => {
+    const setup = createTestSetup(true);
     const failure = new Error("admitted projection subscriber failed");
     const monitored: unknown[] = [];
     const monitor = vi
@@ -11806,16 +12400,18 @@ describe("repository signal routing", () => {
       "subscriber-diagnostic-failure",
       "subscriber-diagnostic-failure",
     );
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createThrowingProjectionRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EventDispatchedToSubscriberSchema],
-        dispatch: (diagnostic) => {
-          diagnostics.push(diagnostic);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createThrowingProjectionRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EventDispatchedToSubscriberSchema],
+          dispatch: (diagnostic) => {
+            diagnostics.push(diagnostic);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       ThrowingTaskProjection.reset(failure);
@@ -11835,17 +12431,20 @@ describe("repository signal routing", () => {
   });
 
   it("keeps subscriber diagnostics tenant-scoped and emits them for catch-up delivery", async () => {
+    const setup = createTestSetup(true);
     const diagnostics: SpineEvent[] = [];
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EventDispatchedToSubscriberSchema],
-        dispatch: (diagnostic) => {
-          diagnostics.push(diagnostic);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks")
+        .add(createExecutingProjectionRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EventDispatchedToSubscriberSchema],
+          dispatch: (diagnostic) => {
+            diagnostics.push(diagnostic);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       await context.eventBus().post(
@@ -11872,17 +12471,20 @@ describe("repository signal routing", () => {
   });
 
   it("does not emit subscriber diagnostics before projection subscriber admission", async () => {
+    const setup = createTestSetup(true);
     const diagnostics: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EventDispatchedToSubscriberSchema],
-        dispatch: (diagnostic) => {
-          diagnostics.push(diagnostic);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingProjectionRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EventDispatchedToSubscriberSchema],
+          dispatch: (diagnostic) => {
+            diagnostics.push(diagnostic);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       await context.eventBus().post(
@@ -11904,19 +12506,22 @@ describe("repository signal routing", () => {
   });
 
   it("does not emit subscriber diagnostics when a default Event has no producer", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     const diagnostics: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createRoutingRepository())
-      .add(createExecutingProjectionRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EventDispatchedToSubscriberSchema],
-        dispatch: (diagnostic) => {
-          diagnostics.push(diagnostic);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createRoutingRepository())
+        .add(createExecutingProjectionRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EventDispatchedToSubscriberSchema],
+          dispatch: (diagnostic) => {
+            diagnostics.push(diagnostic);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       await expect(
@@ -11934,24 +12539,27 @@ describe("repository signal routing", () => {
   });
 
   it("isolates subscriber diagnostic publication failure from projection work", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     const diagnostics: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EventDispatchedToSubscriberSchema],
-        dispatch: (diagnostic) => {
-          diagnostics.push(diagnostic);
-          return Promise.reject(new Error("subscriber diagnostic dispatch failed"));
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingProjectionRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EventDispatchedToSubscriberSchema],
+          dispatch: (diagnostic) => {
+            diagnostics.push(diagnostic);
+            return Promise.reject(new Error("subscriber diagnostic dispatch failed"));
+          },
+        }),
+      setup,
+    );
 
     try {
       await expect(
         context.eventBus().post(createProjectCreated("subscriber-failure", "subscriber-failure")),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
       await expect(
@@ -11967,27 +12575,30 @@ describe("repository signal routing", () => {
   });
 
   it("does not expose projection state when its atomic commit fails", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     const factory = new FailingEntityCommitStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const changes: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [
-          EntityCreatedSchema,
-          EntityStateChangedSchema,
-          EntityArchivedSchema,
-          EntityUnarchivedSchema,
-          EntityDeletedSchema,
-          EntityRestoredSchema,
-        ],
-        dispatch: (event) => {
-          changes.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingProjectionRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [
+            EntityCreatedSchema,
+            EntityStateChangedSchema,
+            EntityArchivedSchema,
+            EntityUnarchivedSchema,
+            EntityDeletedSchema,
+            EntityRestoredSchema,
+          ],
+          dispatch: (event) => {
+            changes.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     const monitor = vi.spyOn(DeliveryMonitor.prototype, "onReceptionFailure");
     try {
       await expect(
@@ -11995,16 +12606,16 @@ describe("repository signal routing", () => {
           .eventBus()
           .post(createProjectCreated("projection-commit-fails", "projection-fails")),
       ).resolves.toBeUndefined();
-      await expect(
-        serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance()),
-      ).rejects.toThrow("forced Entity commit failure");
+      await expect(serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup))).rejects.toThrow(
+        "forced Entity commit failure",
+      );
       expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
       expect(monitor).not.toHaveBeenCalled();
       await expect(
         context.stand().read(ProjectOverviewStateSchema, "projection-fails"),
       ).resolves.toBeUndefined();
       expect(changes).toEqual([]);
-      const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+      const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
       await expect(
         delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
       ).resolves.toContainEqual(
@@ -12017,35 +12628,38 @@ describe("repository signal routing", () => {
   });
 
   it("does not expose aggregate state or state notifications when its atomic commit throws", async () => {
+    const setup = createTestSetup(true);
     const changes: SpineEvent[] = [];
     const factory = new FailingEntityCommitStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [
-          EntityCreatedSchema,
-          EntityStateChangedSchema,
-          EntityArchivedSchema,
-          EntityUnarchivedSchema,
-          EntityDeletedSchema,
-          EntityRestoredSchema,
-        ],
-        dispatch: (event) => {
-          changes.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [
+            EntityCreatedSchema,
+            EntityStateChangedSchema,
+            EntityArchivedSchema,
+            EntityUnarchivedSchema,
+            EntityDeletedSchema,
+            EntityRestoredSchema,
+          ],
+          dispatch: (event) => {
+            changes.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     await expect(
       context
         .commandBus()
         .post(createAggregateCommand("aggregate-commit-fails", "aggregate-fails")),
     ).resolves.toBeUndefined();
-    await expect(
-      serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance()),
-    ).rejects.toThrow("forced Entity commit failure");
+    await expect(serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup))).rejects.toThrow(
+      "forced Entity commit failure",
+    );
     await expect(
       context.stand().read(ProjectStateSchema, "aggregate-fails"),
     ).resolves.toBeUndefined();
@@ -12053,34 +12667,37 @@ describe("repository signal routing", () => {
   });
 
   it("does not expose process-manager state or follow-ups when its atomic commit fails", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new FailingEntityCommitStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const dispatched: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectCreatedSchema],
-        dispatch: (event) => {
-          dispatched.push(event);
-          return Promise.resolve();
-        },
-      })
-      .addEventDispatcher({
-        messageSchemas: () => [EntityStateChangedSchema],
-        dispatch: (event) => {
-          dispatched.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerAssignRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectCreatedSchema],
+          dispatch: (event) => {
+            dispatched.push(event);
+            return Promise.resolve();
+          },
+        })
+        .addEventDispatcher({
+          messageSchemas: () => [EntityStateChangedSchema],
+          dispatch: (event) => {
+            dispatched.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     await expect(
       context.commandBus().post(createAggregateCommand("pm-commit-fails", "pm-fails")),
     ).resolves.toBeUndefined();
-    await expect(
-      serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance()),
-    ).rejects.toThrow("forced Entity commit failure");
+    await expect(serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup))).rejects.toThrow(
+      "forced Entity commit failure",
+    );
     await expect(
       context.stand().read(ProjectQueueStateSchema, "pm-fails"),
     ).resolves.toBeUndefined();
@@ -12088,17 +12705,20 @@ describe("repository signal routing", () => {
   });
 
   it("publishes a committed aggregate state change after durable persistence", async () => {
+    const setup = createTestSetup(true);
     const changes: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EntityStateChangedSchema],
-        dispatch: (event) => {
-          changes.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EntityStateChangedSchema],
+          dispatch: (event) => {
+            changes.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       await context.commandBus().post(createAggregateCommand("command-state-change", "changed"));
@@ -12139,17 +12759,20 @@ describe("repository signal routing", () => {
   });
 
   it("publishes created before state-changed after the first committed aggregate transition", async () => {
+    const setup = createTestSetup(true);
     const changes: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema],
-        dispatch: (event) => {
-          changes.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema],
+          dispatch: (event) => {
+            changes.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     try {
       await context.commandBus().post(createAggregateCommand("created-first", "created-id"));
@@ -12169,21 +12792,28 @@ describe("repository signal routing", () => {
   });
 
   it("uses each lifecycle envelope timestamp for its payload under an advancing clock", async () => {
+    const setup = createTestSetup(true);
     const changes: SpineEvent[] = [];
     let clockTick = 0;
     const previous = Time.setProvider({
       currentTime: () => create(TimestampSchema, { seconds: 1n, nanos: clockTick++ * 1_000 }),
     });
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema, EntityArchivedSchema],
-        dispatch: (event) => {
-          changes.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [
+            EntityCreatedSchema,
+            EntityStateChangedSchema,
+            EntityArchivedSchema,
+          ],
+          dispatch: (event) => {
+            changes.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       await context.commandBus().post(createAggregateCommand("clock-created", "clock-id"));
       await waitForCondition(() => changes.length === 2);
@@ -12210,6 +12840,7 @@ describe("repository signal routing", () => {
   });
 
   it("emits lifecycle-only aggregate transitions without EntityStateChanged", async () => {
+    const setup = createTestSetup(true);
     const changes: SpineEvent[] = [];
     const schemas = [
       EntityCreatedSchema,
@@ -12219,16 +12850,18 @@ describe("repository signal routing", () => {
       EntityDeletedSchema,
       EntityRestoredSchema,
     ];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => schemas,
-        dispatch: (event) => {
-          changes.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => schemas,
+          dispatch: (event) => {
+            changes.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       await context.commandBus().post(createAggregateCommand("seed-lifecycle", "lifecycle-id"));
       await waitForCondition(() => changes.length === 2);
@@ -12271,24 +12904,27 @@ describe("repository signal routing", () => {
   });
 
   it("emits lifecycle-only projection transitions across delete and restore", async () => {
+    const setup = createTestSetup(true);
     const changes: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [
-          EntityCreatedSchema,
-          EntityStateChangedSchema,
-          EntityArchivedSchema,
-          EntityUnarchivedSchema,
-          EntityDeletedSchema,
-          EntityRestoredSchema,
-        ],
-        dispatch: (event) => {
-          changes.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingProjectionRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [
+            EntityCreatedSchema,
+            EntityStateChangedSchema,
+            EntityArchivedSchema,
+            EntityUnarchivedSchema,
+            EntityDeletedSchema,
+            EntityRestoredSchema,
+          ],
+          dispatch: (event) => {
+            changes.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       await context
         .eventBus()
@@ -12333,18 +12969,25 @@ describe("repository signal routing", () => {
   });
 
   it("emits EntityArchived after a seeded process-manager archive", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const changes: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema, EntityArchivedSchema],
-        dispatch: (event) => {
-          changes.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerAssignRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [
+            EntityCreatedSchema,
+            EntityStateChangedSchema,
+            EntityArchivedSchema,
+          ],
+          dispatch: (event) => {
+            changes.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       await context.commandBus().post(createAggregateCommand("pm-seed", "pm-archive"));
       await waitForCondition(() => changes.length === 2);
@@ -12352,7 +12995,7 @@ describe("repository signal routing", () => {
       await context
         .commandBus()
         .post(createAggregateCommand("pm-archive", "pm-archive", "archive-lifecycle"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(RoutingProcessManager.commandCalls).toBe(2);
       await waitForCondition(() => changes.length === 1);
       expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityArchivedSchema));
@@ -12362,25 +13005,28 @@ describe("repository signal routing", () => {
   });
 
   it("rehydrates archived process managers for a lifecycle-only unarchive", async () => {
+    const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const changes: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [
-          EntityCreatedSchema,
-          EntityStateChangedSchema,
-          EntityArchivedSchema,
-          EntityUnarchivedSchema,
-          EntityDeletedSchema,
-          EntityRestoredSchema,
-        ],
-        dispatch: (event) => {
-          changes.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerAssignRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [
+            EntityCreatedSchema,
+            EntityStateChangedSchema,
+            EntityArchivedSchema,
+            EntityUnarchivedSchema,
+            EntityDeletedSchema,
+            EntityRestoredSchema,
+          ],
+          dispatch: (event) => {
+            changes.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       await context.commandBus().post(createAggregateCommand("pm-seed-all", "pm-all"));
       await waitForCondition(() => changes.length === 2);
@@ -12396,7 +13042,7 @@ describe("repository signal routing", () => {
       await context
         .commandBus()
         .post(createAggregateCommand("pm-unarchive-all", "pm-all", "unarchive-lifecycle"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(RoutingProcessManager.commandCalls).toBe(3);
       await expect(
         standAccess.readCurrent(context.stand(), ProjectQueueStateSchema, "pm-all", {}),
@@ -12407,7 +13053,7 @@ describe("repository signal routing", () => {
       await context
         .commandBus()
         .post(createAggregateCommand("pm-delete-all", "pm-all", "delete-lifecycle"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await expect(
         standAccess.readCurrent(context.stand(), ProjectQueueStateSchema, "pm-all", {}),
       ).resolves.toMatchObject({ deleted: true });
@@ -12417,7 +13063,7 @@ describe("repository signal routing", () => {
       await context
         .commandBus()
         .post(createAggregateCommand("pm-restore-all", "pm-all", "restore-lifecycle"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await expect(
         standAccess.readCurrent(context.stand(), ProjectQueueStateSchema, "pm-all", {}),
       ).resolves.toMatchObject({ deleted: false, state: { queue: "Task assigned" } });
@@ -12429,24 +13075,27 @@ describe("repository signal routing", () => {
   });
 
   it("records failed state-change follow-ups with absent and present prior state", async () => {
+    const setup = createTestSetup(true);
     const changes: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EntityStateChangedSchema],
-        dispatch: (event) => {
-          changes.push(event);
-          return Promise.reject(new Error("state-change follow-up failed"));
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EntityStateChangedSchema],
+          dispatch: (event) => {
+            changes.push(event);
+            return Promise.reject(new Error("state-change follow-up failed"));
+          },
+        }),
+      setup,
+    );
 
     try {
       await context.commandBus().post(createAggregateCommand("state-change-first", "state-change"));
       await context
         .commandBus()
         .post(createAggregateCommand("state-change-second", "state-change", "Second"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(changes).toHaveLength(2);
       await expect(
@@ -12469,17 +13118,20 @@ describe("repository signal routing", () => {
   });
 
   it("publishes one causally linked change for aggregate reactors, projections, and process managers", async () => {
+    const setup = createTestSetup(true);
     const aggregateChanges: SpineEvent[] = [];
-    const aggregate = await BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedReactorRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EntityStateChangedSchema],
-        dispatch: (event) => {
-          aggregateChanges.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const aggregate = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createGeneratedReactorRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EntityStateChangedSchema],
+          dispatch: (event) => {
+            aggregateChanges.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       await aggregate.eventBus().post(createProjectCreated("reactor-source", "reactor-id"));
       await waitForCondition(() => aggregateChanges.length === 1);
@@ -12494,16 +13146,18 @@ describe("repository signal routing", () => {
     }
 
     const projectionChanges: SpineEvent[] = [];
-    const projection = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EntityStateChangedSchema],
-        dispatch: (event) => {
-          projectionChanges.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const projection = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingProjectionRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EntityStateChangedSchema],
+          dispatch: (event) => {
+            projectionChanges.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       await projection.eventBus().post(createProjectCreated("projection-source", "projection-id"));
       await waitForCondition(() => projectionChanges.length === 1);
@@ -12517,16 +13171,18 @@ describe("repository signal routing", () => {
     }
 
     const pmChanges: SpineEvent[] = [];
-    const processManager = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EntityStateChangedSchema],
-        dispatch: (event) => {
-          pmChanges.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const processManager = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerAssignRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EntityStateChangedSchema],
+          dispatch: (event) => {
+            pmChanges.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       await processManager.commandBus().post(createAggregateCommand("pm-command", "pm-command-id"));
       await waitForCondition(() => pmChanges.length === 1);
@@ -12539,16 +13195,18 @@ describe("repository signal routing", () => {
     }
 
     const pmEventChanges: SpineEvent[] = [];
-    const eventProcessManager = await BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerReactRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EntityStateChangedSchema],
-        dispatch: (event) => {
-          pmEventChanges.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const eventProcessManager = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerReactRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EntityStateChangedSchema],
+          dispatch: (event) => {
+            pmEventChanges.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       await eventProcessManager.eventBus().post(createProjectCreated("pm-event", "pm-event-id"));
       await waitForCondition(() => pmEventChanges.length === 1);
@@ -12562,17 +13220,20 @@ describe("repository signal routing", () => {
   });
 
   it("does not publish a state change when a projection leaves state unchanged", async () => {
+    const setup = createTestSetup(true);
     const changes: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createPassiveProjectionRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EntityStateChangedSchema],
-        dispatch: (event) => {
-          changes.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createPassiveProjectionRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [EntityStateChangedSchema],
+          dispatch: (event) => {
+            changes.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       await context.eventBus().post(createProjectCreated("unchanged", "unchanged-id"));
       await context.close();
@@ -12583,26 +13244,30 @@ describe("repository signal routing", () => {
   });
 
   it("does not publish when aggregate transition validation rejects the handler mutation", async () => {
+    const setup = createTestSetup(true);
     const changes: SpineEvent[] = [];
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createTransitionViolatingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [
-          EntityCreatedSchema,
-          EntityStateChangedSchema,
-          EntityArchivedSchema,
-          EntityUnarchivedSchema,
-          EntityDeletedSchema,
-          EntityRestoredSchema,
-        ],
-        dispatch: (event) => {
-          changes.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createTransitionViolatingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [
+            EntityCreatedSchema,
+            EntityStateChangedSchema,
+            EntityArchivedSchema,
+            EntityUnarchivedSchema,
+            EntityDeletedSchema,
+            EntityRestoredSchema,
+          ],
+          dispatch: (event) => {
+            changes.push(event);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       await expectMonitoredReception(
+        setup,
         () => context.commandBus().post(createAggregateCommand("rejected-change", "rejected-id")),
         /Command state transition validation failed/,
       );
@@ -12614,16 +13279,18 @@ describe("repository signal routing", () => {
   });
 
   it("rebuilds projection state from stored events without re-appending them", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     const storageFactory = new InMemoryStorageFactory();
-    await configureStorage(storageFactory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .build();
+    await configureStorage(setup, storageFactory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createExecutingProjectionRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, storageFactory);
 
     await context.eventBus().post(createProjectCreated("event-catch-up", "task-catch-up"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     await context.stand().update(
       ProjectOverviewStateSchema,
       create(ProjectOverviewStateSchema, {
@@ -12667,11 +13334,14 @@ describe("repository signal routing", () => {
   });
 
   it("keeps read-side catch-up tenant-scoped", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createProjectionProducingRepository())
-      .add(createExecutingProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks")
+        .add(createProjectionProducingRepository())
+        .add(createExecutingProjectionRepository()),
+      setup,
+    );
 
     await context
       .commandBus()
@@ -12738,16 +13408,19 @@ describe("repository signal routing", () => {
   });
 
   it("rejects read-side catch-up tenant options that do not match the context mode", async () => {
-    const singleTenant = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .build();
+    const setup = createTestSetup(true);
+    const singleTenant = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createExecutingProjectionRepository()),
+      setup,
+    );
     await expect(
       singleTenant.catchUpReadSide({ tenantId: createTenantId("tenant-a") }),
     ).rejects.toThrow('Single-tenant read-side catch-up for "Tasks" does not accept tenantId.');
     await singleTenant.close();
-    const multitenant = await BoundedContext.multitenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .build();
+    const multitenant = await buildContext(
+      BoundedContext.multiTenant("Tasks").add(createExecutingProjectionRepository()),
+      setup,
+    );
     await expect(multitenant.catchUpReadSide()).rejects.toThrow(
       'Multitenant read-side catch-up for "Tasks" requires tenantId.',
     );
@@ -12757,12 +13430,15 @@ describe("repository signal routing", () => {
   });
 
   it("delivers stored events only to matching projection dispatchers during catch-up", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     AlternateCatchUpProjection.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .add(createAlternateCatchUpProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingProjectionRepository())
+        .add(createAlternateCatchUpProjectionRepository()),
+      setup,
+    );
 
     await context.eventBus().post(createProjectCreated("event-primary", "task-primary"));
     await context.eventBus().post(
@@ -12779,7 +13455,7 @@ describe("repository signal routing", () => {
         ),
       }),
     );
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     await context.stand().update(
       ProjectOverviewStateSchema,
       create(ProjectOverviewStateSchema, {
@@ -12828,10 +13504,12 @@ describe("repository signal routing", () => {
   });
 
   it("counts only matched delivery events during catch-up", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createExecutingProjectionRepository()),
+      setup,
+    );
 
     await context.eventBus().post(createProjectCreated("event-shared-state", "task-shared-state"));
     await context.eventBus().post(
@@ -12867,13 +13545,16 @@ describe("repository signal routing", () => {
   });
 
   it("preserves exact multitenant catch-up tenant IDs instead of trimming them", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     const rawTenantId = " tenant-a ";
     const trimmedTenantId = "tenant-a";
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createProjectionProducingRepository())
-      .add(createExecutingProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks")
+        .add(createProjectionProducingRepository())
+        .add(createExecutingProjectionRepository()),
+      setup,
+    );
 
     await context
       .commandBus()
@@ -12933,12 +13614,14 @@ describe("repository signal routing", () => {
   });
 
   it("accepts import-context domain tenant IDs during multitenant catch-up", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     const storageFactory = new InMemoryStorageFactory();
-    await configureStorage(storageFactory);
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .build();
+    await configureStorage(setup, storageFactory);
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks").add(createExecutingProjectionRepository()),
+      setup,
+    );
     await requireTenantDirectory(context.tenantIndex).keep(createTenantId("example.com", "domain"));
     const eventStore = new EventStore(
       { name: "Tasks", multitenant: true, tenantId: createTenantId("example.com", "domain") },
@@ -12973,12 +13656,14 @@ describe("repository signal routing", () => {
   });
 
   it("accepts past-message email tenant IDs during multitenant catch-up", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     const storageFactory = new InMemoryStorageFactory();
-    await configureStorage(storageFactory);
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .build();
+    await configureStorage(setup, storageFactory);
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks").add(createExecutingProjectionRepository()),
+      setup,
+    );
     await requireTenantDirectory(context.tenantIndex).keep(
       createTenantId("owner@example.com", "email"),
     );
@@ -13019,12 +13704,14 @@ describe("repository signal routing", () => {
   });
 
   it("stores multitenant events in the tenant selected by their envelope", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     const storageFactory = new InMemoryStorageFactory();
-    await configureStorage(storageFactory);
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .build();
+    await configureStorage(setup, storageFactory);
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks").add(createExecutingProjectionRepository()),
+      setup,
+    );
     await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-a"));
     await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-b"));
     const tenantBState = create(ProjectOverviewStateSchema, {
@@ -13066,12 +13753,14 @@ describe("repository signal routing", () => {
   });
 
   it("rejects multitenant catch-up events without an envelope tenant", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     const storageFactory = new InMemoryStorageFactory();
-    await configureStorage(storageFactory);
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .build();
+    await configureStorage(setup, storageFactory);
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks").add(createExecutingProjectionRepository()),
+      setup,
+    );
     await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-a"));
     const eventStore = new EventStore(
       { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-a") },
@@ -13100,13 +13789,15 @@ describe("repository signal routing", () => {
   });
 
   it("serializes concurrent read-side catch-up calls", async () => {
+    const setup = createTestSetup(true);
     BlockingCatchUpProjection.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createBlockingCatchUpProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createBlockingCatchUpProjectionRepository()),
+      setup,
+    );
 
     await context.eventBus().post(createProjectCreated("event-blocking", "task-blocking"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     await context.stand().update(
       ProjectOverviewStateSchema,
       create(ProjectOverviewStateSchema, {
@@ -13142,13 +13833,15 @@ describe("repository signal routing", () => {
   });
 
   it("serializes read-side catch-up with live event intake on the EventBus queue", async () => {
+    const setup = createTestSetup(true);
     BlockingCatchUpProjection.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createBlockingCatchUpProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createBlockingCatchUpProjectionRepository()),
+      setup,
+    );
 
     await context.eventBus().post(createProjectCreated("event-queued-catch-up", "task-queued"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     await context.stand().update(
       ProjectOverviewStateSchema,
       create(ProjectOverviewStateSchema, {
@@ -13185,7 +13878,7 @@ describe("repository signal routing", () => {
     BlockingCatchUpProjection.release(1);
 
     await expect(livePost).resolves.toBeUndefined();
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     expect(BlockingCatchUpProjection.completedCalls).toBe(2);
     await expect(context.stand().read(ProjectOverviewStateSchema, "task-live")).resolves.toEqual(
       create(ProjectOverviewStateSchema, {
@@ -13197,13 +13890,15 @@ describe("repository signal routing", () => {
   });
 
   it("waits for active read-side catch-up before closing the context", async () => {
+    const setup = createTestSetup(true);
     BlockingCatchUpProjection.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createBlockingCatchUpProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createBlockingCatchUpProjectionRepository()),
+      setup,
+    );
 
     await context.eventBus().post(createProjectCreated("event-close", "task-close"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     await context.stand().update(
       ProjectOverviewStateSchema,
       create(ProjectOverviewStateSchema, {
@@ -13232,10 +13927,12 @@ describe("repository signal routing", () => {
   });
 
   it("reports a stable error when stored projection delivery fails during catch-up", async () => {
+    const setup = createTestSetup(true);
     ThrowingTaskProjection.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createThrowingProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createThrowingProjectionRepository()),
+      setup,
+    );
 
     await expect(
       context
@@ -13260,10 +13957,12 @@ describe("repository signal routing", () => {
   });
 
   it("reports bounded non-error throw detail during read-side catch-up", async () => {
+    const setup = createTestSetup(true);
     ThrowingTaskProjection.reset("projection subscriber failed without Error");
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createThrowingProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createThrowingProjectionRepository()),
+      setup,
+    );
 
     try {
       await expect(
@@ -13287,11 +13986,13 @@ describe("repository signal routing", () => {
   });
 
   it("reports a stable error when stored catch-up events have no message type", async () => {
+    const setup = createTestSetup(true);
     const storageFactory = new InMemoryStorageFactory();
-    await configureStorage(storageFactory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .build();
+    await configureStorage(setup, storageFactory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createExecutingProjectionRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, storageFactory);
 
     await eventStore.append(
@@ -13312,17 +14013,19 @@ describe("repository signal routing", () => {
   });
 
   it("passes EventContext to generated-registry two-argument event subscribers", async () => {
+    const setup = createTestSetup(true);
     GeneratedTwoArgProjection.reset();
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createGeneratedTwoArgProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks").add(createGeneratedTwoArgProjectionRepository()),
+      setup,
+    );
 
     await context.eventBus().post(
       createProjectCreated("event-generated", "task-generated", {
         pastMessageTenantId: "tenant-b",
       }),
     );
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(GeneratedTwoArgProjection.argumentCounts).toEqual([2]);
     expect(GeneratedTwoArgProjection.contexts).toHaveLength(1);
@@ -13335,9 +14038,10 @@ describe("repository signal routing", () => {
   });
 
   it("delivers a typed rejection and defensive rejection context to event subscribers", async () => {
+    const setup = createTestSetup(true);
     RejectionObservingProjection.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const rejection = TaskAlreadyDone.create({
       id: create(GeneratedTaskIdSchema, { value: "task-observed-rejection" }),
     });
@@ -13351,10 +14055,12 @@ describe("repository signal routing", () => {
     );
     const originalCommand = clone(CommandSchema, command);
     ManagedProjectAggregate.reset(rejection);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createManagedRepository())
-      .add(createRejectionObservingRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createManagedRepository())
+        .add(createRejectionObservingRepository()),
+      setup,
+    );
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(context.commandBus().post(command)).resolves.toBeUndefined();
@@ -13384,44 +14090,52 @@ describe("repository signal routing", () => {
   });
 
   it("passes the admitted EventContext to a custom-routed two-argument subscriber", async () => {
+    const setup = createTestSetup(true);
     GeneratedTwoArgProjection.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(
         createGeneratedTwoArgProjectionRepository(
           EventRouting.create<string>().route(ProjectCreatedSchema, () => ["task-empty"]),
         ),
-      )
-      .build();
+      ),
+      setup,
+    );
 
     const event = createProducerlessProjectCreated("event-context", "task-empty");
     await context.eventBus().post(event);
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(GeneratedTwoArgProjection.argumentCounts).toEqual([2]);
     expect(GeneratedTwoArgProjection.contexts).toEqual([event.context]);
   });
 
   it("isolates EventContext mutations between generated two-argument subscribers", async () => {
+    const setup = createTestSetup(true);
     ContextMutatingGeneratedProjection.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createContextMutatingGeneratedProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(
+        createContextMutatingGeneratedProjectionRepository(),
+      ),
+      setup,
+    );
 
     await context.eventBus().post(createProjectCreated("event-mutating", "task-mutating"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(ContextMutatingGeneratedProjection.observerSawSameContext).toBe(false);
     expect(ContextMutatingGeneratedProjection.observedVersions).toEqual([1]);
   });
 
   it("commits the projection transaction when subscribers only update draft state", async () => {
+    const setup = createTestSetup(true);
     ManagedTaskProjection.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createManagedProjection())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createManagedProjection()),
+      setup,
+    );
 
     await context.eventBus().post(createProjectCreated("event-managed", "task-managed"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(ManagedTaskProjection.subscriberCalls).toBe(1);
     await expect(
@@ -13437,16 +14151,18 @@ describe("repository signal routing", () => {
   });
 
   it("writes live projection subscriber delivery through a durable inbox row", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .build();
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createExecutingProjectionRepository()),
+      setup,
+    );
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
 
     await context.eventBus().post(createProjectCreated("event-inbox", "task-inbox"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
 
@@ -13475,11 +14191,12 @@ describe("repository signal routing", () => {
   });
 
   it("rejects malformed durable projection inbox rows before subscriber execution", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createExecutingProjectionRepository();
-    const context = await BoundedContext.multitenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.multiTenant("Tasks").add(repository), setup);
     await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-a"));
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -13599,6 +14316,7 @@ describe("repository signal routing", () => {
   });
 
   it("routes a Projection Event once at admission and not during delivery", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     let routeCalls = 0;
     const eventRouting = EventRouting.create<string>().route(ProjectCreatedSchema, (message) => {
@@ -13606,9 +14324,9 @@ describe("repository signal routing", () => {
       return [message.id];
     });
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createExecutingProjectionRepository(eventRouting);
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
 
     try {
       await context
@@ -13640,6 +14358,7 @@ describe("repository signal routing", () => {
   });
 
   it("routes a Projection Event to its configured receiver shard", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     const factory = new InMemoryStorageFactory();
     const targetTypeUrl = TypeUrls.derive(ProjectOverviewStateSchema);
@@ -13653,19 +14372,19 @@ describe("repository signal routing", () => {
         return new ShardIndex(6, 8);
       },
     };
-    await ServerEnvironmentLifecycle.resetForTest();
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    setup.settings = {
       storageFactory: factory,
-      tenantIndex: new TestTenantIndex(),
       deliveryStrategy: strategy,
-    });
-    await ServerEnvironment.instance().completeSetup();
+    };
+    setup.index = new TestTenantIndex();
+    setup.seedTenants = false;
+    setup.seeded = false;
     const routing = EventRouting.create<string>().route(ProjectCreatedSchema, () => [
       "routed-projection",
       "other-projection",
     ]);
     const repository = createExecutingProjectionRepository(routing);
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
 
     try {
       await context.eventBus().post(
@@ -13673,11 +14392,11 @@ describe("repository signal routing", () => {
           producerId: "source-project",
         }),
       );
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(decisions).toContainEqual({ id: "routed-projection", type: targetTypeUrl });
       expect(decisions).toContainEqual({ id: "other-projection", type: targetTypeUrl });
-      const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+      const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
       const rows = await delivery.inbox.read(new ShardIndex(6, 8));
       expect(rows).toHaveLength(2);
       expect(
@@ -13691,19 +14410,30 @@ describe("repository signal routing", () => {
   });
 
   it("delivers a pending Projection row on a nonzero shard during startup", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     const factory = new InMemoryStorageFactory();
     const shard = new ShardIndex(6, 8);
-    await ServerEnvironmentLifecycle.resetForTest();
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    const held = new Delivery({
+      context: { name: "__System_Delivery__", multitenant: false },
       storageFactory: factory,
-      tenantIndex: new TestTenantIndex(),
-      deliveryStrategy: { shardCount: 8, shardFor: () => shard },
+      strategy: { shardCount: 8, shardFor: () => shard },
     });
-    await ServerEnvironment.instance().completeSetup();
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    setup.settings = {
+      storageFactory: factory,
+      deliveryStrategy: { shardCount: 8, shardFor: () => shard },
+      delivery: {
+        open: () => undefined,
+        close: () => held.close(),
+        inbox: held.inbox,
+        workRegistry: held.shards,
+      } satisfies ServerEnvironmentDelivery,
+    };
+    setup.index = new TestTenantIndex();
+    setup.seedTenants = false;
+    setup.seeded = false;
     const event = createProjectCreated("pending-projection-event", "pending-projection");
-    const written = await delivery.inbox.receive({
+    const written = await held.inbox.receive({
       inboxId: {
         targetId: Identifiers.pack("string", "pending-projection"),
         targetTypeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
@@ -13717,12 +14447,14 @@ describe("repository signal routing", () => {
       version: 1n,
     });
     expect(written.outcome).toBe("WRITTEN");
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createExecutingProjectionRepository()),
+      setup,
+    );
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
 
     try {
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
       await expect(
         context.stand().read(ProjectOverviewStateSchema, "pending-projection"),
@@ -13734,14 +14466,15 @@ describe("repository signal routing", () => {
   });
 
   it("suppresses duplicate live projection messages during retained delivery", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createExecutingProjectionRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     const event = createProjectCreated("event-duplicate-inbox", "task-duplicate-inbox");
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
 
     if (dispatcher === undefined) {
       throw new Error("Expected projection repository to expose an event dispatcher.");
@@ -13749,7 +14482,7 @@ describe("repository signal routing", () => {
 
     await dispatcher.dispatch(event);
     await dispatcher.dispatch(event);
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
     await expect(
@@ -13771,11 +14504,12 @@ describe("repository signal routing", () => {
   });
 
   it("delivers an independently created matching projection event after suppressing an exact delivery", async () => {
+    const setup = createTestSetup(true);
     ExecutingTaskProjection.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createExecutingProjectionRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) {
       throw new Error("Expected projection repository to expose an event dispatcher.");
@@ -13805,11 +14539,11 @@ describe("repository signal routing", () => {
       await dispatcher.dispatch(first);
       await dispatcher.dispatch(first);
       await dispatcher.dispatch(second);
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(ExecutingTaskProjection.subscriberCalls).toBe(2);
       const delivered = await serverEnvironmentAccess
-        .coreDelivery(ServerEnvironment.instance())
+        .coreDelivery(environmentFor(setup))
         .inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
       expect(delivered).toHaveLength(2);
       expect(delivered.filter((row) => row.signalId === firstId)).toHaveLength(1);
@@ -13829,14 +14563,15 @@ describe("repository signal routing", () => {
   });
 
   it("waits for concurrent duplicate live projection delivery on the repository handoff path", async () => {
+    const setup = createTestSetup(true);
     BlockingCatchUpProjection.reset(1);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createBlockingCatchUpProjectionRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     const event = createProjectCreated("event-concurrent-inbox", "task-concurrent-inbox");
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
 
     if (dispatcher === undefined) {
       throw new Error("Expected projection repository to expose an event dispatcher.");
@@ -13853,7 +14588,7 @@ describe("repository signal routing", () => {
     BlockingCatchUpProjection.release(0);
 
     await expect(Promise.all([first, duplicate])).resolves.toEqual([undefined, undefined]);
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     expect(BlockingCatchUpProjection.startedCalls).toBe(1);
     expect(BlockingCatchUpProjection.completedCalls).toBe(1);
     await expect(
@@ -13874,9 +14609,11 @@ describe("repository signal routing", () => {
   });
 
   it("delivers Stand subscriptions after real projection event handling", async () => {
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .build();
+    const setup = createTestSetup(true);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createExecutingProjectionRepository()),
+      setup,
+    );
     const updates: ProjectOverviewState[] = [];
     context.stand().subscribe(ProjectOverviewStateSchema, {
       next: (update) => {
@@ -13886,7 +14623,7 @@ describe("repository signal routing", () => {
     });
 
     await context.eventBus().post(createProjectCreated("event-subscribed", "task-subscribed"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(updates).toEqual([
       create(ProjectOverviewStateSchema, {
@@ -13898,13 +14635,15 @@ describe("repository signal routing", () => {
   });
 
   it("does not write unchanged projection state after subscriber execution", async () => {
+    const setup = createTestSetup(true);
     PassiveTaskProjection.reset();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createPassiveProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createPassiveProjectionRepository()),
+      setup,
+    );
 
     await context.eventBus().post(createProjectCreated("event-passive", "task-passive"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     expect(PassiveTaskProjection.subscriberCalls).toBe(1);
     await expect(
@@ -13913,12 +14652,14 @@ describe("repository signal routing", () => {
   });
 
   it("atomically retains process-manager diagnostics without creating unchanged state", async () => {
+    const setup = createTestSetup(true);
     DiagnosticOnlyProcessManager.calls = 0;
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createDiagnosticOnlyProcessManagerRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createDiagnosticOnlyProcessManagerRepository()),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -13941,7 +14682,7 @@ describe("repository signal routing", () => {
         version: create(VersionSchema, { number: 1 }),
       });
       await context.commandBus().post(createAggregateCommand("pm-diagnostic", "pm-diagnostic"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(DiagnosticOnlyProcessManager.calls).toBe(1);
       await expect(context.stand().read(ProjectQueueStateSchema, "pm-diagnostic")).resolves.toEqual(
@@ -13959,12 +14700,14 @@ describe("repository signal routing", () => {
   });
 
   it("reuses unchanged-state Process Manager Event storage until repository shutdown", async () => {
+    const setup = createTestSetup(true);
     DiagnosticOnlyProcessManager.calls = 0;
     const factory = new CountingEventRecordFactory();
-    await configureStorage(factory);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createDiagnosticOnlyProcessManagerRepository())
-      .build();
+    await configureStorage(setup, factory);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createDiagnosticOnlyProcessManagerRepository()),
+      setup,
+    );
     const state = create(ProjectQueueStateSchema, { id: "pm-repeat", queue: "existing" });
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
@@ -13983,12 +14726,12 @@ describe("repository signal routing", () => {
         .stand()
         .update(ProjectQueueStateSchema, state, { version: create(VersionSchema, { number: 1 }) });
       await context.commandBus().post(createAggregateCommand("pm-repeat-1", "pm-repeat"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       const afterFirst = factory.eventRecords;
       const closedAfterFirst = factory.eventCloses;
       expect(afterFirst).toBeGreaterThan(0);
       await context.commandBus().post(createAggregateCommand("pm-repeat-2", "pm-repeat"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(factory.eventRecords).toBe(afterFirst);
       expect(factory.eventCloses).toBe(closedAfterFirst);
       expect(factory.eventCloses).toBeLessThan(factory.eventRecords);
@@ -14000,13 +14743,14 @@ describe("repository signal routing", () => {
   });
 
   it("closes retained Entity ports when the Process Manager EventStore close fails", async () => {
+    const setup = createTestSetup(true);
     FilteredProcessManager.reset();
     const factory = new CountingEventRecordFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createVoidProcessManagerRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     await context.eventBus().post(createProjectCreated("pm-close-error", "pm-close-error"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     expect(FilteredProcessManager.calls).toEqual(["react-fallback:Task"]);
     const beforeEntityCloses = factory.entityCloses;
     const close = vi
@@ -14022,15 +14766,17 @@ describe("repository signal routing", () => {
     }
     expect(factory.entityCloses).toBeGreaterThan(beforeEntityCloses);
     await expect(context.close()).rejects.toThrow("BoundedContext close failed");
+    await expectFailedApplicationClose(setup);
   });
 
   it("retains a void Process Manager reaction without creating invalid initial state", async () => {
+    const setup = createTestSetup(true);
     FilteredProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createVoidProcessManagerRepository();
     repository.setStateHistoryEnabled(true);
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -14040,7 +14786,7 @@ describe("repository signal routing", () => {
     });
 
     await context.eventBus().post(createProjectCreated("pm-void-event", "pm-void"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
     expect(FilteredProcessManager.calls).toEqual(["react-fallback:Task"]);
     await expect(storage.readCurrent("pm-void")).resolves.toBeUndefined();
     await expect(storage.readStates("pm-void")).resolves.toEqual([]);
@@ -14049,21 +14795,24 @@ describe("repository signal routing", () => {
   });
 
   it("dispatches a command-only Process Manager reaction without advancing state", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const commands: SpineCommand[] = [];
     const repository = createCommandOnlyProcessManagerRepository();
     repository.setStateHistoryEnabled(true);
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(repository)
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateProjectSchema],
-        dispatch: (command) => {
-          commands.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(repository)
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateProjectSchema],
+          dispatch: (command) => {
+            commands.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -14083,17 +14832,20 @@ describe("repository signal routing", () => {
   });
 
   it("dispatches each native @Command union branch from generated handler metadata", async () => {
+    const setup = createTestSetup(true);
     const commands: SpineCommand[] = [];
-    const context = await BoundedContext.singleTenant("Union commands")
-      .add(createGeneratedUnionProcessManagerRepository())
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateFollowUpProjectSchema, DraftProjectSchema],
-        dispatch: (command) => {
-          commands.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Union commands")
+        .add(createGeneratedUnionProcessManagerRepository())
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateFollowUpProjectSchema, DraftProjectSchema],
+          dispatch: (command) => {
+            commands.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     await context
       .eventBus()
@@ -14109,17 +14861,20 @@ describe("repository signal routing", () => {
   });
 
   it("omits an absent optional tuple command and preserves the present order", async () => {
+    const setup = createTestSetup(true);
     const commands: SpineCommand[] = [];
-    const context = await BoundedContext.singleTenant("Optional tuple commands")
-      .add(createOptionalCommandProcessManagerRepository())
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateFollowUpProjectSchema, DraftProjectSchema],
-        dispatch: (command) => {
-          commands.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Optional tuple commands")
+        .add(createOptionalCommandProcessManagerRepository())
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateFollowUpProjectSchema, DraftProjectSchema],
+          dispatch: (command) => {
+            commands.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
 
     await context
       .eventBus()
@@ -14136,22 +14891,25 @@ describe("repository signal routing", () => {
   });
 
   it("runs generated no-output Command reactions and persists Process Manager state", async () => {
+    const setup = createTestSetup(true);
     SilentCommandProcessManager.calls = 0;
     const commands: SpineCommand[] = [];
     const repository = createSilentCommandProcessManagerRepository();
-    const context = await BoundedContext.singleTenant("Silent commands")
-      .add(repository)
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateProjectSchema],
-        dispatch: (command) => {
-          commands.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Silent commands")
+        .add(repository)
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateProjectSchema],
+          dispatch: (command) => {
+            commands.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       await context.eventBus().post(createProjectCreated("silent-command", "silent-target"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(SilentCommandProcessManager.calls).toBe(1);
       await expect(
         context.stand().readVersioned(ProjectQueueStateSchema, "silent-target"),
@@ -14166,6 +14924,7 @@ describe("repository signal routing", () => {
   });
 
   it("runs a no-output Command reaction for a rejection without a child Command", async () => {
+    const setup = createTestSetup(true);
     SilentCommandProcessManager.rejectionCalls = 0;
     const commands: SpineCommand[] = [];
     const rejection = create(TaskAlreadyDoneSchema, {
@@ -14184,16 +14943,18 @@ describe("repository signal routing", () => {
     source.context.rejection = create(RejectionEventContextSchema, {
       command: cause,
     });
-    const context = await BoundedContext.singleTenant("Silent commands")
-      .add(createSilentCommandProcessManagerRepository())
-      .addCommandDispatcher({
-        messageSchemas: () => [CreateProjectSchema],
-        dispatch: (command) => {
-          commands.push(command);
-          return Promise.resolve();
-        },
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Silent commands")
+        .add(createSilentCommandProcessManagerRepository())
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateProjectSchema],
+          dispatch: (command) => {
+            commands.push(command);
+            return Promise.resolve();
+          },
+        }),
+      setup,
+    );
     try {
       await context.eventBus().post(source);
       await waitForCondition(() => SilentCommandProcessManager.rejectionCalls === 1);
@@ -14210,13 +14971,15 @@ describe("repository signal routing", () => {
   });
 
   it("loads existing projection state before applying later delivered events", async () => {
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createAccumulatingProjectionRepository())
-      .build();
+    const setup = createTestSetup(true);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createAccumulatingProjectionRepository()),
+      setup,
+    );
 
     await context.eventBus().post(createProjectCreated("event-accumulated-1", "task-accumulated"));
     await context.eventBus().post(createProjectCreated("event-accumulated-2", "task-accumulated"));
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     await expect(
       context.stand().read(ProjectOverviewStateSchema, "task-accumulated"),
@@ -14231,11 +14994,12 @@ describe("repository signal routing", () => {
   });
 
   it("atomically updates a timestamped current Version after repository read-modify-write", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createExecutingProjectionRepository();
     repository.setStateHistoryEnabled(true);
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
@@ -14269,7 +15033,7 @@ describe("repository signal routing", () => {
           }),
         ),
       ).resolves.toBeUndefined();
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       await expect(
         context.stand().readVersioned(ProjectOverviewStateSchema, "timestamped-cas"),
@@ -14294,9 +15058,11 @@ describe("repository signal routing", () => {
   });
 
   it("routes projection events without writing Stand when no subscriber is registered", async () => {
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createReactingProjectionRepository())
-      .build();
+    const setup = createTestSetup(true);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createReactingProjectionRepository()),
+      setup,
+    );
 
     await context.eventBus().post(createProjectCreated("event-reacting", "task-reacting"));
 
@@ -14306,10 +15072,13 @@ describe("repository signal routing", () => {
   });
 
   it("delivers an Aggregate-produced Projection update after the shared inbox shard is released", async () => {
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createProjectionProducingRepository())
-      .add(createExecutingProjectionRepository())
-      .build();
+    const setup = createTestSetup(true);
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks")
+        .add(createProjectionProducingRepository())
+        .add(createExecutingProjectionRepository()),
+      setup,
+    );
 
     await context
       .commandBus()
@@ -14329,10 +15098,13 @@ describe("repository signal routing", () => {
   });
 
   it("uses command tenant for domain Events emitted by an Aggregate", async () => {
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createProjectionProducingRepository())
-      .add(createExecutingProjectionRepository())
-      .build();
+    const setup = createTestSetup(true);
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks")
+        .add(createProjectionProducingRepository())
+        .add(createExecutingProjectionRepository()),
+      setup,
+    );
 
     await context
       .commandBus()
@@ -14363,10 +15135,13 @@ describe("repository signal routing", () => {
   });
 
   it("rejects aggregate commands without ids before tenant projection updates", async () => {
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createIdlessCommandProjectionRepository())
-      .add(createExecutingProjectionRepository())
-      .build();
+    const setup = createTestSetup(true);
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks")
+        .add(createIdlessCommandProjectionRepository())
+        .add(createExecutingProjectionRepository()),
+      setup,
+    );
 
     await expect(
       context
@@ -14386,10 +15161,13 @@ describe("repository signal routing", () => {
   });
 
   it("rejects aggregate commands with blank ids before tenant projection updates", async () => {
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createProjectionProducingRepository())
-      .add(createExecutingProjectionRepository())
-      .build();
+    const setup = createTestSetup(true);
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks")
+        .add(createProjectionProducingRepository())
+        .add(createExecutingProjectionRepository()),
+      setup,
+    );
 
     await expect(
       context
@@ -14409,10 +15187,13 @@ describe("repository signal routing", () => {
   });
 
   it("uses command tenant metadata when stored aggregate events update projections", async () => {
-    const context = await BoundedContext.multitenant("Tasks")
-      .add(createTenantProjectionRepo())
-      .add(createExecutingProjectionRepository())
-      .build();
+    const setup = createTestSetup(true);
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tasks")
+        .add(createTenantProjectionRepo())
+        .add(createExecutingProjectionRepository()),
+      setup,
+    );
     const updates: ProjectOverviewState[] = [];
     context.stand().subscribe(
       ProjectOverviewStateSchema,
@@ -14457,12 +15238,15 @@ describe("repository signal routing", () => {
   });
 
   it("does not retain default-handled projection subscriber failures", async () => {
+    const setup = createTestSetup(true);
     const subscriberFailure = new Error("projection subscriber failed after commit");
     ThrowingTaskProjection.failure = subscriberFailure;
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProjectionProducingRepository())
-      .add(createThrowingProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProjectionProducingRepository())
+        .add(createThrowingProjectionRepository()),
+      setup,
+    );
 
     await expect(
       context
@@ -14474,16 +15258,19 @@ describe("repository signal routing", () => {
   });
 
   it("snapshots stored-event dispatch failures as bounded diagnostics", async () => {
+    const setup = createTestSetup(true);
     const thrown = new Error("x".repeat(600));
     thrown.name = "";
     delete thrown.stack;
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectCreatedSchema],
-        dispatch: () => Promise.reject(thrown),
-      })
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createExecutingRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectCreatedSchema],
+          dispatch: () => Promise.reject(thrown),
+        }),
+      setup,
+    );
 
     await expect(
       context
@@ -14495,12 +15282,15 @@ describe("repository signal routing", () => {
   });
 
   it("does not retain default-handled projection failures as dispatch diagnostics", async () => {
+    const setup = createTestSetup(true);
     const subscriberFailure = new Error("bounded projection subscriber failed");
     ThrowingTaskProjection.failure = subscriberFailure;
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createProjectionProducingRepository())
-      .add(createThrowingProjectionRepository())
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createProjectionProducingRepository())
+        .add(createThrowingProjectionRepository()),
+      setup,
+    );
 
     for (let index = 0; index < 12; index++) {
       const suffix = String(index);
@@ -14519,16 +15309,18 @@ describe("repository signal routing", () => {
   });
 
   it("advances a Projection version when the delivered Event has no producer version", async () => {
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .build();
+    const setup = createTestSetup(true);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createExecutingProjectionRepository()),
+      setup,
+    );
 
     await context.eventBus().post(
       createProjectCreated("event-without-version", "task-without-version", {
         includeVersion: false,
       }),
     );
-    await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
     await expect(
       context.stand().readVersioned(ProjectOverviewStateSchema, "task-without-version"),
@@ -14595,10 +15387,11 @@ describe("repository signal routing", () => {
   });
 
   it("rejects invalid repository events before context event storage", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const repository = createRoutingRepository();
-    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(
@@ -14610,8 +15403,9 @@ describe("repository signal routing", () => {
   });
 
   it("runs repository event acceptance before custom dispatcher acceptance", async () => {
+    const setup = createTestSetup(true);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const observed: string[] = [];
     const customDispatcher: EventDispatcher = {
       messageSchemas: () => [ProjectCreatedSchema],
@@ -14621,10 +15415,12 @@ describe("repository signal routing", () => {
       },
       dispatch: () => Promise.resolve(),
     };
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createRoutingRepository())
-      .addEventDispatcher(customDispatcher)
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks")
+        .add(createRoutingRepository())
+        .addEventDispatcher(customDispatcher),
+      setup,
+    );
 
     await expect(
       context
@@ -14654,9 +15450,11 @@ describe("repository signal routing", () => {
   });
 
   it("reports missing projection subscriber methods with neutral repository execution wording", async () => {
-    const context = await BoundedContext.singleTenant("Tasks")
-      .add(createMissingSubscriberRepo())
-      .build();
+    const setup = createTestSetup(true);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(createMissingSubscriberRepo()),
+      setup,
+    );
     const descriptor = Object.getOwnPropertyDescriptor(
       MissingSubscriberMethodProjection.prototype,
       "missingSubscriber",
@@ -14671,7 +15469,7 @@ describe("repository signal routing", () => {
           .post(createProjectCreated("event-missing-method", "task-missing-method")),
       ).resolves.toBeUndefined();
       await expect(
-        serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance()),
+        serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup)),
       ).rejects.toThrow();
     } finally {
       if (descriptor !== undefined) {
@@ -18128,6 +18926,7 @@ describe("Projection state-update routing", () => {
   });
 
   it("rejects a feedback cycle between Projection state subscriptions", async () => {
+    const setup = createTestSetup(false);
     const projectionHandlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectOverviewStateSchema,
@@ -18150,34 +18949,39 @@ describe("Projection state-update routing", () => {
     });
 
     await expect(
-      BoundedContext.singleTenant("State subscription cycle")
-        .add(projection)
-        .add(neutralProjection)
-        .build(),
+      buildContext(
+        BoundedContext.singleTenant("State subscription cycle")
+          .add(projection)
+          .add(neutralProjection),
+        setup,
+      ),
     ).rejects.toThrow(/Projection state subscriptions form a feedback cycle/);
   });
 
   it("allows a one-way dependency between Projection state subscriptions", async () => {
+    const setup = createTestSetup(false);
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectOverviewStateSchema,
       (builder) => [builder.subscribe(ProjectBacklogStateSchema, "subscribeState")],
     );
-    const context = await BoundedContext.singleTenant("One-way state subscription")
-      .add(
-        new Repository({
-          entityType: StateObservingProjection,
-          schema: ProjectOverviewStateSchema,
-          handlers,
-        }),
-      )
-      .add(
-        new Repository({
-          entityType: ProjectBacklogProjection,
-          schema: ProjectBacklogStateSchema,
-        }),
-      )
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("One-way state subscription")
+        .add(
+          new Repository({
+            entityType: StateObservingProjection,
+            schema: ProjectOverviewStateSchema,
+            handlers,
+          }),
+        )
+        .add(
+          new Repository({
+            entityType: ProjectBacklogProjection,
+            schema: ProjectBacklogStateSchema,
+          }),
+        ),
+      setup,
+    );
 
     await context.close();
   });
@@ -18209,6 +19013,7 @@ describe("Projection state-update routing", () => {
   });
 
   it("awaits a state-update query route for a receiving Projection", async () => {
+    const setup = createTestSetup(false);
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectOverviewStateSchema,
@@ -18224,7 +19029,10 @@ describe("Projection state-update routing", () => {
       handlers,
       stateUpdateRouting: routing,
     });
-    const context = await BoundedContext.singleTenant("AsyncStateRoute").add(repository).build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("AsyncStateRoute").add(repository),
+      setup,
+    );
     try {
       await context
         .stand()
@@ -18243,6 +19051,7 @@ describe("Projection state-update routing", () => {
   });
 
   it("drains slow state-update acceptance before closing its repository", async () => {
+    const setup = createTestSetup(false);
     StateObservingProjection.reset();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -18270,7 +19079,10 @@ describe("Projection state-update routing", () => {
         },
       ),
     });
-    const context = await BoundedContext.singleTenant("SlowStateRoute").add(repository).build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("SlowStateRoute").add(repository),
+      setup,
+    );
     const stateEvent = createStateChangedEvent("state-target");
     if (stateEvent.context === undefined) throw new Error("Expected state Event context.");
     stateEvent.context.origin = {
@@ -18547,6 +19359,7 @@ describe("Projection state-update routing", () => {
   });
 
   it("admits one durable state-interface row per selected target", async () => {
+    const setup = createTestSetup(false);
     StateObservingProjection.reset();
     const route = vi.fn(() => ["second", "first", "second"]);
     const token = MessageInterfaces.define<object, readonly [typeof ProjectStateSchema]>([
@@ -18563,7 +19376,10 @@ describe("Projection state-update routing", () => {
       handlers,
       stateUpdateRouting: StateUpdateRouting.create<string>().route(token, route),
     });
-    const context = await BoundedContext.singleTenant("State updates").add(repository).build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("State updates").add(repository),
+      setup,
+    );
 
     try {
       await boundedContextAccess.postSystemEvent(
@@ -18573,7 +19389,7 @@ describe("Projection state-update routing", () => {
           create(ProjectStateSchema, { id: "source", name: "Source" }),
         ),
       );
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(route).toHaveBeenCalledOnce();
       expect(StateObservingProjection.subscriberCalls).toBe(2);
@@ -18597,10 +19413,11 @@ describe("Projection state-update routing", () => {
   });
 
   it("does not commit a state subscriber that returns a concrete value", async () => {
+    const setup = createTestSetup(false);
     StateObservingProjection.reset();
     StateObservingProjection.result = null;
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectOverviewStateSchema,
@@ -18614,7 +19431,10 @@ describe("Projection state-update routing", () => {
         "target",
       ]),
     });
-    const context = await BoundedContext.singleTenant("State updates").add(repository).build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("State updates").add(repository),
+      setup,
+    );
     const storage = new CurrentRecordTestStorage({
       context: { name: "State updates", multitenant: false },
       storageFactory: factory,
@@ -18622,7 +19442,7 @@ describe("Projection state-update routing", () => {
     });
     try {
       await boundedContextAccess.postSystemEvent(context, createStateChangedEvent("source"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       const entries = StateObservingProjection.subscriberCalls;
       expect(entries).toBe(1);
       expect(StateObservingProjection.receivedIds).toEqual(Array(entries).fill("source"));
@@ -18635,14 +19455,13 @@ describe("Projection state-update routing", () => {
   });
 
   it("routes a Projection state subscription through the configured strategy", async () => {
+    const setup = createTestSetup(false);
     StateObservingProjection.reset();
     const factory = new InMemoryStorageFactory();
     const targetTypeUrl = TypeUrls.derive(ProjectOverviewStateSchema);
     const decisions: { id: string; type: string }[] = [];
-    await ServerEnvironmentLifecycle.resetForTest();
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    setup.settings = {
       storageFactory: factory,
-      tenantIndex: new TestTenantIndex(),
       deliveryStrategy: {
         shardCount: 3,
         shardFor(id, type) {
@@ -18652,8 +19471,10 @@ describe("Projection state-update routing", () => {
           return new ShardIndex(2, 3);
         },
       },
-    });
-    await ServerEnvironment.instance().completeSetup();
+    };
+    setup.index = new TestTenantIndex();
+    setup.seedTenants = false;
+    setup.seeded = false;
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectOverviewStateSchema,
@@ -18667,14 +19488,17 @@ describe("Projection state-update routing", () => {
         "routed-state",
       ]),
     });
-    const context = await BoundedContext.singleTenant("State updates").add(repository).build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("State updates").add(repository),
+      setup,
+    );
 
     try {
       await boundedContextAccess.postSystemEvent(context, createStateChangedEvent("source-state"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(decisions).toContainEqual({ id: "routed-state", type: targetTypeUrl });
       expect(StateObservingProjection.subscriberCalls).toBe(1);
-      const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+      const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
       await expect(delivery.inbox.read(new ShardIndex(2, 3))).resolves.toMatchObject([
         { signalId: "state-change-source-state", label: "UPDATE_SUBSCRIBER" },
       ]);
@@ -18685,9 +19509,10 @@ describe("Projection state-update routing", () => {
   });
 
   it("selects state subscribers by EntityStateChanged origin during intake and stored delivery", async () => {
+    const setup = createTestSetup(false);
     OriginStateProjection.reset();
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const handlers = HandlerMetadataValues.defineArity(
       OriginStateProjection,
       ProjectOverviewStateSchema,
@@ -18715,7 +19540,10 @@ describe("Projection state-update routing", () => {
       schema: ProjectOverviewStateSchema,
       handlers,
     });
-    const context = await BoundedContext.singleTenant("State origins").add(repository).build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("State origins").add(repository),
+      setup,
+    );
     const domestic = createStateChangedEvent("domestic-state");
     const external = createStateChangedEvent("external-state");
     external.context = create(EventContextSchema, { external: true });
@@ -18723,14 +19551,14 @@ describe("Projection state-update routing", () => {
     try {
       await boundedContextAccess.postSystemEvent(context, domestic);
       await boundedContextAccess.postSystemEvent(context, external);
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(OriginStateProjection.calls).toEqual([
         "domestic:domestic-state",
         "external:external-state",
       ]);
 
-      const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+      const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
       const stored = await delivery.inbox.read(ShardIndex.single(), {
         statuses: ["TO_DELIVER", "DELIVERED"],
       });
@@ -18748,13 +19576,14 @@ describe("Projection state-update routing", () => {
   });
 
   it("rejects corrupted durable state-update routes without rerouting", async () => {
+    const setup = createTestSetup(false);
     PassiveTaskProjection.reset();
     const route = vi.fn(() => ["target"]);
     const token = MessageInterfaces.define<object, readonly [typeof ProjectStateSchema]>([
       ProjectStateSchema,
     ]);
     const factory = new InMemoryStorageFactory();
-    await configureStorage(factory);
+    await configureStorage(setup, factory);
     const handlers = EntityHandlers.define(
       PassiveTaskProjection,
       ProjectOverviewStateSchema,
@@ -18766,13 +19595,14 @@ describe("Projection state-update routing", () => {
       handlers,
       stateUpdateRouting: StateUpdateRouting.create<string>().route(token, route),
     });
-    const context = await BoundedContext.singleTenant("Stored state updates")
-      .add(repository)
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Stored state updates").add(repository),
+      setup,
+    );
 
     try {
       await boundedContextAccess.postSystemEvent(context, createStateChangedEvent("source"));
-      const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+      const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
       const [stored] = await delivery.inbox.read(ShardIndex.single(), {
         statuses: ["TO_DELIVER", "DELIVERED"],
       });
@@ -18811,6 +19641,7 @@ describe("Projection state-update routing", () => {
   });
 
   it("does not persist or invoke state subscribers when the route has no targets", async () => {
+    const setup = createTestSetup(false);
     StateObservingProjection.reset();
     const route = vi.fn(() => []);
     const handlers = EntityHandlers.define(
@@ -18824,9 +19655,10 @@ describe("Projection state-update routing", () => {
       handlers,
       stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectStateSchema, route),
     });
-    const context = await BoundedContext.singleTenant("Empty state updates")
-      .add(repository)
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Empty state updates").add(repository),
+      setup,
+    );
 
     try {
       await boundedContextAccess.postSystemEvent(context, createStateChangedEvent("source"));
@@ -18842,6 +19674,7 @@ describe("Projection state-update routing", () => {
   });
 
   it("handles direct System dispatch before binding and suppresses unrelated state after binding", async () => {
+    const setup = createTestSetup(false);
     PassiveTaskProjection.reset();
     const handlers = EntityHandlers.define(
       PassiveTaskProjection,
@@ -18863,9 +19696,10 @@ describe("Projection state-update routing", () => {
     await accept(related);
     await dispatcher.dispatch(related);
 
-    const context = await BoundedContext.singleTenant("Direct state updates")
-      .add(repository)
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("Direct state updates").add(repository),
+      setup,
+    );
     try {
       await dispatcher.dispatch(related);
       const unrelated = createStateChangedEvent(
@@ -18875,7 +19709,7 @@ describe("Projection state-update routing", () => {
       await dispatcher.dispatch(unrelated);
       await accept(unrelated);
       await dispatcher.dispatch(unrelated);
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
 
       expect(PassiveTaskProjection.subscriberCalls).toBe(1);
     } finally {
@@ -18884,6 +19718,7 @@ describe("Projection state-update routing", () => {
   });
 
   it("rejects invalid route collections before invoking a subscriber", async () => {
+    const setup = createTestSetup(false);
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectOverviewStateSchema,
@@ -18899,9 +19734,10 @@ describe("Projection state-update routing", () => {
         handlers,
         stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectStateSchema, route),
       });
-      const context = await BoundedContext.singleTenant("Invalid state route")
-        .add(repository)
-        .build();
+      const context = await buildContext(
+        BoundedContext.singleTenant("Invalid state route").add(repository),
+        setup,
+      );
       try {
         await expect(boundedContextAccess.postSystemEvent(context, event)).resolves.toBeUndefined();
         expect(StateObservingProjection.subscriberCalls).toBe(0);
@@ -18936,21 +19772,23 @@ describe("Projection state-update routing", () => {
   });
 
   it("keeps durable state updates within the originating tenant", async () => {
+    const setup = createTestSetup(false);
     StateObservingProjection.reset();
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectOverviewStateSchema,
       (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
     );
-    const context = await BoundedContext.multitenant("Tenant state updates")
-      .add(
+    const context = await buildContext(
+      BoundedContext.multiTenant("Tenant state updates").add(
         new Repository({
           entityType: StateObservingProjection,
           schema: ProjectOverviewStateSchema,
           handlers,
         }),
-      )
-      .build();
+      ),
+      setup,
+    );
 
     try {
       await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-a"));
@@ -18963,7 +19801,7 @@ describe("Projection state-update routing", () => {
           "tenant-a",
         ),
       );
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       await expect(
         context
           .stand()

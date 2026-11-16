@@ -17,14 +17,16 @@
  */
 
 import {
-  EnvironmentType,
+  Environment,
   ServerEnvironment,
   type DeliveryStrategy,
   type RunningServer,
+  type ServerEnvironmentDelivery,
   type StandSubscriptionRegistry,
 } from "@spine-event-engine/server";
 import { BrowserServer, type BrowserServerOptions } from "@spine-event-engine/server/browser";
 import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
+import type { ILogLayer } from "loglayer";
 import {
   ComposedBoardApplication,
   type ComposedBoard,
@@ -66,6 +68,26 @@ export interface BoardServerOptions {
 }
 
 /**
+ * Facilities selected for one Message Board Application process.
+ */
+export interface BoardApplicationFacilities {
+  /**
+   * Stores Application state and Delivery records.
+   */
+  readonly storageFactory: StorageFactory;
+
+  /**
+   * Connects this process to remote Delivery when configured.
+   */
+  readonly delivery?: ServerEnvironmentDelivery;
+
+  /**
+   * Receives server lifecycle diagnostics.
+   */
+  readonly logger?: ILogLayer;
+}
+
+/**
  * Reuses the composed Message Board in local, managed, and combined processes.
  */
 export class MessageBoardApplication {
@@ -81,16 +103,17 @@ export class MessageBoardApplication {
   /**
    * Builds both Bounded Contexts from the already selected environment.
    *
+   * @param environment Configured facilities for the Message Board Application.
    * @param options Listener settings.
    * @param registryFactory Creates one registry per Bounded Context.
    * @returns The configured contexts or running Server.
    */
   async create(
+    environment: ServerEnvironment,
     options: BoardServerOptions = {},
     registryFactory?: () => StandSubscriptionRegistry,
   ): Promise<ComposedBoard> {
-    await ServerEnvironment.instance().completeSetup();
-    return new ComposedBoardApplication(this.#admission()?.readerAdmission).create({
+    return new ComposedBoardApplication(this.#admission()?.readerAdmission).create(environment, {
       host: options.host ?? "127.0.0.1",
       port: options.port ?? 0,
       ...(registryFactory === undefined ? {} : { registryFactory }),
@@ -104,9 +127,10 @@ export class MessageBoardApplication {
    * @returns The configured contexts or running Server.
    */
   async start(options: BoardServerOptions = {}): Promise<RunningServer> {
-    this.#localEnvironment();
-    const native = (await this.create({ host: "127.0.0.1", port: 0 })).server;
-    return BrowserServer.open(await native.start(), this.#browserOptions(options));
+    const browserOptions = this.#browserOptions(options);
+    const composed = await this.create(this.#localEnvironment(), { host: "127.0.0.1", port: 0 });
+    const native = await this.#startNative(composed);
+    return BrowserServer.open(native, browserOptions);
   }
 
   /**
@@ -116,76 +140,140 @@ export class MessageBoardApplication {
    * @returns The configured contexts or running Server.
    */
   async run(options: BoardServerOptions = {}): Promise<RunningServer> {
-    this.#localEnvironment();
-    const native = (await this.create({ host: "127.0.0.1", port: 0 })).server;
-    return BrowserServer.run(native, this.#browserOptions(options));
+    const browserOptions = this.#browserOptions(options);
+    const composed = await this.create(this.#localEnvironment(), { host: "127.0.0.1", port: 0 });
+    return this.#runBrowser(composed, browserOptions);
   }
 
   /**
    * Starts the native application server with deployment-selected storage.
    *
    * @param options Native listener settings.
-   * @param storageFactory Deployment-selected storage.
+   * @param facilities Deployment-selected storage, Delivery, and logging.
    * @returns The configured contexts or running Server.
    */
   async runApplication(
     options: BoardServerOptions,
-    storageFactory: StorageFactory,
+    facilities: BoardApplicationFacilities,
   ): Promise<RunningServer> {
-    this.#environment(storageFactory);
-    return (await this.create(options)).server.run();
+    const composed = await this.create(this.#environment(facilities), options);
+    return composed.server.run();
   }
 
   /**
    * Starts a managed native replica with distinct registries for its Bounded Contexts.
    *
    * @param options Native listener settings.
-   * @param storageFactory Deployment-selected storage.
+   * @param facilities Deployment-selected storage, Delivery, and logging.
    * @param deliveryStrategy Shared Delivery configuration.
    * @param registryFactory Creates one registry per Bounded Context.
    * @returns The configured contexts or running Server.
    */
   async startManagedApplication(
     options: BoardServerOptions,
-    storageFactory: StorageFactory,
+    facilities: BoardApplicationFacilities,
     deliveryStrategy: DeliveryStrategy,
     registryFactory: () => StandSubscriptionRegistry,
   ): Promise<RunningServer> {
-    this.#environment(storageFactory, deliveryStrategy);
-    return (await this.create(options, registryFactory)).server.start();
+    const environment = this.#environment(facilities, deliveryStrategy);
+    const composed = await this.create(environment, options, registryFactory);
+    return this.#startNative(composed);
   }
 
   /**
    * Starts the combined deployment server with one shared domain assembly.
    *
    * @param options Listener and browser settings.
-   * @param storageFactory Deployment-selected storage.
+   * @param facilities Deployment-selected storage, Delivery, and logging.
    * @returns The configured contexts or running Server.
    */
   async runCombined(
     options: BoardServerOptions,
-    storageFactory: StorageFactory,
+    facilities: BoardApplicationFacilities,
   ): Promise<RunningServer> {
-    this.#environment(storageFactory);
-    const native = (await this.create({ host: "127.0.0.1", port: 0 })).server;
-    return BrowserServer.run(native, this.#browserOptions(options));
+    const browserOptions = this.#browserOptions(options);
+    const environment = this.#environment(facilities);
+    const composed = await this.create(environment, { host: "127.0.0.1", port: 0 });
+    return this.#runBrowser(composed, browserOptions);
+  }
+
+  /**
+   * Starts both listeners and closes the assembled Application on startup failure.
+   *
+   * @param composed Assembled native Message Board.
+   * @param options Browser listener and admission settings.
+   * @returns Both running listeners.
+   */
+  async #runBrowser(
+    composed: ComposedBoard,
+    options: BrowserServerOptions,
+  ): Promise<RunningServer> {
+    try {
+      return await BrowserServer.run(composed.server, options);
+    } catch (error) {
+      try {
+        await composed.application.close();
+      } catch (cleanup) {
+        throw new AggregateError([error, cleanup], "Message Board browser startup cleanup failed.");
+      }
+      throw error;
+    }
   }
 
   /**
    * Configures in-memory storage for local example startup.
    */
-  #localEnvironment(): void {
-    this.#environment(new InMemoryStorageFactory());
+  #localEnvironment(): ServerEnvironment {
+    return this.#environment({ storageFactory: new InMemoryStorageFactory() });
   }
 
   /**
    * Installs the selected storage and delivery facilities in the local Server environment.
    */
-  #environment(storageFactory: StorageFactory, deliveryStrategy?: DeliveryStrategy): void {
-    ServerEnvironment.when(EnvironmentType.Local).use({
-      storageFactory,
-      ...(deliveryStrategy === undefined ? {} : { deliveryStrategy }),
-    });
+  #environment(
+    facilities: BoardApplicationFacilities,
+    deliveryStrategy?: DeliveryStrategy,
+  ): ServerEnvironment {
+    return ServerEnvironment.newBuilder()
+      .under(Environment.instance().type, (setting) => {
+        setting.use({
+          storageFactory: facilities.storageFactory,
+          typeRegistry,
+          ...(deliveryStrategy === undefined ? {} : { deliveryStrategy }),
+          ...(facilities.delivery === undefined ? {} : { delivery: facilities.delivery }),
+          ...(facilities.logger === undefined ? {} : { logger: facilities.logger }),
+        });
+      })
+      .build();
+  }
+
+  /**
+   * Starts the native endpoint and keeps Application shutdown after its close.
+   *
+   * @param composed Message Board Application and Server builder.
+   * @returns Native endpoint with Application cleanup.
+   */
+  async #startNative(composed: ComposedBoard): Promise<RunningServer> {
+    let endpoint: RunningServer;
+    try {
+      endpoint = await composed.server.start();
+    } catch (error) {
+      try {
+        await composed.application.close();
+      } catch (cleanup) {
+        throw new AggregateError([error, cleanup], "Message Board startup cleanup failed.");
+      }
+      throw error;
+    }
+    return {
+      host: endpoint.host,
+      port: endpoint.port,
+      baseUrl: endpoint.baseUrl,
+      close: async () => {
+        await endpoint.close();
+        await composed.application.close();
+      },
+    };
   }
 
   /**

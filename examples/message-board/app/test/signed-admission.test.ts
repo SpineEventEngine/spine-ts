@@ -15,7 +15,6 @@
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { Client } from "@spine-event-engine/client-web";
-import { ServerTests } from "@spine-event-engine/server/testing";
 import { ReadBoardStats } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/board_queries_app_query.js";
 import {
   BoardIdSchema,
@@ -28,12 +27,11 @@ import {
   ResolveContextRequestSchema,
   ResolveContextResponseSchema,
 } from "@spine-event-engine/proto/auth";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BoardAdmission } from "../src/signed-admission.js";
 import { MessageBoardApplication } from "../src/message-board-domain.js";
 
 describe("Message Board signed admission", () => {
-  afterEach(async () => ServerTests.resetEnvironment());
   it("verifies a real issued session and operation-bound forwarding proof", async () => {
     const { privateKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
     const admission = BoardAdmission.signed({

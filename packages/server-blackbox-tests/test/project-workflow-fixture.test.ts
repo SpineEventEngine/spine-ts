@@ -12,10 +12,10 @@
  * the License.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { create } from "@bufbuild/protobuf";
-import { ServerEnvironment } from "@spine-event-engine/server";
-import { ServerTests } from "@spine-event-engine/server/testing";
+import { Client as NodeClient } from "@spine-event-engine/client-node";
+import { Application, Server, ServerEnvironment } from "@spine-event-engine/server";
 import { BlackBox } from "@spine-event-engine/testing";
 import { CreateProjectSchema } from "../generated/spine/server/testing/project_commands_pb.js";
 import { ProjectCreatedSchema } from "../generated/spine/server/testing/project_events_pb.js";
@@ -25,20 +25,12 @@ import {
 } from "../generated/spine/server/testing/project_workflow_pb.js";
 import { projectWorkflow, projectWorkflowIds } from "../test-fixtures/project-workflow.js";
 
-beforeEach(async () => {
-  await ServerEnvironment.instance().completeSetup();
-});
-
-afterEach(async () => {
-  await ServerTests.resetEnvironment();
-});
-
 describe("Project process fixture", () => {
   it("routes one committed ProjectCreated to real planning, staffing and projection states", async () => {
     const entries: string[] = [];
     const ids = projectWorkflowIds("fixture-test", 1);
     const blackBox = await BlackBox.from(
-      await projectWorkflow("fixture-test", (entry) => {
+      projectWorkflow("fixture-test", (entry) => {
         entries.push(entry.method);
       }),
     );
@@ -69,15 +61,23 @@ describe("Project process fixture", () => {
 
   it("derives distinct recipient IDs for two ProjectCreated Events", async () => {
     const entries: string[] = [];
-    const context = await projectWorkflow("two-projects", (entry) => {
+    const builder = projectWorkflow("two-projects", (entry) => {
       entries.push(entry.correlation);
     });
     const first = projectWorkflowIds("fixture-pair", 1);
     const second = projectWorkflowIds("fixture-pair", 2);
-    const blackBox = await BlackBox.from(context);
+    const environment = ServerEnvironment.newBuilder().build();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(environment)
+      .add(builder)
+      .build();
+    const context = application.contexts()[0];
+    if (context === undefined) throw new Error("Expected a Bounded Context in the Application.");
+    const endpoint = await Server.atPort(0).setApplication(application).start();
+    const client = NodeClient.connectTo(endpoint.baseUrl);
     try {
       for (const ids of [first, second]) {
-        const result = await blackBox.asGuest().post(
+        const result = await client.asGuest().post(
           CreateProjectSchema,
           create(CreateProjectSchema, {
             project: ids.project,
@@ -86,24 +86,24 @@ describe("Project process fixture", () => {
         );
         expect(result.kind).toBe("ok");
       }
-      await blackBox.eventually(
-        async () =>
-          Promise.all([
-            context.stand().read(PlanningStateSchema, first.planning),
-            context.stand().read(PlanningStateSchema, second.planning),
-            context.stand().read(StaffingStateSchema, first.staffing),
-            context.stand().read(StaffingStateSchema, second.staffing),
-          ]),
-        (states) => states.every((state) => state !== undefined),
-      );
-      await blackBox.eventually(
-        () => entries.length,
-        (length) => length === 10,
-      );
+      await vi.waitFor(async () => {
+        const states = await Promise.all([
+          context.stand().read(PlanningStateSchema, first.planning),
+          context.stand().read(PlanningStateSchema, second.planning),
+          context.stand().read(StaffingStateSchema, first.staffing),
+          context.stand().read(StaffingStateSchema, second.staffing),
+        ]);
+        expect(states.every((state) => state !== undefined)).toBe(true);
+      });
+      await vi.waitFor(() => {
+        expect(entries).toHaveLength(10);
+      });
       expect(entries.filter((value) => value === "fixture-pair:1")).toHaveLength(5);
       expect(entries.filter((value) => value === "fixture-pair:2")).toHaveLength(5);
     } finally {
-      await blackBox.close();
+      await client.close();
+      await endpoint.close();
+      await application.close();
     }
   });
 });

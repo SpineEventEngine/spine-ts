@@ -12,25 +12,29 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
+import { Client } from "@spine-event-engine/client-node";
 import { AiModel, AiRegistry, ModelRef } from "@spine-event-engine/ai";
 import { backendDefinition, createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
 import { AnyPacker } from "@spine-event-engine/core";
+import { EventSchema, type Event } from "@spine-event-engine/proto";
 import { AiModelKind, ConversationIdSchema } from "@spine-event-engine/proto/agent";
 import {
   Agent,
+  Application,
   BoundedContext,
   HandlerRegistryIngestor,
   Repository,
   EnvironmentType,
+  Server,
   ServerEnvironment,
   ShardIndex,
   type EntityHandlersMetadata,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { AiTestBackend, BlackBox } from "../src/index.js";
+import { observeProducedSignals } from "@spine-event-engine/server/testing";
+import { describe, expect, it, vi } from "vitest";
+import { AiTestBackend } from "../src/index.js";
 import {
   SupportReplyAgentIdSchema,
   SupportReplyAgentStateSchema,
@@ -49,17 +53,6 @@ import {
   ProposedSupportReplySchema,
   SupportReplyFactsSchema,
 } from "../test-fixtures/generated/support_ai_types_pb.js";
-
-beforeEach(async () => {
-  ServerEnvironment.when(EnvironmentType.Local).use({
-    storageFactory: new InMemoryStorageFactory(),
-  });
-  await ServerEnvironment.instance().completeSetup();
-});
-
-afterEach(async () => {
-  await resetServerEnvironmentForTest();
-});
 
 const model = AiModel.define({
   name: "capacity-support-reply",
@@ -278,14 +271,61 @@ async function contextBox(
   selfReact = false,
 ) {
   const builder = BoundedContext.singleTenant(name).withAi(ai).persistSystemEvents();
-  const context = await (
-    escalated ? builder.add(escalationRepository()) : builder.add(repository(entityType, selfReact))
-  ).build();
-  return { box: await BlackBox.from(context, { timeoutMs: 7_000 }) };
+  if (escalated) {
+    builder.add(escalationRepository());
+  } else {
+    builder.add(repository(entityType, selfReact));
+  }
+  const environment = ServerEnvironment.newBuilder()
+    .under(EnvironmentType.Local, (setting) => {
+      setting.use({
+        storageFactory: new InMemoryStorageFactory(),
+      });
+    })
+    .build();
+  const application = await Application.newBuilder()
+    .setServerEnvironment(environment)
+    .add(builder)
+    .build();
+  const context = application.contexts()[0];
+  if (context === undefined) throw new Error("Expected a Bounded Context in the Application.");
+  const endpoint = await Server.atPort(0).setApplication(application).start();
+  const client = Client.connectTo(endpoint.baseUrl);
+  const events: Event[] = [];
+  const observer = observeProducedSignals(context, {
+    onEvent: (event) => events.push(clone(EventSchema, event)),
+  });
+  const box = {
+    asGuest: () => client.asGuest(),
+    assertEvents: () => events.map((event) => clone(EventSchema, event)),
+    eventually: async <Value>(
+      read: () => Value | Promise<Value>,
+      ready: (value: Value) => boolean,
+    ) => {
+      let result!: Value;
+      await vi.waitFor(
+        async () => {
+          result = await read();
+          expect(ready(result)).toBe(true);
+        },
+        { timeout: 7_000 },
+      );
+      return result;
+    },
+    close: async () => {
+      await client.close();
+      await endpoint.close();
+      observer.close();
+      await application.close();
+    },
+  };
+  return { box, environment };
 }
 
+type CapacityBox = Awaited<ReturnType<typeof contextBox>>["box"];
+
 async function post(
-  box: BlackBox,
+  box: CapacityBox,
   ticketNumber: string,
   question = `Please draft ${ticketNumber}`,
 ) {
@@ -295,7 +335,7 @@ async function post(
     .post(DraftSupportReplySchema, create(DraftSupportReplySchema, { agent, question }));
 }
 
-async function produced(box: BlackBox, count: number) {
+async function produced(box: CapacityBox, count: number) {
   return box.eventually(
     () => box.assertEvents(),
     (events) => events.length === count,
@@ -324,7 +364,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
       const deferred = await post(second.box, "T-B");
       expect(deferred).toMatchObject({ kind: "ok" });
       expect(
-        await ServerEnvironment.instance().delivery.inbox.read(ShardIndex.single(), {
+        await second.environment.delivery.inbox.read(ShardIndex.single(), {
           statuses: ["TO_DELIVER"],
         }),
       ).toHaveLength(1);
@@ -488,7 +528,11 @@ describe("shared Agent registry capacity through BlackBox", () => {
       .respondWith(create(ProposedSupportReplySchema, { reply: "Alternate reply" }));
     const { ai: primaryRegistry } = registry(primary, 1, 1);
     const ai = primaryRegistry.register(alternate.registration);
-    const { box } = await contextBox("CapacityPreference", ai, PreferenceCapacityAgent);
+    const { box, environment } = await contextBox(
+      "CapacityPreference",
+      ai,
+      PreferenceCapacityAgent,
+    );
     try {
       expect((await post(box, "T-P", "Prefer alternate")).kind).toBe("ok");
       await box.eventually(
@@ -499,7 +543,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
       const deferred = await post(box, "T-P", "After preference");
       expect(deferred).toMatchObject({ kind: "ok" });
       expect(
-        await ServerEnvironment.instance().delivery.inbox.read(ShardIndex.single(), {
+        await environment.delivery.inbox.read(ShardIndex.single(), {
           statuses: ["TO_DELIVER"],
         }),
       ).toHaveLength(1);

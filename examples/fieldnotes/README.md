@@ -62,9 +62,10 @@ flowchart LR
 ```
 
 Next.js serves the page and forwards application requests to one long-lived
-Node host. That host configures `ServerEnvironment`, creates the single-tenant
-Bounded Context, and starts the authenticated browser gateway and private
-native services. The UI process does not create a second environment.
+Node host. That host builds a separate `ServerEnvironment`, adds the single-tenant
+Fieldnotes builder to an `Application`, and starts the authenticated browser gateway
+and private native services. Host shutdown stops the listeners before closing the
+Application and its storage. The UI process does not assemble server services.
 
 The map uses MapLibre with OpenFreeMap and needs no map API key. The interface
 uses shadcn components and a maintained Markdown editor. GitHub-flavored

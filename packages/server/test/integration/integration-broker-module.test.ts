@@ -27,9 +27,6 @@ import {
   EventSchema,
 } from "@spine-event-engine/proto";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
-import { EnvironmentType } from "../../src/server/environment.js";
-import { ServerEnvironment } from "../../src/server/server-environment.js";
-import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { IntegrationBroker } from "../../src/integration/integration-broker.js";
@@ -58,7 +55,6 @@ describe("IntegrationBroker module", () => {
   const brokers: IntegrationBroker[] = [];
   afterEach(async () => {
     await Promise.all(brokers.splice(0).map((broker) => broker.close().catch(() => undefined)));
-    await resetServerEnvironmentForTest();
   });
 
   it("keeps another same-channel subscriber active after one subscriber closes", async () => {
@@ -699,21 +695,17 @@ describe("IntegrationBroker module", () => {
   });
 
   it("drops corrupt external events with safe ERROR facts and continues with a valid frame", async () => {
-    await resetServerEnvironmentForTest();
     const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
-    ServerEnvironment.when(EnvironmentType.Local).use({
-      logger: {
-        child: () => ({
-          withMetadata: (facts: Record<string, unknown>) => ({
-            error: (message: string) => errors.push({ message, facts }),
-          }),
-        }),
-      } as never,
-    });
+    const logger = {
+      withMetadata: (facts: Record<string, unknown>) => ({
+        error: (message: string) => errors.push({ message, facts }),
+      }),
+    } as never;
     const factory = new RecordingTransportFactory();
     const imported: Event[] = [];
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "invalid" }),
+      logger,
       transportFactory: factory,
       eventBus: registeredEventBus(),
       externalEventSchemas: [ReviewTaskAssignedSchema],

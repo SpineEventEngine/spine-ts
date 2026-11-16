@@ -2,6 +2,14 @@
 
 Audience: coding agents implementing or checking the Release Notes Studio example. The [README](README.md) is the human walkthrough and contains build and launch instructions. This reference records the domain messages, Agent invocation, account and tool boundaries, terminal history evidence, history reads, and test seams. It does not replace the application's permission checks.
 
+## Application lifecycle
+
+`ReleaseNotesContext.create(ai, options?)` synchronously returns a Bounded Context
+builder. Studio assembles it in a fresh Application and closes that Application
+when the backend stops. Tests that need both native requests and direct Stand or
+EventBus access use an explicit Application, endpoint, and public Node client.
+Their cleanup closes the endpoint before the Application.
+
 ## Accepted generation sequence
 
 A generation begins only after the trusted desktop service resolves the selected Git revisions and submits `RequestReleaseGeneration`. The Aggregate accepts the inputs before the Agent reacts. The sequence below names the code responsible for each transition and whether completion is synchronous or asynchronous.

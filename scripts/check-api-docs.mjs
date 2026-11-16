@@ -642,6 +642,9 @@ const expectedTestingExports = [
   "BlackBoxTimeoutError",
 ];
 const expectedServerExports = [
+  "Application",
+  "ApplicationBuilder",
+  "ApplicationBuildOptions",
   "AppQueryContext",
   "AppQueryHandler",
   "Aggregate",
@@ -653,7 +656,6 @@ const expectedServerExports = [
   "BaseHandlerMetadata",
   "BoundedContext",
   "BoundedContextBuilder",
-  "BoundedContextBuildOptions",
   "BoundedContextRuntime",
   "BoundedContextName",
   "BoundedContextNameError",
@@ -774,6 +776,7 @@ const expectedServerExports = [
   "PersistentTenantIndexOptions",
   "Server",
   "ServerEnvironment",
+  "ServerEnvironmentBuilder",
   "ServerEnvironmentCloseable",
   "ServerEnvironmentDelivery",
   "ServerEnvironmentSettings",
@@ -1673,6 +1676,42 @@ const forbiddenPublicMembers = [
     matches: (value) => Array.isArray(value.signatures),
   },
   {
+    owner: "BoundedContextBuilder",
+    member: "build",
+    reason: "Application assembles Bounded Context builders",
+    matches: (value) => Array.isArray(value.signatures),
+  },
+  {
+    owner: "BoundedContextBuilder",
+    member: "withTenantIndex",
+    reason: "Application selects the tenant index",
+    matches: (value) => Array.isArray(value.signatures),
+  },
+  {
+    owner: "BoundedContext",
+    member: "multitenant",
+    reason: "removed factory spelling",
+    matches: (value) => Array.isArray(value.signatures),
+  },
+  {
+    owner: "Server",
+    member: "add",
+    reason: "Server accepts a built Application",
+    matches: (value) => Array.isArray(value.signatures),
+  },
+  {
+    owner: "ServerEnvironment",
+    member: "instance",
+    reason: "environment setup is explicit",
+    matches: (value) => Array.isArray(value.signatures),
+  },
+  {
+    owner: "ServerEnvironment",
+    member: "when",
+    reason: "environment setup is explicit",
+    matches: (value) => Array.isArray(value.signatures),
+  },
+  {
     owner: "ContextSpec",
     member: "singleTenant",
     reason: "removed factory",
@@ -1800,6 +1839,8 @@ function collectForbiddenMembers(value, ownerName, matches) {
     [
       "BoundedContext",
       "BoundedContextBuilder",
+      "Server",
+      "ServerEnvironment",
       "ContextSpec",
       "Repository",
       "SingleProcessServerRuntime",

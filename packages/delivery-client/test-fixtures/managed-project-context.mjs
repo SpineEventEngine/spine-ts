@@ -63,12 +63,12 @@ class ManagedProjectProjection extends Projection {
 }
 
 /**
- * Creates a server-local project context for managed-server integration tests.
+ * Declares a project Bounded Context for managed-server integration tests.
  *
  * @param options Facilities selected by the managed application fixture.
- * @returns The assembled project context.
+ * @returns The project Bounded Context builder.
  */
-export async function createManagedProjectContext(options = {}) {
+export function createManagedProjectContext(options = {}) {
   ManagedProjectAggregate.onCreateProject = options.onCreateProject;
   const builder = BoundedContext.singleTenant("ManagedProjects").add(ManagedProjectAggregate);
   if (options.includeProjection === true) {
@@ -79,7 +79,7 @@ export async function createManagedProjectContext(options = {}) {
   if (options.subscriptionRegistry !== undefined) {
     builder.withSubscriptionRegistry(options.subscriptionRegistry);
   }
-  return builder.build();
+  return builder;
 }
 
 /**

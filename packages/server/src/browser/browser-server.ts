@@ -59,6 +59,7 @@ import {
 
 import type { RunningServer } from "../server/server.js";
 import { Server, serverBuilderAccess } from "../server/server.js";
+import { managedApplicationCapture } from "../server/managed-application-capture.js";
 import type {
   BrowserAuthRoute,
   BrowserCredentialReader,
@@ -73,7 +74,6 @@ import {
 import reservedSpineRpcPaths from "../server/reserved-spine-rpc-paths.json" with { type: "json" };
 import { Environment, EnvironmentType } from "../server/environment.js";
 import { ProcessServerCoordinator } from "../server/process-server-coordinator.js";
-import { ServerEnvironment } from "../server/server-environment.js";
 
 const gracefulBrowserDrainMs = 100;
 const reservedPathSet = new Set(reservedSpineRpcPaths);
@@ -382,7 +382,9 @@ export const browserServerImplementation: Readonly<{
       );
       throw error;
     }
-    return BrowserServerValues.openWithOptions(native, running, options);
+    const browser = await BrowserServerValues.openWithOptions(native, running, options);
+    managedApplicationCapture.replaceEndpoint(running, browser);
+    return browser;
   },
 
   /**
@@ -403,14 +405,16 @@ export const browserServerImplementation: Readonly<{
         throw new Error("Combined browser server requires a loopback native listener.");
     }
     const prepared = BrowserServer.preflight(combined ? "combined" : "standalone", options);
-    const native = combined ? await nativeOrOptions.start() : undefined;
+    const native = combined ? await nativeOrOptions.run() : undefined;
     const running = await BrowserServerValues.openWithOptions(native, native, prepared);
-    return ProcessServerCoordinator.add(
+    const managed = ProcessServerCoordinator.add(
       running,
-      native === undefined ? undefined : ServerEnvironment.instance(),
+      combined ? serverBuilderAccess.application(nativeOrOptions) : undefined,
       undefined,
       () => undefined,
     );
+    managedApplicationCapture.replaceEndpoint(native, managed);
+    return managed;
   },
 
   /**

@@ -16,7 +16,6 @@ import { execFile, fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 
-import { ServerTests } from "@spine-event-engine/server/testing";
 import { expect, it, onTestFinished } from "vitest";
 
 const run = promisify(execFile);
@@ -203,19 +202,15 @@ it("rejects an unreachable tenant database before starting a listener", async ()
     membership: "existing",
   });
   let listenerStarted = false;
-  try {
-    await expect(
-      withOrdersServer(
-        setup,
-        () => startOrdersServer(),
-        () => {
-          listenerStarted = true;
-          return Promise.resolve();
-        },
-      ),
-    ).rejects.toThrow();
-    expect(listenerStarted).toBe(false);
-  } finally {
-    await ServerTests.resetEnvironment();
-  }
+  await expect(
+    withOrdersServer(
+      setup,
+      () => startOrdersServer(setup),
+      () => {
+        listenerStarted = true;
+        return Promise.resolve();
+      },
+    ),
+  ).rejects.toThrow();
+  expect(listenerStarted).toBe(false);
 });

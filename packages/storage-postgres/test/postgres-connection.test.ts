@@ -315,6 +315,60 @@ describe("PostgresStorageFactory connection", () => {
     await expect(factory.checkConnection()).rejects.toThrow(/closed/i);
   });
 
+  it("shares a pending shared check, retries its failure, and rejects checks after close", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const unavailable = new Error("schema temporarily unavailable");
+    let failing = true;
+    driver.query.mockImplementation(async (sql) => {
+      if (sql.includes("information_schema.schemata")) {
+        if (failing) {
+          entered.resolve(undefined);
+          await release.promise;
+          throw unavailable;
+        }
+        return { rowCount: 1, rows: [] };
+      }
+      return { rows: [] };
+    });
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/shared", schema: "spine" })
+      .build();
+    const first = factory.checkConnection();
+    try {
+      const readiness = await Promise.race([
+        entered.promise.then(() => "entered" as const),
+        first.then(
+          () => "finished" as const,
+          () => "finished" as const,
+        ),
+      ]);
+      if (readiness !== "entered") throw new Error("Shared check finished before schema probe.");
+      const second = factory.checkConnection();
+      expect(second).toBe(first);
+      const outcomes = Promise.allSettled([first, second]);
+      release.resolve(undefined);
+      const [a, b] = await outcomes;
+      if (a.status !== "rejected" || b.status !== "rejected")
+        throw new Error("Expected both shared check callers to reject.");
+      const firstFailure: unknown = a.reason;
+      const secondFailure: unknown = b.reason;
+      expect(firstFailure).toBeInstanceOf(Error);
+      expect(secondFailure).toBe(firstFailure);
+      failing = false;
+      await expect(factory.checkConnection()).resolves.toBeUndefined();
+      const poolsBeforeClose = driver.Pool.mock.calls.length;
+      await factory.close();
+      await expect(factory.checkConnection()).rejects.toThrow(/closed/i);
+      expect(driver.Pool).toHaveBeenCalledTimes(poolsBeforeClose);
+      expect(driver.end).toHaveBeenCalledTimes(poolsBeforeClose);
+    } finally {
+      release.resolve(undefined);
+      await Promise.allSettled([first]);
+      await factory.close();
+    }
+  });
+
   it("rejects duplicate tenants and normalized physical database targets", async () => {
     const one = tenant("one");
     const two = tenant("two");
@@ -451,21 +505,226 @@ describe("PostgresStorageFactory connection", () => {
       expect(pools[1]?.connect).not.toHaveBeenCalled();
       expect(pools[2]?.connect).toHaveBeenCalledOnce();
       expect(pools[2]?.release).toHaveBeenCalledOnce();
+      const checkedIndexes = () =>
+        driver.query.mock.calls.flatMap(([, values]) => {
+          const name = values?.[1];
+          return typeof name === "string" && name in columns ? [name] : [];
+        });
+      expect(checkedIndexes()).toEqual(["agent_history_full", "agent_history_category"]);
       repaired = true;
       await expect(preparation.prepareAgentHistory(agentScope, "check")).resolves.toBeUndefined();
-      expect(pools).toHaveLength(4);
-      expect(pools[3]?.connect).toHaveBeenCalledOnce();
-      expect(pools[3]?.release).toHaveBeenCalledOnce();
+      expect(pools).toHaveLength(5);
+      expect(pools[3]?.connect).not.toHaveBeenCalled();
       expect(pools[3]?.end).toHaveBeenCalledOnce();
+      expect(pools[4]?.connect).toHaveBeenCalledOnce();
+      expect(pools[4]?.release).toHaveBeenCalledOnce();
+      expect(pools[4]?.end).toHaveBeenCalledOnce();
+      expect(checkedIndexes()).toEqual([
+        "agent_history_full",
+        "agent_history_category",
+        "agent_history_full",
+        "agent_history_category",
+        "agent_history_conversation",
+      ]);
       await preparation.prepareAgentHistory(agentScope, "check");
-      expect(pools).toHaveLength(4);
-      expect(table).toHaveBeenCalledTimes(1);
+      expect(pools).toHaveLength(7);
+      expect(pools[5]?.connect).not.toHaveBeenCalled();
+      expect(pools[5]?.end).toHaveBeenCalledOnce();
+      expect(pools[6]?.connect).toHaveBeenCalledOnce();
+      expect(pools[6]?.release).toHaveBeenCalledOnce();
+      expect(pools[6]?.end).toHaveBeenCalledOnce();
+      expect(checkedIndexes().slice(-3)).toEqual([
+        "agent_history_full",
+        "agent_history_category",
+        "agent_history_conversation",
+      ]);
+      expect(table.mock.calls.map(([mode]) => mode)).toEqual(["check", "check", "check"]);
     } finally {
       await factory.close();
       table.mockRestore();
       driver.Pool.mockImplementation(function Pool() {
         return { connect: driver.connect, end: driver.end };
       });
+    }
+  });
+
+  it("runs a queued Agent audit check after creation and retries changed indexes", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const table = vi.spyOn(PostgresTableInitializer.prototype, "prepare").mockResolvedValue();
+    const pools: {
+      connect: ReturnType<typeof vi.fn>;
+      end: ReturnType<typeof vi.fn>;
+      release: ReturnType<typeof vi.fn>;
+    }[] = [];
+    driver.Pool.mockImplementation(function Pool() {
+      const releaseClient = vi.fn();
+      const end = vi.fn(() => Promise.resolve());
+      const connect = vi.fn(() => Promise.resolve({ query: driver.query, release: releaseClient }));
+      pools.push({ connect, end, release: releaseClient });
+      return {
+        connect,
+        end,
+      };
+    });
+    const columns = {
+      agent_history_full: 'scope_digest, order_key COLLATE "C"',
+      agent_history_category: 'scope_digest, category, order_key COLLATE "C"',
+      agent_history_conversation: 'scope_digest, conversation_digest, order_key COLLATE "C"',
+    };
+    let indexChecks = 0;
+    driver.query.mockImplementation(async (sql, values) => {
+      if (sql.includes("information_schema.schemata")) return { rowCount: 1, rows: [] };
+      if (!sql.includes("pg_get_indexdef")) return { rows: [] };
+      indexChecks += 1;
+      if (indexChecks === 1) {
+        entered.resolve(undefined);
+        await release.promise;
+      }
+      const name = values?.[1] as keyof typeof columns;
+      if (indexChecks === 4) return { rows: [] };
+      return {
+        rows: [
+          {
+            definition: `CREATE INDEX ${name} ON audit USING btree (${columns[name]})`,
+            indisvalid: true,
+            indisready: true,
+          },
+        ],
+      };
+    });
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    let creating: Promise<void> | undefined;
+    let checking: Promise<void> | undefined;
+    let joiningCheck: Promise<void> | undefined;
+    try {
+      creating = preparation.prepareAgentHistory(agentScope, "create");
+      const readiness = await Promise.race([
+        entered.promise.then(() => "entered" as const),
+        creating.then(() => "finished" as const),
+      ]);
+      if (readiness !== "entered") throw new Error("Agent creation finished before index probing.");
+      checking = preparation.prepareAgentHistory(agentScope, "check");
+      joiningCheck = preparation.prepareAgentHistory(agentScope, "check");
+      const outcomes = Promise.allSettled([checking, joiningCheck]);
+      release.resolve(undefined);
+      await creating;
+      for (const outcome of await outcomes) {
+        if (outcome.status !== "rejected") throw new Error("Expected Agent index check failure.");
+        const reason: unknown = outcome.reason;
+        expect(reason).toBeInstanceOf(Error);
+        if (reason instanceof Error) expect(reason.message).toMatch(/index is incompatible/i);
+      }
+      await expect(preparation.prepareAgentHistory(agentScope, "check")).resolves.toBeUndefined();
+      const checked = driver.query.mock.calls.flatMap(([, values]) => {
+        const name = values?.[1];
+        return typeof name === "string" && name in columns ? [name] : [];
+      });
+      expect(checked).toEqual([
+        "agent_history_full",
+        "agent_history_category",
+        "agent_history_conversation",
+        "agent_history_full",
+        "agent_history_full",
+        "agent_history_category",
+        "agent_history_conversation",
+      ]);
+      expect(
+        driver.query.mock.calls.filter(([sql]) => sql.startsWith("CREATE INDEX")),
+      ).toHaveLength(3);
+      expect(table.mock.calls.map(([mode]) => mode)).toEqual(["create", "check", "check"]);
+      expect(pools.every(({ end }) => end.mock.calls.length === 1)).toBe(true);
+      expect(
+        pools.every(
+          ({ connect, release }) => connect.mock.calls.length === release.mock.calls.length,
+        ),
+      ).toBe(true);
+    } finally {
+      release.resolve(undefined);
+      await Promise.allSettled(
+        [creating, checking, joiningCheck].filter(
+          (work): work is Promise<void> => work !== undefined,
+        ),
+      );
+      await factory.close();
+      table.mockRestore();
+      driver.Pool.mockImplementation(function Pool() {
+        return { connect: driver.connect, end: driver.end };
+      });
+    }
+  });
+
+  it("retries Agent audit checks through a retained pool after a catalog fault", async () => {
+    const table = vi.spyOn(PostgresTableInitializer.prototype, "prepare").mockResolvedValue();
+    let broken = false;
+    const catalogFailure = new Error("catalog temporarily unavailable");
+    const columns = {
+      agent_history_full: 'scope_digest, order_key COLLATE "C"',
+      agent_history_category: 'scope_digest, category, order_key COLLATE "C"',
+      agent_history_conversation: 'scope_digest, conversation_digest, order_key COLLATE "C"',
+    };
+    driver.query.mockImplementation((sql, values) => {
+      if (sql.includes("information_schema.schemata"))
+        return Promise.resolve({ rowCount: 1, rows: [] });
+      if (!sql.includes("pg_get_indexdef")) return Promise.resolve({ rows: [] });
+      if (broken) return Promise.reject(catalogFailure);
+      const name = values?.[1] as keyof typeof columns;
+      return Promise.resolve({
+        rows: [
+          {
+            definition: `CREATE INDEX ${name} ON audit USING btree (${columns[name]})`,
+            indisvalid: true,
+            indisready: true,
+          },
+        ],
+      });
+    });
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const records = factory.createRecordStorage(
+      agentScope.context,
+      new RecordSpec({
+        recordType: EventSchema,
+        idSchema: EventIdSchema,
+        extractId: (event) => {
+          if (event.id === undefined) throw new Error("Expected Event.id.");
+          return event.id;
+        },
+      }),
+    );
+    try {
+      await expect(
+        records.read(create(EventIdSchema, { value: "warm-pool" })),
+      ).resolves.toBeUndefined();
+      const poolsBeforeAudit = driver.Pool.mock.calls.length;
+      const releasesBeforeAudit = driver.release.mock.calls.length;
+      const preparation = StoragePreparations.for(factory);
+      await expect(preparation.prepareAgentHistory(agentScope, "check")).resolves.toBeUndefined();
+      broken = true;
+      await expect(preparation.prepareAgentHistory(agentScope, "check")).rejects.toBe(
+        catalogFailure,
+      );
+      expect(driver.Pool).toHaveBeenCalledTimes(poolsBeforeAudit);
+      expect(driver.release).toHaveBeenCalledTimes(releasesBeforeAudit + 2);
+      const readsBeforeCreate = driver.query.mock.calls.length;
+      await expect(preparation.prepareAgentHistory(agentScope, "create")).resolves.toBeUndefined();
+      expect(driver.query).toHaveBeenCalledTimes(readsBeforeCreate);
+      broken = false;
+      await expect(preparation.prepareAgentHistory(agentScope, "check")).resolves.toBeUndefined();
+      expect(driver.Pool).toHaveBeenCalledTimes(poolsBeforeAudit);
+      expect(driver.release).toHaveBeenCalledTimes(releasesBeforeAudit + 3);
+      expect(
+        driver.query.mock.calls.filter(([sql]) => sql.includes("pg_get_indexdef")),
+      ).toHaveLength(7);
+    } finally {
+      records.close();
+      await factory.close();
+      expect(driver.end).toHaveBeenCalledTimes(driver.Pool.mock.calls.length);
+      table.mockRestore();
     }
   });
 

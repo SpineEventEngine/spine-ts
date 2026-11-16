@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Buffer } from "node:buffer";
 
 import {
@@ -27,6 +27,11 @@ const savedConflict = {
   result: "pre-upload-conflict",
   diagnostics: { exitCode: 1, ...conflict.error },
 };
+
+beforeEach(() => {
+  vi.stubEnv("GITHUB_RUN_ATTEMPT", "1");
+  vi.stubEnv("GITHUB_RUN_ID", undefined);
+});
 
 afterEach(() => vi.unstubAllEnvs());
 

@@ -24,8 +24,9 @@ import { Datastore } from "@google-cloud/datastore";
 const config = MessageBoardDeployment.combined(process.env);
 const client = new Datastore({ projectId: config.projectId });
 const logger = MessageBoardDeployment.logger(config.projectId, process.env);
-const storage =
-  MessageBoardDeployment.configureServer(config, client, process.env, logger) ??
-  MessageBoardDeployment.storage(client);
-const server = await new MessageBoardApplication().runCombined(config, storage);
+const facilities = MessageBoardDeployment.configureServer(config, client, process.env, logger) ?? {
+  storageFactory: MessageBoardDeployment.storage(client),
+  ...(logger === undefined ? {} : { logger }),
+};
+const server = await new MessageBoardApplication().runCombined(config, facilities);
 console.log(`MessageBoard combined server ready at ${server.baseUrl}`);

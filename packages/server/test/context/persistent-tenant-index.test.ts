@@ -263,6 +263,25 @@ describe("persistent tenant index", () => {
     await index.close();
   });
 
+  it("retries a failed storage close without reopening index operations", async () => {
+    const factory = new InMemoryStorageFactory();
+    const created = vi.spyOn(factory, "createRecordStorage");
+    const index = await PersistentTenantIndex.create({ storageFactory: factory, group });
+    const storage = created.mock.results.at(-1)?.value as RecordStorage<TenantId, Tenant>;
+    const closeStorage = storage.close.bind(storage);
+    const close = vi
+      .spyOn(storage, "close")
+      .mockImplementationOnce(() => {
+        throw new Error("temporary close failure");
+      })
+      .mockImplementation(closeStorage);
+    await expect(index.close()).rejects.toThrow(/temporary close failure/);
+    await expect(index.contains(tenant("closed"))).rejects.toThrow(/closed/);
+    await index.close();
+    expect(close).toHaveBeenCalledTimes(2);
+    expect(storage.isOpen()).toBe(false);
+  });
+
   it("rejects a page cancelled while the provider query is pending", async () => {
     const factory = new InMemoryStorageFactory();
     const created = vi.spyOn(factory, "createRecordStorage");

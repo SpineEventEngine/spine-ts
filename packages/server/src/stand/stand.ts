@@ -57,7 +57,6 @@ import {
 } from "./stand-direct-delivery.js";
 import type { ReadSideContext, ReadSideFilter, ReadSideOperation } from "./read-side-filter.js";
 import type { BoundedContext } from "../context/bounded-context.js";
-import { ServerEnvironment } from "../server/server-environment.js";
 import {
   snapshotTrustedReader,
   type TrustedReaderContext,
@@ -83,6 +82,11 @@ export interface StandOptions {
    * Storage factory used for read-side state records.
    */
   readonly storageFactory: StorageFactory;
+
+  /**
+   * Waiting update capacity selected by the enclosing Application environment.
+   */
+  readonly subscriptionQueueCapacity?: number;
 }
 
 /**
@@ -314,7 +318,7 @@ export class Stand {
    * @param options The storage context and factory used for state records.
    */
   constructor(options: StandOptions) {
-    this.#subscriptionQueueCapacity = ServerEnvironment.instance().subscriptionQueueCapacity;
+    this.#subscriptionQueueCapacity = options.subscriptionQueueCapacity ?? 100;
     this.#context = Stand.#cloneContext(options.context);
     this.#storageFactory = options.storageFactory;
     deferredUpdates.set(this, (schema, state, updateOptions, metadata) =>

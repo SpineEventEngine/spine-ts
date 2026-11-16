@@ -15,16 +15,19 @@
 import { create } from "@bufbuild/protobuf";
 import {
   Aggregate,
+  Application,
   Assign,
   BoundedContext,
   ProcessManager,
   Projection,
   React,
   Server,
-  ServerEnvironment,
   Subscribe,
+  type BoundedContextBuilder,
   type RunningServer,
 } from "@spine-event-engine/server";
+import type { OrdersEnvironment } from "./orders-environment.js";
+import { OrdersApplicationLifetime } from "./orders-application-lifetime.js";
 
 export { datastoreOrdersProtoModule } from "../generated/proto-module.js";
 
@@ -340,13 +343,12 @@ export const ordersTopology = {
 } as const;
 
 /**
- * Builds the fixed Orders domain using the configured environment.
+ * Creates the fixed Orders Bounded Context builder for Application assembly.
  *
- * @returns The assembled multitenant Orders Bounded Context.
+ * @returns The multitenant Orders Bounded Context builder.
  */
-export async function createOrdersContext(): Promise<BoundedContext> {
-  return BoundedContext.multitenant("Orders")
-
+export function createOrdersContext(): BoundedContextBuilder {
+  return BoundedContext.multiTenant("Orders")
     .add(OrderAggregate)
     .add(SkuAggregate)
     .add(OrderSummaryProjection)
@@ -360,8 +362,7 @@ export async function createOrdersContext(): Promise<BoundedContext> {
     .add(InventoryViewProjection)
     .add(SalesSkuIndexProjection)
     .add(OrderSalesManager)
-    .add(SkuSalesManager)
-    .build();
+    .add(SkuSalesManager);
 }
 
 /**
@@ -382,23 +383,70 @@ export interface OrdersServerOptions {
 }
 
 /**
- * Starts an Orders server using the configured environment.
+ * Starts an Orders server using explicit environment and tenant facilities.
  *
+ * @param setup Configured environment and tenant directory.
  * @param options The network binding options for the server.
- * @returns The running Orders server.
+ * @returns The running Orders server with Application shutdown.
  */
-export async function startOrdersServer(options: OrdersServerOptions = {}): Promise<RunningServer> {
-  const context = await createOrdersContext();
+export async function startOrdersServer(
+  setup: OrdersEnvironment,
+  options: OrdersServerOptions = {},
+): Promise<RunningServer> {
+  const application = await OrdersApplication.create(setup);
+  OrdersApplicationLifetime.track(setup, application);
+  let endpoint: RunningServer;
   try {
-    await ServerEnvironment.instance().createStorageStructures();
-    return await Server.atPort(options.port ?? 0, {
+    endpoint = await Server.atPort(options.port ?? 0, {
       host: options.host ?? "127.0.0.1",
       services: { subscriptionLimit: 1_000 },
     })
-      .add(context)
+      .setApplication(application)
       .start();
   } catch (error) {
-    await context.close();
+    try {
+      await application.close();
+      OrdersApplicationLifetime.completed(setup);
+    } catch (cleanup) {
+      throw new AggregateError([error, cleanup], "Orders listener startup cleanup failed.");
+    }
     throw error;
   }
+  return {
+    host: endpoint.host,
+    port: endpoint.port,
+    baseUrl: endpoint.baseUrl,
+    close: async () => {
+      await endpoint.close();
+      await application.close();
+      OrdersApplicationLifetime.completed(setup);
+    },
+  };
 }
+
+/**
+ * Builds the fixed Orders Application with prepared tenant storage.
+ */
+const OrdersApplication: Readonly<{
+  /**
+   * Builds the fixed Orders Application.
+   *
+   * @param setup Configured environment and tenant directory.
+   * @returns The ready Application.
+   */
+  create(setup: OrdersEnvironment): Promise<Application>;
+}> = Object.freeze({
+  /**
+   * Builds the fixed Orders Application.
+   *
+   * @param setup Configured environment and tenant directory.
+   * @returns The ready Application.
+   */
+  async create(setup) {
+    return await Application.newBuilder()
+      .setServerEnvironment(setup.environment)
+      .setTenantIndex(setup.tenantIndex)
+      .add(createOrdersContext())
+      .build({ createStorageStructures: true });
+  },
+});

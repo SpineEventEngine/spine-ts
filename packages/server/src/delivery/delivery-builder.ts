@@ -15,8 +15,8 @@
 import type { Any } from "@bufbuild/protobuf/wkt";
 import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
+import { randomUUID } from "node:crypto";
 
-import { ServerEnvironment } from "../server/server-environment.js";
 import { Delivery as CoreDelivery, type OnDeliveryMessage } from "./delivery.js";
 import { DeliveryMonitor } from "./delivery-monitor.js";
 import { InboxTargets } from "./inbox.js";
@@ -410,13 +410,10 @@ export class DeliveryBuilder {
     const strategy = DeliveryValues.snapshotStrategy(
       this.#strategy ?? UniformAcrossAllShards.singleShard(),
     );
-    let storageFactory = this.#storageFactory;
-    let node = this.#node;
-    if (storageFactory === undefined || node === undefined) {
-      const environment = ServerEnvironment.instance();
-      storageFactory ??= environment.storageFactory;
-      node ??= this.#worker?.nodeId?.value ?? environment.nodeId;
-    }
+    const storageFactory = this.#storageFactory;
+    if (storageFactory === undefined)
+      throw new Error("Delivery requires an explicit storage factory.");
+    const node = this.#node ?? this.#worker?.nodeId?.value ?? randomUUID();
     if (
       this.#workRegistry instanceof ShardedWorkRegistry &&
       !shardedWorkRegistryAccess.matches(this.#workRegistry, context, storageFactory)

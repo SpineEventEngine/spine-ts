@@ -42,28 +42,26 @@ import {
   type AgentHistoryEntry,
 } from "@spine-event-engine/proto/agent";
 import {
+  Application,
   Aggregate,
   Agent,
   BoundedContext,
   EntityHandlers,
+  EnvironmentType,
   HandlerRegistryIngestor,
   Projection,
   Repository,
-  EnvironmentType,
   ServerEnvironment,
   type EntityHandlersMetadata,
 } from "@spine-event-engine/server";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import {
-  agentHistoryView,
-  resetServerEnvironmentForTest,
-} from "@spine-event-engine/server/testing";
+import { InMemoryStorageBackend, InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { agentHistoryView } from "@spine-event-engine/server/testing";
 import type {
   AgentHistoryCapacity,
   AgentHistoryStorage,
   AgentHistoryStorageInput,
 } from "@spine-event-engine/storage/provider";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { AiTestBackend, BlackBox } from "../src/index.js";
 import {
   SupportReplyAgentIdSchema,
@@ -94,16 +92,6 @@ import {
   ProjectOverviewSchema,
   ProjectSchema,
 } from "../test-fixtures/generated/project_states_pb.js";
-
-async function configureStorage(factory: InMemoryStorageFactory): Promise<void> {
-  await resetServerEnvironmentForTest();
-  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
-  await ServerEnvironment.instance().completeSetup();
-}
-
-afterEach(async () => {
-  await resetServerEnvironmentForTest();
-});
 
 const proposal = AiModel.define({
   name: "draft-support-reply",
@@ -243,8 +231,11 @@ class ProjectAggregate extends Aggregate<string, typeof ProjectSchema> {
 class RecordingHistoryFactory extends InMemoryStorageFactory {
   readonly historyWrites: AgentHistoryEntry[] = [];
 
-  constructor(private readonly limits: AgentHistoryCapacity = {}) {
-    super();
+  constructor(
+    private readonly limits: AgentHistoryCapacity = {},
+    backend?: InMemoryStorageBackend,
+  ) {
+    super(backend);
   }
 
   protected override createAgentHistoryStorage<I>(
@@ -313,8 +304,8 @@ async function configuredBox(
     queuedOperations: 0,
   }).register(backend.registration);
   if (alternate !== undefined) registry = registry.register(alternate.registration);
-  const factory = new RecordingHistoryFactory(limits);
-  await configureStorage(factory);
+  const storageBackend = new InMemoryStorageBackend();
+  const factory = new RecordingHistoryFactory(limits, storageBackend);
   const repository = draftingRepository();
   const builder = BoundedContext.singleTenant("AiSupport")
     .withAi(registry)
@@ -356,9 +347,8 @@ async function configuredBox(
       }),
     );
   }
-  const context = await builder.build();
-  const blackBox = await BlackBox.from(context);
-  return { blackBox, context, factory, repository };
+  const blackBox = await BlackBox.from(builder, { storageFactory: factory });
+  return { blackBox, factory, repository, storageBackend, registry };
 }
 
 async function postDraft(blackBox: BlackBox) {
@@ -515,15 +505,13 @@ async function configuredToolBox(closeFailure?: "throw" | "never") {
     .register(registration)
     .registerTools(tools);
   const factory = new RecordingHistoryFactory();
-  await configureStorage(factory);
   const repository = draftingRepository();
-  const context = await BoundedContext.singleTenant("AiToolSupport")
+  const builder = BoundedContext.singleTenant("AiToolSupport")
     .withAi(registry)
     .persistSystemEvents()
-    .add(repository)
-    .build();
+    .add(repository);
   return {
-    blackBox: await BlackBox.from(context, { timeoutMs: 5_000 }),
+    blackBox: await BlackBox.from(builder, { timeoutMs: 5_000, storageFactory: factory }),
     factory,
     repository,
     sequence,
@@ -893,7 +881,8 @@ describe("Agent scripted execution through BlackBox", () => {
         reply: "Your order is on its way.",
       }),
     );
-    const { blackBox, context, repository } = await configuredBox(backend);
+    const { blackBox, repository, storageBackend, registry } = await configuredBox(backend);
+    let retainedItems: readonly AgentHistoryEntry[] = [];
     try {
       const posted = await postDraft(blackBox);
       expect(posted.kind).toBe("ok");
@@ -920,6 +909,7 @@ describe("Agent scripted execution through BlackBox", () => {
       expect(backend.requests()[0]?.call).toBe("draft");
       const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
       const retained = await blackBox.readAgentHistory(repository, agentId, { pageSize: 10 });
+      retainedItems = retained.items;
       const exchanges = retained.items
         .filter((entry) => entry.item.case === "conversationRecord")
         .reverse();
@@ -946,11 +936,6 @@ describe("Agent scripted execution through BlackBox", () => {
         expect(
           AnyPacker.tryUnpack(exchanges[1].item.value.content, GenerationResponseSchema),
         ).toBeDefined();
-      const issued = context.registeredRepositories()[0];
-      if (issued === undefined) throw new Error("Expected a registered Agent view.");
-      expect((await agentHistoryView(context, issued, agentId, { pageSize: 10 })).items).toEqual(
-        retained.items,
-      );
       expect(
         retained.items.filter((entry) => entry.item.case === "conversationRecord"),
       ).toHaveLength(2);
@@ -993,6 +978,37 @@ describe("Agent scripted execution through BlackBox", () => {
       backend.assertSatisfied();
     } finally {
       await blackBox.close();
+    }
+    const environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (setting) => {
+        setting.use({
+          storageFactory: new RecordingHistoryFactory({}, storageBackend),
+        });
+      })
+      .build();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(environment)
+      .add(
+        BoundedContext.singleTenant("AiSupport")
+          .withAi(registry)
+          .persistSystemEvents()
+          .add(draftingRepository()),
+      )
+      .build();
+    try {
+      const context = application.contexts()[0];
+      if (context === undefined) throw new Error("Expected a Bounded Context in the Application.");
+      const issued = context.registeredRepositories()[0];
+      if (issued === undefined) throw new Error("Expected a registered Agent view.");
+      const history = await agentHistoryView(
+        context,
+        issued,
+        create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" }),
+        { pageSize: 10 },
+      );
+      expect(history.items).toEqual(retainedItems);
+    } finally {
+      await application.close();
     }
   });
 

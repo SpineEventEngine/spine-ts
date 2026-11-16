@@ -21,15 +21,13 @@ import {
   Aggregate,
   Assign,
   BoundedContext,
-  EnvironmentType,
+  type BoundedContextBuilder,
   Projection,
   React,
-  ServerEnvironment,
   Subscribe,
   Throws,
   type RepositoryOptions,
 } from "@spine-event-engine/server";
-import type { StorageFactory } from "@spine-event-engine/storage";
 
 import {
   type CancelReleaseGeneration,
@@ -530,30 +528,18 @@ export interface ReleaseContextOptions {
  */
 export const ReleaseNotesContext: Readonly<{
   /**
-   * Builds the Release Notes Bounded Context with trusted AI and storage facilities.
+   * Declares the Release Notes Bounded Context with trusted AI facilities.
    */
-  create(
-    ai: AiRegistry,
-    storage?: StorageFactory,
-    options?: ReleaseContextOptions,
-  ): Promise<BoundedContext>;
+  create(ai: AiRegistry, options?: ReleaseContextOptions): BoundedContextBuilder;
 }> = Object.freeze({
   /**
-   * Builds the in-memory-capable release-notes Bounded Context.
+   * Declares the release-notes Bounded Context for an Application.
    *
    * @param ai Registry with an authorized concrete generation deployment.
-   * @param storage Optional storage factory for tests and local runtime.
    * @param options Application model resolver.
-   * @returns Built Bounded Context; the caller closes it after use.
+   * @returns Release Notes Bounded Context builder.
    */
-  async create(
-    ai: AiRegistry,
-    storage?: StorageFactory,
-    options: ReleaseContextOptions = {},
-  ): Promise<BoundedContext> {
-    if (storage !== undefined)
-      ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: storage });
-    await ServerEnvironment.instance().completeSetup();
+  create(ai: AiRegistry, options: ReleaseContextOptions = {}): BoundedContextBuilder {
     const builder = BoundedContext.singleTenant("ReleaseNotes")
 
       .withAi(ai)
@@ -566,6 +552,6 @@ export const ReleaseNotesContext: Readonly<{
         },
       })
       .add(ReleaseDraftProjection);
-    return builder.build();
+    return builder;
   },
 });

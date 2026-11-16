@@ -17,7 +17,7 @@ import process from "node:process";
 import { create } from "@bufbuild/protobuf";
 import { AnyPacker } from "@spine-event-engine/core";
 import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
-import { SignalMetadata } from "@spine-event-engine/server";
+import { Application, SignalMetadata } from "@spine-event-engine/server";
 
 import { CreateOrderSchema } from "../dist/generated/spine/examples/orders/commands_pb.js";
 import { OrderSchema } from "../dist/generated/spine/examples/orders/entities_pb.js";
@@ -38,12 +38,13 @@ const factory = await createOrdersPostgresFactory({
   contosoUrl: process.env.ORDERS_CONTOSO_DATABASE_URL,
 });
 const tenants = [ordersTenants.northwind, ordersTenants.contoso];
-const setup = await configureOrdersEnvironment({
+let setup = await configureOrdersEnvironment({
   storageFactory: factory,
   tenants,
   membership: phase === "write" ? "seed-if-empty" : "existing",
 });
 let context;
+let application;
 let result;
 try {
   const registered = await setup.tenantIndex.all();
@@ -54,9 +55,14 @@ try {
   )
     throw new Error("Orders membership was not retained across launch processes.");
 
-  context = await createOrdersContext();
+  application = await Application.newBuilder()
+    .setServerEnvironment(setup.environment)
+    .setTenantIndex(setup.tenantIndex)
+    .add(createOrdersContext())
+    .build();
+  context = application.contexts()[0];
   if (phase === "write") {
-    await setup.environment.createStorageStructures();
+    await application.createStorageStructures();
     const metadata = new SignalMetadata();
     for (const [tenantId, skuId] of [
       [tenants[0], "northwind-sku"],
@@ -74,14 +80,29 @@ try {
         }),
       );
     }
-    await context.close();
-    context = await createOrdersContext();
+    await application.close();
+    await setup.close();
+    setup = await configureOrdersEnvironment({
+      storageFactory: await createOrdersPostgresFactory({
+        sharedUrl: process.env.ORDERS_SHARED_DATABASE_URL,
+        northwindUrl: process.env.ORDERS_NORTHWIND_DATABASE_URL,
+        contosoUrl: process.env.ORDERS_CONTOSO_DATABASE_URL,
+      }),
+      tenants,
+      membership: "existing",
+    });
+    application = await Application.newBuilder()
+      .setServerEnvironment(setup.environment)
+      .setTenantIndex(setup.tenantIndex)
+      .add(createOrdersContext())
+      .build();
+    context = application.contexts()[0];
   }
   const northwind = (await context.stand().read(OrderSchema, id, { tenantId: tenants[0] }))?.skuId;
   const contoso = (await context.stand().read(OrderSchema, id, { tenantId: tenants[1] }))?.skuId;
   result = { id, northwind, contoso };
 } finally {
-  if (context) await context.close();
+  if (application) await application.close();
   await setup.close();
 }
 process.stdout.write(JSON.stringify(result));

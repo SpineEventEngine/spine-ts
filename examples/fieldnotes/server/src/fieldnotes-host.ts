@@ -23,6 +23,7 @@ import {
 import { StringifierRegistry, Time, TypeRegistry } from "@spine-event-engine/core";
 import { fieldnotesProtoModule } from "@spine-event-engine/example-fieldnotes-model";
 import {
+  Application,
   Environment,
   EnvironmentType,
   Server,
@@ -91,6 +92,8 @@ export class FieldnotesHost {
   readonly #factory: StorageFactory;
 
   #environment: ServerEnvironment | undefined;
+
+  #application: Application | undefined;
 
   #sessionStore: PersistentOpaqueSessionStore | undefined;
 
@@ -235,12 +238,14 @@ export class FieldnotesHost {
    */
   private async start(settings: FieldnotesSettings, options: FieldnotesHostOptions): Promise<void> {
     const registry = TypeRegistry.from(fieldnotesProtoModule);
-    ServerEnvironment.when(Environment.instance().type).use({
-      storageFactory: this.#factory,
-      typeRegistry: registry,
-    });
-    this.#environment = ServerEnvironment.instance();
-    await this.#environment.completeSetup();
+    this.#environment = ServerEnvironment.newBuilder()
+      .under(Environment.instance().type, (setting) => {
+        setting.use({
+          storageFactory: this.#factory,
+          typeRegistry: registry,
+        });
+      })
+      .build();
     await this.openSessions(settings);
     const clock = new FieldnotesClock();
     const source = await this.authentication(settings, options);
@@ -340,7 +345,12 @@ export class FieldnotesHost {
     authRoutes: readonly BrowserAuthRoute[],
     gatewayPort: number,
   ): Promise<void> {
-    const context = await createFieldnotesContext();
+    const environment = this.#environment;
+    if (environment === undefined) throw new Error("Fieldnotes environment is unavailable.");
+    this.#application = await Application.newBuilder()
+      .setServerEnvironment(environment)
+      .add(createFieldnotesContext())
+      .build();
     const proof = this.#proof;
     if (proof === undefined) throw new Error("Reader proof is unavailable.");
     this.#bindings = new DurableSubscriptionBindings({
@@ -352,10 +362,11 @@ export class FieldnotesHost {
     this.#native = await new Server({
       host: "127.0.0.1",
       port: 0,
-      contexts: [context],
       readSideFilters: fieldnotesReadFilters(),
       services: { readerAdmission: { forwarded: proof } },
-    }).start();
+    })
+      .setApplication(this.#application)
+      .start();
     await this.openGateway(registry, clock, publicOrigin, proof, authRoutes, gatewayPort);
   }
 
@@ -405,11 +416,15 @@ export class FieldnotesHost {
    * @returns Completion or combined cleanup failures.
    */
   async close(): Promise<void> {
+    try {
+      await this.#gateway?.close();
+      await this.#native?.close();
+    } catch (error) {
+      throw new AggregateError([error], "Fieldnotes listener close failed.");
+    }
     const failures: unknown[] = [];
     for (const release of [
-      () => this.#gateway?.close(),
       () => this.#authRoutes?.close(),
-      () => this.#native?.close(),
       () => this.#bindings?.close(),
       () => this.#direct?.close(),
       () => this.#firebaseAdmin?.close(),
@@ -417,7 +432,7 @@ export class FieldnotesHost {
       () => this.#sessionStore?.close(),
       () => this.#cookies?.close(),
       () => this.#proof?.close(),
-      () => this.#environment?.close() ?? this.#factory.close(),
+      () => this.#application?.close() ?? this.#environment?.close() ?? this.#factory.close(),
     ]) {
       try {
         await release();

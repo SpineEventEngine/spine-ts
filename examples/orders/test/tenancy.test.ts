@@ -36,12 +36,12 @@ import {
 } from "@spine-event-engine/proto/client";
 import { InMemoryStorageBackend, InMemoryStorageFactory } from "@spine-event-engine/storage";
 import {
+  Application,
   PersistentTenantIndex,
   SignalMetadata,
-  ServerEnvironment,
+  ServerEnvironmentBuilder,
 } from "@spine-event-engine/server";
-import { ServerTests } from "@spine-event-engine/server/testing";
-import { afterEach, expect, it, vi } from "vitest";
+import { expect, it, vi } from "vitest";
 
 import { CreateOrderSchema } from "../generated/spine/examples/orders/commands_pb.js";
 import { OrderSchema } from "../generated/spine/examples/orders/entities_pb.js";
@@ -52,15 +52,19 @@ const northwind = create(TenantIdSchema, { kind: { case: "value", value: "northw
 const contoso = create(TenantIdSchema, { kind: { case: "value", value: "contoso" } });
 const unknown = create(TenantIdSchema, { kind: { case: "value", value: "unknown" } });
 
-afterEach(async () => ServerTests.resetEnvironment());
-
 it("isolates the same complete order ID across registered tenants and rejects unregistered tenants", async () => {
   const { configureOrdersEnvironment, createOrdersContext } = await import("../dist/src/index.js");
   const setup = await configureOrdersEnvironment({
     storageFactory: new InMemoryStorageFactory(),
     tenants: [northwind, contoso],
   });
-  const context = await createOrdersContext();
+  const application = await Application.newBuilder()
+    .setServerEnvironment(setup.environment)
+    .setTenantIndex(setup.tenantIndex)
+    .add(createOrdersContext())
+    .build();
+  const context = application.contexts()[0];
+  if (context === undefined) throw new Error("Expected Orders Bounded Context.");
   const post = (tenantId: typeof northwind | undefined, skuId: string) => {
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "orders-user" }),
@@ -101,7 +105,7 @@ it("isolates the same complete order ID across registered tenants and rejects un
       await context.stand().readAllVersioned(OrderSchema, { tenantId: northwind }),
     ).toHaveLength(1);
   } finally {
-    await context.close();
+    await application.close();
     await setup.close();
   }
 });
@@ -112,7 +116,7 @@ it("routes matching order IDs through queries and subscriptions within their ori
     storageFactory: new InMemoryStorageFactory(),
     tenants: [northwind, contoso],
   });
-  const server = await startOrdersServer();
+  const server = await startOrdersServer(setup);
   const session = new Http2SessionManager(server.baseUrl);
   const transport = createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: session });
   const commands = createClient(CommandService, transport);
@@ -227,7 +231,6 @@ it("reads persisted membership before a restart and rejects a changed routing se
     membership: "seed-if-empty",
   });
   await first.close();
-  await ServerTests.resetEnvironment();
   const second = await configureOrdersEnvironment({
     storageFactory: new InMemoryStorageFactory(backend),
     tenants: [northwind, contoso],
@@ -242,7 +245,6 @@ it("reads persisted membership before a restart and rejects a changed routing se
   } finally {
     await second.close();
   }
-  await ServerTests.resetEnvironment();
   await expect(
     configureOrdersEnvironment({
       storageFactory: new InMemoryStorageFactory(backend),
@@ -254,17 +256,18 @@ it("reads persisted membership before a restart and rejects a changed routing se
 
 it("checks tenant storage structures before opening the Orders listener", async () => {
   const { configureOrdersEnvironment, startOrdersServer } = await import("../dist/src/index.js");
+  const factory = new InMemoryStorageFactory();
   const setup = await configureOrdersEnvironment({
-    storageFactory: new InMemoryStorageFactory(),
+    storageFactory: factory,
     tenants: [northwind, contoso],
   });
-  const preparation = vi
-    .spyOn(ServerEnvironment.prototype, "createStorageStructures")
-    .mockRejectedValue(new Error("tenant database unavailable"));
+  const preparation = vi.spyOn(factory, "createRecordStorage").mockImplementation(() => {
+    throw new Error("tenant database unavailable");
+  });
   let running: Awaited<ReturnType<typeof startOrdersServer>> | undefined;
   try {
     await expect(
-      startOrdersServer().then((server) => {
+      startOrdersServer(setup).then((server) => {
         running = server;
         throw new Error("listener started before tenant preparation");
       }),
@@ -309,18 +312,23 @@ it("closes storage when tenant registration fails during setup", async () => {
   }
 });
 
-it("closes storage when environment setup fails", async () => {
+it("closes storage when Application environment construction fails", async () => {
   const { configureOrdersEnvironment } = await import("../dist/src/index.js");
   const factory = new InMemoryStorageFactory();
   const close = vi.spyOn(factory, "close");
   const failure = new Error("environment setup failed");
-  const setup = vi.spyOn(ServerEnvironment.prototype, "completeSetup").mockRejectedValue(failure);
+  const build = vi.spyOn(ServerEnvironmentBuilder.prototype, "build").mockImplementation(() => {
+    throw failure;
+  });
   try {
     await expect(
-      configureOrdersEnvironment({ storageFactory: factory, tenants: [northwind, contoso] }),
+      configureOrdersEnvironment({
+        storageFactory: factory,
+        tenants: [northwind, contoso],
+      }),
     ).rejects.toBe(failure);
     expect(close).toHaveBeenCalledOnce();
   } finally {
-    setup.mockRestore();
+    build.mockRestore();
   }
 });

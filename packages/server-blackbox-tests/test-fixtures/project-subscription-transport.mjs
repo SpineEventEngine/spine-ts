@@ -40,7 +40,12 @@ import {
 import { EventSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { DeliveryServer } from "@spine-event-engine/delivery-server";
-import { EnvironmentType, ServerEnvironment, SpineServices } from "@spine-event-engine/server";
+import {
+  Application,
+  EnvironmentType,
+  ServerEnvironment,
+  SpineServices,
+} from "@spine-event-engine/server";
 import { BrowserServer } from "@spine-event-engine/server/browser";
 import { NodeCoordinator } from "@spine-event-engine/server-test-fixtures/internal";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
@@ -145,7 +150,7 @@ const admin = postgres
   : await requireProvider("mysql2/promise").createConnection(provider.urls.spine_test);
 const quotedDatabase = postgres ? `"${database}"` : `\`${database}\``;
 let factory;
-let context;
+let application;
 let server;
 let secondaryServer;
 let browser;
@@ -215,18 +220,24 @@ try {
     deliveryServer = await new DeliveryServer({ port: 0 }).start();
     remoteDelivery = RemoteDelivery.connectTo({ endpoint: deliveryServer.baseUrl });
   }
-  ServerEnvironment.when(EnvironmentType.Local).use({
-    storageFactory: factory,
-    ...(remoteDelivery === undefined ? {} : { delivery: remoteDelivery }),
-  });
-  await ServerEnvironment.instance().completeSetup();
+  const environment = ServerEnvironment.newBuilder()
+    .under(EnvironmentType.Local, (setting) =>
+      setting.use({
+        storageFactory: factory,
+        ...(remoteDelivery === undefined ? {} : { delivery: remoteDelivery }),
+      }),
+    )
+    .build();
   const organization = `subscription-${database}`;
   const ids = projectWorkflowIds(organization, 1);
-  context = projectWorkflow(
-    `ProjectSubscription_${database}`,
-    (entry) => entries.push(entry),
+  const contextBuilder = projectWorkflow(`ProjectSubscription_${database}`, (entry) =>
+    entries.push(entry),
   );
-  const services = new SpineServices({ contexts: [context] });
+  application = await Application.newBuilder()
+    .setServerEnvironment(environment)
+    .add(contextBuilder)
+    .build();
+  const services = new SpineServices({ application });
   server = http2.createServer(
     connectNodeAdapter({
       routes: (router) =>
@@ -1092,27 +1103,29 @@ try {
   finishCancel.resolve();
   const cleanup = [];
   let databaseDropped = false;
+  let secondaryClosed = secondaryServer === undefined;
+  let primaryClosed = server === undefined;
   for (const action of [
     async () => client?.close(),
     async () => streamProxy?.close(),
     async () => browser?.close(),
     async () => coordinator?.close(),
-    async () => context?.close(),
-    async () => remoteDelivery?.close(),
+    async () => {
+      if (secondaryServer === undefined) return;
+      await new Promise((resolve, reject) =>
+        secondaryServer.close((error) => (error ? reject(error) : resolve())),
+      );
+      secondaryClosed = true;
+    },
+    async () => {
+      if (server === undefined) return;
+      await new Promise((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+      primaryClosed = true;
+    },
+    async () => (secondaryClosed && primaryClosed ? application?.close() : undefined),
     async () => deliveryServer?.close(),
-    async () =>
-      secondaryServer === undefined
-        ? undefined
-        : new Promise((resolve, reject) =>
-            secondaryServer.close((error) => (error ? reject(error) : resolve())),
-          ),
-    async () =>
-      server === undefined
-        ? undefined
-        : new Promise((resolve, reject) =>
-            server.close((error) => (error ? reject(error) : resolve())),
-          ),
-    async () => factory?.close(),
     async () => {
       if (created) await admin.query(`DROP DATABASE ${quotedDatabase}`);
       databaseDropped = true;

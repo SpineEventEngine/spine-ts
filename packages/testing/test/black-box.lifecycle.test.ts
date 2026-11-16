@@ -15,7 +15,14 @@
 import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
 import { Client as NodeClient } from "@spine-event-engine/client-node";
-import { AppQueryHandler, Server, ServerEnvironment } from "@spine-event-engine/server";
+import {
+  Application,
+  AppQueryHandler,
+  BoundedContext,
+  Server,
+  ServerEnvironment,
+} from "@spine-event-engine/server";
+import { BlackBox } from "../src/black-box/black-box.js";
 import { registerSpineMetadata } from "@spine-event-engine/server/spi/handler-registry";
 import "../../server/test-fixtures/generated/proto-module.js";
 // prettier-ignore
@@ -32,6 +39,18 @@ import { ProjectIdSchema } from "../../server/test-fixtures/generated/repository
 import { BlackBoxTestAccess } from "../src/black-box/black-box.js";
 
 describe("BlackBox lifecycle seams", () => {
+  it("runs separate test Applications with the same Bounded Context name", async () => {
+    const first = await BlackBox.from(BoundedContext.singleTenant("SharedName"));
+    const second = await BlackBox.from(BoundedContext.singleTenant("SharedName"));
+    try {
+      expect(first.asGuest()).toBeDefined();
+      expect(second.asGuest()).toBeDefined();
+    } finally {
+      await second.close();
+      await first.close();
+    }
+  });
+
   it("executes a generated App Query through a live scoped client and rejects it after close", async () => {
     class OverviewHandler extends AppQueryHandler<
       GetProjectOverview.Query,
@@ -57,11 +76,18 @@ describe("BlackBox lifecycle seams", () => {
       },
       "testing:scoped-overview",
     );
-    await ServerEnvironment.instance().completeSetup();
-    const running = await new Server({ appQueries: [new OverviewHandler()] }).start();
+    const environment = ServerEnvironment.newBuilder().build();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(environment)
+      .add(BoundedContext.singleTenant("ScopedOverview"))
+      .build();
+    const running = await new Server({ appQueries: [new OverviewHandler()] })
+      .setApplication(application)
+      .start();
     const blackBox = BlackBoxTestAccess.create({
       server: running,
       client: NodeClient.connectTo(running.baseUrl),
+      application,
     });
     const scope = blackBox.asGuest();
     const request = create(GetProjectOverview.querySchema, {
@@ -99,6 +125,78 @@ describe("BlackBox lifecycle seams", () => {
     expect(() => blackBox.assertEvents()).toThrow("closed");
     await blackBox.close().catch(() => undefined);
     expect(observationCloses).toBe(1);
+  });
+
+  it("closes its Application after the endpoint and client", async () => {
+    const closed: string[] = [];
+    const blackBox = BlackBoxTestAccess.create({
+      client: {
+        close: () => {
+          closed.push("client");
+          return Promise.resolve();
+        },
+      },
+      server: {
+        close: () => {
+          closed.push("endpoint");
+          return Promise.resolve();
+        },
+      },
+      application: {
+        close: () => {
+          closed.push("application");
+          return Promise.resolve();
+        },
+      },
+    });
+
+    await blackBox.close();
+
+    expect(closed).toEqual(["client", "endpoint", "application"]);
+  });
+
+  it("closes its Application after a failed client connection", async () => {
+    const closed: string[] = [];
+    const failure = await BlackBoxTestAccess.open({
+      start: () =>
+        Promise.resolve({
+          close: () => {
+            closed.push("endpoint");
+            return Promise.resolve();
+          },
+        }),
+      connect: () => {
+        throw new Error("connection failed");
+      },
+      application: {
+        close: () => {
+          closed.push("application");
+          return Promise.resolve();
+        },
+      },
+    }).catch((error: unknown) => error);
+
+    expect((failure as Error).message).toBe("connection failed");
+    expect(closed).toEqual(["endpoint", "application"]);
+  });
+
+  it("retains its Application when endpoint cleanup fails", async () => {
+    let applicationCloses = 0;
+    const blackBox = BlackBoxTestAccess.create({
+      client: { close: () => Promise.resolve() },
+      server: {
+        close: () => Promise.reject(new Error("endpoint still active")),
+      },
+      application: {
+        close: () => {
+          applicationCloses++;
+          return Promise.resolve();
+        },
+      },
+    });
+
+    await expect(blackBox.close()).rejects.toThrow("BlackBox cleanup failed");
+    expect(applicationCloses).toBe(0);
   });
 
   it("cleans an acquired server when connection startup fails", async () => {

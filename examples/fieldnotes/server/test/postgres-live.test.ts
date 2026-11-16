@@ -37,7 +37,6 @@ import {
   CoordinatesSchema,
   PlaceIdSchema,
 } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/types_pb.js";
-import { ServerTests } from "@spine-event-engine/server/testing";
 import {
   SubscriptionService,
   TopicIdSchema,
@@ -276,7 +275,6 @@ it("retains one private Place and its opaque app session across a PostgreSQL hos
       );
       await first.close();
       first = undefined;
-      await ServerTests.resetEnvironment();
       second = await FieldnotesHost.open(settings, { storageFactory: await factory() });
       expect(await second.sessions.resolve({ kind: "cookie", value: credential })).toMatchObject({
         principal: { id: "persistent-author" },
@@ -344,7 +342,7 @@ it("retains one private Place and its opaque app session across a PostgreSQL hos
         await reader.close();
       }
     },
-    [() => second?.close(), () => first?.close(), () => ServerTests.resetEnvironment()],
+    [() => second?.close(), () => first?.close()],
   );
 });
 
@@ -408,7 +406,6 @@ it("retains a direct OIDC transaction and one-use grant across fresh PostgreSQL 
       if (!state) throw new Error("OIDC start state is missing.");
       await host.close();
       host = undefined;
-      await ServerTests.resetEnvironment();
       host = await FieldnotesHost.open(settings, await options());
       const callback = await fetch(
         `${host.gateway.baseUrl}/auth/google/callback?state=${encodeURIComponent(state)}&code=code&iss=${encodeURIComponent(issuer)}`,
@@ -421,7 +418,6 @@ it("retains a direct OIDC transaction and one-use grant across fresh PostgreSQL 
       expect(grant).toBeTruthy();
       await host.close();
       host = undefined;
-      await ServerTests.resetEnvironment();
       host = await FieldnotesHost.open(settings, await options());
       const issued = await post(host, "/auth/google/exchange", { grant, codeVerifier: verifier });
       expect(issued.status).toBe(200);
@@ -449,7 +445,7 @@ it("retains a direct OIDC transaction and one-use grant across fresh PostgreSQL 
         principal: { id: JSON.stringify(["google-oidc", issuer, "restart-user"]) },
       });
     },
-    [() => host?.close(), () => ServerTests.resetEnvironment()],
+    [() => host?.close()],
   );
 });
 
@@ -605,7 +601,7 @@ it("traverses more than two native pages through the private PostgreSQL gateway"
         await client.close();
       }
     },
-    [() => host?.close() ?? factory?.close(), () => ServerTests.resetEnvironment()],
+    [() => host?.close() ?? factory?.close()],
   );
 });
 

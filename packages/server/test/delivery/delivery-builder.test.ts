@@ -38,8 +38,19 @@ import { Delivery as CoreDelivery } from "../../src/delivery/delivery.js";
 import { InboxRecords } from "../../src/delivery/inbox-records.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { createMessage } from "./inbox-message-fixture.js";
+import { EnvironmentTests, EnvironmentType } from "../../src/server/environment.js";
 
 describe("DeliveryMonitor delivery", () => {
+  it("builds Delivery from explicit storage without a process environment", () => {
+    EnvironmentTests.use(EnvironmentType.Production);
+    try {
+      expect(build().build().node).toBeTruthy();
+      expect(() => new DeliveryBuilder().build()).toThrow(/storage factory/i);
+    } finally {
+      EnvironmentTests.reset();
+    }
+  });
+
   it("is instantiable and permits direct or promised hook results", async () => {
     const monitor = new DeliveryMonitor();
     expect(await monitor.shouldContinueAfter("DELIVERY")).toBe(true);

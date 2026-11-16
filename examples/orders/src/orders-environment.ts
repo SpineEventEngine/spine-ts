@@ -20,6 +20,7 @@ import {
   ServerEnvironment,
 } from "@spine-event-engine/server";
 import { StorageGroup, type StorageFactory } from "@spine-event-engine/storage";
+import { OrdersApplicationLifetime } from "./orders-application-lifetime.js";
 
 /**
  * Supplies stable complete tenant identities for the Orders demonstrations.
@@ -84,21 +85,23 @@ export async function configureOrdersEnvironment(
   let environment: ServerEnvironment | undefined;
   try {
     await reconcileMembership(tenantIndex, options);
-    ServerEnvironment.when(EnvironmentType.Local).use({
-      storageFactory: options.storageFactory,
-      tenantIndex,
-    });
-    environment = ServerEnvironment.instance();
-    await environment.completeSetup();
+    environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (setting) => {
+        setting.use({
+          storageFactory: options.storageFactory,
+        });
+      })
+      .build();
   } catch (error) {
     await closeFailedSetup(tenantIndex, environment, options.storageFactory, error);
   }
   if (environment === undefined) throw new Error("Orders environment setup did not complete.");
-  return {
+  const setup: OrdersEnvironment = {
     tenantIndex,
     environment,
-    close: () => closeOrdersEnvironment(tenantIndex, environment),
+    close: () => closeOrdersEnvironment(setup, tenantIndex, environment),
   };
+  return setup;
 }
 
 /**
@@ -195,14 +198,17 @@ async function closeFailedSetup(
 /**
  * Closes the index, then the environment, even if one close rejects.
  *
+ * @param setup Explicit launch setup retaining a started Application.
  * @param index Directory opened for this launch.
  * @param environment Process facilities configured for this launch.
  * @returns Completion after both close attempts.
  */
 async function closeOrdersEnvironment(
+  setup: OrdersEnvironment,
   index: PersistentTenantIndex,
   environment: ServerEnvironment,
 ): Promise<void> {
+  if (await OrdersApplicationLifetime.close(setup)) return;
   const errors: unknown[] = [];
   try {
     await index.close();

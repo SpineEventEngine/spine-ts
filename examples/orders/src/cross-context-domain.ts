@@ -13,7 +13,12 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { BoundedContext, ProcessManager, React } from "@spine-event-engine/server";
+import {
+  BoundedContext,
+  ProcessManager,
+  React,
+  type BoundedContextBuilder,
+} from "@spine-event-engine/server";
 
 import { OrderAggregate, SkuAggregate, SkuCatalogProjection } from "./orders-domain.js";
 import { OrderReviewSchema } from "../generated/spine/examples/orders/entities_pb.js";
@@ -65,29 +70,23 @@ export class OrderReview extends ProcessManager<string, typeof OrderReviewSchema
  */
 export const OrderReviewContexts: Readonly<{
   /**
-   * Builds catalog and ordering Bounded Contexts using the configured environment.
+   * Declares catalog and ordering Bounded Contexts for one Application.
    */
-  create(): Promise<{
-    readonly catalog: BoundedContext;
-    readonly orders: BoundedContext;
-  }>;
+  create(): {
+    readonly catalog: BoundedContextBuilder;
+    readonly orders: BoundedContextBuilder;
+  };
 }> = Object.freeze({
   /**
-   * Builds two registrations without changing the load-demo topology.
+   * Declares two registrations without changing the load-demo topology.
    *
-   * @returns The catalog and ordering contexts.
+   * @returns The catalog and ordering Bounded Context builders.
    */
-  async create() {
-    const catalog = await BoundedContext.multitenant("Catalog")
-
+  create() {
+    const catalog = BoundedContext.multiTenant("Catalog")
       .add(SkuAggregate)
-      .add(SkuCatalogProjection)
-      .build();
-    const orders = await BoundedContext.multitenant("Ordering")
-
-      .add(OrderAggregate)
-      .add(OrderReview)
-      .build();
+      .add(SkuCatalogProjection);
+    const orders = BoundedContext.multiTenant("Ordering").add(OrderAggregate).add(OrderReview);
     return { catalog, orders };
   },
 });

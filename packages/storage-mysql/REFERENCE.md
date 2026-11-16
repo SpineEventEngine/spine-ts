@@ -32,6 +32,11 @@ mode creates missing structures and verifies their complete layout. Both modes
 reuse a bound runtime pool or release temporary pools, and compatible results
 are shared with later ordinary use. A failed attempt remains retryable.
 
+Each explicit compatibility check reads current metadata, even after creation or
+an earlier check succeeded. Concurrent calls in the same mode share an active
+attempt. A call in the other mode waits for that attempt to settle, then performs
+its requested operation. Completed creation readiness is retained for ordinary use.
+
 Both preparation modes also verify declared `RecordSpec.indexes`: each is a complete non-unique,
 ascending B-tree index with no prefix, expression, or hidden component. Indexed
 fixed byte columns use the declared `VARBINARY(width)`; stored and queried byte

@@ -49,16 +49,16 @@ import {
 import { SubscriptionService } from "@spine-event-engine/proto/client";
 import {
   BoundedContext,
+  Application,
   DeliveryBuilder,
-  EnvironmentType,
   EventRouting,
   InMemorySubscriptionRegistry,
   SignalMetadata,
   ServerEnvironment,
   UniformAcrossAllShards,
+  type BoundedContext as BuiltContext,
 } from "@spine-event-engine/server";
-import { ServerTests } from "@spine-event-engine/server/testing";
-import { BlackBox, type BlackBoxScope } from "@spine-event-engine/testing";
+import { TodoTestSession } from "./todo-test-session.js";
 import {
   cpSync,
   existsSync,
@@ -114,12 +114,11 @@ const signalMetadata = new SignalMetadata();
 const maxRemoteDiagnosticRows = 4;
 const maxRemoteDiagnosticIdLength = 64;
 const remoteOperationTimeoutMs = 500;
-const ownedBlackBoxes = new Set<BlackBox>();
+const ownedBlackBoxes = new Set<TodoTestSession>();
 
 afterEach(async () => {
   await Promise.all([...ownedBlackBoxes].map((blackBox) => blackBox.close()));
   ownedBlackBoxes.clear();
-  await ServerTests.resetEnvironment();
 });
 
 describe("@spine-event-engine/example-todo", () => {
@@ -152,15 +151,23 @@ describe("@spine-event-engine/example-todo", () => {
       }
       const createFixtureContext =
         fixtureModule.createTodoContext as TodoModule["createTodoContext"];
-      const failure = await createFixtureContext().catch((error: unknown) => error);
+      const environment = ServerEnvironment.newBuilder().build();
+      const failure = await Application.newBuilder()
+        .setServerEnvironment(environment)
+        .add(createFixtureContext())
+        .build()
+        .catch((error: unknown) => error);
 
       expect(failure).toBeInstanceOf(Error);
       expect((failure as Error).message).toContain(
         "Generated metadata for TaskAggregate is missing",
       );
       await import(pathToFileURL(join(fixture, "src/index.js")).href);
-      const context = await createFixtureContext();
-      await context.close();
+      const application = await Application.newBuilder()
+        .setServerEnvironment(environment)
+        .add(createFixtureContext())
+        .build();
+      await application.close();
     } finally {
       rmSync(fixture, { recursive: true, force: true });
     }
@@ -169,11 +176,10 @@ describe("@spine-event-engine/example-todo", () => {
   it("uses the application-selected storage factory", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const createRecordStorage = vi.spyOn(storageFactory, "createRecordStorage");
-    const context = await createTodoContext({ storageFactory });
+    const fixture = await TodoTestSession.open(createTodoContext(), { storageFactory });
 
     expect(createRecordStorage).toHaveBeenCalled();
-    await context.close();
-    await storageFactory.close();
+    await fixture.close();
   });
 
   it("accepts application-owned Delivery and subscription facilities", async () => {
@@ -181,14 +187,11 @@ describe("@spine-event-engine/example-todo", () => {
     const subscriptionRegistry = new InMemorySubscriptionRegistry();
     const deliveryStrategy = UniformAcrossAllShards.forNumber(1);
 
-    const context = await createTodoContext({
+    const fixture = await TodoTestSession.open(createTodoContext({ subscriptionRegistry }), {
       deliveryStrategy,
       storageFactory,
-      subscriptionRegistry,
     });
-
-    await context.close();
-    await storageFactory.close();
+    await fixture.close();
   });
 
   it("keeps generated registry discovery out of application context assembly", () => {
@@ -671,8 +674,8 @@ describe("@spine-event-engine/example-todo", () => {
   });
 
   it("creates a task with an optional initial assignment in Event order", async () => {
-    const context = await createTodoContext();
-    const fixture = await createTodoBlackBox(context);
+    const fixture = await createTodoBlackBox();
+    const context = fixture.context;
     const scope = fixture.asGuest();
     const ada = create(UserIdSchema, { value: "ada" });
 
@@ -715,12 +718,14 @@ describe("@spine-event-engine/example-todo", () => {
   });
 
   it("starts and closes the standalone server with its default listener options", async () => {
+    const closeApplication = vi.spyOn(Application.prototype, "close");
     const server = await startTodoServer();
     try {
       expect(server.baseUrl).toBe("http://127.0.0.1:8080");
     } finally {
       await server.close();
     }
+    expect(closeApplication).toHaveBeenCalledOnce();
   });
 
   it("updates one task in a shared list without changing its sibling", async () => {
@@ -756,8 +761,8 @@ describe("@spine-event-engine/example-todo", () => {
   });
 
   it("routes assignment lifecycle events to zero, one, and two assignee targets", async () => {
-    const context = await createTodoContext();
-    const fixture = await createTodoBlackBox(context);
+    const fixture = await createTodoBlackBox();
+    const context = fixture.context;
     const scope = fixture.asGuest();
     const taskId = "task-assignment";
     const firstAssignee = create(UserIdSchema, { value: "ada" });
@@ -786,13 +791,13 @@ describe("@spine-event-engine/example-todo", () => {
       await expectTaskAssigneeEventually(fixture, context, firstAssignee, []);
       await expectTaskAssigneeEventually(fixture, context, secondAssignee, []);
     } finally {
-      await context.close();
+      await fixture.close();
     }
   });
 
   it("assigns an open task or changes its assignee with the matching Event alternative", async () => {
-    const context = await createTodoContext();
-    const fixture = await createTodoBlackBox(context);
+    const fixture = await createTodoBlackBox();
+    const context = fixture.context;
     const scope = fixture.asGuest();
     const taskId = "task-assign-choice";
     const ada = create(UserIdSchema, { value: "ada" });
@@ -828,8 +833,8 @@ describe("@spine-event-engine/example-todo", () => {
   });
 
   it("keeps projections unchanged for rejected assignment transitions before reopening permits one", async () => {
-    const context = await createTodoContext();
-    const fixture = await createTodoBlackBox(context);
+    const fixture = await createTodoBlackBox();
+    const context = fixture.context;
     const scope = fixture.asGuest();
     const taskId = "task-assignment-rejections";
     const listId = taskId;
@@ -889,17 +894,16 @@ describe("@spine-event-engine/example-todo", () => {
         event.taskListId === undefined ? [] : [event.taskListId],
     );
     const firstStorage = new InMemoryStorageFactory(storageBackend);
-    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: firstStorage });
-    await ServerEnvironment.instance().completeSetup();
     const firstRouting = EventRouting.create<TaskListId>();
     firstRouting.route(TaskEvent, firstRoute);
-    const first = await BoundedContext.singleTenant("Tasks")
-      .add(todo.TaskAggregate)
-      .add(todo.TaskListProjection, {
+    const firstFixture = await TodoTestSession.open(
+      BoundedContext.singleTenant("Tasks").add(todo.TaskAggregate).add(todo.TaskListProjection, {
         // Generated interface tokens cross the dynamic compiled-example boundary.
         eventRouting: firstRouting,
-      })
-      .build();
+      }),
+      { storageFactory: firstStorage },
+    );
+    const first = firstFixture.context;
     const listId = create(TaskListIdSchema, { value: "task-inbox-retained" });
     const event = SignalEnvelopes.event({
       context: create(EventContextSchema, {
@@ -920,9 +924,8 @@ describe("@spine-event-engine/example-todo", () => {
       await first.eventBus().post(event);
       expect(firstRoute).toHaveBeenCalledTimes(1);
     } finally {
-      await first.close();
+      await firstFixture.close();
     }
-    await ServerTests.resetEnvironment();
 
     const targetId = AnyPacker.pack(TaskListIdSchema, listId);
     const targetTypeUrl = TypeUrls.derive(TaskListSchema);
@@ -965,18 +968,14 @@ describe("@spine-event-engine/example-todo", () => {
     });
     const retainedRouting = EventRouting.create<TaskListId>();
     retainedRouting.route(TaskEvent, retainedRoute);
-    ServerEnvironment.when(EnvironmentType.Local).use({
-      storageFactory: new InMemoryStorageFactory(storageBackend),
-    });
-    await ServerEnvironment.instance().completeSetup();
-    const restarted = await BoundedContext.singleTenant("Tasks")
-      .add(todo.TaskAggregate)
-      .add(todo.TaskListProjection, {
+    const restartedFixture = await TodoTestSession.open(
+      BoundedContext.singleTenant("Tasks").add(todo.TaskAggregate).add(todo.TaskListProjection, {
         // Generated interface tokens cross the dynamic compiled-example boundary.
         eventRouting: retainedRouting,
-      })
-      .build();
-    const restartedFixture = await createTodoBlackBox(restarted);
+      }),
+      { storageFactory: new InMemoryStorageFactory(storageBackend) },
+    );
+    const restarted = restartedFixture.context;
     try {
       await restartedFixture.eventually(
         async () => await restarted.stand().read(TaskListSchema, listId),
@@ -1468,8 +1467,8 @@ describe("@spine-event-engine/example-todo", () => {
   });
 
   it("accepts an already-completed rejection and publishes its typed event", async () => {
-    const context = await createTodoContext();
-    const fixture = await createTodoBlackBox(context);
+    const fixture = await createTodoBlackBox();
+    const context = fixture.context;
     const scope = fixture.asGuest();
     const subscription = await scope.createSubscription(createTaskAlreadyDoneTopic(), {
       kind: "event",
@@ -1528,8 +1527,8 @@ describe("@spine-event-engine/example-todo", () => {
   });
 
   it("publishes exact assignment rejection types through active subscriptions", async () => {
-    const context = await createTodoContext();
-    const fixture = await createTodoBlackBox(context);
+    const fixture = await createTodoBlackBox();
+    const context = fixture.context;
     const scope = fixture.asGuest();
     const unassigned = await scope.createSubscription(
       createTaskRejectionTopic(TaskNotAssignedSchema),
@@ -1649,12 +1648,11 @@ describe("@spine-event-engine/example-todo", () => {
     const routing = EventRouting.create<MessageShape<typeof UserIdSchema>>()
       .route(TaskAssignmentEvent, assignmentRoute)
       .route(routedTaskReassignedSchema, reassignmentRoute);
-    await ServerEnvironment.instance().completeSetup();
-    const context = await BoundedContext.singleTenant("Rejected assignment routing")
-      .add(todo.TaskAggregate)
-      .add(todo.TaskAssigneeProjection, { eventRouting: routing })
-      .build();
-    const fixture = await createTodoBlackBox(context);
+    const fixture = await createTodoBlackBox(
+      BoundedContext.singleTenant("Rejected assignment routing")
+        .add(todo.TaskAggregate)
+        .add(todo.TaskAssigneeProjection, { eventRouting: routing }),
+    );
     const scope = fixture.asGuest();
     const taskId = "task-rejected-routing";
 
@@ -1851,8 +1849,8 @@ describe("@spine-event-engine/example-todo", () => {
   });
 
   it("rebuilds the task list from stored events during read-side catch-up", async () => {
-    const context = await createTodoContext();
-    const fixture = await createTodoBlackBox(context);
+    const fixture = await createTodoBlackBox();
+    const context = fixture.context;
     const scope = fixture.asGuest();
 
     try {
@@ -1903,7 +1901,7 @@ describe("@spine-event-engine/example-todo", () => {
         }),
       );
     } finally {
-      await context.close();
+      await fixture.close();
     }
   });
 });
@@ -1915,16 +1913,16 @@ interface RemoteTodo {
   readonly subscriptions: Client<typeof SubscriptionService>;
 }
 
-async function createTodoBlackBox(context?: Awaited<ReturnType<typeof createTodoContext>>) {
-  const blackBox = await BlackBox.from(context ?? (await createTodoContext()), {
-    timeoutMs: 500,
-    intervalMs: 5,
-  });
+async function createTodoBlackBox(context?: ReturnType<typeof createTodoContext>) {
+  const blackBox = await TodoTestSession.open(context ?? createTodoContext());
   ownedBlackBoxes.add(blackBox);
   return blackBox;
 }
 
-async function readTaskLists(scope: BlackBoxScope, query: Query): Promise<readonly TaskList[]> {
+async function readTaskLists(
+  scope: ReturnType<TodoTestSession["asGuest"]>,
+  query: Query,
+): Promise<readonly TaskList[]> {
   const response = await scope.send(query);
   return response.message.map(({ state }) => {
     const taskList = unpackTaskList(state);
@@ -1934,8 +1932,8 @@ async function readTaskLists(scope: BlackBoxScope, query: Query): Promise<readon
 }
 
 async function readTaskListsEventually(
-  blackBox: BlackBox,
-  scope: BlackBoxScope,
+  blackBox: TodoTestSession,
+  scope: ReturnType<TodoTestSession["asGuest"]>,
   query: Query,
   accept: (rows: readonly TaskList[]) => boolean,
 ): Promise<readonly TaskList[]> {
@@ -2102,8 +2100,8 @@ function unassignTask(taskId: string) {
 }
 
 async function expectTaskAssigneeEventually(
-  fixture: BlackBox,
-  context: Awaited<ReturnType<TodoModule["createTodoContext"]>>,
+  fixture: TodoTestSession,
+  context: BuiltContext,
   assignee: MessageShape<typeof UserIdSchema>,
   taskIds: readonly string[],
 ): Promise<void> {
@@ -2502,9 +2500,7 @@ function createTaskAlreadyDoneProbe(suffix: string) {
   };
 }
 
-function rejectionPublisher(
-  context: Awaited<ReturnType<TodoModule["createTodoContext"]>>,
-): RejectionPublisher {
+function rejectionPublisher(context: BuiltContext): RejectionPublisher {
   return {
     postEvent(schema, message) {
       const producerId = message.id;
@@ -2525,9 +2521,7 @@ function rejectionPublisher(
   };
 }
 
-function assignmentRejectionPublisher(
-  context: Awaited<ReturnType<TodoModule["createTodoContext"]>>,
-): AssignmentRejectionPublisher {
+function assignmentRejectionPublisher(context: BuiltContext): AssignmentRejectionPublisher {
   return {
     postEvent(schema, message) {
       const producerId = message.id;
@@ -2771,8 +2765,8 @@ function createTaskListRows(id: string, tasks: Task[]): readonly TaskList[] {
 }
 
 async function expectTaskListEventuallyUnchanged(
-  fixture: BlackBox,
-  scope: BlackBoxScope,
+  fixture: TodoTestSession,
+  scope: ReturnType<TodoTestSession["asGuest"]>,
   expected: readonly TaskList[],
   taskId: string,
 ): Promise<readonly TaskList[]> {

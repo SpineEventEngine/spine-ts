@@ -55,7 +55,7 @@ export function managedReplicaOptions(
       delivery = facilities.delivery;
       return new MessageBoardApplication().startManagedApplication(
         { host, port },
-        facilities.storageFactory,
+        facilities,
         UniformAcrossAllShards.forNumber(config.deliveryShardCount),
         () => new InMemorySubscriptionRegistry(),
       );

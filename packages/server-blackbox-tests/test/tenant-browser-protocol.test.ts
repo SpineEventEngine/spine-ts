@@ -18,18 +18,17 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { Client } from "@spine-event-engine/client-web";
 import { ErrorSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import {
+  Application,
   Aggregate,
   BoundedContext,
   Repository,
   Server,
   ServerEnvironment,
-  EnvironmentType,
   PersistentTenantIndex,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory, StorageGroup } from "@spine-event-engine/storage";
 import { BrowserServer } from "@spine-event-engine/server/browser";
-import { ServerTests } from "@spine-event-engine/server/testing";
-import { afterEach, expect, it, onTestFinished, vi } from "vitest";
+import { expect, it, vi } from "vitest";
 
 import { CreateProjectSchema } from "../generated/spine/server/testing/project_commands_pb.js";
 import { ProjectCreatedSchema } from "../generated/spine/server/testing/project_events_pb.js";
@@ -39,32 +38,31 @@ import {
 } from "../generated/spine/server/testing/project_workflow_pb.js";
 import { projectWorkflowIds } from "../test-fixtures/project-workflow.js";
 
-afterEach(async () => ServerTests.resetEnvironment());
-
 it("preserves unknown-tenant details through browser gateway and Connect client", async () => {
   const tenantIndex = await PersistentTenantIndex.create({
     storageFactory: new InMemoryStorageFactory(),
     group: new StorageGroup("browser-tenants"),
   });
-  onTestFinished(() => tenantIndex.close());
-  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex });
-  const environment = ServerEnvironment.instance();
-  await environment.completeSetup();
+  const environment = ServerEnvironment.newBuilder().build();
   const tenant = create(TenantIdSchema, { kind: { case: "value", value: "absent-browser" } });
   const actor = create(UserIdSchema, { value: "guest" });
   const dispatch = vi.fn(() => Promise.resolve());
-  const context = await BoundedContext.multitenant("BrowserTenantProof")
-    .addCommandDispatcher({
-      messageSchemas: () => [CreateProjectSchema],
-      dispatch,
-    })
+  const application = await Application.newBuilder()
+    .setServerEnvironment(environment)
+    .setTenantIndex(tenantIndex)
+    .add(
+      BoundedContext.multiTenant("BrowserTenantProof").addCommandDispatcher({
+        messageSchemas: () => [CreateProjectSchema],
+        dispatch,
+      }),
+    )
     .build();
   const actorContext = { actor, tenant, timestamp: create(TimestampSchema, { seconds: 1n }) };
   let native: Awaited<ReturnType<Server["start"]>> | undefined;
   let running: Awaited<ReturnType<typeof BrowserServer.run>> | undefined;
   let client: Client | undefined;
   try {
-    native = await new Server({ contexts: [context], port: 0 }).start();
+    native = await Server.atPort(0).setApplication(application).start();
     running = await BrowserServer.open(native, {
       origins: ["http://127.0.0.1:5173"],
       publicAccess: true,
@@ -101,8 +99,7 @@ it("preserves unknown-tenant details through browser gateway and Connect client"
       () => client?.close(),
       () => running?.close(),
       () => native?.close(),
-      () => context.close(),
-      () => tenantIndex.close(),
+      () => application.close(),
     ]);
   }
 });
@@ -112,10 +109,7 @@ it("preserves unknown-tenant details for browser subscription activation", async
     storageFactory: new InMemoryStorageFactory(),
     group: new StorageGroup("browser-subscription-tenants"),
   });
-  onTestFinished(() => tenantIndex.close());
-  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex });
-  const environment = ServerEnvironment.instance();
-  await environment.completeSetup();
+  const environment = ServerEnvironment.newBuilder().build();
   const tenant = create(TenantIdSchema, { kind: { case: "value", value: "absent-browser-sub" } });
   const actor = create(UserIdSchema, { value: "guest" });
 
@@ -123,13 +117,17 @@ it("preserves unknown-tenant details for browser subscription activation", async
    * Provides a domain-correct Event route for the browser subscription.
    */
   class Project extends Aggregate<ProjectId, typeof ProjectStateSchema> {}
-  const context = await BoundedContext.multitenant("BrowserSubscriptionTenantProof")
+  const application = await Application.newBuilder()
+    .setServerEnvironment(environment)
+    .setTenantIndex(tenantIndex)
     .add(
-      new Repository({
-        entityType: Project,
-        schema: ProjectStateSchema,
-        events: [ProjectCreatedSchema],
-      }),
+      BoundedContext.multiTenant("BrowserSubscriptionTenantProof").add(
+        new Repository({
+          entityType: Project,
+          schema: ProjectStateSchema,
+          events: [ProjectCreatedSchema],
+        }),
+      ),
     )
     .build();
   const actorContext = { actor, tenant, timestamp: create(TimestampSchema, { seconds: 1n }) };
@@ -137,7 +135,7 @@ it("preserves unknown-tenant details for browser subscription activation", async
   let running: Awaited<ReturnType<typeof BrowserServer.run>> | undefined;
   let client: Client | undefined;
   try {
-    native = await new Server({ contexts: [context], port: 0 }).start();
+    native = await Server.atPort(0).setApplication(application).start();
     running = await BrowserServer.open(native, {
       origins: ["http://127.0.0.1:5173"],
       publicAccess: true,
@@ -167,8 +165,7 @@ it("preserves unknown-tenant details for browser subscription activation", async
       () => client?.close(),
       () => running?.close(),
       () => native?.close(),
-      () => context.close(),
-      () => tenantIndex.close(),
+      () => application.close(),
     ]);
   }
 });

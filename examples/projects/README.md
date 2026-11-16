@@ -75,14 +75,19 @@ Process Manager's stored state.
 <!-- docs-snippet-path: examples/projects/test/topology.test.ts -->
 
 ```ts
+import { Application, ServerEnvironment } from "@spine-event-engine/server";
 import { createProjectManagementContext, type AssignmentWeightService } from "../src/index.js";
 
 // This example service counts each task as three units of work.
 const weights: AssignmentWeightService = { weightFor: () => 3 };
-const context = await createProjectManagementContext(weights);
+const builder = createProjectManagementContext(weights);
+const application = await Application.newBuilder()
+  .setServerEnvironment(ServerEnvironment.newBuilder().build())
+  .add(builder)
+  .build();
 
-// Use the context to handle messages, then close it during shutdown.
-await context.close();
+// Use the Application, then close it after its endpoints stop.
+await application.close();
 ```
 
 Inside `createProjectManagementContext()`, registration uses

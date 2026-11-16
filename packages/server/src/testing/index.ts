@@ -12,7 +12,8 @@
  * the License.
  */
 
-import { ServerEnvironmentLifecycle } from "../server/server-environment.js";
+import { serverEnvironmentAccess } from "../server/server-environment.js";
+import { applicationAccess, type Application } from "../server/application.js";
 import type { Agent } from "../entity/entity.js";
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
 import type { HistoryPage, HistoryRead } from "@spine-event-engine/ai";
@@ -57,27 +58,24 @@ export {
 } from "../integration/external-messages.js";
 
 /**
- * Provides deterministic server-environment cleanup for package tests.
+ * Provides deterministic Application lifetime observations for tests.
  */
-export const ServerTests: {
-  readonly resetEnvironment: () => Promise<void>;
-} = Object.freeze({
-  // prettier-ignore
-
+export const ApplicationTests: Readonly<{
   /**
-   * Resets shared server facilities before the next test creates a server.
+   * Waits for an Application's admitted Delivery work.
    */
-  resetEnvironment(): Promise<void> {
-    return ServerEnvironmentLifecycle.resetForTest();
+  waitForDelivery(application: Application): Promise<void>;
+}> = Object.freeze({
+  /**
+   * Waits for Delivery already admitted by one Application to settle.
+   *
+   * @param application Application whose Delivery work is observed.
+   * @returns Completion after admitted shard work settles.
+   */
+  waitForDelivery(application: Application): Promise<void> {
+    return serverEnvironmentAccess.whenDeliveryIdle(applicationAccess.environment(application));
   },
 });
-
-/**
- * Resets shared server facilities before the next test creates a server.
- */
-const serverTestReset: () => Promise<void> = ServerTests.resetEnvironment;
-
-export { serverTestReset as resetServerEnvironmentForTest };
 
 /**
  * Posts a locally constructed Event through the bounded context's external intake path.

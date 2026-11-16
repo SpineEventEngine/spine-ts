@@ -216,16 +216,14 @@ function writeExactConsumerManifest(consumer, artifacts) {
  */
 const exactConsumerSource = [
   ...frameworkPackageNames.map((name) => "import " + JSON.stringify(name) + ";"),
-  'import { Server, ServerEnvironment } from "@spine-event-engine/server";',
+  'import { Application, BoundedContext, Server, ServerEnvironment } from "@spine-event-engine/server";',
   'import { BrowserServer } from "@spine-event-engine/server/browser";',
   "import { BlackBox } from '@spine-event-engine/testing';",
-  "import { resetServerEnvironmentForTest } from '@spine-event-engine/server/testing';",
   "if (typeof BlackBox !== 'function') throw new Error('Testing path is unavailable');",
-  "if (typeof resetServerEnvironmentForTest !== 'function') " +
-    "throw new Error('Server testing path is unavailable');",
-  "await resetServerEnvironmentForTest();",
-  "await ServerEnvironment.instance().completeSetup();",
-  "const native = await Server.atPort(0).start();",
+  "const environment = ServerEnvironment.newBuilder().build();",
+  "const application = await Application.newBuilder().setServerEnvironment(environment)",
+  '  .add(BoundedContext.singleTenant("ArtifactProbe")).build();',
+  "const native = await Server.atPort(0).setApplication(application).start();",
   "const browser = await BrowserServer.open(native, {",
   '  origins: ["http://127.0.0.1:5173"],',
   "  sessions: { resolve: () => Promise.resolve(undefined) },",
@@ -248,6 +246,7 @@ const exactConsumerSource = [
   '    throw new Error("Browser auth route is unavailable");',
   "} finally {",
   "  await browser.close();",
+  "  await application.close();",
   "}",
   "",
 ].join("\n");

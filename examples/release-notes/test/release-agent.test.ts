@@ -27,7 +27,7 @@ import {
   GenerationResponseSchema,
 } from "@spine-event-engine/proto/agent";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { BlackBox } from "@spine-event-engine/testing";
+import { readAgentHistoryPage } from "@spine-event-engine/server/testing";
 import { expect, it, vi } from "vitest";
 
 import {
@@ -59,6 +59,7 @@ import {
   RepositorySelectionIdSchema,
 } from "../generated/spine/examples/releasenotes/types_pb.js";
 import { ReleaseNotesAgent, ReleaseNotesContext } from "../dist/src/domain/index.js";
+import { ReleaseTestSession } from "./release-test-session.js";
 import { GitReleaseComparison } from "../src/trusted/git-release.js";
 import { ReleaseGitRegistration } from "../src/trusted/git-mcp-registration.js";
 
@@ -269,8 +270,12 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
   })
     .register(model)
     .registerTools(tools);
-  const context = await ReleaseNotesContext.create(registry, new InMemoryStorageFactory());
-  const box = await BlackBox.from(context, { timeoutMs: 30_000 });
+  const box = await ReleaseTestSession.open(
+    ReleaseNotesContext.create(registry),
+    new InMemoryStorageFactory(),
+    30_000,
+  );
+  const context = box.context;
   const id = create(ReleaseDraftIdSchema, { value: "release-agent-1" });
   try {
     expect(
@@ -381,7 +386,7 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
       .agentHistory(id, {})
       .fullHistory({ pageSize: 40 });
     expect(registeredHistory.items.length).toBeGreaterThan(0);
-    const history = await box.readAgentHistory(ReleaseNotesAgent, id, { pageSize: 40 });
+    const history = await readAgentHistoryPage(context, ReleaseNotesAgent, id, { pageSize: 40 });
     expect(registeredHistory.items).toEqual(history.items);
     const outcomes = history.items.flatMap((entry) => {
       if (entry.item.case !== "conversationRecord" || !entry.item.value.content) return [];

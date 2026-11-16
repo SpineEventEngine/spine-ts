@@ -82,7 +82,6 @@ import {
   type ReaderAdmissionResult,
 } from "../services/trusted-reader-ingress.js";
 import { NativeOperation } from "../services/native-operation.js";
-import { ServerEnvironment } from "./server-environment.js";
 
 const defaultHost = "127.0.0.1";
 const defaultPort = 0;
@@ -231,6 +230,11 @@ export interface NodeCoordinatorOptions {
    */
 
   readonly writeMaxBytes?: number;
+
+  /**
+   * Capacity for updates waiting behind an active Coordinator subscription result.
+   */
+  readonly subscriptionQueueCapacity?: number;
 
   /**
    * Selects network trust or native authentication ports at the managed listener.
@@ -421,7 +425,9 @@ export class NodeCoordinator {
    */
   static async open(options: NodeCoordinatorOptions): Promise<NodeCoordinator> {
     NodeCoordinatorValues.validateReaderModes(options);
-    const subscriptionQueueCapacity = ServerEnvironment.instance().subscriptionQueueCapacity;
+    const subscriptionQueueCapacity = options.subscriptionQueueCapacity ?? 100;
+    if (!Number.isSafeInteger(subscriptionQueueCapacity) || subscriptionQueueCapacity < 0)
+      throw new Error("Coordinator subscriptionQueueCapacity must be a nonnegative safe integer.");
     const { host, port, readMaxBytes, writeMaxBytes } = this.#listenerOptions(options);
     // eslint-disable-next-line prefer-const -- routes capture the Coordinator before the listener exists.
     let coordinator: NodeCoordinator;

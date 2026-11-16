@@ -37,12 +37,14 @@ import {
   VersionSchema,
   ZoneIdSchema,
 } from "@spine-event-engine/proto";
-import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { describe, expect, expectTypeOf, it, onTestFinished, vi } from "vitest";
+import { InMemoryStorageBackend, InMemoryStorageFactory } from "@spine-event-engine/storage";
 
 import {
   Aggregate,
+  Application,
   BoundedContext,
+  type BoundedContextBuilder,
   type DescriptorMessageSchema,
   EntityHandlers,
   type EntityHandlersMetadata,
@@ -58,6 +60,9 @@ import {
   type AppQueryContext,
   SingleProcessServerRuntime,
 } from "../../src/index.js";
+import { ServerEnvironment, serverEnvironmentAccess } from "../../src/server/server-environment.js";
+import { applicationAccess } from "../../src/server/application.js";
+import { EnvironmentType } from "../../src/server/environment.js";
 import { processManagerQueryAccess } from "../../src/entity/entity.js";
 import { TestTenantIndex } from "../tenant-index-fixture.js";
 import {
@@ -111,7 +116,6 @@ import {
 } from "../../test-fixtures/generated/handler-registry/rejections_pb.js";
 
 const closePhase = vi.hoisted(() => ({
-  onBegin: undefined as ((context: unknown) => void) | undefined,
   failBuild: undefined as ((builder: unknown) => boolean) | undefined,
   pauseBuild: undefined as ((builder: unknown) => Promise<void> | undefined) | undefined,
   failAdapter: false,
@@ -134,40 +138,42 @@ vi.mock("../../src/context/bounded-context.js", async (importOriginal) => {
     ...actual,
     boundedContextAccess: {
       ...actual.boundedContextAccess,
-      build(...args: Parameters<typeof actual.boundedContextAccess.build>) {
+      assemble(...args: Parameters<typeof actual.boundedContextAccess.assemble>) {
         if (closePhase.failBuild?.(args[0])) throw new Error("context build failed");
         const pause = closePhase.pauseBuild?.(args[0]);
         return pause === undefined
-          ? actual.boundedContextAccess.build(...args)
-          : pause.then(() => actual.boundedContextAccess.build(...args));
-      },
-      beginClose(context: BoundedContext) {
-        actual.boundedContextAccess.beginClose(context);
-        closePhase.onBegin?.(context);
+          ? actual.boundedContextAccess.assemble(...args)
+          : pause.then(() => actual.boundedContextAccess.assemble(...args));
       },
     },
   };
 });
 
-afterEach(async () => {
-  const { ServerEnvironment, ServerEnvironmentLifecycle, serverEnvironmentAccess } =
-    await import("../../src/server/server-environment.js");
-  const environment = ServerEnvironment.instance();
-  for (const context of serverEnvironmentAccess.openContexts(environment)) await context.close();
-  await ServerEnvironmentLifecycle.resetForTest();
-});
-
-beforeEach(async () => {
-  const { ServerEnvironment } = await import("../../src/server/server-environment.js");
-  const { EnvironmentType } = await import("../../src/server/environment.js");
+async function buildApplication(
+  builders: readonly BoundedContextBuilder[],
+  factory?: InMemoryStorageFactory,
+): Promise<Application> {
   const index = new TestTenantIndex();
-  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: index });
-  const environment = ServerEnvironment.instance();
-  await environment.completeSetup();
   for (const value of ["tenant-a", "tenant-b", "SINGLE_TENANT"]) {
     await index.keep(create(TenantIdSchema, { kind: { case: "value", value } }));
   }
-});
+  const environment = ServerEnvironment.newBuilder()
+    .under(EnvironmentType.Local, (configuration) => {
+      configuration.use(factory === undefined ? {} : { storageFactory: factory });
+    })
+    .build();
+  const builder = Application.newBuilder().setServerEnvironment(environment).setTenantIndex(index);
+  for (const entry of builders) builder.add(entry);
+  const application = await builder.build();
+  onTestFinished(() => application.close());
+  return application;
+}
+
+function requireContext(application: Application, position: number): BoundedContext {
+  const context = application.contexts()[position];
+  if (context === undefined) throw new Error(`Expected Bounded Context ${String(position)}.`);
+  return context;
+}
 
 const projectionColumns = EntityColumn.register(
   ProjectOverviewStateSchema,
@@ -610,29 +616,36 @@ function queryCommand(id: string, name: string, tenant?: string, suffix?: string
   });
 }
 
-async function queryDeliveryIdle(): Promise<void> {
-  const { ServerEnvironment, serverEnvironmentAccess } =
-    await import("../../src/server/server-environment.js");
-  await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+async function queryDeliveryIdle(application: Application): Promise<void> {
+  await serverEnvironmentAccess.whenDeliveryIdle(applicationAccess.environment(application));
 }
 
 async function startPausedQueryServer(order: "target-first" | "handler-first") {
-  const projects = await BoundedContext.singleTenant("PausedProjects")
-    .add(projectionRepository())
-    .build();
-  const workflows = await BoundedContext.singleTenant("PausedWorkflows")
-    .add(pausedLookupRepository())
-    .build();
+  const builders = [
+    BoundedContext.singleTenant("PausedProjects").add(projectionRepository()),
+    BoundedContext.singleTenant("PausedWorkflows").add(pausedLookupRepository()),
+  ];
+  const application = await buildApplication(
+    order === "target-first" ? builders : [...builders].reverse(),
+  );
+  const projects = application
+    .contexts()
+    .find((context) => context.name.value === "PausedProjects");
+  const workflows = application
+    .contexts()
+    .find((context) => context.name.value === "PausedWorkflows");
+  if (projects === undefined || workflows === undefined) throw new Error("Missing query contexts.");
   await projects
     .stand()
     .update(
       ProjectOverviewStateSchema,
       create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
     );
-  const contexts = order === "target-first" ? [projects, workflows] : [workflows, projects];
-  const server = Server.atPort(0);
-  for (const context of contexts) server.add(context);
-  return { projects, workflows, running: await server.start() };
+  return {
+    projects,
+    workflows,
+    running: await Server.atPort(0).setApplication(application).start(),
+  };
 }
 
 function reviewRejectionEvent(id: string) {
@@ -671,8 +684,8 @@ describe("Process Manager querying", () => {
       "test:scoped-app-query",
     );
     const server = new Server({ appQueries: [new ScopedAppQueryHandler()] });
-    const workflows = await BoundedContext.multitenant("ScopedAppQueryWorkflows")
-      .add(
+    const application = await buildApplication([
+      BoundedContext.multiTenant("ScopedAppQueryWorkflows").add(
         new Repository({
           entityType: ScopedAppQueryManager,
           schema: ProcessManagerStateSchema,
@@ -694,9 +707,10 @@ describe("Process Manager querying", () => {
           onCreate: (options) =>
             new ScopedAppQueryManager(options, (q, context) => server.query(q, context)),
         }),
-      )
-      .build();
-    server.add(workflows);
+      ),
+    ]);
+    const workflows = requireContext(application, 0);
+    server.setApplication(application);
     const running = await server.start();
     try {
       const command = queryCommand("project-1", "scoped", "tenant-a");
@@ -755,13 +769,14 @@ describe("Process Manager querying", () => {
         maskedLookupRepository(),
       );
       if (route === "local") workflowBuilder.add(profileRepository());
-      const workflows = await workflowBuilder.build();
-      const projects =
-        route === "foreign"
-          ? await BoundedContext.singleTenant(`MaskedProjects-${route}`)
-              .add(profileRepository())
-              .build()
-          : undefined;
+      const application = await buildApplication([
+        workflowBuilder,
+        ...(route === "foreign"
+          ? [BoundedContext.singleTenant(`MaskedProjects-${route}`).add(profileRepository())]
+          : []),
+      ]);
+      const workflows = requireContext(application, 0);
+      const projects = route === "foreign" ? requireContext(application, 1) : undefined;
       const target = projects ?? workflows;
       await target
         .stand()
@@ -769,9 +784,7 @@ describe("Process Manager querying", () => {
           ProjectProfileStateSchema,
           create(ProjectProfileStateSchema, { id: "project-1", mutableNote: "visible" }),
         );
-      const server = Server.atPort(0).add(workflows);
-      if (projects !== undefined) server.add(projects);
-      const running = await server.start();
+      const running = await Server.atPort(0).setApplication(application).start();
 
       try {
         await workflows.commandBus().post(queryCommand("project-1", "masked"));
@@ -798,20 +811,21 @@ describe("Process Manager querying", () => {
         return state;
       }
     }
-    const projects = await BoundedContext.singleTenant("Projects")
-      .add(projectionRepository())
-      .addReadSideFilter(new ObserveRead())
-      .build();
-    const workflows = await BoundedContext.singleTenant("Workflows")
-      .add(processManagerRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.singleTenant("Projects")
+        .add(projectionRepository())
+        .addReadSideFilter(new ObserveRead()),
+      BoundedContext.singleTenant("Workflows").add(processManagerRepository()),
+    ]);
+    const projects = requireContext(application, 0);
+    const workflows = requireContext(application, 1);
     await projects
       .stand()
       .update(
         ProjectOverviewStateSchema,
         create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
       );
-    const running = await Server.atPort(0).add(workflows).add(projects).start();
+    const running = await Server.atPort(0).setApplication(application).start();
 
     try {
       await workflows.commandBus().post(queryCommand("project-1", "ready"));
@@ -835,127 +849,132 @@ describe("Process Manager querying", () => {
     }
   });
 
-  it("admits only one concurrent Server assembly for a shared context", async () => {
+  it("starts two endpoints for one Application without interrupting shared queries", async () => {
     ProjectLookup.reset();
-    const workflows = await BoundedContext.singleTenant("ConcurrentWorkflows")
-      .add(processManagerRepository())
-      .build();
-    const firstProjects = await BoundedContext.singleTenant("ConcurrentFirstProjects")
-      .add(projectionRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.singleTenant("ConcurrentWorkflows").add(processManagerRepository()),
+      BoundedContext.singleTenant("ConcurrentFirstProjects").add(projectionRepository()),
+    ]);
+    const workflows = requireContext(application, 0);
+    const firstProjects = requireContext(application, 1);
     await firstProjects
       .stand()
       .update(
         ProjectOverviewStateSchema,
         create(ProjectOverviewStateSchema, { id: "shared", name: "first", priority: 1 }),
       );
-    const outcomes = await Promise.allSettled([
-      Server.atPort(0).add(workflows).add(firstProjects).start(),
-      Server.atPort(0).add(workflows).add(firstProjects).start(),
+    const [first, second] = await Promise.all([
+      Server.atPort(0).setApplication(application).start(),
+      Server.atPort(0).setApplication(application).start(),
     ]);
-    const accepted = outcomes.filter((result) => result.status === "fulfilled");
-    const rejected = outcomes.filter((result) => result.status === "rejected");
-    expect(accepted).toHaveLength(1);
-    expect(rejected).toHaveLength(1);
-    const running = accepted[0]?.value;
-    if (running === undefined) throw new Error("A Server was not started.");
     try {
+      await first.close();
       await workflows.commandBus().post(queryCommand("shared", "first"));
       await vi.waitFor(() => {
         expect(ProjectLookup.results[0]?.name).toBe("first");
       });
     } finally {
-      await running.close();
+      await Promise.all([first.close(), second.close()]);
     }
   });
 
   it.each(["before-builder", "after-builder"])(
-    "reserves all prebuilt contexts %s before awaiting a builder",
+    "reserves Application builders %s before awaiting a delayed builder",
     async (position) => {
       ProjectLookup.reset();
-      const workflows = await BoundedContext.singleTenant(`PendingWorkflows-${position}`)
-        .add(processManagerRepository())
-        .build();
-      const original = await BoundedContext.singleTenant(`PendingProjects-${position}`)
-        .add(projectionRepository())
-        .build();
-      const intruder = await BoundedContext.singleTenant(`PendingIntruder-${position}`)
-        .add(profileRepository())
-        .build();
+      const workflowsBuilder = BoundedContext.singleTenant(`PendingWorkflows-${position}`).add(
+        processManagerRepository(),
+      );
+      const originalBuilder = BoundedContext.singleTenant(`PendingProjects-${position}`).add(
+        projectionRepository(),
+      );
+      const intruderBuilder = BoundedContext.singleTenant(`PendingIntruder-${position}`).add(
+        profileRepository(),
+      );
       const delayed = BoundedContext.singleTenant(`DelayedBuilder-${position}`);
-      await original
-        .stand()
-        .update(
-          ProjectOverviewStateSchema,
-          create(ProjectOverviewStateSchema, { id: "shared", name: "original", priority: 1 }),
-        );
-      let entered!: () => void;
-      let resume!: () => void;
-      const building = new Promise<void>((resolve) => {
-        entered = resolve;
-      });
-      const released = new Promise<void>((resolve) => {
-        resume = resolve;
-      });
+      const building = Promise.withResolvers<undefined>();
+      const released = Promise.withResolvers<undefined>();
       closePhase.pauseBuild = (builder) => {
         if (builder !== delayed) return undefined;
-        entered();
-        return released;
+        building.resolve(undefined);
+        return released.promise;
       };
-      const first = Server.atPort(0);
-      if (position === "before-builder") first.add(workflows).add(delayed).add(original);
-      else first.add(delayed).add(workflows).add(original);
-      const firstStart = first.start();
-      await building;
-      const secondStart = Server.atPort(0).add(workflows).add(intruder).start();
+      let intruderBuilds = 0;
+      closePhase.failBuild = (builder) => {
+        if (builder !== intruderBuilder) return false;
+        intruderBuilds += 1;
+        return true;
+      };
+      const firstBuild = buildApplication(
+        position === "before-builder"
+          ? [workflowsBuilder, delayed, originalBuilder]
+          : [delayed, workflowsBuilder, originalBuilder],
+      );
+      await building.promise;
+      const secondEnvironment = ServerEnvironment.newBuilder().build();
+      const secondBuild = Application.newBuilder()
+        .setServerEnvironment(secondEnvironment)
+        .add(workflowsBuilder)
+        .add(intruderBuilder)
+        .build();
 
       try {
-        await expect(secondStart).rejects.toThrow(/already associated|assembly/);
-        resume();
-        const running = await firstStart;
-        await workflows.commandBus().post(queryCommand("shared", "original"));
-        await vi.waitFor(() => {
-          expect(ProjectLookup.results[0]?.name).toBe("original");
-        });
-        expect(RegisteredTargets.forStand(intruder.stand())).toBeUndefined();
-        await running.close();
+        await expect(secondBuild).rejects.toThrow(/already used|claimed/);
+        expect(intruderBuilds).toBe(0);
+        released.resolve(undefined);
+        const application = await firstBuild;
+        const workflows = application
+          .contexts()
+          .find((context) => context.name.value.startsWith("PendingWorkflows"));
+        const original = application
+          .contexts()
+          .find((context) => context.name.value.startsWith("PendingProjects"));
+        if (workflows === undefined || original === undefined)
+          throw new Error("Expected the reserved query contexts.");
+        await original
+          .stand()
+          .update(
+            ProjectOverviewStateSchema,
+            create(ProjectOverviewStateSchema, { id: "shared", name: "original", priority: 1 }),
+          );
+        const running = await Server.atPort(0).setApplication(application).start();
+        try {
+          await workflows.commandBus().post(queryCommand("shared", "original"));
+          await vi.waitFor(() => {
+            expect(ProjectLookup.results[0]?.name).toBe("original");
+          });
+        } finally {
+          await running.close();
+        }
       } finally {
         closePhase.pauseBuild = undefined;
-        resume();
-        await secondStart.then(
-          (running) => running.close(),
-          () => undefined,
-        );
-        await firstStart.then(
-          (running) => running.close(),
-          () => undefined,
-        );
+        closePhase.failBuild = undefined;
+        released.resolve(undefined);
+        await secondEnvironment.close();
       }
     },
   );
 
   it("retries failed second-Server cleanup without closing the live context", async () => {
     ProjectLookup.reset();
-    const workflows = await BoundedContext.singleTenant("RetainedWorkflows")
-      .add(processManagerRepository())
-      .build();
-    const original = await BoundedContext.singleTenant("RetainedProjects")
-      .add(projectionRepository())
-      .build();
-    const unused = await BoundedContext.singleTenant("UnusedProjects")
-      .add(profileRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.singleTenant("RetainedWorkflows").add(processManagerRepository()),
+      BoundedContext.singleTenant("RetainedProjects").add(projectionRepository()),
+      BoundedContext.singleTenant("UnusedProjects").add(profileRepository()),
+    ]);
+    const workflows = requireContext(application, 0);
+    const original = requireContext(application, 1);
     await original
       .stand()
       .update(
         ProjectOverviewStateSchema,
         create(ProjectOverviewStateSchema, { id: "shared", name: "original", priority: 1 }),
       );
-    const first = await Server.atPort(0).add(workflows).add(original).start();
+    const first = await Server.atPort(0).setApplication(application).start();
     let closes = 0;
+    closePhase.failAdapter = true;
     const second = Server.atPort(0)
-      .add(unused)
-      .add(workflows)
+      .setApplication(application)
       .addResource({
         close() {
           closes += 1;
@@ -978,25 +997,29 @@ describe("Process Manager querying", () => {
         )?.context,
       ).toBe(original);
     } finally {
+      closePhase.failAdapter = false;
       await first.close();
     }
   });
 
   it("rejects a live context before invoking a later failing builder", async () => {
     ProjectLookup.reset();
-    const workflows = await BoundedContext.singleTenant("BuildGuardWorkflows")
-      .add(processManagerRepository())
-      .build();
-    const projects = await BoundedContext.singleTenant("BuildGuardProjects")
-      .add(projectionRepository())
-      .build();
+    const workflowsBuilder = BoundedContext.singleTenant("BuildGuardWorkflows").add(
+      processManagerRepository(),
+    );
+    const application = await buildApplication([
+      workflowsBuilder,
+      BoundedContext.singleTenant("BuildGuardProjects").add(projectionRepository()),
+    ]);
+    const workflows = requireContext(application, 0);
+    const projects = requireContext(application, 1);
     await projects
       .stand()
       .update(
         ProjectOverviewStateSchema,
         create(ProjectOverviewStateSchema, { id: "shared", name: "ready", priority: 1 }),
       );
-    const running = await Server.atPort(0).add(workflows).add(projects).start();
+    const running = await Server.atPort(0).setApplication(application).start();
     const failing = BoundedContext.singleTenant("BuildGuardFailure");
     let buildAttempts = 0;
     closePhase.failBuild = (builder) => {
@@ -1006,9 +1029,18 @@ describe("Process Manager querying", () => {
     };
 
     try {
-      await expect(Server.atPort(0).add(workflows).add(failing).start()).rejects.toThrow(
-        /assembly/,
-      );
+      const secondEnvironment = ServerEnvironment.newBuilder().build();
+      try {
+        await expect(
+          Application.newBuilder()
+            .setServerEnvironment(secondEnvironment)
+            .add(workflowsBuilder)
+            .add(failing)
+            .build(),
+        ).rejects.toThrow(/already used/);
+      } finally {
+        await secondEnvironment.close();
+      }
       expect(buildAttempts).toBe(0);
       await workflows.commandBus().post(queryCommand("shared", "ready"));
       await vi.waitFor(() => {
@@ -1020,45 +1052,60 @@ describe("Process Manager querying", () => {
     }
   });
 
-  it("retains partial-build admissions until failed cleanup retries complete", async () => {
-    const projects = await BoundedContext.singleTenant("PartialBuildProjects")
-      .add(projectionRepository())
-      .build();
+  it("retains partial Application cleanup until a failed context close retries", async () => {
+    const environment = ServerEnvironment.newBuilder().build();
     const broken = BoundedContext.singleTenant("PartialBuildBroken");
-    closePhase.failBuild = (builder) => builder === broken;
+    const builder = Application.newBuilder()
+      .setServerEnvironment(environment)
+      .add(BoundedContext.singleTenant("PartialBuildProjects").add(projectionRepository()))
+      .add(broken);
+    closePhase.failBuild = (candidate) => candidate === broken;
+    const originalClose: unknown = Reflect.get(BoundedContext.prototype, "close");
+    if (typeof originalClose !== "function") throw new Error("Expected Bounded Context close.");
     let closes = 0;
-    const server = Server.atPort(0)
-      .add(projects)
-      .add(broken)
-      .addResource({
-        close() {
-          closes += 1;
-          if (closes === 1) throw new Error("resource cleanup failed");
-        },
-      });
+    const projectRef: { current?: BoundedContext } = {};
+    const closeSpy = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
+      this: BoundedContext,
+    ) {
+      if (this.name.value === "PartialBuildProjects") {
+        projectRef.current = this;
+        closes += 1;
+        if (closes === 1) return Promise.reject(new Error("context cleanup failed"));
+      }
+      return Reflect.apply(originalClose, this, []) as Promise<void>;
+    });
 
     try {
-      await expect(server.start()).rejects.toThrow(/cleanup/);
+      await expect(builder.build()).rejects.toThrow(/cleanup/);
       expect(closes).toBe(1);
-      expect(RegisteredTargets.forStand(projects.stand())).toBeUndefined();
-      await expect(Server.atPort(0).add(projects).start()).rejects.toThrow(/assembly/);
-      await expect(server.start()).rejects.toThrow(/deferred cleanup completed/);
+      await expect(builder.close()).resolves.toBeUndefined();
       expect(closes).toBe(2);
-      await expect(projects.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
-        "Stand is closed.",
+      const projectContext = projectRef.current;
+      if (projectContext === undefined) throw new Error("Expected the partial Bounded Context.");
+      await expect(
+        projectContext.stand().readAllVersioned(ProjectOverviewStateSchema),
+      ).rejects.toThrow("Stand is closed.");
+      const reused = await buildApplication([
+        BoundedContext.singleTenant("PartialBuildProjects").add(projectionRepository()),
+      ]);
+      expect(requireContext(reused, 0).stand().stateTypes()).toContain(
+        TypeUrls.derive(ProjectOverviewStateSchema),
       );
     } finally {
       closePhase.failBuild = undefined;
+      closeSpy.mockRestore();
+      await environment.close();
     }
   });
 
   it("releases routes and closes contexts after service option validation fails", async () => {
-    const projects = await BoundedContext.singleTenant("InvalidServiceProjects")
-      .add(projectionRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.singleTenant("InvalidServiceProjects").add(projectionRepository()),
+    ]);
+    const projects = requireContext(application, 0);
     let closes = 0;
     const server = Server.atPort(0, { services: { subscriptionLimit: 0 } })
-      .add(projects)
+      .setApplication(application)
       .addResource({
         close() {
           closes += 1;
@@ -1067,6 +1114,8 @@ describe("Process Manager querying", () => {
 
     await expect(server.start()).rejects.toThrow(/subscriptionLimit/);
     expect(closes).toBe(1);
+    expect(RegisteredTargets.forStand(projects.stand())).toBeDefined();
+    await application.close();
     expect(RegisteredTargets.forStand(projects.stand())).toBeUndefined();
     await expect(projects.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
       "Stand is closed.",
@@ -1074,13 +1123,14 @@ describe("Process Manager querying", () => {
   });
 
   it("retries adapter-construction cleanup without repeating completed phases", async () => {
-    const projects = await BoundedContext.singleTenant("AdapterFailureProjects")
-      .add(projectionRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.singleTenant("AdapterFailureProjects").add(projectionRepository()),
+    ]);
+    const projects = requireContext(application, 0);
     let closes = 0;
     closePhase.failAdapter = true;
     const server = Server.atPort(0)
-      .add(projects)
+      .setApplication(application)
       .addResource({
         close() {
           closes += 1;
@@ -1094,6 +1144,8 @@ describe("Process Manager querying", () => {
       expect(RegisteredTargets.forStand(projects.stand())).toBeDefined();
       await expect(server.start()).rejects.toThrow(/deferred cleanup completed/);
       expect(closes).toBe(2);
+      expect(RegisteredTargets.forStand(projects.stand())).toBeDefined();
+      await application.close();
       expect(RegisteredTargets.forStand(projects.stand())).toBeUndefined();
     } finally {
       closePhase.failAdapter = false;
@@ -1101,35 +1153,39 @@ describe("Process Manager querying", () => {
   });
 
   it("releases routes after a completed Server close", async () => {
-    const context = await BoundedContext.singleTenant("ReleasedProjects")
-      .add(projectionRepository())
-      .build();
-    const running = await Server.atPort(0).add(context).start();
+    const application = await buildApplication([
+      BoundedContext.singleTenant("ReleasedProjects").add(projectionRepository()),
+    ]);
+    const context = requireContext(application, 0);
+    const running = await Server.atPort(0).setApplication(application).start();
     expect(RegisteredTargets.forStand(context.stand())).toBeDefined();
 
     await running.close();
 
+    expect(RegisteredTargets.forStand(context.stand())).toBeDefined();
+    await application.close();
     expect(RegisteredTargets.forStand(context.stand())).toBeUndefined();
   });
 
   it("delivers retained Process Manager work with a foreign state read after restart", async () => {
     ProjectLookup.reset();
-    const factory = new InMemoryStorageFactory();
-    const { ServerEnvironment, ServerEnvironmentLifecycle } =
-      await import("../../src/server/server-environment.js");
-    const { EnvironmentType } = await import("../../src/server/environment.js");
-    await ServerEnvironmentLifecycle.resetForTest();
-    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
-    await ServerEnvironment.instance().completeSetup();
+    const backend = new InMemoryStorageBackend();
     const createdVersions: number[] = [];
     const buildContexts = async () => {
-      const projects = await BoundedContext.singleTenant("RestartProjects")
-        .add(projectionRepository())
-        .build();
-      const workflows = await BoundedContext.singleTenant("RestartWorkflows")
-        .add(processManagerRepository(identityNameFilter, createdVersions))
-        .build();
-      return { projects, workflows };
+      const application = await buildApplication(
+        [
+          BoundedContext.singleTenant("RestartProjects").add(projectionRepository()),
+          BoundedContext.singleTenant("RestartWorkflows").add(
+            processManagerRepository(identityNameFilter, createdVersions),
+          ),
+        ],
+        new InMemoryStorageFactory(backend),
+      );
+      return {
+        application,
+        projects: requireContext(application, 0),
+        workflows: requireContext(application, 1),
+      };
     };
     const first = await buildContexts();
     await first.projects
@@ -1138,7 +1194,7 @@ describe("Process Manager querying", () => {
         ProjectOverviewStateSchema,
         create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
       );
-    const initial = await Server.atPort(0).add(first.workflows).add(first.projects).start();
+    const initial = await Server.atPort(0).setApplication(first.application).start();
     await first.workflows.commandBus().post(queryCommand("project-1", "ready"));
     await vi.waitFor(async () => {
       const current = await first.workflows.stand().read(ProcessManagerStateSchema, "project-1");
@@ -1148,8 +1204,9 @@ describe("Process Manager querying", () => {
     ProjectLookup.reset();
 
     const pending = queryCommand("project-1", "ready", undefined, "retained");
-    const { serverEnvironmentAccess } = await import("../../src/server/server-environment.js");
-    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const delivery = serverEnvironmentAccess.coreDelivery(
+      applicationAccess.environment(first.application),
+    );
     await delivery.inbox.receive({
       inboxId: {
         targetId: Identifiers.pack("string", "project-1"),
@@ -1163,8 +1220,9 @@ describe("Process Manager querying", () => {
       whenReceived: Time.currentTime(),
       version: 1n,
     });
+    await first.application.close();
     const restarted = await buildContexts();
-    const running = await Server.atPort(0).add(restarted.workflows).add(restarted.projects).start();
+    const running = await Server.atPort(0).setApplication(restarted.application).start();
 
     try {
       await vi.waitFor(() => {
@@ -1181,19 +1239,20 @@ describe("Process Manager querying", () => {
 
   it("reads a foreign state while reacting to a rejected review command", async () => {
     RejectionProjectLookup.results = [];
-    const projects = await BoundedContext.singleTenant("RejectedProjects")
-      .add(projectionRepository())
-      .build();
-    const workflows = await BoundedContext.singleTenant("RejectedWorkflows")
-      .add(rejectionLookupRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.singleTenant("RejectedProjects").add(projectionRepository()),
+      BoundedContext.singleTenant("RejectedWorkflows").add(rejectionLookupRepository()),
+    ]);
+    const projects = requireContext(application, 0);
+    const workflows = requireContext(application, 1);
+
     await projects
       .stand()
       .update(
         ProjectOverviewStateSchema,
         create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
       );
-    const running = await Server.atPort(0).add(workflows).add(projects).start();
+    const running = await Server.atPort(0).setApplication(application).start();
 
     try {
       await workflows.eventBus().post(reviewRejectionEvent("project-1"));
@@ -1219,40 +1278,44 @@ describe("Process Manager querying", () => {
       const released = new Promise<void>((resolve) => {
         release = resolve;
       });
-      const projects = await BoundedContext.singleTenant("ClosingProjects")
-        .add(projectionRepository())
-        .build();
+      const projectRef: { context?: BoundedContext } = {};
       const results: ProjectOverviewState[][] = [];
-      const workflows = await BoundedContext.singleTenant("ClosingWorkflows")
-        .addCommandDispatcher({
-          messageSchemas: () => [CreateReviewProjectSchema],
-          async dispatch() {
-            enter();
-            await released;
-            const states = await projects.stand().readAllVersioned(ProjectOverviewStateSchema);
-            results.push(states.map((result) => result.state));
-          },
-        })
-        .build();
+      const projectBuilder =
+        BoundedContext.singleTenant("ClosingProjects").add(projectionRepository());
+      const workflowBuilder = BoundedContext.singleTenant("ClosingWorkflows").addCommandDispatcher({
+        messageSchemas: () => [CreateReviewProjectSchema],
+        async dispatch() {
+          enter();
+          await released;
+          const projects = projectRef.context;
+          if (projects === undefined) throw new Error("Expected query Bounded Context.");
+          const states = await projects.stand().readAllVersioned(ProjectOverviewStateSchema);
+          results.push(states.map((result) => result.state));
+        },
+      });
+      const application = await buildApplication(
+        order === "target-first"
+          ? [projectBuilder, workflowBuilder]
+          : [workflowBuilder, projectBuilder],
+      );
+      const projects = application
+        .contexts()
+        .find((context) => context.name.value === "ClosingProjects");
+      const workflows = application
+        .contexts()
+        .find((context) => context.name.value === "ClosingWorkflows");
+      if (projects === undefined || workflows === undefined)
+        throw new Error("Expected both query Bounded Contexts.");
+      projectRef.context = projects;
       await projects
         .stand()
         .update(
           ProjectOverviewStateSchema,
           create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
         );
-      const contexts = order === "target-first" ? [projects, workflows] : [workflows, projects];
-      const server = Server.atPort(0);
-      for (const context of contexts) server.add(context);
-      const running = await server.start();
+      const running = await Server.atPort(0).setApplication(application).start();
       const unrelatedRuntime = new SingleProcessServerRuntime();
       await unrelatedRuntime.start();
-      let began!: () => void;
-      const sourceClosing = new Promise<void>((resolve) => {
-        began = resolve;
-      });
-      closePhase.onBegin = (context) => {
-        if (context === workflows) began();
-      };
 
       try {
         const posting = workflows
@@ -1263,8 +1326,8 @@ describe("Process Manager querying", () => {
             (error: unknown) => error,
           );
         await entered;
-        const closing = running.close();
-        await sourceClosing;
+        const contexts = order === "target-first" ? [projects, workflows] : [workflows, projects];
+        const closing = Promise.all(contexts.map((context) => context.close()));
         expect(() => projects.stand().stateTypes()).not.toThrow();
         await expect(projects.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
           "Bounded Context is closing.",
@@ -1277,11 +1340,11 @@ describe("Process Manager querying", () => {
         release();
         expect(await posting).toBeUndefined();
         await closing;
+        await running.close();
         expect(results).toEqual([
           [create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 })],
         ]);
       } finally {
-        closePhase.onBegin = undefined;
         release();
         await running.close();
         await unrelatedRuntime.close();
@@ -1327,12 +1390,13 @@ describe("Process Manager querying", () => {
 
   it("reads the same named tenant in a multitenant destination", async () => {
     ProjectLookup.reset();
-    const projects = await BoundedContext.multitenant("TenantProjects")
-      .add(projectionRepository())
-      .build();
-    const workflows = await BoundedContext.multitenant("TenantWorkflows")
-      .add(processManagerRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.multiTenant("TenantProjects").add(projectionRepository()),
+      BoundedContext.multiTenant("TenantWorkflows").add(processManagerRepository()),
+    ]);
+    const projects = requireContext(application, 0);
+    const workflows = requireContext(application, 1);
+
     await projects
       .stand()
       .update(
@@ -1347,7 +1411,7 @@ describe("Process Manager querying", () => {
         create(ProjectOverviewStateSchema, { id: "shared", name: "B", priority: 2 }),
         { tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-b" } }) },
       );
-    const running = await Server.atPort(0).add(projects).add(workflows).start();
+    const running = await Server.atPort(0).setApplication(application).start();
 
     try {
       await workflows.commandBus().post(queryCommand("shared", "B", "tenant-b"));
@@ -1365,22 +1429,23 @@ describe("Process Manager querying", () => {
   it("reads a query-visible Aggregate registered in another context", async () => {
     ProjectLookup.reset();
     class ProjectAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
-    const projects = await BoundedContext.singleTenant("AggregateProjects")
-      .add(
+    const application = await buildApplication([
+      BoundedContext.singleTenant("AggregateProjects").add(
         new Repository({
           entityType: ProjectAggregate,
           schema: ProjectStateSchema,
           handlers: EntityHandlers.define(ProjectAggregate, ProjectStateSchema, () => []),
         }),
-      )
-      .build();
-    const workflows = await BoundedContext.singleTenant("AggregateWorkflows")
-      .add(processManagerRepository())
-      .build();
+      ),
+      BoundedContext.singleTenant("AggregateWorkflows").add(processManagerRepository()),
+    ]);
+    const projects = requireContext(application, 0);
+    const workflows = requireContext(application, 1);
+
     await projects
       .stand()
       .update(ProjectStateSchema, create(ProjectStateSchema, { id: "project-1", name: "ready" }));
-    const running = await Server.atPort(0).add(workflows).add(projects).start();
+    const running = await Server.atPort(0).setApplication(application).start();
 
     try {
       await workflows.commandBus().post(queryCommand("project-1", "aggregate"));
@@ -1398,25 +1463,26 @@ describe("Process Manager querying", () => {
 
   it("reads a query-visible Process Manager registered in another context", async () => {
     ProjectLookup.reset();
-    const reviews = await BoundedContext.singleTenant("ReviewProjects")
-      .add(
+    const application = await buildApplication([
+      BoundedContext.singleTenant("ReviewProjects").add(
         new Repository({
           entityType: ProjectReview,
           schema: ProjectReviewStateSchema,
           handlers: EntityHandlers.define(ProjectReview, ProjectReviewStateSchema, () => []),
         }),
-      )
-      .build();
-    const workflows = await BoundedContext.singleTenant("ReviewWorkflows")
-      .add(processManagerRepository())
-      .build();
+      ),
+      BoundedContext.singleTenant("ReviewWorkflows").add(processManagerRepository()),
+    ]);
+    const reviews = requireContext(application, 0);
+    const workflows = requireContext(application, 1);
+
     await reviews
       .stand()
       .update(
         ProjectReviewStateSchema,
         create(ProjectReviewStateSchema, { id: "project-1", queue: "ready" }),
       );
-    const running = await Server.atPort(0).add(workflows).add(reviews).start();
+    const running = await Server.atPort(0).setApplication(application).start();
 
     try {
       await workflows.commandBus().post(queryCommand("project-1", "review"));
@@ -1435,19 +1501,20 @@ describe("Process Manager querying", () => {
   it("accepts an equivalent descriptor instance for a registered state type", async () => {
     ProjectLookup.reset();
     expect(equivalentProjectionSchema).not.toBe(ProjectOverviewStateSchema);
-    const projects = await BoundedContext.singleTenant("EquivalentProjects")
-      .add(projectionRepository())
-      .build();
-    const workflows = await BoundedContext.singleTenant("EquivalentWorkflows")
-      .add(processManagerRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.singleTenant("EquivalentProjects").add(projectionRepository()),
+      BoundedContext.singleTenant("EquivalentWorkflows").add(processManagerRepository()),
+    ]);
+    const projects = requireContext(application, 0);
+    const workflows = requireContext(application, 1);
+
     await projects
       .stand()
       .update(
         ProjectOverviewStateSchema,
         create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
       );
-    const running = await Server.atPort(0).add(workflows).add(projects).start();
+    const running = await Server.atPort(0).setApplication(application).start();
 
     try {
       await workflows.commandBus().post(queryCommand("project-1", "equivalent"));
@@ -1462,9 +1529,10 @@ describe("Process Manager querying", () => {
   });
 
   it("validates foreign query fields against the registered target", async () => {
-    const projects = await BoundedContext.singleTenant("ValidatedProjects")
-      .add(projectionRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.singleTenant("ValidatedProjects").add(projectionRepository()),
+    ]);
+    const projects = requireContext(application, 0);
     const targets = new RegisteredTargets([projects]);
     const target = targets.find(TypeUrls.derive(ProjectOverviewStateSchema));
     if (target === undefined) throw new Error("Projection registration was not found.");
@@ -1497,12 +1565,13 @@ describe("Process Manager querying", () => {
 
   it("preserves compound filters, ordering, limit, and detached results across contexts", async () => {
     ProjectLookup.reset();
-    const projects = await BoundedContext.singleTenant("QueryOptionsProjects")
-      .add(projectionRepository())
-      .build();
-    const workflows = await BoundedContext.singleTenant("QueryOptionsWorkflows")
-      .add(processManagerRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.singleTenant("QueryOptionsProjects").add(projectionRepository()),
+      BoundedContext.singleTenant("QueryOptionsWorkflows").add(processManagerRepository()),
+    ]);
+    const projects = requireContext(application, 0);
+    const workflows = requireContext(application, 1);
+
     for (const [id, name, priority] of [
       ["one", "waiting", 1],
       ["two", "ready", 2],
@@ -1515,7 +1584,7 @@ describe("Process Manager querying", () => {
           create(ProjectOverviewStateSchema, { id, name, priority }),
         );
     }
-    const running = await Server.atPort(0).add(workflows).add(projects).start();
+    const running = await Server.atPort(0).setApplication(application).start();
 
     try {
       await workflows.commandBus().post(queryCommand("two", "compound"));
@@ -1539,19 +1608,20 @@ describe("Process Manager querying", () => {
 
   it("executes a context-free generated query in a foreign Process Manager read", async () => {
     ProjectLookup.reset();
-    const projects = await BoundedContext.singleTenant("SharedQueryProjects")
-      .add(projectionRepository())
-      .build();
-    const workflows = await BoundedContext.singleTenant("SharedQueryWorkflows")
-      .add(processManagerRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.singleTenant("SharedQueryProjects").add(projectionRepository()),
+      BoundedContext.singleTenant("SharedQueryWorkflows").add(processManagerRepository()),
+    ]);
+    const projects = requireContext(application, 0);
+    const workflows = requireContext(application, 1);
+
     await projects
       .stand()
       .update(
         ProjectOverviewStateSchema,
         create(ProjectOverviewStateSchema, { id: "shared", name: "ready", priority: 2 }),
       );
-    const running = await Server.atPort(0).add(workflows).add(projects).start();
+    const running = await Server.atPort(0).setApplication(application).start();
     try {
       await workflows.commandBus().post(queryCommand("shared", "shared"));
       await vi.waitFor(() => {
@@ -1566,12 +1636,13 @@ describe("Process Manager querying", () => {
 
   it("uses SINGLE_TENANT in a multitenant destination", async () => {
     ProjectLookup.reset();
-    const projects = await BoundedContext.multitenant("TenantProjects")
-      .add(projectionRepository())
-      .build();
-    const workflows = await BoundedContext.singleTenant("SingleWorkflows")
-      .add(processManagerRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.multiTenant("TenantProjects").add(projectionRepository()),
+      BoundedContext.singleTenant("SingleWorkflows").add(processManagerRepository()),
+    ]);
+    const projects = requireContext(application, 0);
+    const workflows = requireContext(application, 1);
+
     const singleTenant = create(TenantIdSchema, {
       kind: { case: "value", value: "SINGLE_TENANT" },
     });
@@ -1584,7 +1655,7 @@ describe("Process Manager querying", () => {
       );
     const observed: unknown[] = [];
     const observation = QueryReader.observe((query) => observed.push(query));
-    const running = await Server.atPort(0).add(workflows).add(projects).start();
+    const running = await Server.atPort(0).setApplication(application).start();
 
     try {
       await workflows.commandBus().post(queryCommand("shared", "single"));
@@ -1603,29 +1674,27 @@ describe("Process Manager querying", () => {
     ["FirstProjects", "SecondProjects"],
     ["SecondProjects", "FirstProjects"],
   ])("rejects duplicate state registration in %s then %s", async (first, second) => {
-    const firstContext = await BoundedContext.singleTenant(first)
-      .add(projectionRepository())
-      .build();
     await expect(
-      BoundedContext.singleTenant(second).add(projectionRepository()).build(),
+      buildApplication([
+        BoundedContext.singleTenant(first).add(projectionRepository()),
+        BoundedContext.singleTenant(second).add(projectionRepository()),
+      ]),
     ).rejects.toThrow(new RegExp(`ProjectOverviewState.*${first}.*${second}`));
-    expect(() => firstContext.stand().stateTypes()).not.toThrow();
-    await firstContext.close();
-    const reused = await BoundedContext.singleTenant(second).add(projectionRepository()).build();
-    await reused.close();
+    const application = await buildApplication([
+      BoundedContext.singleTenant(second).add(projectionRepository()),
+    ]);
+    const reused = requireContext(application, 0);
+    expect(() => reused.stand().stateTypes()).not.toThrow();
   });
 
   it("retries failed Server cleanup after a separate startup failure", async () => {
-    const first = await BoundedContext.singleTenant("RetryProjectsOne")
-      .add(projectionRepository())
-      .build();
-    const second = await BoundedContext.singleTenant("RetryProjectsTwo")
-      .add(profileRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.singleTenant("RetryProjectsOne").add(projectionRepository()),
+      BoundedContext.singleTenant("RetryProjectsTwo").add(profileRepository()),
+    ]);
     let closes = 0;
     const server = Server.atPort(0)
-      .add(first)
-      .add(second)
+      .setApplication(application)
       .addResource({
         close() {
           closes += 1;
@@ -1663,14 +1732,15 @@ describe("Process Manager querying", () => {
 
   it("does not discover targets attached to another Server", async () => {
     ProjectLookup.reset();
-    const projects = await BoundedContext.singleTenant("OtherProjects")
-      .add(projectionRepository())
-      .build();
-    const workflows = await BoundedContext.singleTenant("LocalWorkflows")
-      .add(processManagerRepository())
-      .build();
-    const projectsServer = await Server.atPort(0).add(projects).start();
-    const workflowsServer = await Server.atPort(0).add(workflows).start();
+    const projectsApplication = await buildApplication([
+      BoundedContext.singleTenant("OtherProjects").add(projectionRepository()),
+    ]);
+    const workflowsApplication = await buildApplication([
+      BoundedContext.singleTenant("LocalWorkflows").add(processManagerRepository()),
+    ]);
+    const workflows = requireContext(workflowsApplication, 0);
+    const projectsServer = await Server.atPort(0).setApplication(projectsApplication).start();
+    const workflowsServer = await Server.atPort(0).setApplication(workflowsApplication).start();
     let reads = 0;
     const observation = QueryReader.observe(() => {
       reads += 1;
@@ -1693,19 +1763,19 @@ describe("Process Manager querying", () => {
   it("rejects a foreign Entity without query visibility before reading", async () => {
     HiddenLookup.failure = undefined;
     HiddenLookup.completed = false;
-    const hidden = await BoundedContext.singleTenant("HiddenProjects")
-      .add(
+    const application = await buildApplication([
+      BoundedContext.singleTenant("HiddenProjects").add(
         new Repository({
           entityType: ProjectQueue,
           schema: ProjectQueueStateSchema,
           handlers: EntityHandlers.define(ProjectQueue, ProjectQueueStateSchema, () => []),
         }),
-      )
-      .build();
-    const workflows = await BoundedContext.singleTenant("VisibleWorkflows")
-      .add(hiddenLookupRepository())
-      .build();
-    const running = await Server.atPort(0).add(hidden).add(workflows).start();
+      ),
+      BoundedContext.singleTenant("VisibleWorkflows").add(hiddenLookupRepository()),
+    ]);
+    const workflows = requireContext(application, 1);
+
+    const running = await Server.atPort(0).setApplication(application).start();
     let reads = 0;
     const observation = QueryReader.observe(() => {
       reads += 1;
@@ -1727,17 +1797,17 @@ describe("Process Manager querying", () => {
 
   it("rejects a named tenant before reading a single-tenant target", async () => {
     ProjectLookup.reset();
-    const projects = await BoundedContext.singleTenant("SingleProjects")
-      .add(projectionRepository())
-      .build();
-    const workflows = await BoundedContext.multitenant("TenantWorkflows")
-      .add(processManagerRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.singleTenant("SingleProjects").add(projectionRepository()),
+      BoundedContext.multiTenant("TenantWorkflows").add(processManagerRepository()),
+    ]);
+    const workflows = requireContext(application, 1);
+
     let reads = 0;
     const observation = QueryReader.observe(() => {
       reads += 1;
     });
-    const running = await Server.atPort(0).add(projects).add(workflows).start();
+    const running = await Server.atPort(0).setApplication(application).start();
 
     try {
       await workflows.commandBus().post(queryCommand("project-1", "ready", "tenant-a"));
@@ -1864,10 +1934,12 @@ describe("Process Manager querying", () => {
         return name;
       },
     };
-    const context = await BoundedContext.multitenant("ProcessManagerQueries")
-      .add(projectionRepository())
-      .add(processManagerRepository(nameFilter, createdVersions))
-      .build();
+    const application = await buildApplication([
+      BoundedContext.multiTenant("ProcessManagerQueries")
+        .add(projectionRepository())
+        .add(processManagerRepository(nameFilter, createdVersions)),
+    ]);
+    const context = requireContext(application, 0);
     const tenantA = create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } });
     const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-b" } });
 
@@ -1888,19 +1960,19 @@ describe("Process Manager querying", () => {
         );
 
       await context.commandBus().post(queryCommand("shared", "A", "tenant-a"));
-      await queryDeliveryIdle();
+      await queryDeliveryIdle(application);
       expect(ProjectLookup.results).toEqual([
         create(ProjectOverviewStateSchema, { id: "shared", name: "A", priority: 1 }),
       ]);
 
       await context.commandBus().post(queryCommand("shared", "B", "tenant-b"));
-      await queryDeliveryIdle();
+      await queryDeliveryIdle(application);
       expect(ProjectLookup.results).toEqual([
         create(ProjectOverviewStateSchema, { id: "shared", name: "B", priority: 2 }),
       ]);
 
       await context.commandBus().post(queryCommand("shared", "A", "tenant-a", "restored"));
-      await queryDeliveryIdle();
+      await queryDeliveryIdle(application);
       expect(ProjectLookup.results).toEqual([
         create(ProjectOverviewStateSchema, { id: "shared", name: "A", priority: 1 }),
       ]);
@@ -1922,10 +1994,10 @@ describe("Process Manager querying", () => {
           { tenantId: tenantB },
         );
       await context.commandBus().post(queryCommand("shared-query", "shared", "tenant-a"));
-      await queryDeliveryIdle();
+      await queryDeliveryIdle(application);
       expect(ProjectLookup.results[0]?.priority).toBe(4);
       await context.commandBus().post(queryCommand("shared-query", "shared", "tenant-b"));
-      await queryDeliveryIdle();
+      await queryDeliveryIdle(application);
       expect(ProjectLookup.results[0]?.priority).toBe(7);
       expect(sharedQuery.build().context).toBeUndefined();
     } finally {
@@ -1935,10 +2007,12 @@ describe("Process Manager querying", () => {
 
   it("passes the signal actor, tenant, and zone to the query", async () => {
     ProjectLookup.reset();
-    const context = await BoundedContext.multitenant("ProcessManagerQueries")
-      .add(projectionRepository())
-      .add(processManagerRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.multiTenant("ProcessManagerQueries")
+        .add(projectionRepository())
+        .add(processManagerRepository()),
+    ]);
+    const context = requireContext(application, 0);
     const observed: unknown[] = [];
     const observation = QueryReader.observe((query) => observed.push(query));
     const command = queryCommand("shared", "A", "tenant-a");
@@ -1947,7 +2021,7 @@ describe("Process Manager querying", () => {
 
     try {
       await context.commandBus().post(command);
-      await queryDeliveryIdle();
+      await queryDeliveryIdle(application);
       expect(observed).toHaveLength(1);
       expect(observed[0]).toMatchObject({
         context: {
@@ -1995,10 +2069,12 @@ describe("Process Manager querying", () => {
   ])("validates a $name predicate before reading storage", async ({ predicate, message }) => {
     ProjectLookup.reset();
     ProjectLookup.predicate = predicate;
-    const context = await BoundedContext.singleTenant("ProcessManagerQueries")
-      .add(projectionRepository())
-      .add(processManagerRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.singleTenant("ProcessManagerQueries")
+        .add(projectionRepository())
+        .add(processManagerRepository()),
+    ]);
+    const context = requireContext(application, 0);
     let reads = 0;
     const observation = QueryReader.observe(() => {
       reads += 1;
@@ -2008,7 +2084,7 @@ describe("Process Manager querying", () => {
       await expect(
         context.commandBus().post(queryCommand("query-id", "invalid")),
       ).resolves.toBeUndefined();
-      await queryDeliveryIdle();
+      await queryDeliveryIdle(application);
       expect(ProjectLookup.failure).toBeInstanceOf(Error);
       expect((ProjectLookup.failure as Error).message).toBe(message);
       expect(reads).toBe(0);
@@ -2020,10 +2096,12 @@ describe("Process Manager querying", () => {
 
   it("includes archived state, excludes deleted state, and returns clones", async () => {
     ProjectLookup.reset();
-    const context = await BoundedContext.singleTenant("ProcessManagerQueries")
-      .add(projectionRepository())
-      .add(processManagerRepository())
-      .build();
+    const application = await buildApplication([
+      BoundedContext.singleTenant("ProcessManagerQueries")
+        .add(projectionRepository())
+        .add(processManagerRepository()),
+    ]);
+    const context = requireContext(application, 0);
 
     try {
       await context
@@ -2048,14 +2126,14 @@ describe("Process Manager querying", () => {
         );
 
       await context.commandBus().post(queryCommand("manager", "all", undefined, "second"));
-      await queryDeliveryIdle();
+      await queryDeliveryIdle(application);
       expect(ProjectLookup.results.map((state) => state.name).sort()).toEqual(["archived", "live"]);
       const live = ProjectLookup.results.find((state) => state.id === "live");
       if (live === undefined) throw new Error("Expected live query result.");
       live.name = "changed by handler";
 
       await context.commandBus().post(queryCommand("manager", "all"));
-      await queryDeliveryIdle();
+      await queryDeliveryIdle(application);
       expect(ProjectLookup.results.find((state) => state.id === "live")).toEqual(
         create(ProjectOverviewStateSchema, { id: "live", name: "live", priority: 1 }),
       );

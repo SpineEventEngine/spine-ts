@@ -33,21 +33,22 @@ import {
 } from "@spine-event-engine/proto";
 import {
   AbstractEventSubscriber,
+  Application,
   BoundedContext,
+  type BoundedContextBuilder,
   EnvironmentType,
   EventRouting,
   Projection,
   ServerEnvironment,
   SINGLE_TENANT,
 } from "@spine-event-engine/server";
-import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
 import {
   registerSpineMetadata,
   type SpineMetadata,
 } from "@spine-event-engine/server/spi/handler-registry";
 import { spineMetadataTestAccess } from "../../dist/handler/spine-metadata-inventory.js";
 import { serverEnvironmentAccess } from "../../dist/server/server-environment.js";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished } from "vitest";
 
 import {
   loadWave13Contract,
@@ -188,22 +189,60 @@ function createEntityGeneratedRegistryRoot(
   );
 }
 
+const environments = new WeakMap<BoundedContext, ServerEnvironment>();
+
+async function buildContext(
+  builder: BoundedContextBuilder,
+  factory?: RecordingTransportFactory,
+): Promise<BoundedContext> {
+  const [context] = await buildContexts([builder], factory);
+  if (context === undefined) throw new Error("Expected an integration Bounded Context.");
+  return context;
+}
+
+async function buildContexts(
+  builders: readonly BoundedContextBuilder[],
+  factory?: RecordingTransportFactory,
+): Promise<readonly BoundedContext[]> {
+  const environment = ServerEnvironment.newBuilder()
+    .under(EnvironmentType.Local, (configuration) => {
+      configuration.use(factory === undefined ? {} : { integrationChannelFactory: factory });
+    })
+    .build();
+  const builder = Application.newBuilder()
+    .setServerEnvironment(environment)
+    .setTenantIndex(new TestTenantIndex());
+  for (const entry of builders) builder.add(entry);
+  const application = await builder.build();
+  onTestFinished(() => application.close());
+  const contexts = application.contexts();
+  for (const context of contexts) environments.set(context, environment);
+  return contexts;
+}
+
+function environmentFor(context: BoundedContext): ServerEnvironment {
+  const environment = environments.get(context);
+  if (environment === undefined) throw new Error("Expected an integration environment.");
+  return environment;
+}
+
 describe("Wave 13 IntegrationBroker", () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     spineMetadataTestAccess.clear();
-    await resetServerEnvironmentForTest();
   });
-  afterEach(async () => resetServerEnvironmentForTest());
   it("RED-01 delivers one requested domestic event once between two same-process contexts", async () => {
     await broker("one producer / one consumer delivery");
-    await ServerEnvironment.instance().completeSetup();
     const seen: unknown[] = [];
-    const consumer = await BoundedContext.singleTenant("Red01Consumer")
-      .addEventDispatcher(external([ReviewTaskAssignedSchema], seen))
-      .build();
-    const producer = await BoundedContext.singleTenant("Red01Producer")
-      .addEventDispatcher(domestic([ReviewTaskAssignedSchema]))
-      .build();
+    const [consumer, producer] = await buildContexts([
+      BoundedContext.singleTenant("Red01Consumer").addEventDispatcher(
+        external([ReviewTaskAssignedSchema], seen),
+      ),
+      BoundedContext.singleTenant("Red01Producer").addEventDispatcher(
+        domestic([ReviewTaskAssignedSchema]),
+      ),
+    ]);
+    if (consumer === undefined || producer === undefined)
+      throw new Error("Expected both contexts.");
     try {
       const original = event();
       await producer.eventBus().post(original);
@@ -215,8 +254,6 @@ describe("Wave 13 IntegrationBroker", () => {
   it("advertises and delivers a standalone external Event through the context broker", async () => {
     await broker("standalone external Event interest and imported delivery");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
-    await ServerEnvironment.instance().completeSetup();
     class ExternalSubscriber extends AbstractEventSubscriber {
       calls = 0;
       subscribe(): void {
@@ -239,12 +276,16 @@ describe("Wave 13 IntegrationBroker", () => {
         ],
       },
     ]);
-    const consumer = await BoundedContext.singleTenant("StandaloneExternalConsumer")
-      .addEventDispatcher(subscriber)
-      .build();
-    const producer = await BoundedContext.singleTenant("StandaloneExternalProducer")
-      .addEventDispatcher(domestic([ReviewTaskAssignedSchema]))
-      .build();
+    const consumer = await buildContext(
+      BoundedContext.singleTenant("StandaloneExternalConsumer").addEventDispatcher(subscriber),
+      factory,
+    );
+    const producer = await buildContext(
+      BoundedContext.singleTenant("StandaloneExternalProducer").addEventDispatcher(
+        domestic([ReviewTaskAssignedSchema]),
+      ),
+      factory,
+    );
     try {
       await producer.eventBus().post(event(ReviewTaskAssignedSchema, "standalone-external"));
       expect(subscriber.calls).toBe(1);
@@ -254,23 +295,25 @@ describe("Wave 13 IntegrationBroker", () => {
       );
     } finally {
       await close(producer, consumer);
-      await ServerEnvironment.instance().close();
     }
   });
   it("RED-02 fans one producer event out to every requesting consumer", async () => {
     await broker("many-consumer complete-event fan-out");
-    await ServerEnvironment.instance().completeSetup();
     const first: unknown[] = [],
       second: unknown[] = [];
-    const producer = await BoundedContext.singleTenant("Red02Producer")
-      .addEventDispatcher(domestic([ReviewTaskAssignedSchema]))
-      .build();
-    const one = await BoundedContext.singleTenant("Red02One")
-      .addEventDispatcher(external([ReviewTaskAssignedSchema], first))
-      .build();
-    const two = await BoundedContext.singleTenant("Red02Two")
-      .addEventDispatcher(external([ReviewTaskAssignedSchema], second))
-      .build();
+    const [producer, one, two] = await buildContexts([
+      BoundedContext.singleTenant("Red02Producer").addEventDispatcher(
+        domestic([ReviewTaskAssignedSchema]),
+      ),
+      BoundedContext.singleTenant("Red02One").addEventDispatcher(
+        external([ReviewTaskAssignedSchema], first),
+      ),
+      BoundedContext.singleTenant("Red02Two").addEventDispatcher(
+        external([ReviewTaskAssignedSchema], second),
+      ),
+    ]);
+    if (producer === undefined || one === undefined || two === undefined)
+      throw new Error("Expected all fan-out contexts.");
     try {
       await producer.eventBus().post(event());
       expect(first).toHaveLength(1);
@@ -281,14 +324,17 @@ describe("Wave 13 IntegrationBroker", () => {
   });
   it("RED-05 does not export an unrequested domestic event", async () => {
     await broker("wanted-type-only domestic publication");
-    await ServerEnvironment.instance().completeSetup();
     const seen: unknown[] = [];
-    const consumer = await BoundedContext.singleTenant("Red05Consumer")
-      .addEventDispatcher(external([ReviewTaskAssignedSchema], seen))
-      .build();
-    const producer = await BoundedContext.singleTenant("Red05Producer")
-      .addEventDispatcher(domestic([ReviewTaskAssignedSchema, ReviewStartedSchema]))
-      .build();
+    const [consumer, producer] = await buildContexts([
+      BoundedContext.singleTenant("Red05Consumer").addEventDispatcher(
+        external([ReviewTaskAssignedSchema], seen),
+      ),
+      BoundedContext.singleTenant("Red05Producer").addEventDispatcher(
+        domestic([ReviewTaskAssignedSchema, ReviewStartedSchema]),
+      ),
+    ]);
+    if (consumer === undefined || producer === undefined)
+      throw new Error("Expected both contexts.");
     try {
       await producer.eventBus().post(event(ReviewStartedSchema, "unwanted"));
       await producer.eventBus().post(event(ReviewTaskAssignedSchema, "wanted"));
@@ -301,18 +347,20 @@ describe("Wave 13 IntegrationBroker", () => {
   it("RED-06 does not republish imported events in a bidirectional cycle", async () => {
     await broker("origin-only loop prevention");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
-    await ServerEnvironment.instance().completeSetup();
     const a: unknown[] = [],
       b: unknown[] = [];
-    const left = await BoundedContext.singleTenant("Red06A")
-      .addEventDispatcher(domestic([ReviewTaskAssignedSchema]))
-      .addEventDispatcher(external([ReviewStartedSchema], a))
-      .build();
-    const right = await BoundedContext.singleTenant("Red06B")
-      .addEventDispatcher(domestic([ReviewStartedSchema]))
-      .addEventDispatcher(external([ReviewTaskAssignedSchema], b))
-      .build();
+    const left = await buildContext(
+      BoundedContext.singleTenant("Red06A")
+        .addEventDispatcher(domestic([ReviewTaskAssignedSchema]))
+        .addEventDispatcher(external([ReviewStartedSchema], a)),
+      factory,
+    );
+    const right = await buildContext(
+      BoundedContext.singleTenant("Red06B")
+        .addEventDispatcher(domestic([ReviewStartedSchema]))
+        .addEventDispatcher(external([ReviewTaskAssignedSchema], b)),
+      factory,
+    );
     try {
       await left.eventBus().post(event(ReviewTaskAssignedSchema, "a"));
       await right.eventBus().post(event(ReviewStartedSchema, "b"));
@@ -335,11 +383,12 @@ describe("Wave 13 IntegrationBroker", () => {
   it("RED-07 installs one publisher on the first requester and serializes complete-set replacement", async () => {
     await broker("first request and replacement");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
-    await ServerEnvironment.instance().completeSetup();
-    const producer = await BoundedContext.singleTenant(`Red07${crypto.randomUUID()}`)
-      .addEventDispatcher(domestic([ReviewTaskAssignedSchema, ReviewStartedSchema]))
-      .build();
+    const producer = await buildContext(
+      BoundedContext.singleTenant(`Red07${crypto.randomUUID()}`).addEventDispatcher(
+        domestic([ReviewTaskAssignedSchema, ReviewStartedSchema]),
+      ),
+      factory,
+    );
     try {
       await publishWanted(factory, "Red07Peer", [ReviewTaskAssignedSchema]);
       const initialConfigCount = configPublications(factory).length;
@@ -363,17 +412,17 @@ describe("Wave 13 IntegrationBroker", () => {
       expect(eventPublisherCreations(factory, ReviewStartedSchema)).toHaveLength(1);
     } finally {
       await producer.close();
-      await ServerEnvironment.instance().close();
     }
   });
   it("RED-08 retains publication while another requester still wants the type", async () => {
     await broker("per-origin wanted references");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
-    await ServerEnvironment.instance().completeSetup();
-    const producer = await BoundedContext.singleTenant(`Red08${crypto.randomUUID()}`)
-      .addEventDispatcher(domestic([ReviewTaskAssignedSchema]))
-      .build();
+    const producer = await buildContext(
+      BoundedContext.singleTenant(`Red08${crypto.randomUUID()}`).addEventDispatcher(
+        domestic([ReviewTaskAssignedSchema]),
+      ),
+      factory,
+    );
     try {
       await publishWanted(factory, "Red08First", [ReviewTaskAssignedSchema]);
       await publishWanted(factory, "Red08Second", [ReviewTaskAssignedSchema]);
@@ -384,7 +433,6 @@ describe("Wave 13 IntegrationBroker", () => {
       expect(eventPublisherCreations(factory, ReviewTaskAssignedSchema)).toHaveLength(1);
     } finally {
       await producer.close();
-      await ServerEnvironment.instance().close();
     }
   });
   // prettier-ignore
@@ -397,17 +445,16 @@ describe("Wave 13 IntegrationBroker", () => {
   it("RED-10 suppresses an unchanged complete wanted-event set", async () => {
     await broker("unchanged complete-set suppression");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
-    await ServerEnvironment.instance().completeSetup();
-    const context = await BoundedContext.singleTenant(`Red10${crypto.randomUUID()}`)
-      .addEventDispatcher(external([ReviewTaskAssignedSchema], []))
-      .addEventDispatcher(external([ReviewTaskAssignedSchema], []))
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant(`Red10${crypto.randomUUID()}`)
+        .addEventDispatcher(external([ReviewTaskAssignedSchema], []))
+        .addEventDispatcher(external([ReviewTaskAssignedSchema], [])),
+      factory,
+    );
     try {
       expect(await decodeWantedFrames(factory)).toHaveLength(1);
     } finally {
       await context.close();
-      await ServerEnvironment.instance().close();
     }
   });
   it("RED-11 rebroadcasts an unchanged wanted-event set after a peer comes online", async () => {
@@ -431,14 +478,16 @@ describe("Wave 13 IntegrationBroker", () => {
   });
   it("RED-13 preserves per-producer order, complete Event bytes, and EventId", async () => {
     await broker("full Event identity and order");
-    await ServerEnvironment.instance().completeSetup();
     const seen: unknown[] = [];
-    const c = await BoundedContext.singleTenant("Red13C")
-      .addEventDispatcher(external([ReviewTaskAssignedSchema], seen))
-      .build();
-    const p = await BoundedContext.singleTenant("Red13P")
-      .addEventDispatcher(domestic([ReviewTaskAssignedSchema]))
-      .build();
+    const [c, p] = await buildContexts([
+      BoundedContext.singleTenant("Red13C").addEventDispatcher(
+        external([ReviewTaskAssignedSchema], seen),
+      ),
+      BoundedContext.singleTenant("Red13P").addEventDispatcher(
+        domestic([ReviewTaskAssignedSchema]),
+      ),
+    ]);
+    if (c === undefined || p === undefined) throw new Error("Expected both contexts.");
     try {
       const one = event(ReviewTaskAssignedSchema, "one"),
         two = event(ReviewTaskAssignedSchema, "two");
@@ -465,8 +514,6 @@ describe("Wave 13 IntegrationBroker", () => {
   });
   it("RED-15 validates the existing tenant boundary and isolates imported tenants", async () => {
     await broker("tenant-aware imported intake");
-    ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: new TestTenantIndex() });
-    await ServerEnvironment.instance().completeSetup();
     createEntityGeneratedRegistryRoot([
       {
         entityType: ReviewTaskAssignedOriginProjection,
@@ -483,12 +530,13 @@ describe("Wave 13 IntegrationBroker", () => {
       },
     ]);
     ReviewTaskAssignedOriginProjection.reset();
-    const c = await BoundedContext.multitenant("Red15")
-      .add(ReviewTaskAssignedOriginProjection, { eventRouting: taskEventOriginRouting })
-      .build();
-    const p = await BoundedContext.multitenant("Red15P")
-      .addEventDispatcher(domestic([ReviewTaskAssignedSchema]))
-      .build();
+    const [c, p] = await buildContexts([
+      BoundedContext.multiTenant("Red15").add(ReviewTaskAssignedOriginProjection, {
+        eventRouting: taskEventOriginRouting,
+      }),
+      BoundedContext.multiTenant("Red15P").addEventDispatcher(domestic([ReviewTaskAssignedSchema])),
+    ]);
+    if (c === undefined || p === undefined) throw new Error("Expected both contexts.");
     const tenantA = create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } });
     const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-b" } });
     try {
@@ -502,7 +550,7 @@ describe("Wave 13 IntegrationBroker", () => {
       await consumerIndex.keep(tenantB);
       await p.eventBus().post(event(ReviewTaskAssignedSchema, "a", "tenant-a"));
       await p.eventBus().post(event(ReviewTaskAssignedSchema, "b", "tenant-b"));
-      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(c));
       expect(ReviewTaskAssignedOriginProjection.externalContexts.map(tenantValue)).toEqual([
         "tenant-a",
         "tenant-b",
@@ -519,12 +567,18 @@ describe("Wave 13 IntegrationBroker", () => {
       await expect(p.eventBus().post(event(ReviewTaskAssignedSchema, "missing"))).rejects.toThrow(
         /tenant/u,
       );
-      const single = await BoundedContext.singleTenant("Red15Single")
-        .addEventDispatcher(external([ReviewTaskAssignedSchema], []))
-        .build();
-      const forbidden = await BoundedContext.singleTenant("Red15Forbidden")
-        .addEventDispatcher(domestic([ReviewTaskAssignedSchema]))
-        .build();
+      const single = await buildContext(
+        BoundedContext.singleTenant("Red15Single").addEventDispatcher(
+          external([ReviewTaskAssignedSchema], []),
+        ),
+        undefined,
+      );
+      const forbidden = await buildContext(
+        BoundedContext.singleTenant("Red15Forbidden").addEventDispatcher(
+          domestic([ReviewTaskAssignedSchema]),
+        ),
+        undefined,
+      );
       await expect(
         forbidden.eventBus().post(event(ReviewTaskAssignedSchema, "forbidden", "tenant-a")),
       ).rejects.toThrow(/tenant/u);
@@ -536,15 +590,19 @@ describe("Wave 13 IntegrationBroker", () => {
   it("RED-16 changes only EventContext.external before posting through the normal EventBus", async () => {
     await broker("normal EventBus import with system/self filtering");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
-    await ServerEnvironment.instance().completeSetup();
     const seen: unknown[] = [];
-    const c = await BoundedContext.singleTenant("Red16C")
-      .addEventDispatcher(external([ReviewTaskAssignedSchema], seen))
-      .build();
-    const p = await BoundedContext.singleTenant("Red16P")
-      .addEventDispatcher(domestic([ReviewTaskAssignedSchema]))
-      .build();
+    const c = await buildContext(
+      BoundedContext.singleTenant("Red16C").addEventDispatcher(
+        external([ReviewTaskAssignedSchema], seen),
+      ),
+      factory,
+    );
+    const p = await buildContext(
+      BoundedContext.singleTenant("Red16P").addEventDispatcher(
+        domestic([ReviewTaskAssignedSchema]),
+      ),
+      factory,
+    );
     try {
       const original = create(EventSchema, {
         id: create(EventIdSchema, { value: "red16-preserved" }),
@@ -577,7 +635,6 @@ describe("Wave 13 IntegrationBroker", () => {
       expect(seen).toHaveLength(beforeIgnored);
     } finally {
       await close(p, c);
-      await ServerEnvironment.instance().close();
     }
   });
 });
@@ -592,24 +649,31 @@ async function assertWantedLifecycle(options: {
   readonly assertNoPublicationAfterWithdrawal?: boolean;
 }): Promise<void> {
   const factory = new RecordingTransportFactory();
-  ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
-  await ServerEnvironment.instance().completeSetup();
-  const producer = await BoundedContext.singleTenant(`WantedProducer${crypto.randomUUID()}`)
-    .addEventDispatcher(domestic([ReviewTaskAssignedSchema, ReviewStartedSchema]))
-    .build();
+  const producer = await buildContext(
+    BoundedContext.singleTenant(`WantedProducer${crypto.randomUUID()}`).addEventDispatcher(
+      domestic([ReviewTaskAssignedSchema, ReviewStartedSchema]),
+    ),
+    factory,
+  );
   // RED-07 exercises producer-before-consumer; the peer-online branch creates
   // a consumer before its producer to retain the reverse construction order.
   const consumers = await Promise.all(
     Array.from({ length: options.requesters }, (_, index) =>
-      BoundedContext.singleTenant(`WantedConsumer${String(index)}${crypto.randomUUID()}`)
-        .addEventDispatcher(external([ReviewTaskAssignedSchema], []) as never)
-        .build(),
+      buildContext(
+        BoundedContext.singleTenant(
+          `WantedConsumer${String(index)}${crypto.randomUUID()}`,
+        ).addEventDispatcher(external([ReviewTaskAssignedSchema], []) as never),
+        factory,
+      ),
     ),
   );
   let peer: BoundedContext | undefined;
   try {
     if (options.peerOnline)
-      peer = await BoundedContext.singleTenant(`WantedPeer${crypto.randomUUID()}`).build();
+      peer = await buildContext(
+        BoundedContext.singleTenant(`WantedPeer${crypto.randomUUID()}`),
+        factory,
+      );
     if (options.closeFirst) await required(consumers[0], "first consumer").close();
 
     const eventPublicationsBefore = eventPublications(factory).length;
@@ -641,19 +705,17 @@ async function assertWantedLifecycle(options: {
       ...consumers.slice(options.closeFirst ? 1 : 0).map((context) => context.close()),
       peer?.close(),
     ]);
-    await ServerEnvironment.instance().close();
   }
 }
 
 async function assertFailedReplacementKeepsPriorWantedSet(): Promise<void> {
   const factory = new RecordingTransportFactory();
-  ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
-  await ServerEnvironment.instance().completeSetup();
-  const producer = await BoundedContext.singleTenant(`RollbackProducer${crypto.randomUUID()}`)
-    .addEventDispatcher(
+  const producer = await buildContext(
+    BoundedContext.singleTenant(`RollbackProducer${crypto.randomUUID()}`).addEventDispatcher(
       domestic([ReviewTaskAssignedSchema, ReviewStartedSchema, ReviewFollowUpScheduledSchema]),
-    )
-    .build();
+    ),
+    factory,
+  );
   try {
     await publishWanted(factory, "RollbackPeer", [ReviewTaskAssignedSchema]);
     factory.failPublisherCreationAfter(
@@ -678,7 +740,6 @@ async function assertFailedReplacementKeepsPriorWantedSet(): Promise<void> {
     expect(eventPublications(factory)).toHaveLength(afterWithdrawal);
   } finally {
     await producer.close();
-    await ServerEnvironment.instance().close();
   }
 }
 

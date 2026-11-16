@@ -1,7 +1,7 @@
 # Spine application server for Node.js
 
-`@spine-event-engine/server` is the native Node.js runtime for a Spine bounded
-context. Use it to assemble contexts and expose native Connect/gRPC-compatible
+`@spine-event-engine/server` is the native Node.js runtime for a Spine Application.
+Use it to assemble Bounded Contexts and expose native Connect/gRPC-compatible
 services. Browser hosting is deliberately a separate entry point.
 
 > **Experimental prerelease.** Install an exact snapshot while this API evolves:
@@ -21,47 +21,50 @@ assembly, listener startup, and cleanup work locally.
 
 ## First native server
 
-Build one context, start a loopback listener on an ephemeral port, and close
-the returned running server. `start()` installs no signal handlers, which makes
+Build an Application, start a loopback listener on an ephemeral port, and close
+the listener before the Application. `start()` installs no signal handlers, which makes
 this shape appropriate for tests and hosts that manage shutdown themselves.
 
 <!-- docs-snippet-path: packages/server/test/server/server-environment.test.ts -->
 
 ```ts
-import { BoundedContext, Server, ServerEnvironment } from "@spine-event-engine/server";
+import { Application, BoundedContext, Server, ServerEnvironment } from "@spine-event-engine/server";
 
-await ServerEnvironment.instance().completeSetup();
-const context = await BoundedContext.singleTenant("Tasks").build();
-const running = await new Server({ contexts: [context], port: 0 }).start();
+const environment = ServerEnvironment.newBuilder().build();
+const application = await Application.newBuilder()
+  .setServerEnvironment(environment)
+  .add(BoundedContext.singleTenant("Tasks"))
+  .build();
+const running = await Server.atPort(0).setApplication(application).start();
 try {
   // Native Command, Query, and Subscription services are now listening.
 } finally {
   await running.close();
+  await application.close();
 }
 ```
 
-Add generated entities with `BoundedContext.add(...)` and use
-`build()` to assemble the context and load generated repositories when configured. A
-context is single-tenant or multitenant by construction; select that mode
-before registering application handlers and storage.
-`build()` prepares the current model storage and awaits the first subscription
-registry pass. Set `createStorageStructures: false` or
-`startSubscriptionMonitoring: false` in `build({...})` to defer either phase
-independently until the first valid input. Complete environment setup explicitly
-before building, even when both phases are deferred.
-Starting monitoring still prepares its shared subscription registry when model
-structure creation is deferred; it does not prepare every tenant's Entity storage structures.
-An eager required-phase failure stops accepting new input and triggers environment
-cleanup. A lazy first-input failure rejects that input and can be retried.
-After build, `context.runtime.createStorageStructures(...tenantIds)` explicitly
-creates declared structures; `checkStructureCompatibility(...tenantIds)` checks
-them without creating structures. With no IDs, a multitenant context traverses
-its current tenant index in pages; a single-tenant context prepares its neutral
-destination. `startSubscriptionMonitoring()` starts the initial registry pass
-without preparing every tenant's Entity structures. The environment offers the
-same operations across completed, open contexts, selecting matching multitenant
-contexts for explicit IDs. Database-backed providers require an existing
-database; these operations do not provision one or register tenants.
+Add generated Entities to a Bounded Context builder with `.add(EntityClass)`.
+Pass that builder to Application. Application build sets up storage and transport,
+assembles every Bounded Context, and registers shared reads before starting work.
+Select `singleTenant(name)` or `multiTenant(name)` when declaring each Bounded Context.
+
+By default, Application build prepares model structures and starts subscription
+monitoring. Pass `{ createStorageStructures: false, startSubscriptionMonitoring: false }`
+to defer both until first use, or disable either independently. Monitoring still
+prepares its shared subscription registry when model preparation is deferred.
+Required startup failure prevents the Application from serving. A lazy first-use
+failure rejects that input and can be retried.
+
+`application.createStorageStructures(...tenantIds)` prepares declared structures
+across its open Bounded Contexts. With explicit IDs it selects multi-tenant Bounded
+Contexts, without requiring those tenants to be registered. With no IDs it includes
+single-tenant Bounded Contexts and the current registered tenants. The corresponding
+`checkStructureCompatibility()` checks structures without creating them; other
+startup services may already have prepared their separate storage.
+Use `boundedContext.runtime.createStorageStructures()` or the corresponding check
+to work on one Bounded Context. Administrative failure leaves an established
+Application running. These calls neither create a database nor register a tenant.
 
 ## Give an Entity an application service
 
@@ -88,7 +91,7 @@ The application's `src/index.js` imports its generated `spine-bootstrap.js`
 before assembly, so `add(TaskAssignment)` finds the passive metadata for that
 exact class.
 
-Await `builder.build()` to assemble the context. The callback runs for each
+Pass `builder` to Application and await Application build. The callback runs for each
 fresh or restored Entity object, not just once per ID. It also works for
 Aggregates and Projections, including Projection rebuilds. Return a fresh
 instance synchronously and pass the supplied options unchanged. Application
@@ -245,25 +248,23 @@ override. Single-tenant execution uses `SINGLE_TENANT`, even when the request
 omits a tenant field. A named tenant cannot query a single-tenant context: that
 fails before reading. See the [query contract](REFERENCE.md#handler-routing-and-operations)
 for the complete tenant rules and empty-result behavior.
-For a multitenant receiving Bounded Context, supply an application tenant directory and
-register each accepted tenant through its `keep(tenantId)` method before sending
-tenant-scoped work. The optional environment setting defaults to `SINGLE_TENANT`;
-that mode creates no directory or provider catalog. A multitenant Bounded Context
-requires an environment directory before assembly, even when `withTenantIndex()`
-selects another directory for that Bounded Context. In one environment, a
-single-tenant Identity Bounded Context still uses `SINGLE_TENANT` while a
-multitenant Orders Bounded Context uses the configured directory.
-Both public `tenantIndex` getters return `TenantIndexSetting`, so narrow against
-`SINGLE_TENANT` before calling directory methods. A single-tenant Bounded Context always
-returns the marker, even when its environment has a directory for other Bounded Contexts.
-Provider catalogs remain available as storage-provider APIs, but environment
-assembly does not infer membership from them.
+Every multi-tenant Bounded Context uses `application.tenantIndex()`. The getter is
+synchronous and returns the same index handle without storage I/O. Register each
+accepted tenant through `await application.tenantIndex().keep(tenantId)` before
+sending tenant-scoped work. Preparing a supplied TenantId can happen before this
+registration. Request admission still rejects unregistered tenants.
+
+The default index uses the Application environment's storage. A single-tenant
+Application that never asks for tenant storage does not initialize it. Single-tenant
+Bounded Contexts use `SINGLE_TENANT`, even when another Bounded Context uses the index.
+Provider catalogs remain separate and do not determine tenant membership.
 `PersistentTenantIndex.create({ storageFactory, group })` stores registrations
 through the selected factory. Remote providers can retain them across process
 restarts; memory storage remains process-local. Its async factory prepares supported structures by
 default; set `createMissingStructures: false` when the application prepares
-the selected record family separately before data access. Close the index after its admitted work
-finishes; it leaves the supplied storage factory open.
+the selected record family separately before data access. Supply the index with
+`Application.newBuilder().setTenantIndex(index)`. Application closes it after its
+admitted work finishes; it leaves the separately supplied storage factory open.
 Unknown tenants fail before reads or handlers run; input never registers them.
 
 The [Orders application](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/orders/README.md)
@@ -361,7 +362,8 @@ Configure the registry outside the Entity. The Bounded Context requires persiste
 Events, and the Agent registration supplies its permitted capabilities. The
 [example Bounded Context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
 assembles these settings with generated passive handler metadata. Supply the AI registry
-through `ServerEnvironment.when(type).use({ ai: registry })` as a default, or
+through `ServerEnvironment.newBuilder().under(type, (configuration) => configuration.use({ ai: registry }))`
+as a default, or
 `BoundedContextBuilder.withAi(registry)` for one Bounded Context.
 
 Posting a Command awaits acceptance. Model work and the resulting domain Event

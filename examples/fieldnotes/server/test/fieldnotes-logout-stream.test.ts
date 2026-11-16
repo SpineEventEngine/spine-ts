@@ -20,13 +20,11 @@ import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { SubscriptionService, TopicIdSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { PlaceViewQuery } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/entities_query.js";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { ServerTests } from "@spine-event-engine/server/testing";
-import { afterEach, expect, it, vi } from "vitest";
+import { expect, it, vi } from "vitest";
 import { FieldnotesHost } from "../src/fieldnotes-host.js";
 import type { FieldnotesSettings } from "../src/host-settings.js";
 
 const origin = "https://localhost:3000";
-afterEach(async () => ServerTests.resetEnvironment());
 
 it("ends an active private entity stream when its app session is logged out", async () => {
   const settings: FieldnotesSettings = {

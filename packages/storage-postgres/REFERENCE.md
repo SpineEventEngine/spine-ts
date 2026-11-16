@@ -37,6 +37,11 @@ factory. Explicit preparation uses and releases a temporary pool when no runtime
 pool exists; otherwise it reuses the retained runtime pool. Failed requirements
 can be retried without discarding earlier compatible families.
 
+Each explicit compatibility check reads current metadata, even after creation or
+an earlier check succeeded. Concurrent calls in the same mode share an active
+attempt. A call in the other mode waits for that attempt to settle, then performs
+its requested operation. Completed creation readiness is retained for ordinary use.
+
 Each `RecordSpec.indexes` requirement likewise checks a complete non-unique,
 ascending B-tree index with default operator class and column collation, no
 partial predicate, expression, or included column. Create mode adds missing

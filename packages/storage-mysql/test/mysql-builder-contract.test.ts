@@ -194,6 +194,134 @@ describe("MysqlStorageFactory builder contract", () => {
     }
   });
 
+  it("runs a queued Agent index check after creation and retries changed metadata", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    let indexReads = 0;
+    const query = vi.fn(async (sql: string, values: readonly unknown[] = []) => {
+      if (sql.includes("AND index_name=?")) {
+        indexReads += 1;
+        if (indexReads === 1) {
+          entered.resolve(undefined);
+          await release.promise;
+        }
+        if (indexReads === 3) return [[], []];
+      }
+      return agentMetadataQuery(sql, values, true);
+    });
+    const pools: {
+      getConnection: ReturnType<typeof vi.fn>;
+      release: ReturnType<typeof vi.fn>;
+      end: ReturnType<typeof vi.fn>;
+    }[] = [];
+    vi.mocked(createPool).mockImplementation(() => {
+      const connection = mysqlConnection(query);
+      const getConnection = vi.fn(() => Promise.resolve(connection));
+      const end = vi.fn(() => Promise.resolve());
+      pools.push({ getConnection, release: connection.release, end });
+      return { getConnection, end } as never;
+    });
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/agent_concurrent" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    let creating: Promise<void> | undefined;
+    let checking: Promise<void> | undefined;
+    let joiningCheck: Promise<void> | undefined;
+    try {
+      creating = preparation.prepareAgentHistory(scope, "create");
+      const readiness = await Promise.race([
+        entered.promise.then(() => "entered" as const),
+        creating.then(() => "finished" as const),
+      ]);
+      if (readiness !== "entered") throw new Error("Agent creation finished before index probing.");
+      checking = preparation.prepareAgentHistory(scope, "check");
+      joiningCheck = preparation.prepareAgentHistory(scope, "check");
+      const outcomes = Promise.allSettled([checking, joiningCheck]);
+      release.resolve(undefined);
+      await creating;
+      for (const outcome of await outcomes) {
+        if (outcome.status !== "rejected") throw new Error("Expected Agent index check failure.");
+        const reason: unknown = outcome.reason;
+        expect(reason).toBeInstanceOf(Error);
+        if (reason instanceof Error) expect(reason.message).toMatch(/index is missing/i);
+      }
+      await expect(preparation.prepareAgentHistory(scope, "check")).resolves.toBeUndefined();
+      expect(indexReads).toBe(7);
+      expect(query.mock.calls.filter(([sql]) => sql.startsWith("CREATE INDEX"))).toEqual([]);
+      expect(pools.every(({ end }) => end.mock.calls.length === 1)).toBe(true);
+      expect(
+        pools.every(
+          ({ getConnection, release }) =>
+            getConnection.mock.calls.length === release.mock.calls.length,
+        ),
+      ).toBe(true);
+    } finally {
+      release.resolve(undefined);
+      await Promise.allSettled(
+        [creating, checking, joiningCheck].filter(
+          (work): work is Promise<void> => work !== undefined,
+        ),
+      );
+      await factory.close();
+    }
+  });
+
+  it("checks enabled Agent state and Event histories without creating tables", async () => {
+    const query = vi.fn((sql: string, values: readonly unknown[] = []) =>
+      agentMetadataQuery(sql, values, true),
+    );
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(mysqlConnection(query))),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/agent_histories" })
+      .build();
+    const input = {
+      ...supportAgentInput(),
+      stateHistory: true,
+      eventHistory: true,
+    } as unknown as EntityStorageInput<SupportReplyAgentId, SupportReplyAgentState>;
+    try {
+      await expect(
+        StoragePreparations.for(factory).prepareAgentCommit(input, "check"),
+      ).resolves.toBeUndefined();
+      const checkedTables = query.mock.calls.flatMap(([sql, values]) =>
+        sql.includes("information_schema.columns") && typeof values?.[0] === "string"
+          ? [values[0]]
+          : [],
+      );
+      expect(checkedTables).toHaveLength(6);
+      expect(new Set(checkedTables).size).toBe(6);
+      expect(query.mock.calls.every(([sql]) => sql.trimStart().startsWith("SELECT"))).toBe(true);
+    } finally {
+      await factory.close();
+    }
+  });
+
+  it("rejects mismatched typed Agent query columns before opening MySQL", async () => {
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/agent_columns" })
+      .build();
+    const input = {
+      ...supportAgentInput(),
+      columns: [
+        new RecordColumn("agent_id", ColumnTypes.message(SupportReplyAgentIdSchema), () =>
+          create(SupportReplyAgentIdSchema, { ticketNumber: "T-columns" }),
+        ),
+      ],
+    } as unknown as EntityStorageInput<SupportReplyAgentId, SupportReplyAgentState>;
+    try {
+      await expect(
+        StoragePreparations.for(factory).prepareAgentCommit(input, "check"),
+      ).rejects.toThrow("Entity query columns differ from current records.");
+      expect(createPool).not.toHaveBeenCalled();
+    } finally {
+      await factory.close();
+    }
+  });
+
   it.each(["state", "event"] as const)(
     "prepares current, %s history, and context EventStore without opening Entity handles",
     async (enabled) => {
@@ -511,7 +639,7 @@ describe("MysqlStorageFactory builder contract", () => {
     await factory.close();
   });
 
-  it("does not escalate a pending read-only check and retries its missing table later", async () => {
+  it("runs creation after a pending read-only check fails", async () => {
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
     let missing = true;
@@ -551,11 +679,11 @@ describe("MysqlStorageFactory builder contract", () => {
       cause: { message: "MySQL table google_protobuf_StringValue lacks ID." },
     });
     await expect(creating).rejects.toThrow(/schema is incompatible/i);
-    expect(sql.some((statement) => statement.includes("CREATE"))).toBe(false);
+    expect(sql.some((statement) => statement.includes("CREATE"))).toBe(true);
     missing = false;
     await preparation.prepareRecord(context, spec, undefined, "create");
-    expect(sql.filter((statement) => statement.includes("CREATE"))).toHaveLength(1);
-    expect(end).toHaveBeenCalledTimes(3);
+    expect(sql.filter((statement) => statement.includes("CREATE"))).toHaveLength(2);
+    expect(end).toHaveBeenCalledTimes(4);
     await factory.close();
   });
 
@@ -595,6 +723,100 @@ describe("MysqlStorageFactory builder contract", () => {
     await pending;
     await closing;
     expect(end).toHaveBeenCalledTimes(2);
+  });
+
+  it("inspects a table again when a check follows successful creation", async () => {
+    const query = vi.fn(mysqlQuery);
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(mysqlConnection(query))),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/prepared" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "recheck", multitenant: false } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    await preparation.prepareRecord(context, spec, undefined, "create");
+    const before = query.mock.calls.filter(([sql]) =>
+      sql.includes("information_schema.columns"),
+    ).length;
+    await preparation.prepareRecord(context, spec, undefined, "check");
+    expect(
+      query.mock.calls.filter(([sql]) => sql.includes("information_schema.columns")),
+    ).toHaveLength(before + 1);
+    await factory.close();
+  });
+
+  it("runs a queued check after concurrent creation", async () => {
+    const query = vi.fn(mysqlQuery);
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(mysqlConnection(query))),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/prepared" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "concurrent-recheck", multitenant: false } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    await Promise.all([
+      preparation.prepareRecord(context, spec, undefined, "create"),
+      preparation.prepareRecord(context, spec, undefined, "check"),
+      preparation.prepareRecord(context, spec, undefined, "check"),
+    ]);
+    expect(
+      query.mock.calls.filter(([sql]) => sql.includes("information_schema.columns")),
+    ).toHaveLength(2);
+    await factory.close();
+  });
+
+  it("detects missing columns on a later explicit check", async () => {
+    let missing = false;
+    const query = vi.fn((sql: string) =>
+      missing && sql.includes("information_schema.columns")
+        ? Promise.resolve([[], []])
+        : mysqlQuery(sql),
+    );
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(mysqlConnection(query))),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/prepared" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "drift", multitenant: false } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    await preparation.prepareRecord(context, spec, undefined, "check");
+    missing = true;
+    await expect(preparation.prepareRecord(context, spec, undefined, "check")).rejects.toThrow();
+    const beforeConflict = query.mock.calls.length;
+    const conflicting = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "int32",
+      extractId: () => 1,
+    });
+    await expect(
+      preparation.prepareRecord(context, conflicting, undefined, "check"),
+    ).rejects.toThrow(/conflict/i);
+    expect(query).toHaveBeenCalledTimes(beforeConflict);
+    missing = false;
+    await preparation.prepareRecord(context, spec, undefined, "check");
+    expect(query.mock.calls.length).toBeGreaterThan(beforeConflict);
+    await factory.close();
   });
 
   it("reuses equivalent reordered Task columns and rejects a conflicting declaration", async () => {

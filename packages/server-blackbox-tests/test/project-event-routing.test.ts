@@ -33,19 +33,18 @@ import {
 import {
   Aggregate,
   BoundedContext,
+  type BoundedContextBuilder,
   type EntityHandlersMetadata,
   EventRouting,
   HandlerRegistryIngestor,
   ProcessManager,
   Projection,
   Repository,
-  ServerEnvironment,
 } from "@spine-event-engine/server";
-import { ServerTests } from "@spine-event-engine/server/testing";
 import type { GeneratedHandlerRegistry } from "@spine-event-engine/server/spi/handler-registry";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
+import { ApplicationTestSession } from "../test-fixtures/application-test-session.js";
 
-import { BlackBox } from "@spine-event-engine/testing";
 import {
   ApproveProjectSchema,
   CreateProjectSchema,
@@ -404,7 +403,7 @@ function context(
   planning: PlanningId,
   staffing: StaffingId,
   deliveredRejections?: Event[],
-): Promise<BoundedContext> {
+): BoundedContextBuilder {
   const builder = BoundedContext.singleTenant("project event routing")
     .add(projectRepository())
     .add(planningRepository(routeTo(planning)))
@@ -421,7 +420,7 @@ function context(
       },
     });
   }
-  return builder.build();
+  return builder;
 }
 async function awaitProjectWorkflowStates(
   boundedContext: BoundedContext,
@@ -526,11 +525,12 @@ function expectProjectWorkflowIds(
 }
 
 describe("project workflow Event routing", () => {
-  beforeEach(async () => ServerEnvironment.instance().completeSetup());
-  afterEach(async () => ServerTests.resetEnvironment());
   it("delivers a client and server-context Command through a command-substituting Process Manager", async () => {
     const { project, planning, staffing, portfolio } = ids();
-    const boundedContext = await context(routeTo(portfolio), planning, staffing);
+    const session = await ApplicationTestSession.open(
+      context(routeTo(portfolio), planning, staffing),
+    );
+    const boundedContext = session.context;
     try {
       await createProject(boundedContext, project);
       await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
@@ -553,18 +553,22 @@ describe("project workflow Event routing", () => {
         projectName: "approved",
       });
     } finally {
-      await boundedContext.close();
+      await session.close();
     }
   });
 
   it("drains a command substitution's produced command when the context closes immediately", async () => {
     const { project, planning, staffing, portfolio } = ids();
-    const boundedContext = await context(routeTo(portfolio), planning, staffing);
+    const session = await ApplicationTestSession.open(
+      context(routeTo(portfolio), planning, staffing),
+    );
+    const boundedContext = session.context;
     Project.reset();
     await createProject(boundedContext, project);
     await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
     await approveProject(boundedContext, project);
     await boundedContext.close();
+    await session.close();
     expect(Project.scheduledStatuses).toContain("approved");
   });
 
@@ -577,7 +581,10 @@ describe("project workflow Event routing", () => {
       entered.resolve(undefined);
       return release.promise;
     };
-    const boundedContext = await context(routeTo(portfolio), planning, staffing);
+    const session = await ApplicationTestSession.open(
+      context(routeTo(portfolio), planning, staffing),
+    );
+    const boundedContext = session.context;
     try {
       const posting = createProject(boundedContext, project);
       await entered.promise;
@@ -592,7 +599,7 @@ describe("project workflow Event routing", () => {
       expect(Project.scheduledStatuses).toContain("scheduled");
     } finally {
       release.resolve(undefined);
-      await boundedContext.close();
+      await session.close();
       Project.reset();
     }
   });
@@ -600,7 +607,10 @@ describe("project workflow Event routing", () => {
   it("updates custom- and producer-ID-routed persisted Entity states", async () => {
     const { project, planning, staffing, portfolio } = ids();
     expectProjectWorkflowIds(project, planning, staffing, portfolio);
-    const boundedContext = await context(routeTo(portfolio), planning, staffing);
+    const session = await ApplicationTestSession.open(
+      context(routeTo(portfolio), planning, staffing),
+    );
+    const boundedContext = session.context;
     try {
       await createProject(boundedContext, project);
       await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
@@ -639,14 +649,15 @@ describe("project workflow Event routing", () => {
         boundedContext.stand().read(ProjectProjectionStateSchema, project),
       ).resolves.toMatchObject({ id: project, name: "roadmap" });
     } finally {
-      await boundedContext.close();
+      await session.close();
     }
   });
 
   it("suppresses only the portfolio with an empty custom Event route", async () => {
     const { project, planning, staffing, portfolio } = ids();
     const none = EventRouting.create<PortfolioId>().route(ProjectCreatedSchema, () => []);
-    const boundedContext = await context(none, planning, staffing);
+    const session = await ApplicationTestSession.open(context(none, planning, staffing));
+    const boundedContext = session.context;
     try {
       await createProject(boundedContext, project);
       await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio, {
@@ -684,14 +695,16 @@ describe("project workflow Event routing", () => {
         boundedContext.stand().read(ProjectProjectionStateSchema, project),
       ).resolves.toMatchObject({ id: project, name: "roadmap" });
     } finally {
-      await boundedContext.close();
+      await session.close();
     }
   });
 
-  it("reaches the same persisted states through the public BlackBox API", async () => {
+  it("reaches the same persisted states through the public client API", async () => {
     const { project, planning, staffing, portfolio } = ids();
-    const boundedContext = await context(routeTo(portfolio), planning, staffing);
-    const blackBox = await BlackBox.from(boundedContext);
+    const blackBox = await ApplicationTestSession.open(
+      context(routeTo(portfolio), planning, staffing),
+    );
+    const boundedContext = blackBox.context;
     try {
       const scope = blackBox.asGuest();
       const posted = await scope.post(
@@ -791,7 +804,9 @@ describe("project workflow Event routing", () => {
 
   it("captures a committed Aggregate reactor Event once in production order", async () => {
     const { project, planning, staffing, portfolio } = ids();
-    const blackBox = await BlackBox.from(await context(routeTo(portfolio), planning, staffing));
+    const blackBox = await ApplicationTestSession.open(
+      context(routeTo(portfolio), planning, staffing),
+    );
     try {
       const posted = await blackBox
         .asGuest()
@@ -828,13 +843,10 @@ describe("project workflow Event routing", () => {
   it("delivers an async domain rejection without capturing it as a committed event", async () => {
     const { project, planning, staffing, portfolio } = ids();
     const deliveredRejections: Event[] = [];
-    const boundedContext = await context(
-      routeTo(portfolio),
-      planning,
-      staffing,
-      deliveredRejections,
+    const blackBox = await ApplicationTestSession.open(
+      context(routeTo(portfolio), planning, staffing, deliveredRejections),
     );
-    const blackBox = await BlackBox.from(boundedContext);
+    const boundedContext = blackBox.context;
     try {
       const scope = blackBox.asGuest();
       await scope.post(

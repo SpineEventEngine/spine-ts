@@ -34,9 +34,9 @@ flowchart LR
 
 Next.js serves the interface and forwards the two application route groups to
 one long-lived Node host. That host runs the gateway, private native services,
-and Fieldnotes Bounded Context in the same process. `ServerEnvironment` is
-configured in this host. The Next.js process does not create a Bounded Context
-or configure an environment.
+and Fieldnotes Bounded Context in the same process. The host builds an `Application`
+with a separate `ServerEnvironment` and the Fieldnotes Bounded Context builder.
+The Next.js process does not assemble server services.
 
 The gateway verifies the application session before forwarding an operation.
 It derives the Command actor from that verified identity. A separate `jose`
@@ -606,9 +606,9 @@ or PKCE verifiers.
 
 ## Persistence and startup
 
-The host supplies a PostgreSQL `StorageFactory` to `ServerEnvironment` before
-assembling the Bounded Context. It passes that factory to the persistent auth
-stores too. These stores use the framework's storage operations; the example
+The host configures a separate `ServerEnvironment` with a PostgreSQL
+`StorageFactory`, then builds an `Application` with the Fieldnotes Bounded Context
+builder. It passes that factory to the persistent auth stores too. These stores use the framework's storage operations; the example
 does not add a parallel SQL adapter for authentication.
 
 <!-- docs-snippet-path: examples/fieldnotes/server/src/fieldnotes-host.ts -->

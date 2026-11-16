@@ -19,7 +19,6 @@
 
 import { BrowserServer } from "@spine-event-engine/server/browser";
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
-import { Datastore } from "@google-cloud/datastore";
 
 import { MessageBoardDeployment } from "./deployment-config.js";
 import { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
@@ -28,10 +27,7 @@ import { SystemClock } from "./system-clock.js";
 import { BoardAdmission } from "./signed-admission.js";
 
 const config = MessageBoardDeployment.gateway(process.env);
-const client = new Datastore({ projectId: config.projectId });
 const logger = MessageBoardDeployment.logger(config.projectId, process.env);
-const storage = MessageBoardDeployment.storage(client);
-MessageBoardDeployment.configureGatewayServer(config, storage, logger);
 const policy = new BoardAccessPolicy();
 const signed = BoardAdmission.configured(process.env);
 const { discovery, backendUrls } = config;

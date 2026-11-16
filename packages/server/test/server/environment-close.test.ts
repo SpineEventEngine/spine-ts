@@ -13,7 +13,7 @@
  */
 
 import { type StorageFactory } from "@spine-event-engine/storage";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   ServerEnvironment,
@@ -21,15 +21,13 @@ import {
   type ServerEnvironmentSettings,
 } from "../../src/server/server-environment.js";
 import { EnvironmentType } from "../../src/server/environment.js";
-import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
-
-afterEach(async () => {
-  await resetServerEnvironmentForTest().catch(() => undefined);
-});
 
 function serverEnvironment(settings: ServerEnvironmentSettings = {}): ServerEnvironment {
-  ServerEnvironment.when(EnvironmentType.Local).use(settings);
-  return ServerEnvironment.instance();
+  return ServerEnvironment.newBuilder()
+    .under(EnvironmentType.Local, (configuration) => {
+      configuration.use(settings);
+    })
+    .build();
 }
 
 describe("ServerEnvironment close", () => {
@@ -37,7 +35,6 @@ describe("ServerEnvironment close", () => {
     const attempts: string[] = [];
     const deliveryError = new Error("delivery close failed");
     const nestedDeliveryError = new Error("nested delivery close failed");
-    const tracerError = new Error("tracer close failed");
     const storageError = new Error("storage close failed");
     const cyclicStorageFailure = new AggregateError([storageError], "storage aggregate");
     (cyclicStorageFailure.errors as unknown[]).push(cyclicStorageFailure);
@@ -53,10 +50,8 @@ describe("ServerEnvironment close", () => {
       ],
       "delivery aggregate",
     );
-    const tracerFailure = new AggregateError([tracerError], "tracer aggregate");
     const environment = serverEnvironment({
       delivery: failingOnceCloseable("delivery", deliveryFailure, attempts),
-      tracerFactory: failingOnceCloseable("tracer", tracerFailure, attempts),
       storageFactory: failingOnceCloseable(
         "storage",
         cyclicStorageFailure,
@@ -73,11 +68,10 @@ describe("ServerEnvironment close", () => {
       nestedDeliveryError,
       nestedDeliveryError,
       deliveryError,
-      tracerError,
       storageError,
       cyclicStorageFailure,
     ]);
-    expect(attempts).toEqual(["delivery", "tracer", "storage"]);
+    expect(attempts).toEqual(["delivery", "storage"]);
   });
 
   it("flattens iterable aggregate errors while continuing later facilities", async () => {
@@ -87,7 +81,6 @@ describe("ServerEnvironment close", () => {
     (iterableFailure as unknown as { errors: Set<unknown> }).errors = new Set([iterableLeaf]);
     const environment = serverEnvironment({
       delivery: failingOnceCloseable("delivery", iterableFailure, attempts),
-      tracerFactory: successfulCloseable("tracer", attempts),
       storageFactory: successfulCloseable("storage", attempts) as StorageFactory,
     });
 
@@ -95,7 +88,7 @@ describe("ServerEnvironment close", () => {
 
     expect(failure).toBeInstanceOf(AggregateError);
     expect((failure as AggregateError).errors).toEqual([iterableLeaf]);
-    expect(attempts).toEqual(["delivery", "tracer", "storage"]);
+    expect(attempts).toEqual(["delivery", "storage"]);
   });
 
   it("flattens a deep aggregate chain without blocking later facilities or completed-index retries", async () => {
@@ -107,7 +100,6 @@ describe("ServerEnvironment close", () => {
     }
     const environment = serverEnvironment({
       delivery: failingOnceCloseable("delivery", failure as AggregateError, attempts),
-      tracerFactory: successfulCloseable("tracer", attempts),
       storageFactory: successfulCloseable("storage", attempts) as StorageFactory,
     });
 
@@ -115,31 +107,27 @@ describe("ServerEnvironment close", () => {
 
     expect(firstFailure).toBeInstanceOf(AggregateError);
     expect((firstFailure as AggregateError).errors).toEqual([leaf]);
-    expect(attempts).toEqual(["delivery", "tracer", "storage"]);
+    expect(attempts).toEqual(["delivery", "storage"]);
     await expect(environment.close()).resolves.toBeUndefined();
-    expect(attempts).toEqual(["delivery", "tracer", "storage", "delivery"]);
+    expect(attempts).toEqual(["delivery", "storage", "delivery"]);
   });
 
   it("retries only facilities that previously failed and leaves completed facilities idempotent", async () => {
     const attempts: string[] = [];
-    const tracerError = new Error("tracer close failed once");
     const storageError = new Error("storage close failed once");
     const environment = serverEnvironment({
       delivery: successfulCloseable("delivery", attempts),
-      tracerFactory: failingOnceCloseable("tracer", tracerError, attempts),
       storageFactory: failingOnceCloseable("storage", storageError, attempts) as StorageFactory,
     });
 
     const firstFailure = await environment.close().catch((error: unknown) => error);
     expect(firstFailure).toBeInstanceOf(AggregateError);
-    expect((firstFailure as AggregateError).errors).toEqual([tracerError, storageError]);
-
-    await expect(environment.completeSetup()).rejects.toThrow("closed");
+    expect((firstFailure as AggregateError).errors).toEqual([storageError]);
 
     await expect(environment.close()).resolves.toBeUndefined();
     await expect(environment.close()).resolves.toBeUndefined();
 
-    expect(attempts).toEqual(["delivery", "tracer", "storage", "tracer", "storage"]);
+    expect(attempts).toEqual(["delivery", "storage", "storage"]);
   });
 
   it("contains a throwing close getter, continues later facilities, and retries that facility", async () => {
@@ -159,7 +147,6 @@ describe("ServerEnvironment close", () => {
     });
     const environment = serverEnvironment({
       delivery,
-      tracerFactory: successfulCloseable("tracer", attempts),
       storageFactory: successfulCloseable("storage", attempts) as StorageFactory,
     });
 
@@ -167,9 +154,9 @@ describe("ServerEnvironment close", () => {
 
     expect(firstFailure).toBeInstanceOf(AggregateError);
     expect((firstFailure as AggregateError).errors).toEqual([getterFailure]);
-    expect(attempts).toEqual(["tracer", "storage"]);
+    expect(attempts).toEqual(["storage"]);
     await expect(environment.close()).resolves.toBeUndefined();
-    expect(attempts).toEqual(["tracer", "storage", "delivery"]);
+    expect(attempts).toEqual(["storage", "delivery"]);
     expect(getterAttempts).toBe(2);
   });
 
@@ -177,20 +164,18 @@ describe("ServerEnvironment close", () => {
     const attempts: string[] = [];
     const environment = serverEnvironment({
       delivery: successfulCloseable("delivery", attempts),
-      tracerFactory: successfulCloseable("tracer", attempts),
       storageFactory: successfulCloseable("storage", attempts) as StorageFactory,
     });
 
     await expect(environment.close()).resolves.toBeUndefined();
     await expect(environment.close()).resolves.toBeUndefined();
 
-    expect(attempts).toEqual(["delivery", "tracer", "storage"]);
+    expect(attempts).toEqual(["delivery", "storage"]);
   });
 
   it("ignores owned non-closeable facilities", async () => {
     const environment = serverEnvironment({
       delivery: {} as ServerEnvironmentCloseable,
-      tracerFactory: {} as ServerEnvironmentCloseable,
       storageFactory: {} as StorageFactory,
     });
 

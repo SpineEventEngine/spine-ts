@@ -70,6 +70,13 @@ export interface TenantIndex {
    * @returns Completion or rejection from this index.
    */
   keep(tenantId: TenantId): Promise<void>;
+
+  /**
+   * Closes registration after admitted index operations settle.
+   *
+   * @returns Completion after the index releases its storage handles.
+   */
+  close(): Promise<void>;
 }
 
 /**

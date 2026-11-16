@@ -9,7 +9,7 @@ This maintained example assembles one Message Board application from four worksp
 | [`view-handlers`](../view-handlers/src/index.ts)       | Message and announcement Projections that consume that Event.                                            |
 | `composed-app`                                         | Builds both Bounded Contexts, registers one App Query handler with `Server`, and installs read policies. |
 
-[`new ComposedBoardApplication().create()`](src/index.ts) adds the Aggregate and message Projection from
+[`new ComposedBoardApplication().create(environment)`](src/index.ts) adds the Aggregate and message Projection from
 different packages to **one** Bounded Context. It builds the announcements Bounded
 Context from the view package. The announcement subscriber declares
 `External<MessagePosted>` so the existing integration broker delivers the
@@ -21,6 +21,11 @@ installed runtime dependencies and writes `generated/spine-metadata.ts`,
 `generated/spine-bootstrap.ts`, and the dependency adapters. Regenerate after
 installing or changing dependencies; neither Bounded Context needs a registry
 root.
+
+Supply an explicitly configured ServerEnvironment. The returned composition
+includes its Application, the two Bounded Contexts, and the Server configured for
+that Application. Direct callers close the running endpoint before closing
+`composition.application`. The maintained hosts perform that cleanup themselves.
 
 [`ReadBoardStatsHandler`](src/board-query-handler.ts) takes a generated
 `ReadBoardStats.Query`, reads cumulative statistics from the two Bounded

@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { create, type Message } from "@bufbuild/protobuf";
 import { Identifiers, SignalEnvelopes, spineCoreRegistry } from "@spine-event-engine/core";
 import {
@@ -33,6 +33,7 @@ import { InMemoryTransportFactory } from "@spine-event-engine/transport";
 
 import {
   ServerEnvironment,
+  type ServerEnvironmentSettings,
   type ServerEnvironmentCloseable,
   type ServerEnvironmentDelivery,
   serverEnvironmentAccess,
@@ -43,10 +44,12 @@ import {
 } from "../../src/delivery/delivery-builder.js";
 import { Delivery as CoreDelivery } from "../../src/delivery/delivery.js";
 import { DeliverySupervisor } from "../../src/delivery/delivery-supervisor.js";
+import { IntegrationBroker } from "../../src/integration/integration-broker.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { createMessage } from "../delivery/inbox-message-fixture.js";
 import { EnvironmentTests, EnvironmentType } from "../../src/server/environment.js";
-import { BoundedContext } from "../../src/context/bounded-context.js";
+import { BoundedContext, type BoundedContextBuilder } from "../../src/context/bounded-context.js";
+import { Application, type ApplicationBuildOptions } from "../../src/server/application.js";
 import { SINGLE_TENANT, type TenantIndex } from "../../src/context/tenant-index.js";
 import { tenant } from "../tenant-fixture.js";
 import {
@@ -55,7 +58,6 @@ import {
 } from "../../src/stand/subscription-registry.js";
 import { Server } from "../../src/server/server.js";
 import { emitServerError, emitServerWarning } from "../../src/server/server-log.js";
-import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import { ServerStartedSchema } from "../../test-fixtures/generated/server-lifecycle/events_pb.js";
 import {
   serverStatusRegistry,
@@ -63,36 +65,70 @@ import {
 } from "./generated-server-registry-fixture.js";
 import type { ILogLayer } from "loglayer";
 
-afterEach(async () => {
-  await resetServerEnvironmentForTest();
+afterEach(() => {
   vi.restoreAllMocks();
+  EnvironmentTests.reset();
 });
+
+function environmentWith(
+  type: EnvironmentType,
+  settings: ServerEnvironmentSettings,
+): ServerEnvironment {
+  return ServerEnvironment.newBuilder()
+    .under(type, (configuration) => {
+      configuration.use(settings);
+    })
+    .build();
+}
+
+async function buildApplication(
+  builders: readonly BoundedContextBuilder[],
+  environment: ServerEnvironment,
+  options: ApplicationBuildOptions = {},
+  index?: TenantIndex,
+): Promise<Application> {
+  const applicationBuilder = Application.newBuilder().setServerEnvironment(environment);
+  for (const builder of builders) applicationBuilder.add(builder);
+  if (index !== undefined) applicationBuilder.setTenantIndex(index);
+  const application = await applicationBuilder.build(options);
+  onTestFinished(() => application.close());
+  return application;
+}
+
+async function buildContext(
+  builder: BoundedContextBuilder,
+  environment: ServerEnvironment,
+  options: ApplicationBuildOptions = {},
+  index?: TenantIndex,
+): Promise<BoundedContext> {
+  const application = await buildApplication([builder], environment, options, index);
+  const [context] = application.contexts();
+  if (context === undefined) throw new Error("Expected a Bounded Context.");
+  return context;
+}
 
 function configured(
   delivery: ServerEnvironmentCloseable & { open?: unknown; [key: string]: unknown },
 ) {
-  ServerEnvironment.when(EnvironmentType.Local).use({ delivery });
-  return ServerEnvironment.instance();
+  const environment = environmentWith(EnvironmentType.Local, { delivery });
+  return environment;
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
-  it.each([undefined, SINGLE_TENANT] as const)(
-    "selects single-tenant mode without consulting a provider catalog (%s)",
-    async (setting) => {
+  it.each([false, true])(
+    "selects single-tenant mode without consulting a provider catalog (index: %s)",
+    async (withIndex) => {
       const storage = new InMemoryStorageFactory();
       const catalog = vi.spyOn(storage, "tenantCatalog");
       const records = vi.spyOn(storage, "createRecordStorage");
-      ServerEnvironment.when(EnvironmentType.Local).use({
-        storageFactory: storage,
-        ...(setting === undefined ? {} : { tenantIndex: setting }),
-      });
-      const environment = ServerEnvironment.instance();
-      expect(environment.tenantIndex).toBe(SINGLE_TENANT);
-      await environment.completeSetup();
-      const context = await BoundedContext.singleTenant("NoDirectory").build({
-        createStorageStructures: false,
-        startSubscriptionMonitoring: false,
-      });
+      const environment = environmentWith(EnvironmentType.Local, { storageFactory: storage });
+      const directory = withIndex ? tenantIndex() : undefined;
+      const context = await buildContext(
+        BoundedContext.singleTenant("NoDirectory"),
+        environment,
+        { createStorageStructures: false, startSubscriptionMonitoring: false },
+        directory,
+      );
       expect(context.tenantIndex).toBe(SINGLE_TENANT);
       expect(catalog).not.toHaveBeenCalled();
       expect(records.mock.calls.some(([, spec]) => spec.recordType === TenantSchema)).toBe(false);
@@ -100,67 +136,77 @@ describe("ServerEnvironment delivery lifecycle", () => {
     },
   );
 
-  it("requires an environment directory before opening multitenant business storage", async () => {
+  it("creates a default Application tenant index for multitenant business storage", async () => {
     const storage = new InMemoryStorageFactory();
-    const records = vi.spyOn(storage, "createRecordStorage");
-    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: storage });
-    const environment = ServerEnvironment.instance();
-    await environment.completeSetup();
-    await expect(BoundedContext.multitenant("RequiresDirectory").build()).rejects.toThrow(
-      /tenant index|tenant directory/i,
+    const environment = environmentWith(EnvironmentType.Local, { storageFactory: storage });
+    const context = await buildContext(
+      BoundedContext.multiTenant("RequiresDirectory"),
+      environment,
     );
-    expect(records).not.toHaveBeenCalled();
+    expect(context.tenantIndex).not.toBe(SINGLE_TENANT);
+    if (context.tenantIndex === SINGLE_TENANT)
+      throw new Error("Expected an Application tenant index.");
+    await expect(context.tenantIndex.all()).resolves.toEqual([]);
+    await context.close();
   });
 
-  it("rejects a local multitenant directory when the environment remains single-tenant", async () => {
+  it("uses an explicit Application tenant index for a multitenant Bounded Context", async () => {
     const storage = new InMemoryStorageFactory();
     const records = vi.spyOn(storage, "createRecordStorage");
-    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: storage });
-    await ServerEnvironment.instance().completeSetup();
-    await expect(
-      BoundedContext.multitenant("LocalDirectoryOnly").withTenantIndex(tenantIndex()).build(),
-    ).rejects.toThrow(/environment tenant index/i);
-    expect(records).not.toHaveBeenCalled();
+    const environment = environmentWith(EnvironmentType.Local, { storageFactory: storage });
+    const directory = tenantIndex();
+    const context = await buildContext(
+      BoundedContext.multiTenant("LocalDirectoryOnly"),
+      environment,
+      {},
+      directory,
+    );
+    expect(context.tenantIndex).toBe(directory);
+    expect(records.mock.calls.some(([, spec]) => spec.recordType === TenantSchema)).toBe(false);
+    await context.close();
   });
 
-  it("exposes the marker for a single context inside an indexed environment", async () => {
+  it("exposes the marker for a single-tenant Bounded Context in an indexed Application", async () => {
     const directory = tenantIndex();
     const lookup = vi.spyOn(directory, "contains");
-    ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: directory });
-    await ServerEnvironment.instance().completeSetup();
-    const context = await BoundedContext.singleTenant("MixedSingle").build({
-      createStorageStructures: false,
-      startSubscriptionMonitoring: false,
-    });
-    expect(ServerEnvironment.instance().tenantIndex).toBe(directory);
+    const environment = environmentWith(EnvironmentType.Local, {});
+    const context = await buildContext(
+      BoundedContext.singleTenant("MixedSingle"),
+      environment,
+      { createStorageStructures: false, startSubscriptionMonitoring: false },
+      directory,
+    );
     expect(context.tenantIndex).toBe(SINGLE_TENANT);
     expect(lookup).not.toHaveBeenCalled();
     await context.close();
   });
 
-  it("resolves the default subscription waiting capacity", () => {
-    expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(100);
+  it("resolves the default subscription waiting capacity", async () => {
+    const environment = environmentWith(EnvironmentType.Local, {});
+    expect(environment.subscriptionQueueCapacity).toBe(100);
+    await environment.close();
   });
 
-  it("captures a configured subscription capacity from a settings factory once and resets it", async () => {
-    const settings = vi.fn(() => ({ subscriptionQueueCapacity: 0 }));
-    ServerEnvironment.when(EnvironmentType.Local).use(settings);
-    expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(0);
-    expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(0);
-    expect(settings).toHaveBeenCalledOnce();
-    await resetServerEnvironmentForTest();
-    expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(100);
+  it("keeps configured subscription capacity local to one environment", async () => {
+    const environment = environmentWith(EnvironmentType.Local, { subscriptionQueueCapacity: 0 });
+    expect(environment.subscriptionQueueCapacity).toBe(0);
+    const fresh = environmentWith(EnvironmentType.Local, {});
+    expect(fresh.subscriptionQueueCapacity).toBe(100);
+    await environment.close();
+    await fresh.close();
   });
 
   it.each([-1, 0.5, Number.NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, null, "2"])(
     "rejects invalid subscription capacity %s before constructing facilities",
-    (capacity) => {
-      ServerEnvironment.when(EnvironmentType.Local).use({
-        subscriptionQueueCapacity: capacity as number,
-      });
-      expect(() => ServerEnvironment.instance()).toThrow(RangeError);
-      ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: 0 });
-      expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(0);
+    async (capacity) => {
+      expect(() =>
+        environmentWith(EnvironmentType.Local, {
+          subscriptionQueueCapacity: capacity as number,
+        }),
+      ).toThrow(RangeError);
+      const environment = environmentWith(EnvironmentType.Local, { subscriptionQueueCapacity: 0 });
+      expect(environment.subscriptionQueueCapacity).toBe(0);
+      await environment.close();
     },
   );
 
@@ -169,7 +215,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
       context: { name: "InlineRemote", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    const environment = environmentWith(EnvironmentType.Local, {
       delivery: {
         open: () => undefined,
         close: () => ports.close(),
@@ -177,8 +223,8 @@ describe("ServerEnvironment delivery lifecycle", () => {
         workRegistry: ports.shards,
       },
     });
-    const environment = ServerEnvironment.instance();
-    await environment.completeSetup();
+
+    await serverEnvironmentAccess.setup(environment);
     expect(environment.delivery.inbox).toBe(ports.inbox);
     await environment.close();
   });
@@ -209,7 +255,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
           : value;
       },
     });
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    const environment = environmentWith(EnvironmentType.Local, {
       logger: { child: () => child } as unknown as ILogLayer,
       delivery: {
         open: () => undefined,
@@ -218,8 +264,8 @@ describe("ServerEnvironment delivery lifecycle", () => {
         workRegistry: ports.shards,
       },
     });
-    const environment = ServerEnvironment.instance();
-    await environment.completeSetup();
+
+    await serverEnvironmentAccess.setup(environment);
     const delivery = serverEnvironmentAccess.coreDelivery(environment);
     delivery.wake(ShardIndex.single());
     await expect(logged.promise).resolves.toBe("Background Delivery failed.");
@@ -230,9 +276,12 @@ describe("ServerEnvironment delivery lifecycle", () => {
   it("completes shared setup before a direct context becomes available", async () => {
     const storage = new InMemoryStorageFactory();
     const check = vi.spyOn(storage, "checkConnection");
-    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: storage });
-    await ServerEnvironment.instance().completeSetup();
-    const context = await BoundedContext.singleTenant("SetupBeforeContext").build();
+    const environment = environmentWith(EnvironmentType.Local, { storageFactory: storage });
+    await serverEnvironmentAccess.setup(environment);
+    const context = await buildContext(
+      BoundedContext.singleTenant("SetupBeforeContext"),
+      environment,
+    );
     try {
       expect(check).toHaveBeenCalledOnce();
     } finally {
@@ -240,32 +289,32 @@ describe("ServerEnvironment delivery lifecycle", () => {
     }
   });
 
-  it("rejects direct context build before explicit environment setup without probing storage", async () => {
+  it("checks storage while Application assembly prepares its environment", async () => {
     const storage = new InMemoryStorageFactory();
     const check = vi.spyOn(storage, "checkConnection");
-    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: storage });
-    await expect(BoundedContext.singleTenant("MissingSetup").build()).rejects.toThrow(
-      "Await ServerEnvironment.completeSetup()",
-    );
-    expect(check).not.toHaveBeenCalled();
+    const environment = environmentWith(EnvironmentType.Local, { storageFactory: storage });
+    await buildContext(BoundedContext.singleTenant("MissingSetup"), environment);
+    expect(check).toHaveBeenCalledOnce();
   });
 
-  it("keeps shared Delivery usable after a listener closes its context", async () => {
-    const environment = ServerEnvironment.instance();
-    await environment.completeSetup();
-    const context = await BoundedContext.singleTenant("ListenerContext").build();
-    const running = await new Server({ contexts: [context], port: 0 }).start();
+  it("keeps shared Delivery usable after a listener closes its endpoint", async () => {
+    const environment = environmentWith(EnvironmentType.Local, {});
+    const application = await buildApplication(
+      [BoundedContext.singleTenant("ListenerContext")],
+      environment,
+    );
+    const running = await Server.atPort(0).setApplication(application).start();
     await running.close();
     await expect(environment.delivery.inbox.read(ShardIndex.single())).resolves.toEqual([]);
-    await environment.close();
+    await application.close();
   });
 
   it("constructs one usable single-tenant Delivery from explicit environment inputs", async () => {
-    const environment = ServerEnvironment.instance();
-    await environment.completeSetup();
+    const environment = environmentWith(EnvironmentType.Local, {});
+    await serverEnvironmentAccess.setup(environment);
     const publicDelivery: PublicDelivery = environment.delivery;
     expect(publicDelivery).toBe(environment.delivery);
-    expect(ServerEnvironment.instance().delivery).toBe(environment.delivery);
+    expect(environment.delivery).toBe(environment.delivery);
     expect(environment.delivery.context).toEqual({
       name: "__System_Delivery__",
       multitenant: false,
@@ -278,9 +327,9 @@ describe("ServerEnvironment delivery lifecycle", () => {
   it("waits for an admitted public Delivery run before closing shared storage", async () => {
     const factory = new InMemoryStorageFactory();
     const closeFactory = vi.spyOn(factory, "close");
-    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
-    const environment = ServerEnvironment.instance();
-    await environment.completeSetup();
+    const environment = environmentWith(EnvironmentType.Local, { storageFactory: factory });
+
+    await serverEnvironmentAccess.setup(environment);
     await environment.delivery.inbox.receive(createMessage("public-run", "event-public-run", 1n));
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
@@ -350,12 +399,17 @@ describe("ServerEnvironment delivery lifecycle", () => {
       },
       source,
     };
-    ServerEnvironment.when(EnvironmentType.Local).use({ delivery: remote });
-    const environment = ServerEnvironment.instance();
-    expect(() => environment.delivery).toThrow("completeSetup");
-    await environment.completeSetup();
+    const environment = environmentWith(EnvironmentType.Local, { delivery: remote });
+
+    expect(() => environment.delivery).toThrow(
+      "Build the Application before using environment Delivery.",
+    );
+    await serverEnvironmentAccess.setup(environment);
     expect(environment.delivery.inbox).toBe(inbox);
-    const empty = await BoundedContext.singleTenant("NoRemoteRecipientYet").build();
+    const empty = await buildContext(
+      BoundedContext.singleTenant("NoRemoteRecipientYet"),
+      environment,
+    );
     expect(scans).toBe(0);
     await empty.close();
     await environment.close();
@@ -366,11 +420,12 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const factory = new InMemoryTransportFactory();
     const initialize = vi.spyOn(factory, "initialize").mockImplementation(() => gate.promise);
     const publisher = vi.spyOn(factory, "createPublisher");
-    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
-    const environment = ServerEnvironment.instance();
+    const environment = environmentWith(EnvironmentType.Local, {
+      integrationChannelFactory: factory,
+    });
 
-    const first = environment.completeSetup();
-    const second = environment.completeSetup();
+    const first = serverEnvironmentAccess.setup(environment);
+    const second = serverEnvironmentAccess.setup(environment);
     expect(first).toBe(second);
     await Promise.resolve();
     expect(initialize).toHaveBeenCalledTimes(1);
@@ -386,14 +441,17 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const cleanupError = new Error("transport cleanup failed");
     vi.spyOn(factory, "initialize").mockRejectedValue(setupError);
     vi.spyOn(factory, "close").mockRejectedValueOnce(cleanupError).mockResolvedValue(undefined);
-    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
-    const environment = ServerEnvironment.instance();
+    const environment = environmentWith(EnvironmentType.Local, {
+      integrationChannelFactory: factory,
+    });
 
-    const failure = await environment.completeSetup().catch((error: unknown) => error);
+    const failure = await serverEnvironmentAccess
+      .setup(environment)
+      .catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(AggregateError);
     expect((failure as AggregateError).errors).toContain(setupError);
     expect((failure as AggregateError).errors).toContain(cleanupError);
-    await expect(environment.completeSetup()).rejects.toThrow("closed");
+    await expect(serverEnvironmentAccess.setup(environment)).rejects.toThrow("closed");
     await environment.close();
   });
 
@@ -414,21 +472,21 @@ describe("ServerEnvironment delivery lifecycle", () => {
       events.push("transport");
       return closeTransport();
     });
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    const environment = environmentWith(EnvironmentType.Local, {
       storageFactory: storage,
       integrationChannelFactory: transport,
       delivery: { close: () => events.push("delivery") },
-      tracerFactory: { close: () => events.push("tracer") },
     });
-    const environment = ServerEnvironment.instance();
 
-    await expect(environment.completeSetup()).rejects.toBe(failure);
+    await expect(serverEnvironmentAccess.setup(environment)).rejects.toBe(failure);
     expect(initialize).not.toHaveBeenCalled();
-    expect(events).toEqual(["delivery", "transport", "tracer", "storage"]);
-    expect(() => environment.delivery).toThrow("completeSetup");
-    await expect(BoundedContext.singleTenant("AfterFailedStorage").build()).rejects.toThrow(
-      "closed",
+    expect(events).toEqual(["delivery", "transport", "storage"]);
+    expect(() => environment.delivery).toThrow(
+      "Build the Application before using environment Delivery.",
     );
+    await expect(
+      buildContext(BoundedContext.singleTenant("AfterFailedStorage"), environment),
+    ).rejects.toThrow("closed");
   });
 
   it("closes initialized facilities when a remote Delivery port fails to open", async () => {
@@ -462,35 +520,36 @@ describe("ServerEnvironment delivery lifecycle", () => {
       inbox: {} as ServerEnvironmentDelivery["inbox"],
       workRegistry: {} as ServerEnvironmentDelivery["workRegistry"],
     };
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    const environment = environmentWith(EnvironmentType.Local, {
       storageFactory: storage,
       integrationChannelFactory: transport,
       delivery: remote,
-      tracerFactory: { close: () => events.push("tracer") },
     });
-    const environment = ServerEnvironment.instance();
 
-    const error = await environment.completeSetup().catch((cause: unknown) => cause);
+    const error = await serverEnvironmentAccess.setup(environment).catch((cause: unknown) => cause);
     expect(error).toBeInstanceOf(AggregateError);
     expect((error as AggregateError).errors).toEqual([openFailure, cleanupFailure]);
     expect(initialize).toHaveBeenCalledOnce();
-    expect(events).toEqual(["open", "delivery", "transport", "tracer", "storage"]);
-    expect(() => environment.delivery).toThrow("completeSetup");
+    expect(events).toEqual(["open", "delivery", "transport", "storage"]);
+    expect(() => environment.delivery).toThrow(
+      "Build the Application before using environment Delivery.",
+    );
   });
 
   it("does not report readiness when close fences pending transport setup", async () => {
     const gate = Promise.withResolvers<undefined>();
     const factory = new InMemoryTransportFactory();
     const initialize = vi.spyOn(factory, "initialize").mockImplementation(() => gate.promise);
-    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
-    const environment = ServerEnvironment.instance();
+    const environment = environmentWith(EnvironmentType.Local, {
+      integrationChannelFactory: factory,
+    });
 
-    const setup = environment.completeSetup();
+    const setup = serverEnvironmentAccess.setup(environment);
     await vi.waitFor(() => {
       expect(initialize).toHaveBeenCalledOnce();
     });
     const closing = environment.close();
-    await expect(environment.completeSetup()).rejects.toThrow("closed");
+    await expect(serverEnvironmentAccess.setup(environment)).rejects.toThrow("closed");
     gate.resolve(undefined);
     await expect(setup).rejects.toThrow("closed during Delivery setup");
     await closing;
@@ -520,13 +579,13 @@ describe("ServerEnvironment delivery lifecycle", () => {
         release: () => Promise.resolve(true),
       },
     };
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    const environment = environmentWith(EnvironmentType.Local, {
       storageFactory: storage,
       integrationChannelFactory: transport,
       delivery: remote,
     });
-    const environment = ServerEnvironment.instance();
-    const setup = environment.completeSetup();
+
+    const setup = serverEnvironmentAccess.setup(environment);
     await entered.promise;
     const closing = environment.close();
     let closed = false;
@@ -540,7 +599,9 @@ describe("ServerEnvironment delivery lifecycle", () => {
     );
     try {
       await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(() => environment.delivery).toThrow("completeSetup");
+      expect(() => environment.delivery).toThrow(
+        "Build the Application before using environment Delivery.",
+      );
       expect(closed).toBe(false);
       expect(remote.close).not.toHaveBeenCalled();
       expect(closeTransport).not.toHaveBeenCalled();
@@ -554,89 +615,121 @@ describe("ServerEnvironment delivery lifecycle", () => {
     expect(remote.close).toHaveBeenCalledOnce();
     expect(closeTransport).toHaveBeenCalledOnce();
     expect(closeStorage).toHaveBeenCalledOnce();
-    expect(() => environment.delivery).toThrow("completeSetup");
-    await expect(BoundedContext.singleTenant("AfterRemoteClose").build()).rejects.toThrow("closed");
+    expect(() => environment.delivery).toThrow(
+      "Build the Application before using environment Delivery.",
+    );
+    await expect(
+      buildContext(BoundedContext.singleTenant("AfterRemoteClose"), environment),
+    ).rejects.toThrow("closed");
   });
 
-  it("rejects full reset during an empty context build and while its context remains open", async () => {
-    await ServerEnvironment.instance().completeSetup();
-    const building = BoundedContext.singleTenant("EmptyPending").build();
-    await expect(resetServerEnvironmentForTest()).rejects.toThrow("active Bounded Contexts");
-    const context = await building;
-    await expect(resetServerEnvironmentForTest()).rejects.toThrow("active Bounded Contexts");
-    await context.close();
-    await expect(resetServerEnvironmentForTest()).resolves.toBeUndefined();
+  it("rejects environment close during Application build and while its Bounded Context is active", async () => {
+    const environment = environmentWith(EnvironmentType.Local, {});
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const open: unknown = Reflect.get(IntegrationBroker.prototype, "open");
+    if (typeof open !== "function") throw new Error("Expected IntegrationBroker open.");
+    const spy = vi.spyOn(IntegrationBroker.prototype, "open").mockImplementation(async function (
+      this: IntegrationBroker,
+    ) {
+      entered.resolve(undefined);
+      await release.promise;
+      await Reflect.apply(open, this, []);
+    });
+    const building = buildApplication([BoundedContext.singleTenant("EmptyPending")], environment);
+    try {
+      await entered.promise;
+      await expect(environment.close()).rejects.toThrow("active Bounded Contexts");
+      release.resolve(undefined);
+      const application = await building;
+      await expect(environment.close()).rejects.toThrow("active Bounded Contexts");
+      await application.close();
+      await expect(environment.close()).resolves.toBeUndefined();
+    } finally {
+      release.resolve(undefined);
+      spy.mockRestore();
+    }
   });
+
   it("uses the marker when a custom storage factory has no catalog", async () => {
     const factory = new CataloglessStorageFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
-    const environment = ServerEnvironment.instance();
-    await environment.completeSetup();
-    const context = await BoundedContext.singleTenant("CataloglessTasks").build({
-      createStorageStructures: false,
-      startSubscriptionMonitoring: false,
-    });
-    expect(environment.tenantIndex).toBe(SINGLE_TENANT);
+    const environment = environmentWith(EnvironmentType.Local, { storageFactory: factory });
+
+    await serverEnvironmentAccess.setup(environment);
+    const context = await buildContext(
+      BoundedContext.singleTenant("CataloglessTasks"),
+      environment,
+      {
+        createStorageStructures: false,
+        startSubscriptionMonitoring: false,
+      },
+    );
     expect(context.tenantIndex).toBe(SINGLE_TENANT);
     await context.close();
   });
-  it("shares the configured live index and keeps a context override separate", async () => {
+  it("shares one Application tenant index across multitenant Bounded Contexts", async () => {
     const company = tenantIndex();
-    const billing = tenantIndex();
-    ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: company });
-    const environment = ServerEnvironment.instance();
-    await environment.completeSetup();
-    const orders = await BoundedContext.multitenant("IndexOrders").build();
-    const invoices = await BoundedContext.multitenant("IndexInvoices")
-      .withTenantIndex(billing)
-      .build();
-    expect(environment.tenantIndex).toBe(company);
+    const environment = environmentWith(EnvironmentType.Local, {});
+    const application = await buildApplication(
+      [BoundedContext.multiTenant("IndexOrders"), BoundedContext.multiTenant("IndexInvoices")],
+      environment,
+      {},
+      company,
+    );
+    const [orders, invoices] = application.contexts();
+    if (orders === undefined || invoices === undefined)
+      throw new Error("Expected two Bounded Contexts.");
+    expect(application.tenantIndex()).toBe(company);
     expect(orders.tenantIndex).toBe(company);
-    expect(invoices.tenantIndex).toBe(billing);
+    expect(invoices.tenantIndex).toBe(company);
     await orders.close();
     await company.keep(tenant("after-orders-close"));
     await expect(company.contains(tenant("after-orders-close"))).resolves.toBe(true);
     await invoices.close();
   });
-  it("defaults one process-wide integration channel factory in production", async () => {
+
+  it("creates an independent default integration channel factory for each production environment", async () => {
     EnvironmentTests.use(EnvironmentType.Production);
-    ServerEnvironment.when(EnvironmentType.Production).use({
+    const first = environmentWith(EnvironmentType.Production, {
       storageFactory: new InMemoryStorageFactory(),
       typeRegistry: spineCoreRegistry,
     });
-
+    const second = environmentWith(EnvironmentType.Production, {
+      storageFactory: new InMemoryStorageFactory(),
+      typeRegistry: spineCoreRegistry,
+    });
     const close = vi.spyOn(InMemoryTransportFactory.prototype, "close");
-    const environment = ServerEnvironment.instance() as unknown as {
-      readonly integrationChannelFactory: InMemoryTransportFactory;
-    };
-
-    expect(environment.integrationChannelFactory).toBeInstanceOf(InMemoryTransportFactory);
-    expect(ServerEnvironment.instance()).toBe(environment);
-    await ServerEnvironment.instance().close();
-    expect(close).toHaveBeenCalledTimes(1);
+    expect(first.integrationChannelFactory).toBeInstanceOf(InMemoryTransportFactory);
+    expect(second.integrationChannelFactory).toBeInstanceOf(InMemoryTransportFactory);
+    expect(first.integrationChannelFactory).not.toBe(second.integrationChannelFactory);
+    await first.close();
+    await second.close();
+    expect(close).toHaveBeenCalledTimes(2);
   });
 
   it("shares the default integration channel across local brokers and closes it once", async () => {
-    await ServerEnvironment.instance().completeSetup();
+    const environment = environmentWith(EnvironmentType.Local, {});
     const createdPublishers = vi.spyOn(InMemoryTransportFactory.prototype, "createPublisher");
     const createdSubscribers = vi.spyOn(InMemoryTransportFactory.prototype, "createSubscriber");
     const close = vi.spyOn(InMemoryTransportFactory.prototype, "close");
     const received: unknown[] = [];
-    const consumer = await BoundedContext.singleTenant("DefaultChannelConsumer")
-      .addEventDispatcher({
-        messageSchemas: () => [ServerStartedSchema],
-        externalEventSchemas: () => [ServerStartedSchema],
-        dispatch: (event: unknown) => Promise.resolve(received.push(event)).then(() => undefined),
-      })
-      .build();
-    const producer = await BoundedContext.singleTenant("DefaultChannelProducer")
-      .addEventDispatcher({
-        messageSchemas: () => [ServerStartedSchema],
-        dispatch: () => Promise.resolve(),
-      })
-      .build();
-    const environment = ServerEnvironment.instance();
-
+    const application = await buildApplication(
+      [
+        BoundedContext.singleTenant("DefaultChannelConsumer").addEventDispatcher({
+          messageSchemas: () => [ServerStartedSchema],
+          externalEventSchemas: () => [ServerStartedSchema],
+          dispatch: (event: unknown) => Promise.resolve(received.push(event)).then(() => undefined),
+        }),
+        BoundedContext.singleTenant("DefaultChannelProducer").addEventDispatcher({
+          messageSchemas: () => [ServerStartedSchema],
+          dispatch: () => Promise.resolve(),
+        }),
+      ],
+      environment,
+    );
+    const [consumer, producer] = application.contexts();
+    if (consumer === undefined || producer === undefined)
+      throw new Error("Expected two Bounded Contexts.");
     try {
       await producer.eventBus().post(
         SignalEnvelopes.event({
@@ -659,8 +752,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
         ),
       ).toBe(true);
     } finally {
-      await Promise.all([producer.close(), consumer.close()]);
-      await environment.close();
+      await application.close();
     }
 
     expect(close).toHaveBeenCalledTimes(1);
@@ -670,48 +762,40 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const close = vi.fn();
     const factory = { close } as never;
     EnvironmentTests.use(EnvironmentType.Production);
-    ServerEnvironment.when(EnvironmentType.Production).use({
+    const environment = environmentWith(EnvironmentType.Production, {
       storageFactory: new InMemoryStorageFactory(),
       integrationChannelFactory: factory,
       typeRegistry: spineCoreRegistry,
     });
 
-    const environment = ServerEnvironment.instance() as unknown as {
-      readonly integrationChannelFactory: unknown;
-    };
-
     expect(environment.integrationChannelFactory).toBe(factory);
-    await ServerEnvironment.instance().close();
+    await environment.close();
     expect(close).toHaveBeenCalledTimes(1);
   });
 
   it("requires an application schema registry in production", () => {
     EnvironmentTests.use(EnvironmentType.Production);
-    ServerEnvironment.when(EnvironmentType.Production).use({
-      storageFactory: new InMemoryStorageFactory(),
-      integrationChannelFactory: new InMemoryTransportFactory(),
-    });
-
-    expect(() => ServerEnvironment.instance()).toThrow(
-      "Production ServerEnvironment requires typeRegistry.",
-    );
+    expect(() =>
+      environmentWith(EnvironmentType.Production, {
+        storageFactory: new InMemoryStorageFactory(),
+        integrationChannelFactory: new InMemoryTransportFactory(),
+      }),
+    ).toThrow("Production ServerEnvironment requires typeRegistry.");
   });
 
   it("rejects core Delivery access for an object outside the environment registry", () => {
     const outside = {} as ServerEnvironment;
     expect(() => serverEnvironmentAccess.coreDelivery(outside)).toThrow(
-      "ServerEnvironment.completeSetup() must finish before Delivery use.",
+      "Build the Application before using environment Delivery.",
     );
   });
 
   it("snapshots one caller-owned logger child when the environment resolves", () => {
     const child = Object.freeze({});
     const logger = { child: vi.fn(() => child) };
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    const environment = environmentWith(EnvironmentType.Local, {
       ...{ logger: logger as unknown as ILogLayer },
     });
-
-    const environment = ServerEnvironment.instance();
 
     expect(logger.child).toHaveBeenCalledTimes(1);
     expect(logger.child).toHaveBeenCalledWith();
@@ -725,11 +809,11 @@ describe("ServerEnvironment delivery lifecycle", () => {
         info: (message: string) => records.push({ message, operation: facts.operation }),
       }),
     };
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    const environment = environmentWith(EnvironmentType.Local, {
       logger: { child: () => child } as unknown as ILogLayer,
     });
 
-    await ServerEnvironment.instance().completeSetup();
+    await serverEnvironmentAccess.setup(environment);
 
     expect(records).toEqual([
       { message: "Environment storage connection checked.", operation: "server.setup_storage" },
@@ -739,9 +823,9 @@ describe("ServerEnvironment delivery lifecycle", () => {
   });
 
   it("writes default warning and error records as uppercase structured console JSON", async () => {
+    const environment = environmentWith(EnvironmentType.Local, {});
     const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const environment = ServerEnvironment.instance();
 
     emitServerWarning(serverEnvironmentAccess.loggerFor(environment), "Warning message", {
       contextName: "Tasks",
@@ -770,6 +854,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
       reasonCode: "failed",
     });
     expect(warningRecord.timestamp).toEqual(expect.any(String));
+    await environment.close();
   });
 
   it("warns once for a volatile registry in production and never in local", async () => {
@@ -781,17 +866,20 @@ describe("ServerEnvironment delivery lifecycle", () => {
     };
     logger.child.mockReturnValue(logger);
     EnvironmentTests.use(EnvironmentType.Production);
-    ServerEnvironment.when(EnvironmentType.Production).use({
+    const environment = environmentWith(EnvironmentType.Production, {
       storageFactory: new InMemoryStorageFactory(),
       integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
-    const production = ServerEnvironment.instance();
-    await production.completeSetup();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
-      .build();
+    const production = environment;
+    await serverEnvironmentAccess.setup(production);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").withSubscriptionRegistry(
+        new InMemorySubscriptionRegistry(),
+      ),
+      environment,
+    );
 
     try {
       serverEnvironmentAccess.warnVolatileRegistry(production, context);
@@ -815,17 +903,20 @@ describe("ServerEnvironment delivery lifecycle", () => {
     };
     logger.child.mockReturnValue(logger);
     EnvironmentTests.use(EnvironmentType.Production);
-    ServerEnvironment.when(EnvironmentType.Production).use({
+    const environment = environmentWith(EnvironmentType.Production, {
       storageFactory: new InMemoryStorageFactory(),
       integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
-    const environment = ServerEnvironment.instance();
-    await environment.completeSetup();
-    const context = await BoundedContext.singleTenant(`secret-context-${"x".repeat(257)}`)
-      .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
-      .build();
+
+    await serverEnvironmentAccess.setup(environment);
+    const context = await buildContext(
+      BoundedContext.singleTenant(`secret-context-${"x".repeat(257)}`).withSubscriptionRegistry(
+        new InMemorySubscriptionRegistry(),
+      ),
+      environment,
+    );
 
     try {
       serverEnvironmentAccess.warnVolatileRegistry(environment, context);
@@ -847,14 +938,17 @@ describe("ServerEnvironment delivery lifecycle", () => {
       warn: (message: string) => warnings.push(message),
     };
     logger.child.mockReturnValue(logger);
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    const environment = environmentWith(EnvironmentType.Local, {
       ...{ logger: logger as unknown as ILogLayer },
     });
-    const environment = ServerEnvironment.instance();
-    await environment.completeSetup();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
-      .build();
+
+    await serverEnvironmentAccess.setup(environment);
+    const context = await buildContext(
+      BoundedContext.singleTenant("Tasks").withSubscriptionRegistry(
+        new InMemorySubscriptionRegistry(),
+      ),
+      environment,
+    );
 
     try {
       serverEnvironmentAccess.warnVolatileRegistry(environment, context);
@@ -875,22 +969,23 @@ describe("ServerEnvironment delivery lifecycle", () => {
     logger.child.mockReturnValue(logger);
     EnvironmentTests.use(EnvironmentType.Production);
     const storageFactory = new InMemoryStorageFactory();
-    ServerEnvironment.when(EnvironmentType.Production).use({
+    const environment = environmentWith(EnvironmentType.Production, {
       storageFactory,
       integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
-    const environment = ServerEnvironment.instance();
-    await environment.completeSetup();
+
+    await serverEnvironmentAccess.setup(environment);
     const registry = new StorageSubscriptionRegistry(
       { name: "PersistentTasks", multitenant: false },
       storageFactory,
       new StorageGroup("subscriptions_PersistentTasks"),
     );
-    const context = await BoundedContext.singleTenant("PersistentTasks")
-      .withSubscriptionRegistry(registry)
-      .build();
+    const context = await buildContext(
+      BoundedContext.singleTenant("PersistentTasks").withSubscriptionRegistry(registry),
+      environment,
+    );
 
     try {
       serverEnvironmentAccess.warnVolatileRegistry(environment, context);
@@ -910,21 +1005,29 @@ describe("ServerEnvironment delivery lifecycle", () => {
     };
     logger.child.mockReturnValue(logger);
     EnvironmentTests.use(EnvironmentType.Production);
-    ServerEnvironment.when(EnvironmentType.Production).use({
+    const environment = environmentWith(EnvironmentType.Production, {
       storageFactory: new InMemoryStorageFactory(),
       integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
-    await ServerEnvironment.instance().completeSetup();
-    const context = await BoundedContext.singleTenant("Tasks")
-      .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
-      .build();
-    const server = new Server({ contexts: [context], port: 0 });
-
+    await serverEnvironmentAccess.setup(environment);
+    const application = await buildApplication(
+      [
+        BoundedContext.singleTenant("Tasks").withSubscriptionRegistry(
+          new InMemorySubscriptionRegistry(),
+        ),
+      ],
+      environment,
+    );
+    const server = Server.atPort(0).setApplication(application);
     const running = await server.start();
-    expect(warnings).toEqual(["Stand subscription registry is not persistent."]);
-    await running.close();
+    try {
+      expect(warnings).toEqual(["Stand subscription registry is not persistent."]);
+    } finally {
+      await running.close();
+      await application.close();
+    }
   });
 
   it("uses the configured remote Admin source for supervisor recovery and observation", async () => {
@@ -960,13 +1063,15 @@ describe("ServerEnvironment delivery lifecycle", () => {
       },
     });
 
-    await environment.completeSetup();
+    await serverEnvironmentAccess.setup(environment);
     expect(snapshots).toBe(0);
     serverStatusRegistry();
-    const context = await BoundedContext.singleTenant("RemoteSourceRecipient")
+    const context = await buildContext(
+      BoundedContext.singleTenant("RemoteSourceRecipient")
 
-      .add(ServerStatusProjection)
-      .build();
+        .add(ServerStatusProjection),
+      environment,
+    );
     try {
       await waitFor(() => snapshots > 0 && observations > 0);
     } finally {
@@ -1001,9 +1106,9 @@ describe("ServerEnvironment delivery lifecycle", () => {
         releaseExpired: () => Promise.resolve([]),
       },
     };
-    ServerEnvironment.when(EnvironmentType.Local).use({ delivery: remoteFacility });
-    const environment = ServerEnvironment.instance();
-    await environment.completeSetup();
+    const environment = environmentWith(EnvironmentType.Local, { delivery: remoteFacility });
+
+    await serverEnvironmentAccess.setup(environment);
     await ports.inbox.receive(createMessage("notify-failed", "signal", 1n));
 
     expect(() => {
@@ -1016,17 +1121,16 @@ describe("ServerEnvironment delivery lifecycle", () => {
     await environment.close();
   });
 
-  it("closes delivery tracer and storage in the approved order", async () => {
+  it("closes delivery and storage in the approved order", async () => {
     const events: string[] = [];
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    const environment = environmentWith(EnvironmentType.Local, {
       delivery: { close: () => events.push("delivery") },
-      tracerFactory: { close: () => events.push("tracer") },
       storageFactory: { close: () => events.push("storage") } as never,
     });
 
-    await ServerEnvironment.instance().close();
+    await environment.close();
 
-    expect(events).toEqual(["delivery", "tracer", "storage"]);
+    expect(events).toEqual(["delivery", "storage"]);
   });
 
   it("retries only unfinished environment close phases after partial failure", async () => {
@@ -1039,7 +1143,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
         return { warn: vi.fn(), error: vi.fn() };
       },
     };
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    const environment = environmentWith(EnvironmentType.Local, {
       delivery: {
         close: () => {
           events.push("delivery");
@@ -1051,7 +1155,6 @@ describe("ServerEnvironment delivery lifecycle", () => {
       },
       logger: { child: () => child } as unknown as ILogLayer,
     });
-    const environment = ServerEnvironment.instance();
 
     await expect(environment.close()).rejects.toThrow("ServerEnvironment close failed.");
     await expect(environment.close()).resolves.toBeUndefined();
@@ -1070,6 +1173,7 @@ function tenantIndex(): TenantIndex {
       return Promise.resolve();
     },
     all: () => Promise.resolve([...entries.values()]),
+    close: () => Promise.resolve(),
     page: (request) =>
       Promise.resolve({ ids: [...entries.values()].slice(0, request.count), hasMore: false }),
   };

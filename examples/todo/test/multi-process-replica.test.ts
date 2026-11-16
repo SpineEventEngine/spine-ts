@@ -20,23 +20,36 @@ const calls = vi.hoisted(() => {
   const typeRegistry = {};
   const subscriptionRegistry = {};
   const context = {};
+  const application = {};
+  const environment = {};
   const server = {};
   const start = vi.fn(() => Promise.resolve(server));
-  const add = vi.fn(() => ({ start }));
+  const setApplication = vi.fn(() => ({ start }));
+  const environmentBuilder = { under: vi.fn(), build: vi.fn(() => environment) };
+  environmentBuilder.under.mockReturnValue(environmentBuilder);
+  const applicationBuilder = {
+    setServerEnvironment: vi.fn(),
+    add: vi.fn(),
+    build: vi.fn(() => Promise.resolve(application)),
+  };
+  applicationBuilder.setServerEnvironment.mockReturnValue(applicationBuilder);
+  applicationBuilder.add.mockReturnValue(applicationBuilder);
   const builder = {
     setClient: vi.fn(),
     build: vi.fn(() => storageFactory),
   };
   builder.setClient.mockReturnValue(builder);
   return {
-    add,
+    application,
+    applicationBuilder,
     builder,
     context,
-    createContext: vi.fn(() => Promise.resolve(context)),
+    createContext: vi.fn(() => context),
     delivery,
-    environmentUse: vi.fn(),
+    environmentBuilder,
     server,
     shardStrategy: {},
+    setApplication,
     start,
     storageFactory,
     subscriptionRegistry,
@@ -59,12 +72,13 @@ vi.mock("@google-cloud/datastore", () => ({
   }),
 }));
 vi.mock("@spine-event-engine/server", () => ({
+  Application: { newBuilder: vi.fn(() => calls.applicationBuilder) },
   EnvironmentType: { Production: "production" },
   InMemorySubscriptionRegistry: vi.fn(function InMemorySubscriptionRegistry() {
     return calls.subscriptionRegistry;
   }),
-  Server: { atPort: vi.fn(() => ({ add: calls.add })) },
-  ServerEnvironment: { when: vi.fn(() => ({ use: calls.environmentUse })) },
+  Server: { atPort: vi.fn(() => ({ setApplication: calls.setApplication })) },
+  ServerEnvironment: { newBuilder: vi.fn(() => calls.environmentBuilder) },
   UniformAcrossAllShards: { forNumber: vi.fn(() => calls.shardStrategy) },
 }));
 vi.mock("../src/todo-app.js", () => ({ createTodoContext: calls.createContext }));
@@ -87,18 +101,22 @@ describe("To-Do multi-process replica", () => {
 
     expect(calls.builder.setClient).toHaveBeenCalledOnce();
     expect(calls.builder.build).toHaveBeenCalledOnce();
-    expect(calls.environmentUse).toHaveBeenCalledWith({
+    const configure = calls.environmentBuilder.under.mock.calls[0]?.[1] as (setting: {
+      use(settings: unknown): void;
+    }) => void;
+    const use = vi.fn();
+    configure({ use });
+    expect(use).toHaveBeenCalledWith({
       storageFactory: calls.storageFactory,
       typeRegistry: calls.typeRegistry,
       delivery: calls.delivery,
       deliveryStrategy: calls.shardStrategy,
     });
     expect(calls.createContext).toHaveBeenCalledWith({
-      storageFactory: calls.storageFactory,
-      deliveryStrategy: calls.shardStrategy,
       subscriptionRegistry: calls.subscriptionRegistry,
     });
-    expect(calls.add).toHaveBeenCalledWith(calls.context);
+    expect(calls.applicationBuilder.add).toHaveBeenCalledWith(calls.context);
+    expect(calls.setApplication).toHaveBeenCalledWith(calls.application);
     expect(replica.server).toBe(calls.server);
     await replica.synchronize();
     expect(calls.delivery.open).toHaveBeenCalledOnce();

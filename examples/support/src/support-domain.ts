@@ -19,12 +19,10 @@ import {
   Aggregate,
   Assign,
   BoundedContext,
-  EnvironmentType,
+  type BoundedContextBuilder,
   Projection,
-  ServerEnvironment,
   Subscribe,
 } from "@spine-event-engine/server";
-import type { StorageFactory } from "@spine-event-engine/storage";
 
 import {
   DraftSupportReplySchema,
@@ -152,21 +150,17 @@ export class SupportReview extends Projection<SupportTicketId, typeof SupportRev
  */
 export const SupportContext: Readonly<{
   /**
-   * Builds the Support Bounded Context with the configured AI registry and storage.
+   * Declares the Support Bounded Context with the configured AI registry.
    */
-  create(ai: AiRegistry, storage?: StorageFactory): Promise<BoundedContext>;
+  create(ai: AiRegistry): BoundedContextBuilder;
 }> = Object.freeze({
   /**
-   * Builds the local support Bounded Context; the caller closes it after use.
+   * Declares the local support Bounded Context for an Application.
    *
    * @param ai Authenticated registry with a generation default.
-   * @param storage Optional storage provider; memory is used for local tests.
-   * @returns Built support Bounded Context with Agent audit retention.
+   * @returns Support Bounded Context builder with Agent audit retention.
    */
-  async create(ai: AiRegistry, storage?: StorageFactory): Promise<BoundedContext> {
-    if (storage !== undefined)
-      ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: storage });
-    await ServerEnvironment.instance().completeSetup();
+  create(ai: AiRegistry): BoundedContextBuilder {
     const builder = BoundedContext.singleTenant("WarehouseSupport")
 
       .withAi(ai)
@@ -176,7 +170,7 @@ export const SupportContext: Readonly<{
         ai: { models: [draftSupportReply] },
       })
       .add(SupportReview);
-    return builder.build();
+    return builder;
   },
 });
 

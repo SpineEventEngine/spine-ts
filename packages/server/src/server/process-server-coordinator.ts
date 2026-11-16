@@ -13,14 +13,15 @@
  */
 
 import type { RunningServer } from "./server.js";
-import type { ServerEnvironment } from "./server-environment.js";
+import type { Application } from "./application.js";
+import { applicationAccess } from "./application.js";
 import type { ILogLayer } from "loglayer";
 
 import { emitServerError } from "./server-log.js";
 
 interface RunRecord {
   readonly server: RunningServer;
-  readonly environment: ServerEnvironment | undefined;
+  readonly application: Application | undefined;
   readonly logger: ILogLayer | undefined;
   retirement: Promise<void> | undefined;
 }
@@ -37,7 +38,7 @@ let closingRunning: Promise<void> | undefined;
 export const ProcessServerCoordinator: Readonly<{
   add(
     server: RunningServer,
-    environment: ServerEnvironment | undefined,
+    application: Application | undefined,
     logger: ILogLayer | undefined,
     onRetired: () => void,
   ): RunningServer;
@@ -47,11 +48,11 @@ export const ProcessServerCoordinator: Readonly<{
 }> = Object.freeze({
   add(
     server: RunningServer,
-    environment: ServerEnvironment | undefined,
+    application: Application | undefined,
     logger: ILogLayer | undefined,
     onRetired: () => void,
   ): RunningServer {
-    const record: RunRecord = { server, environment, logger, retirement: undefined };
+    const record: RunRecord = { server, application, logger, retirement: undefined };
     running.push(record);
     ProcessServerCoordinator.installSignals();
     return {
@@ -90,6 +91,11 @@ export const ProcessServerCoordinator: Readonly<{
  * @internal
  */
 const ProcessServerCoordinatorValues = Object.freeze({
+  /**
+   * Closes managed endpoints in reverse registration order on a process signal.
+   *
+   * @returns Completion after each endpoint retirement is attempted.
+   */
   async closeRunning(): Promise<void> {
     for (const record of [...running].reverse()) {
       try {
@@ -107,6 +113,12 @@ const ProcessServerCoordinatorValues = Object.freeze({
       }
     }
   },
+
+  /**
+   * Removes a retired endpoint and uninstalls signals after the final one.
+   *
+   * @param record Managed endpoint to remove.
+   */
   remove(record: RunRecord): void {
     const index = running.indexOf(record);
     if (index >= 0) running.splice(index, 1);
@@ -115,18 +127,28 @@ const ProcessServerCoordinatorValues = Object.freeze({
     process.off("SIGTERM", ProcessServerCoordinator.onSignal);
     signalsInstalled = false;
   },
+
+  /**
+   * Closes the shared Application after its final managed endpoint retires.
+   *
+   * @param record Managed endpoint completing shutdown.
+   * @returns Completion after Application closure when this is its final endpoint.
+   */
   retire(record: RunRecord): Promise<void> {
     const current = record.retirement;
     if (current !== undefined) return current;
     const retirement = Promise.resolve()
       .then(async () => {
         if (!running.includes(record)) return;
+        if (record.application !== undefined)
+          await applicationAccess.whenManagedStartsIdle(record.application);
         if (
-          record.environment !== undefined &&
-          !running.some((candidate) => candidate !== record && candidate.environment !== undefined)
-        ) {
-          await record.environment.close();
-        }
+          record.application !== undefined &&
+          !running.some(
+            (candidate) => candidate !== record && candidate.application === record.application,
+          )
+        )
+          await record.application.close();
         ProcessServerCoordinatorValues.remove(record);
       })
       .catch((error: unknown) => {

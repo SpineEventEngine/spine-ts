@@ -85,7 +85,7 @@ import { BlackBox } from "@spine-event-engine/testing";
 import { CreateTaskSchema } from "../../generated/spine/examples/todo/task_commands_pb.js";
 import { createTodoContext } from "../todo-app.js";
 
-const box = await BlackBox.from(await createTodoContext());
+const box = await BlackBox.from(createTodoContext());
 try {
   const scope = box.asGuest();
   const acknowledgement = await scope.post(
@@ -124,9 +124,11 @@ async function waitForReady(box: import("@spine-event-engine/testing").BlackBox)
 ```
 
 `BlackBox.from()` accepts fixed `tenant`, `zoneId`, `timeoutMs`, and
-`intervalMs` options. Time values must be positive integers. `close()` cancels
+`intervalMs` options. Optional `storageFactory` and `tenantIndex` select storage
+for the fresh test Application. Time values must be positive integers. `close()` cancels
 subscriptions created by the box, closes its client, and then closes the local
-server.
+Server and Application. If endpoint shutdown fails, Application resources stay
+available for a later cleanup attempt.
 
 ## External events and produced signals
 

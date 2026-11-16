@@ -8,9 +8,10 @@ shutdown.
 ## Bootstrap and providers
 
 `configureOrdersEnvironment({ storageFactory, tenants, membership })` opens a
-`PersistentTenantIndex` in the `orders-tenant-directory` group and supplies it
-with the selected `StorageFactory` to `ServerEnvironment`. Call it once before
-assembling an Orders Bounded Context. `ordersTenants.northwind` and
+`PersistentTenantIndex` in the `orders-tenant-directory` group and builds a
+ServerEnvironment using the selected StorageFactory. It returns both in a setup handle. Pass that
+handle to startOrdersServer(), which supplies the environment and index to
+Application. Call setup before assembling an Orders Application. `ordersTenants.northwind` and
 `ordersTenants.contoso` are complete generated `TenantId` messages with stable
 `value` variants. Membership and storage routing are separate. The configured
 set must be distinct and match all persisted members; missing, extra, or
@@ -52,7 +53,7 @@ const setup = await configureOrdersEnvironment({
 });
 await withOrdersServer(
   setup,
-  () => startOrdersServer(),
+  () => startOrdersServer(setup),
   (server) => {
     // Send complete tenant identities with commands, queries, and subscriptions.
     return Promise.resolve(server.baseUrl);
@@ -72,26 +73,24 @@ ID. `InMemoryStorageFactory` preserves the same assembly and tenant admission
 behavior within one process, but neither its tenant directory nor records
 survive process exit.
 
-`startOrdersServer({ host, port })` creates the fixed Orders Bounded Context,
-calls `ServerEnvironment.createStorageStructures()`, and then starts the gRPC
-listener. Structure preparation is limited to supported provider tables,
-indexes, or equivalent records inside existing infrastructure. A preparation
-failure closes the assembled context and returns a failure before a listener
-starts. The runner's `withOrdersServer()` closes the running server before
-closing the tenant index and environment. If server drain rejects, storage
-remains open; if startup fails before a server exists, setup closes. Failure
-aggregation retains the run failure when cleanup also fails.
+`startOrdersServer(setup, { host, port })` builds an Application containing the
+fixed Orders Bounded Context, prepares its storage, and then starts the native
+listener. Preparation creates supported structures inside existing infrastructure;
+it does not create a database. Failure prevents listener startup and retains any
+unfinished cleanup. The returned host handle closes its endpoint before the
+Application. If endpoint shutdown fails, shared storage remains available for
+retry. `withOrdersServer()` preserves the operation error if cleanup also fails.
 
 ## Domain assemblies
 
 `createOrdersContext()` registers two Aggregates, ten Projections, and two
 Process Managers: fourteen repositories in the load topology. It and the
-other Orders factories call `BoundedContext.multitenant` and consume the
-configured environment. A request without a registered complete tenant
+other Orders factories return `BoundedContext.multiTenant` builders. Application
+build uses the explicit environment and index supplied by the setup handle. A request without a registered complete tenant
 identity is rejected without a membership write.
 
-`OrderReviewContexts.create()` returns separate Catalog and Ordering Bounded Contexts
-that run in the same server process. Run the focused example from the repository root:
+`OrderReviewContexts.create()` synchronously returns Catalog and Ordering Bounded
+Context builders. Add both to one Application so their handlers share local reads. Run the focused example from the repository root:
 
 ```bash
 pnpm typecheck:build
@@ -154,7 +153,7 @@ pnpm --dir examples/orders run test:datastore
 The PostgreSQL test uses two separate Node processes: the second validates
 stored membership with `membership: "existing"` before `keep` or reseeding and
 reads distinct Northwind and Contoso values at the same order ID without an
-explicit `environment.createStorageStructures()` call. It also checks changed
+explicit `application.createStorageStructures()` call. It also checks changed
 membership/routing and unreachable tenant storage before listener startup. The
 Datastore emulator test reads distinct values at one ID in the two tenant
 namespaces. The provider load commands exercise real command, query, and

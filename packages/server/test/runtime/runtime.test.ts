@@ -231,7 +231,7 @@ describe("SingleProcessServerRuntime", () => {
 
   it("ends admitted-work authority when a detached async callback outlives its work", async () => {
     const runtime = new SingleProcessServerRuntime();
-    const environment = ServerEnvironment.instance();
+    const environment = ServerEnvironment.newBuilder().build();
     runtimeAccess.bindFrameworkEnvironment(runtime, environment);
     const escaped = Promise.withResolvers<undefined>();
     let later!: Promise<boolean>;
@@ -245,6 +245,7 @@ describe("SingleProcessServerRuntime", () => {
 
     await expect(later).resolves.toBe(false);
     await runtime.close();
+    await environment.close();
   });
 
   it("drains follow-up work appended while close is already draining", async () => {

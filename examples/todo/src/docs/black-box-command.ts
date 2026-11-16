@@ -18,7 +18,7 @@ import { BlackBox } from "@spine-event-engine/testing";
 import { CreateTaskSchema } from "../../generated/spine/examples/todo/task_commands_pb.js";
 import { createTodoContext } from "../todo-app.js";
 
-const box = await BlackBox.from(await createTodoContext());
+const box = await BlackBox.from(createTodoContext());
 try {
   const scope = box.asGuest();
   const acknowledgement = await scope.post(

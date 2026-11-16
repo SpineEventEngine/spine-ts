@@ -19,14 +19,13 @@ import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
 import { EventContextSchema, EventIdSchema, VersionSchema } from "@spine-event-engine/proto";
 import { AnyPacker, Identifiers } from "@spine-event-engine/core";
 import ts from "typescript";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   BuildHandlerAnalyzer,
   GeneratedRegistryWriter,
 } from "@spine-event-engine/proto-tools/testing";
-import { BoundedContext, ServerEnvironment } from "@spine-event-engine/server";
-import { ServerTests } from "@spine-event-engine/server/testing";
+import { Application, BoundedContext, ServerEnvironment } from "@spine-event-engine/server";
 import { expectWave13ContractToCompile } from "../integration/wave13-compile-contract.js";
 import {
   createWave13OriginRegistry,
@@ -36,18 +35,23 @@ import {
 import { ReviewTaskAssignedSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
 describe("Wave 13 external receptor origin", () => {
-  beforeEach(async () => ServerEnvironment.instance().completeSetup());
-  afterEach(async () => ServerTests.resetEnvironment());
   it("RED-03 excludes imported events from a domestic receptor", async () => {
     const registry = createWave13OriginRegistry();
     Wave13OriginProjection.reset();
-    const context = await BoundedContext.singleTenant("Red03MixedOrigin")
-      .add(Wave13OriginProjection, { eventRouting: wave13OriginRouting })
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(
+        BoundedContext.singleTenant("Red03MixedOrigin").add(Wave13OriginProjection, {
+          eventRouting: wave13OriginRouting,
+        }),
+      )
       .build();
+    const [context] = application.contexts();
+    if (context === undefined) throw new Error("Expected the origin Bounded Context.");
     try {
       await context.eventBus().post(event(true));
     } finally {
-      await context.close();
+      await application.close();
       registry.clear();
     }
     expect(Wave13OriginProjection.domesticContexts).toEqual([]);
@@ -56,13 +60,20 @@ describe("Wave 13 external receptor origin", () => {
   it("RED-04 excludes domestic events from an external receptor", async () => {
     const registry = createWave13OriginRegistry();
     Wave13OriginProjection.reset();
-    const context = await BoundedContext.singleTenant("Red04MixedOrigin")
-      .add(Wave13OriginProjection, { eventRouting: wave13OriginRouting })
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(
+        BoundedContext.singleTenant("Red04MixedOrigin").add(Wave13OriginProjection, {
+          eventRouting: wave13OriginRouting,
+        }),
+      )
       .build();
+    const [context] = application.contexts();
+    if (context === undefined) throw new Error("Expected the origin Bounded Context.");
     try {
       await context.eventBus().post(event(false));
     } finally {
-      await context.close();
+      await application.close();
       registry.clear();
     }
     expect(Wave13OriginProjection.domesticContexts).toHaveLength(1);

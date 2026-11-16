@@ -24,12 +24,17 @@ import { QueryIdSchema, QuerySchema } from "@spine-event-engine/proto/client";
 import { QueryService } from "@spine-event-engine/proto/client";
 import { TopicIdSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
-import { ServerEnvironment, SignalMetadata } from "@spine-event-engine/server";
-import { ServerTests } from "@spine-event-engine/server/testing";
+import {
+  Application,
+  ApplicationBuilder,
+  ServerEnvironment,
+  SignalMetadata,
+} from "@spine-event-engine/server";
 import { existsSync } from "node:fs";
+import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { CreateProjectSchema } from "../generated/spine/examples/projects/commands_pb.js";
 import { ProjectSummarySchema } from "../generated/spine/examples/projects/read_models_pb.js";
@@ -43,8 +48,60 @@ import { TaskSchema } from "../generated/spine/examples/projects/entities_pb.js"
 const metadata = new SignalMetadata();
 
 describe("project-management load example", () => {
-  beforeEach(async () => ServerEnvironment.instance().completeSetup());
-  afterEach(async () => ServerTests.resetEnvironment());
+  it("closes its Application after the endpoint closes", async () => {
+    const { startProjectManagementServer } = await import("../dist/src/index.js");
+    const closeApplication = vi.spyOn(Application.prototype, "close");
+    const server = await startProjectManagementServer({ port: 0 });
+
+    await server.close();
+
+    expect(closeApplication).toHaveBeenCalledOnce();
+  });
+
+  it("closes its Application when the requested port is occupied", async () => {
+    const listener = createServer();
+    await new Promise<void>((resolve) => listener.listen(0, "127.0.0.1", resolve));
+    const address = listener.address();
+    if (address === null || typeof address === "string") throw new Error("Expected TCP port.");
+    const { startProjectManagementServer } = await import("../dist/src/index.js");
+    const closeApplication = vi.spyOn(Application.prototype, "close");
+    closeApplication.mockClear();
+    try {
+      await expect(
+        startProjectManagementServer({ host: "127.0.0.1", port: address.port }),
+      ).rejects.toThrow();
+      expect(closeApplication).toHaveBeenCalledOnce();
+    } finally {
+      listener.close();
+      closeApplication.mockRestore();
+    }
+  });
+
+  it("retains environment storage when failed Application cleanup cannot finish", async () => {
+    const { startProjectManagementServer } = await import("../dist/src/index.js");
+    const buildFailure = new Error("Application build failed");
+    const cleanupFailure = new Error("partial Bounded Context close failed");
+    const build = vi
+      .spyOn(ApplicationBuilder.prototype, "build")
+      .mockRejectedValueOnce(buildFailure);
+    const closeBuilder = vi
+      .spyOn(ApplicationBuilder.prototype, "close")
+      .mockRejectedValueOnce(cleanupFailure);
+    const closeEnvironment = vi.spyOn(ServerEnvironment.prototype, "close");
+    closeEnvironment.mockClear();
+    try {
+      const failure = await startProjectManagementServer().catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toEqual([buildFailure, cleanupFailure]);
+      expect(closeBuilder).toHaveBeenCalledOnce();
+      expect(closeEnvironment).not.toHaveBeenCalled();
+    } finally {
+      build.mockRestore();
+      closeBuilder.mockRestore();
+      closeEnvironment.mockRestore();
+    }
+  });
+
   it("passes one shared weight service to restored TaskAssignment instances", async () => {
     const { createProjectManagementContext } = await import("../dist/src/index.js");
     let weightCalls = 0;
@@ -54,7 +111,12 @@ describe("project-management load example", () => {
         return 3;
       },
     };
-    const context = await createProjectManagementContext(weights);
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(createProjectManagementContext(weights))
+      .build();
+    const context = application.contexts()[0];
+    if (context === undefined) throw new Error("Expected a Bounded Context in the Application.");
     const taskId = "weighted-task";
     const actorContext = create(ActorContextSchema, {
       ...metadata.actorContext({ actor: create(UserIdSchema, { value: "weighted-user" }) }),
@@ -95,13 +157,18 @@ describe("project-management load example", () => {
         });
       });
     } finally {
-      await context.close();
+      await application.close();
     }
   });
 
   it("uses the default assignment weight for new and restored managers", async () => {
     const { createProjectManagementContext } = await import("../dist/src/index.js");
-    const context = await createProjectManagementContext();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(createProjectManagementContext())
+      .build();
+    const context = application.contexts()[0];
+    if (context === undefined) throw new Error("Expected a Bounded Context in the Application.");
     const taskId = "default-weight-task";
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "default-weight-user" }),
@@ -128,13 +195,18 @@ describe("project-management load example", () => {
         });
       });
     } finally {
-      await context.close();
+      await application.close();
     }
   });
 
   it("routes two task Events to the same project-keyed TaskList row", async () => {
     const { createProjectManagementContext } = await import("../dist/src/index.js");
-    const context = await createProjectManagementContext();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(createProjectManagementContext())
+      .build();
+    const context = application.contexts()[0];
+    if (context === undefined) throw new Error("Expected a Bounded Context in the Application.");
     const projectId = "shared-project";
     const actorContext = metadata.actorContext({
       actor: create(UserIdSchema, { value: "project-list-user" }),
@@ -159,7 +231,7 @@ describe("project-management load example", () => {
         context.stand().read(TaskListSchema, "shared-task-one"),
       ).resolves.toBeUndefined();
     } finally {
-      await context.close();
+      await application.close();
     }
   });
 
@@ -178,7 +250,12 @@ describe("project-management load example", () => {
     expect(new Set(projectManagementTopology.projections.map((entry) => entry.event))).toEqual(
       new Set(["ProjectCreated", "TaskCreated", "PersonEnrolled"]),
     );
-    const context = await createProjectManagementContext();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(ServerEnvironment.newBuilder().build())
+      .add(createProjectManagementContext())
+      .build();
+    const context = application.contexts()[0];
+    if (context === undefined) throw new Error("Expected a Bounded Context in the Application.");
     try {
       const repositories = context.registeredRepositories();
       expect(repositories).toHaveLength(33);
@@ -192,7 +269,7 @@ describe("project-management load example", () => {
         repositories.filter((repository) => repository.entityFamily === "process-manager"),
       ).toHaveLength(10);
     } finally {
-      await context.close();
+      await application.close();
     }
   });
 
