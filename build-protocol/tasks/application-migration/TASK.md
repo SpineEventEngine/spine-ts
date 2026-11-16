@@ -309,3 +309,27 @@ focused LCOV confirms all equal-second comparison branches execute. The complete
 affected preflight passes, and the retained reliability reviewer accepts the
 correction. Production behavior, thresholds and exclusions are unchanged. Final
 remote acceptance is the Build workflow on this branch after this correction.
+
+### CI rerun isolation
+
+The 2026-11-16 rerun of Build 43483108388 fails 26 release-tool tests because
+they inherit GitHub's rerun attempt instead of establishing their simulated
+publication attempt. This is a standard, test-only correction in the existing
+worktree. Acceptance: the three affected suites pass with an inherited rerun
+attempt, explicit recovery scenarios still exercise later attempts, and actual
+publication safeguards remain unchanged. Final acceptance requires green CI.
+
+The implementer assignment uses explicit gpt-6-sol / medium for the three
+release test files. The performance/reliability reviewer uses explicit
+gpt-6-sol / medium to check isolation, environment restoration, and unchanged
+publication safeguards after focused preflight. Desktop supports these explicit
+profiles; actual runtime metadata is unavailable. Style is checked mechanically
+and in the focused review. Public API/docs and final security review are not
+reopened because no production contract, behavior, or dependency changes.
+
+Each affected test now starts with a simulated attempt 1 and no run ID, then
+restores the inherited values. All 68 tests pass with those variables unset and
+with inherited attempts 2 and 3. Focused formatting/lint, tooling typechecks,
+and documentation checks pass; independent reliability review has no findings.
+The existing Build workflow runs full release verification and the publication
+trial for the pushed correction; no real publication is performed by these tests.

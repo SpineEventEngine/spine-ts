@@ -4,7 +4,7 @@ import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTrialServices, withProcessGuard } from "./release-trial.mjs";
 import { executeRelease } from "./release-cli.mjs";
@@ -22,6 +22,13 @@ const release = {
   version: entry.version,
   packages: [entry],
 };
+
+beforeEach(() => {
+  vi.stubEnv("GITHUB_RUN_ATTEMPT", "1");
+  vi.stubEnv("GITHUB_RUN_ID", undefined);
+});
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("offline release trial boundaries", () => {
   it("blocks the real npm subprocess when the injected spawn is ignored", async () => {
