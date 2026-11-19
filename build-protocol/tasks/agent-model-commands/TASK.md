@@ -156,7 +156,9 @@ is not a model mismatch. Subagents may not spawn subagents.
 
 - Architecture pass: requirements_splitter, gpt-6-astra/high, fresh context.
   Scope: implementation seams, provider load/commit feasibility, ordered slices,
-  relevant JVM comparison. Read-only; pending dispatch/result.
+  relevant JVM comparison. Completed read-only; explicit model/reasoning fields
+  confirmed. Runtime self-introspection not exposed; immutable configured
+  requirements_splitter profile is Astra/high. No human design blocker.
 - Implementation slice 1: implementer, gpt-6-sol/medium, fresh context.
   Scope: language-neutral Agent Proto namespace, existing timestamp corrections,
   new model Command/Event/rejection/identity contracts, generated exports and
@@ -170,6 +172,54 @@ is not a model mismatch. Subagents may not spawn subagents.
 ## Current status
 
 Requirements recorded. Official master fetched and already contained by this
-branch. Architecture pass and implementation remain. No unresolved human design
-question; any implementation discovery must preserve the accepted contract or
-be raised with concrete evidence.
+branch. Architecture pass accepted; slice 1 implementation is active. No
+unresolved human design question; implementation discoveries must preserve the
+accepted contract or be raised with concrete evidence.
+
+## Implementation seams
+
+JVM comparison used the official research checkout at
+`04ba1bedc3f8db3c8c58b987f9795f952f14c0ab`: AbstractAssignee invokes ordinary
+receptors and handles outcomes; LiveDeliveryStation dispatches before marking
+delivery complete. Detached asynchronous lifecycle and Agent model Commands are
+new APIs, not claimed JVM equivalents.
+
+- AsyncCommandHandler subclasses AbstractAssignee and reuses @Assign and
+  addAssignee metadata. Extend build-time-handler-analyzer recognition; Promise
+  results already have generated support. The standalone runtime tracks method
+  and all publication attempts; existing SignalPublisher logs contained errors,
+  so settlement never establishes delivery.
+- Extend Bounded Context drain coordination, retaining recipients and accepted
+  internal follow-ups until the work reaches stability. Current beginClose
+  removes recipients and aborts Agent work too early. Cover direct and
+  Server/Application-coordinated close. Detach asynchronous invocations with the
+  existing withoutDeliveryCommitFence seam to avoid inherited shard state.
+- Replace readAgentPreferences with combined current/attributes retrieval.
+  SQL uses independently resolved current/attributes identities in one seeded
+  join or tagged UNION statement. Datastore uses one transactional batch lookup
+  and identifies returned records by their native identities, including absence.
+  Memory uses the shared Agent mutation coordination. Reuse commitAgent atomic
+  writes, comparing both loaded Version and complete attributes, including
+  absence versus an empty record.
+- Agent repository loading must bypass the old sequential ProcessManager load
+  plus preferences read, reuse Entity restoration/history binding, and preserve
+  normal Stand queries and access checks.
+- Index prepared requests through existing immutable history identities: a
+  request category with call ID as stable record ID. Existing Agent scope plus
+  that ID enables exact primary-record lookup without another store or history
+  scan. Add memory direct lookup and extend history categories/order.
+- Replace admitAgent/reservation/receipt/post-ack execution with an awaited
+  ordinary Agent reception. Delete special startAgent lease renewal and session
+  callbacks. Keep shared ordinary Delivery commit fencing.
+- Reuse AgentLiveAiRuntime: its dependencies are registry, policy, scope,
+  selection, budget, audit, and cancellation rather than an Agent instance.
+  Add an internal admitted-operation entry accepting the transported operation
+  ID, while preserving direct invocation validation and behavior. The standalone
+  model handler creates its own audit resources and never captures the requesting
+  Agent or shard session.
+
+Provider test services are isolated containers named spine-agent-model-pg,
+spine-agent-model-mysql, and spine-agent-model-datastore. Local connection setup
+is outside Git in /tmp/agent-model-provider-env.sh. Provider acceptance must
+exercise missing-record combinations, combined-read counts, concurrent commits,
+attributes-only conflicts, atomic rollback, and tenant/type/ID isolation.
