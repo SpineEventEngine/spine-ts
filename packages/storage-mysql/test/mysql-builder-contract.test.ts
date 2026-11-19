@@ -167,10 +167,7 @@ describe("MysqlStorageFactory builder contract", () => {
     const factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: "mysql://db.example/agent_check" })
       .build();
-    const layout = supportAgentInput() as unknown as EntityStorageInput<
-      SupportReplyAgentId,
-      SupportReplyAgentState
-    >;
+    const layout = supportAgentInput();
     const preparation = StoragePreparations.for(factory);
     try {
       await expect(preparation.prepareAgentCommit(layout, "check")).rejects.toMatchObject({

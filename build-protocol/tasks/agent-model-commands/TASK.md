@@ -317,14 +317,16 @@ is not a model mismatch. Subagents may not spawn subagents.
   request/history/provider work. Focused behavior, build/tooling, documentation,
   Proto, lint and formatting checks passed. Other canonical concerns were
   accepted or clean on inspection, including security. No previous review outputs
-  were supplied. A bounded follow-up checks these corrections within this round.
+  were supplied. The bounded follow-up confirmed both fixes at `9500f32ad`, including
+  domain-correct fixtures and storage errors remaining outside output-failure
+  classification. No relevant issue remains.
 
 ## Current status
 
 Architecture, implementation slices 1–5, and required version metadata are
 complete. Common workspace version is `2.0.0-snapshot.32`. All three fresh
-Astra/high reviews and their corrections are complete; bounded confirmation of
-the third round's fixes is pending.
+Astra/high reviews and their corrections are complete, including bounded
+confirmation of the final fixes.
 Shared-runtime release verification follows convergence. The selected profile is
 `verify:release` because Delivery, Bounded Context shutdown, storage providers,
 public protocol, and model execution change together. No unresolved human design
@@ -336,7 +338,15 @@ Returned model Commands have detached metadata, with a regression proving a
 changed discarded request cannot alter later trusted construction. Generation,
 production build, package imports/assets/links, and current-output consistency
 checks passed. Round 1's six and round 2's five accepted corrections are complete.
-Bounded confirmation of round 3's corrections and the full release gate remain.
+Round 3's corrections are also confirmed. Live PostgreSQL, MySQL, MariaDB and
+Datastore Agent history, paired storage/commit, and interruption checks passed.
+The full release gate passed production/tooling/web builds, then stopped on
+five unnecessary assertions in provider tests. The same Sol/medium implementer
+removed them; affected live tests, tooling types, lint and formatting passed.
+Repository-wide preflight passed, including full ESLint, formatting, generated
+consistency, documentation and package checks. The release profile is repeated
+after this mechanical correction, which changes no production behavior and needs
+no new review.
 
 ## Implementation seams
 

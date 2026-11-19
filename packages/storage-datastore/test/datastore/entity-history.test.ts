@@ -425,10 +425,7 @@ describe("Datastore generated Entity records", () => {
       .setClient(backend.client() as never)
       .setStringifierRegistry(stringifiers)
       .build();
-    const layout = supportAgentInput() as unknown as EntityStorageInput<
-      SupportReplyAgentId,
-      SupportReplyAgentState
-    >;
+    const layout = supportAgentInput();
     const commits = EntityCommitStorageFactories.create(provider, layout);
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-atomic" });
     const preference = create(ModelPreferenceSchema, {
@@ -549,10 +546,7 @@ describe("Datastore generated Entity records", () => {
       .setClient(backend.client() as never)
       .setStringifierRegistry(stringifiers)
       .build();
-    const layout = supportAgentInput() as unknown as EntityStorageInput<
-      SupportReplyAgentId,
-      SupportReplyAgentState
-    >;
+    const layout = supportAgentInput();
     const commits = EntityCommitStorageFactories.create(provider, layout);
     const current = provider.createRecordStorage(layout.context, layout.recordSpec);
     const history = AgentHistoryStorageFactories.create(provider, {

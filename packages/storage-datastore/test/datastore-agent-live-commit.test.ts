@@ -81,10 +81,7 @@ describe("Datastore Agent preparation without an emulator", () => {
         throw new Error("custom creator invoked");
       })
       .build();
-    const layout = entityInput() as unknown as EntityStorageInput<
-      SupportReplyAgentId,
-      SupportReplyAgentState
-    >;
+    const layout = entityInput();
     try {
       await expect(
         StoragePreparations.for(factory).prepareAgentCommit(layout, "create"),

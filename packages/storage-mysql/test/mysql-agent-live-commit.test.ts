@@ -53,10 +53,7 @@ describe("MySQL Agent preparation without a database", () => {
     const factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: "mysql://db.example/offline_agent_preparation" })
       .build();
-    const layout = entityInput() as unknown as EntityStorageInput<
-      SupportReplyAgentId,
-      SupportReplyAgentState
-    >;
+    const layout = entityInput();
     const commits = EntityCommitStorageFactories.create(factory, layout);
     const release = Promise.withResolvers<undefined>();
     const started = Promise.withResolvers<undefined>();
