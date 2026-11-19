@@ -361,8 +361,17 @@ listener gates snapshots; an explicit primary-listener snapshot proves unrelated
 requests remain unblocked. The regression failed with the old global gate and
 passed with the targeted gate. Repeated readiness tests, tooling typecheck,
 file-level lint, syntax, formatting and diff checks passed. No production API or
-timeout changes. Bounded confirmation by the existing third Astra/high reviewer
-and the full release profile follow.
+timeout changes. The existing third Astra/high reviewer confirmed the bounded
+correction at `a57acac11`, including shared Delivery state, survivor progress,
+replacement admission/rejoin, and both listeners' cleanup. Its independent
+readiness suite passed. The full release profile then passed all tests but
+missed the required branch coverage threshold. The same Sol/medium implementer
+added behavior tests for Agent attribute identity, detached records and conflict
+checks, exact model-request history scope and malformed records, UTF-8 history
+ordering, protected reads, and duplicate binding rejection. Focused tests,
+tooling types, affected lint/formatting, cleanup and diff checks passed. LCOV
+comparison covers the missing branches with a small margin. Thresholds and
+exclusions remain unchanged. A complete release run must confirm global coverage.
 
 ## Implementation seams
 

@@ -221,6 +221,8 @@ describe("Agent model Command construction", () => {
     );
     const release = ModelCommandBindings.bind(restoredAgent, session());
     expect(ModelCommandBindings.require(restoredAgent)).toBeDefined();
+    expect(() => ModelCommandBindings.bind(restoredAgent, session())).toThrow("already bound");
+    expect(ModelCommandBindings.require(restoredAgent)).toBeDefined();
     release();
     expect(() => ModelCommandBindings.require(restoredAgent)).toThrow(
       "only during an Agent handler",

@@ -177,6 +177,56 @@ describe("Agent history binding", () => {
     expect(redact).toHaveBeenCalledOnce();
   });
 
+  it("keeps exact model history reads bounded and rejects incomplete stored requests", async () => {
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-exact-boundary" });
+    const agent = new ReadingAgent({
+      id,
+      schema: SupportReplyAgentStateSchema,
+      state: create(SupportReplyAgentStateSchema, { id }),
+      version: create(VersionSchema),
+    });
+    await expect(agent.readRequest("exact-boundary")).rejects.toThrow(
+      "only from repository execution",
+    );
+    const original = modelRequest("exact-boundary", create(TimestampSchema, { seconds: 4n }));
+    let returned: AgentHistoryEntry | undefined;
+    const providerRead = vi.fn(() => Promise.resolve(returned));
+    const storage: AgentHistoryStorage<SupportReplyAgentId> = {
+      capacity: {},
+      append: () => Promise.resolve(),
+      appendAll: () => Promise.resolve(),
+      read: () => Promise.resolve({ entries: [], hasMore: false }),
+      readModelRequest: providerRead,
+      close: () => undefined,
+    };
+    const scope = {
+      context: "Support",
+      tenant: "null",
+      repository: SupportReplyAgentStateSchema.typeName,
+      entity: id.ticketNumber,
+    };
+    AgentHistoryReads.bind(agent, { storage, entityId: id, scope });
+    expect(await agent.readRequest("exact-boundary")).toBeUndefined();
+    returned = original;
+    AgentHistoryReads.bind(agent, { storage, entityId: id, scope, maxBytes: 1 });
+    await expect(agent.readRequest("exact-boundary")).rejects.toThrow("exceeds maxBytes");
+    AgentHistoryReads.bind(agent, { storage, entityId: id, scope });
+    returned = clone(AgentHistoryEntrySchema, original);
+    if (returned.item.case !== "modelRequest") throw new Error("Expected request history.");
+    returned.item.value.request = undefined;
+    await expect(agent.readRequest("exact-boundary")).rejects.toThrow("incomplete");
+    returned = clone(AgentHistoryEntrySchema, original);
+    if (returned.item.case !== "modelRequest") throw new Error("Expected request history.");
+    returned.item.value.source = { case: undefined };
+    await expect(agent.readRequest("exact-boundary")).rejects.toThrow("no triggering signal");
+    returned = create(AgentHistoryEntrySchema, {
+      whenOccurred: create(TimestampSchema, { seconds: 4n }),
+      item: { case: "domainEvent", value: create(EventSchema) },
+    });
+    await expect(agent.readRequest("exact-boundary")).rejects.toThrow("different history category");
+    expect(providerRead).toHaveBeenCalledTimes(5);
+  });
+
   it("requires repository history and returns an empty provider-backed page", async () => {
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-46" });
     const agent = new ReadingAgent({

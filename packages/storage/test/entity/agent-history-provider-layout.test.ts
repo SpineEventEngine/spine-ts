@@ -12,15 +12,34 @@
  * the License.
  */
 
-import { clone, toBinary } from "@bufbuild/protobuf";
-import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
+import { clone, create, toBinary } from "@bufbuild/protobuf";
+import { AnyPacker, SignalEnvelopes } from "@spine-event-engine/core";
+import { EventContextSchema } from "@spine-event-engine/proto";
+import {
+  AgentHistoryEntrySchema,
+  CallModelSchema,
+  ModelCallAbandonedRecordSchema,
+  ModelOutcomeHandledRecordSchema,
+  ModelRepliedSchema,
+} from "@spine-event-engine/proto/agent";
 import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import { describe, expect, it } from "vitest";
+// prettier-ignore
+import {
+  ProposedSupportReplySchema,
+} from "../../../server/test-fixtures/generated/entity-metadata/support_ai_types_pb.js";
 
 import { AgentHistoryKeys } from "../../src/entity/agent-history.js";
 import { AgentHistoryPages } from "../../src/entity/agent-history-provider-page.js";
 import { AgentHistoryRecords } from "../../src/entity/agent-history-record-spec.js";
-import { conversation, event, occurredAt, scope } from "./agent-history-fixtures.js";
+import {
+  conversation,
+  event,
+  modelRequest,
+  occurredAt,
+  scope,
+  submissionAttempt,
+} from "./agent-history-fixtures.js";
 
 const digest = (value: string): string => `digest:${value}`;
 const at = occurredAt(1_789_000_001n, 123_456_789);
@@ -66,6 +85,210 @@ describe("Agent history provider layout", () => {
     const valid = AgentHistoryRecords.record(scope.stateType, "ticket", entry);
     expect(() => AgentHistoryRecords.slot({ ...valid, scope: undefined })).toThrow();
     expect(() => AgentHistoryRecords.slot({ ...valid, entry: undefined })).toThrow();
+  });
+
+  it("rejects incomplete conversation and Event identities before provider indexing", () => {
+    const conversationEntry = conversation("record-id", "conversation-id", at);
+    if (conversationEntry.item.case !== "conversationRecord")
+      throw new Error("Expected conversation history.");
+    conversationEntry.item.value.conversation = undefined;
+    expect(() => AgentHistoryKeys.fromEntry(conversationEntry)).toThrow("ConversationId");
+
+    const missingRecordId = conversation("record-id", "conversation-id", at);
+    if (missingRecordId.item.case !== "conversationRecord")
+      throw new Error("Expected conversation history.");
+    missingRecordId.item.value.id = undefined;
+    expect(() => AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(missingRecordId))).toThrow(
+      "record ID",
+    );
+
+    const missingEventId = event("event-id", at, false);
+    if (missingEventId.item.case !== "domainEvent") throw new Error("Expected domain Event.");
+    missingEventId.item.value.id = undefined;
+    expect(() => AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(missingEventId))).toThrow(
+      "record ID",
+    );
+  });
+
+  it("uses exact request identity across Agent scopes and model history categories", () => {
+    const request = modelRequest("scoped-call", at);
+    const attempted = submissionAttempt("first-attempt", request, at);
+    const stored = AgentHistoryRecords.record(scope.stateType, "ticket", request);
+    expect(
+      AgentHistoryRecords.requestEntry(stored, scope.stateType, "ticket", "scoped-call"),
+    ).toEqual(request);
+    expect(AgentHistoryRecords.slot(stored)).toBe(
+      AgentHistoryRecords.requestSlot(scope.stateType, "ticket", "scoped-call"),
+    );
+    for (const [stateType, agentKey, callId] of [
+      ["", "ticket", "scoped-call"],
+      [scope.stateType, "", "scoped-call"],
+      [scope.stateType, "ticket", ""],
+    ] as const)
+      expect(() => AgentHistoryRecords.requestSlot(stateType, agentKey, callId)).toThrow(
+        "complete identity",
+      );
+    expect(() =>
+      AgentHistoryRecords.requestEntry(stored, scope.stateType, "other", "scoped-call"),
+    ).toThrow("identity conflict");
+    expect(() =>
+      AgentHistoryRecords.requestEntry(stored, "other.State", "ticket", "scoped-call"),
+    ).toThrow("identity conflict");
+    expect(() =>
+      AgentHistoryRecords.requestEntry(stored, scope.stateType, "ticket", "another-call"),
+    ).toThrow("identity conflict");
+    expect(materialized("category", request)).toBe("request");
+    expect(materialized("category", attempted)).toBe("attempt");
+    expect(materialized("conversation_key", request)).toBe("");
+    expect(materialized("conversation_key", attempted)).toBe("");
+  });
+
+  it("indexes handled replies and explicit abandonment without placing them in conversation history", () => {
+    const request = modelRequest("outcome-call", at);
+    if (request.item.case !== "modelRequest" || request.item.value.request?.message === undefined)
+      throw new Error("Expected a complete request fixture.");
+    const payload = AnyPacker.unpack(request.item.value.request.message, CallModelSchema);
+    const call = payload.call;
+    if (call?.id === undefined || call.conversation === undefined)
+      throw new Error("Expected complete model call metadata.");
+    const outcome = SignalEnvelopes.event({
+      schema: ModelRepliedSchema,
+      message: create(ModelRepliedSchema, {
+        call,
+        output: AnyPacker.pack(
+          ProposedSupportReplySchema,
+          create(ProposedSupportReplySchema, { replyText: "A reviewed answer." }),
+        ),
+        whenStarted: at,
+        whenCompleted: at,
+      }),
+      context: create(EventContextSchema, { timestamp: at }),
+    });
+    const handledRecord = create(ModelOutcomeHandledRecordSchema, {
+      id: "handled-1",
+      call: call.id,
+      conversation: call.conversation,
+      outcome,
+      whenHandled: at,
+    });
+    const handled = create(AgentHistoryEntrySchema, {
+      whenOccurred: at,
+      item: { case: "handledOutcome", value: handledRecord },
+    });
+    const source = request.item.value.source;
+    const abandonedRecord = create(ModelCallAbandonedRecordSchema, {
+      id: "abandoned-1",
+      call: call.id,
+      conversation: call.conversation,
+      whenAbandoned: at,
+      source,
+    });
+    const abandoned = create(AgentHistoryEntrySchema, {
+      whenOccurred: at,
+      item: { case: "abandonment", value: abandonedRecord },
+    });
+    expect(materialized("category", handled)).toBe("handled");
+    expect(materialized("category", abandoned)).toBe("abandoned");
+    expect(materialized("conversation_key", handled)).toBe("");
+    expect(materialized("conversation_key", abandoned)).toBe("");
+    expect(AgentHistoryKeys.fromEntry(handled).recordId).toBe("handled-1");
+    expect(AgentHistoryKeys.fromEntry(abandoned).recordId).toBe("abandoned-1");
+    expect(() =>
+      AgentHistoryKeys.fromEntry({
+        ...handled,
+        item: {
+          case: "handledOutcome",
+          value: { ...handledRecord, call: undefined },
+        },
+      }),
+    ).toThrow("call and conversation");
+    expect(() =>
+      AgentHistoryKeys.fromEntry({
+        ...handled,
+        item: {
+          case: "handledOutcome",
+          value: { ...handledRecord, outcome: undefined },
+        },
+      }),
+    ).toThrow("complete Event");
+    expect(() =>
+      AgentHistoryKeys.fromEntry({
+        ...abandoned,
+        item: {
+          case: "abandonment",
+          value: { ...abandonedRecord, source: { case: undefined } },
+        },
+      }),
+    ).toThrow("triggering signal");
+    expect(() =>
+      AgentHistoryKeys.fromEntry({ ...abandoned, whenOccurred: occurredAt(2n) }),
+    ).toThrow("wrapper time");
+    expect(() =>
+      AgentHistoryKeys.fromEntry({
+        ...handled,
+        item: {
+          case: "handledOutcome",
+          value: { ...handledRecord, conversation: undefined },
+        },
+      }),
+    ).toThrow("call and conversation");
+    expect(() =>
+      AgentHistoryKeys.fromEntry({
+        ...abandoned,
+        item: {
+          case: "abandonment",
+          value: { ...abandonedRecord, call: undefined },
+        },
+      }),
+    ).toThrow("call and conversation");
+  });
+
+  it("rejects malformed prepared requests and submission attempts before indexing", () => {
+    const request = modelRequest("guarded-call", at);
+    const absentCall = clone(AgentHistoryEntrySchema, request);
+    if (absentCall.item.case !== "modelRequest") throw new Error("Expected model request.");
+    absentCall.item.value.request = undefined;
+    expect(() => AgentHistoryKeys.fromEntry(absentCall)).toThrow("requires a CallModel Command");
+    const absentSource = clone(AgentHistoryEntrySchema, request);
+    if (absentSource.item.case !== "modelRequest") throw new Error("Expected model request.");
+    absentSource.item.value.source = { case: undefined };
+    expect(() => AgentHistoryKeys.fromEntry(absentSource)).toThrow("triggering signal");
+    const wrongRequestTime = clone(AgentHistoryEntrySchema, request);
+    wrongRequestTime.whenOccurred = occurredAt(2n);
+    expect(() => AgentHistoryKeys.fromEntry(wrongRequestTime)).toThrow("wrapper time");
+    const attempt = submissionAttempt("guarded-attempt", request, at);
+    const missingAttempt = clone(AgentHistoryEntrySchema, attempt);
+    if (missingAttempt.item.case !== "submissionAttempt") throw new Error("Expected attempt.");
+    missingAttempt.item.value.command = undefined;
+    expect(() => AgentHistoryKeys.fromEntry(missingAttempt)).toThrow(
+      "requires a CallModel Command",
+    );
+    const wrongAttemptTime = clone(AgentHistoryEntrySchema, attempt);
+    if (wrongAttemptTime.item.case !== "submissionAttempt") throw new Error("Expected attempt.");
+    wrongAttemptTime.item.value.whenAttempted = occurredAt(2n);
+    expect(() => AgentHistoryKeys.fromEntry(wrongAttemptTime)).toThrow("wrapper time");
+    const wrongSubmissionTime = clone(AgentHistoryEntrySchema, attempt);
+    if (wrongSubmissionTime.item.case !== "submissionAttempt") throw new Error("Expected attempt.");
+    const attemptedCommand = wrongSubmissionTime.item.value.command;
+    if (attemptedCommand?.message === undefined) throw new Error("Expected attempted Command.");
+    const attemptedPayload = AnyPacker.unpack(attemptedCommand.message, CallModelSchema);
+    attemptedPayload.whenSubmissionAttempted = occurredAt(2n);
+    attemptedCommand.message = AnyPacker.pack(CallModelSchema, attemptedPayload);
+    expect(() => AgentHistoryKeys.fromEntry(wrongSubmissionTime)).toThrow("wrapper time");
+  });
+
+  it("keeps non-ASCII record identities distinct and ordered in provider keys", () => {
+    const first = event("résumé", at, false);
+    const second = event("resume", at, false);
+    const firstKey = AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(first));
+    const secondKey = AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(second));
+    expect(firstKey).not.toBe(secondKey);
+    expect(
+      AgentHistoryKeys.compare(
+        AgentHistoryKeys.fromEntry(first),
+        AgentHistoryKeys.fromEntry(second),
+      ),
+    ).toBe(Math.sign(firstKey.localeCompare(secondKey, "en")));
   });
 });
 
