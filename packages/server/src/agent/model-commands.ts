@@ -179,8 +179,9 @@ export class ModelCommandSession implements AgentModelCommands {
       definition.definition.kind === "generation" ? AiModelKind.GENERATION : AiModelKind.DECISION;
     const selected = this.input.selected.get(kind);
     if (selected === undefined) throw new Error("Model Command has no selected deployment.");
+    const id = randomUUID();
     const call = create(ModelCallSchema, {
-      id: create(AiOperationIdSchema, { value: randomUUID() }),
+      id: create(AiOperationIdSchema, { value: id }),
       replyContext: create(BoundedContextNameSchema, { value: this.input.replyContext }),
       ...(this.input.tenant === undefined ? {} : { tenant: this.input.tenant }),
       agent: this.input.agent,
@@ -195,8 +196,6 @@ export class ModelCommandSession implements AgentModelCommands {
       model: selected.model,
       input: AnyPacker.pack(definition.definition.input, request.input),
     });
-    const id = call.id?.value;
-    if (id === undefined) throw new Error("Model Command call ID is absent.");
     this.#created.set(id, clone(CallModelSchema, command));
     return command;
   }
@@ -223,9 +222,12 @@ export class ModelCommandSession implements AgentModelCommands {
   returned(value: CallModel): ModelCall {
     const id = value.call?.id?.value;
     const constructed = id === undefined ? undefined : this.#created.get(id);
-    if (constructed === undefined || !equals(CallModelSchema, value, constructed))
+    if (
+      constructed === undefined ||
+      value.call === undefined ||
+      !equals(CallModelSchema, value, constructed)
+    )
       throw new TypeError("Returned CallModel was not constructed by this Agent turn.");
-    if (value.call === undefined) throw new TypeError("Returned CallModel has no call metadata.");
     return clone(ModelCallSchema, value.call);
   }
 

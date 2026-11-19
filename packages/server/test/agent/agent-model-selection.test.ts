@@ -169,6 +169,39 @@ function connectSelected(
 }
 
 describe("Agent model authorization scope", () => {
+  it("keeps absent selection distinct from a resolver exception", async () => {
+    const { registry } = selectionRegistry(() => true, undefined, false);
+    const source = AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema));
+    const args = [
+      registry,
+      { models: [proposal] },
+      supportScope(),
+      [],
+      new AbortController().signal,
+      Time.currentTimeMillis() + 1000,
+      "generation",
+      source,
+    ] as const;
+    await expect(AgentModelSelection.selectOptionalLiveKind(...args)).resolves.toBeUndefined();
+    await expect(
+      AgentModelSelection.selectOptionalLiveKind(
+        registry,
+        {
+          models: [proposal],
+          resolveModel: () => {
+            throw new TypeError("generation has no deployment default");
+          },
+        },
+        supportScope(),
+        [],
+        new AbortController().signal,
+        Time.currentTimeMillis() + 1000,
+        "generation",
+        source,
+      ),
+    ).rejects.toThrow("generation has no deployment default");
+  });
+
   it("selects a live model from the original typed signal and committed preference", async () => {
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-live-selection" });
     const command = create(CommandSchema, {

@@ -50,7 +50,7 @@ import {
   ReleaseTitleSchema,
   RepositorySelectionIdSchema,
 } from "../generated/spine/examples/releasenotes/types_pb.js";
-import { historyAge, historyRecord } from "../src/studio-history-record.js";
+import { historyAge, historyKey, historyMerge, historyRecord } from "../src/studio-history-record.js";
 import { HistoryDrawer } from "../src/studio-history-view.js";
 
 const object = (value: unknown): Record<string, unknown> => {
@@ -58,6 +58,52 @@ const object = (value: unknown): Record<string, unknown> => {
     throw new Error("Expected serialized Protobuf object");
   return value as Record<string, unknown>;
 };
+
+test("prepared, attempted, handled, and abandoned model calls have distinct timeline records", () => {
+  const call = {
+    id: { value: "call-7" },
+    capability: { value: "draft-release-notes" },
+    capabilityRevision: { value: "1" },
+    conversation: { value: "release-7" },
+  };
+  const command = {
+    id: { uuid: "command-7" },
+    message: { "@type": "type.spine.io/spine.agent.CallModel", call },
+  };
+  const source = {
+    id: { value: "source-7" },
+    message: { "@type": "type.spine.examples.releasenotes.ReleaseGenerationRequested" },
+  };
+  const entries = [
+    { occurredAt: "2026-10-14T12:01:00Z", modelRequest: { request: command, event: source } },
+    { occurredAt: "2026-10-14T12:02:00Z", submissionAttempt: { id: "attempt-7", command } },
+    { occurredAt: "2026-10-14T12:03:00Z", handledOutcome: {
+      id: "handled-7", call: call.id, conversation: call.conversation,
+      outcome: { message: { "@type": "type.spine.io/spine.agent.ModelReplied" } },
+    } },
+    { occurredAt: "2026-10-14T12:04:00Z", abandonment: {
+      id: "abandoned-7", call: call.id, conversation: call.conversation, event: source,
+    } },
+  ];
+  expect(entries.map(historyKey)).toEqual([
+    "request:command-7", "submissionAttempt:attempt-7", "handledOutcome:handled-7",
+    "abandonment:abandoned-7",
+  ]);
+  expect(historyMerge(entries, entries)).toHaveLength(4);
+  expect(entries.map((entry) => historyRecord(entry).title)).toEqual([
+    "Model request prepared", "Model submission attempted", "Model reply handled",
+    "Model call abandoned",
+  ]);
+  expect(historyRecord(entries[0]).exact).toContain("ReleaseGenerationRequested");
+  expect(historyRecord(entries[1]).preview).toContain("draft-release-notes@1");
+  expect(historyRecord(entries[2]).preview).toContain("call-7");
+  expect(historyRecord(entries[3]).detail).toContain("source-7");
+  const rejected = { handledOutcome: {
+    id: "handled-8", call: call.id, conversation: call.conversation,
+    outcome: { message: { "@type": "type.spine.io/spine.agent.ModelCallFailed" } },
+  } };
+  expect(historyRecord(rejected).title).toBe("Model failure handled");
+});
 const id = create(ReleaseDraftIdSchema, { value: "draft" });
 const title = create(ReleaseTitleSchema, { value: "October release" });
 const comparison = create(ReleaseComparisonSchema, {

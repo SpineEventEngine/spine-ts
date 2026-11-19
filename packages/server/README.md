@@ -295,80 +295,77 @@ Declare the Agent ID and state in Proto, with `option (entity).kind = ENTITY;`
 on the state. The [Support example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md) includes
 complete [domain Protos](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/proto/spine/examples/support/states.proto),
 [a model definition](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/model.ts), and
-[an Agent implementation](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts).
+[an Agent implementation](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/support-domain.ts).
 
-The handler invokes a typed model operation, updates its draft only on success,
-and emits a domain outcome. This abbreviated declaration uses the example's
-actual generated messages:
+The Agent prepares a typed model Command and saves the current facts. Its separate
+`@React` handlers receive a typed reply or failure after the provider finishes.
+This short form uses the actual generated messages:
 
 <!-- prettier-ignore-start -->
 
-<!-- docs-snippet-path: examples/support/src/index.ts -->
+<!-- docs-snippet-path: examples/support/src/support-domain.ts -->
 
 ```ts
-import { create } from "@bufbuild/protobuf";
-import { Agent, Assign } from "@spine-event-engine/server";
+import { equals } from "@bufbuild/protobuf";
+import type { CallModel } from "@spine-event-engine/proto/generated/spine/agent/commands_pb.js";
+import { Agent, Command } from "@spine-event-engine/server";
 import type { DraftSupportReply } from "../generated/spine/examples/support/commands_pb.js";
-import {
-    SupportReplySuggestedSchema,
-    SupportReplyFailedSchema,
-    type SupportReplySuggested,
-    type SupportReplyFailed,
-} from "../generated/spine/examples/support/events_pb.js";
 import { SupportDraftStateSchema } from "../generated/spine/examples/support/states_pb.js";
-import type { SupportTicketId } from "../generated/spine/examples/support/types_pb.js";
+import { SupportRequestSchema, type SupportTicketId } from
+    "../generated/spine/examples/support/types_pb.js";
 import { draftSupportReply } from "./model.js";
 
-/** Proposes support replies for a person's review. */
+/**
+ * Prepares reviewable support replies for a ticket.
+ */
 class SupportDraftAgent extends Agent<SupportTicketId, typeof SupportDraftStateSchema> {
     /**
-     * Drafts a reply from the submitted ticket facts.
+     * Prepares one model Command from current ticket facts.
      *
-     * @param command Ticket facts and an explicit conversation.
-     * @returns The proposed reply or a recorded failure outcome.
+     * @param command Ticket facts and conversation identity.
+     * @returns Model Command submitted after this Agent saves.
      */
-    @Assign
-    async draft(command: DraftSupportReply): Promise<SupportReplySuggested | SupportReplyFailed> {
+    @Command draft(command: DraftSupportReply): CallModel {
         if (command.conversation === undefined || command.request === undefined)
             throw new TypeError("A draft requires ticket facts and a conversation.");
-        const result = await this.ai.invoke(draftSupportReply, {
-            call: "draft-support-reply",
-            conversation: command.conversation,
+        const request = command.request;
+        const conversation = command.conversation;
+        this.update((state) => {
+            const changed = state.request === undefined ||
+                !equals(SupportRequestSchema, state.request, request) ||
+                state.conversation?.value !== conversation.value;
+            state.id = this.id;
+            state.request = request;
+            if (changed) state.reply = undefined;
+            state.conversation = conversation;
+        });
+        return this.modelCommands.create(draftSupportReply, {
+            conversation,
             input: command,
         });
-        const outcome = {
-            id: this.id,
-            request: command.request,
-            conversation: command.conversation,
-            operation: result.operationId,
-        };
-        if (!result.ok) return create(SupportReplyFailedSchema, outcome);
-        this.update((state) =>
-            Object.assign(state, {
-                id: this.id,
-                request: command.request,
-                conversation: command.conversation,
-                reply: result.value,
-            }),
-        );
-        return create(SupportReplySuggestedSchema, { ...outcome, reply: result.value });
     }
 }
 ```
 
 <!-- prettier-ignore-end -->
 
+The [complete Agent](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/support-domain.ts)
+uses `modelCallHistory(callId)` in its reply and failure handlers to recover the
+original request. It compares that request with current facts before emitting a
+reviewable domain Event. A result for replaced facts cannot overwrite the new draft.
+
 Configure the registry outside the Entity. The Bounded Context requires persisted System
 Events, and the Agent registration supplies its permitted capabilities. The
-[example Bounded Context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
+[example Bounded Context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/support-domain.ts)
 assembles these settings with generated passive handler metadata. Supply the AI registry
 through `ServerEnvironment.newBuilder().under(type, (configuration) => configuration.use({ ai: registry }))`
 as a default, or
 `BoundedContextBuilder.withAi(registry)` for one Bounded Context.
 
-Posting a Command awaits acceptance. Model work and the resulting domain Event
-arrive asynchronously afterward. The handling operation can await a model without
-keeping a database transaction open. See the [Agent execution reference](REFERENCE.md#agent-execution)
+Posting waits for Inbox reception and scheduling. Delivery marks an Agent input
+`DELIVERED` after its handler and save finish. The model work and resulting
+domain Event arrive afterward. Direct `ai.invoke()` can still be awaited inside
+a handler without keeping a database transaction open. See the [Agent execution reference](REFERENCE.md#agent-execution)
 for defaults and retained history.
 
 ## Native lifecycle and routing

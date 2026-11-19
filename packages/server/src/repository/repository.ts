@@ -5308,7 +5308,7 @@ class AgentLiveRunner {
     const selected = new Map<AiModelKind, AgentLiveModel>();
     for (const kind of ["generation", "decision"] as const) {
       if (!configuration.models.some((model) => model.definition.kind === kind)) continue;
-      const value = await AgentModelSelection.selectLiveKind(
+      const value = await AgentModelSelection.selectOptionalLiveKind(
         ai,
         configuration,
         scope,
@@ -5318,7 +5318,7 @@ class AgentLiveRunner {
         kind,
         this.invocation.source.value.message,
       );
-      selected.set(value.kind, value);
+      if (value !== undefined) selected.set(value.kind, value);
     }
     return selected;
   }
@@ -6101,6 +6101,11 @@ interface AdmittedModelCommand {
 }
 
 /**
+ * Rejects a transported model Command that differs from its saved request.
+ */
+class ModelRequestCorrelationError extends TypeError {}
+
+/**
  * Executes framework model Commands through the ordinary asynchronous assignee runtime.
  */
 export class AgentModelCommandHandler extends AsyncCommandHandler {
@@ -6247,7 +6252,8 @@ export class AgentModelCommandHandler extends AsyncCommandHandler {
       execution = await this.createExecution(admitted, model, call, limits, deadlineEpochMs);
       return await this.runExecution(execution, admitted, call, whenStarted);
     } catch (error) {
-      if (RejectionThrowable.is(error)) throw error;
+      if (error instanceof ModelRequestCorrelationError || RejectionThrowable.is(error))
+        throw error;
       throw RejectionThrowable.create(ModelCallFailedSchema, {
         call,
         reason: error instanceof AgentLiveFault ? error.reason : "UNAVAILABLE",
@@ -6309,7 +6315,7 @@ export class AgentModelCommandHandler extends AsyncCommandHandler {
     limits: AiInvocationLimits,
     deadlineEpochMs: number | undefined,
   ): Promise<AgentLiveAiRuntime> {
-    const { source, metadata, scope } = this.executionScope(admitted, call);
+    const { source, metadata, scope } = await this.executionScope(admitted, call);
     const signal = new AbortController().signal;
     const selected = await this.selectedModel(admitted, model, scope, signal, deadlineEpochMs);
     const audit = this.executionAudit(admitted, source, metadata);
@@ -6327,17 +6333,17 @@ export class AgentModelCommandHandler extends AsyncCommandHandler {
   }
 
   /**
-   * Captures the original Command, Agent, actor, and tenant for authorization.
+   * Captures the original request signal, Agent, actor, and tenant for authorization.
    *
    * @param admitted Bound Command and Agent repository.
    * @param call Transported call metadata.
    * @returns Original invocation, metadata service, and authorization scope.
    */
-  private executionScope(admitted: AdmittedModelCommand, call: ModelCall) {
+  private async executionScope(admitted: AdmittedModelCommand, call: ModelCall) {
     const packedId = call.agent?.entityId;
     if (packedId === undefined) throw new TypeError("Model Command Agent ID is absent.");
     const source: AgentLiveInvocation = {
-      source: { case: "command", value: admitted.command },
+      source: await this.originalSource(admitted, call),
       recipientId: clone(AnySchema, packedId),
       stateType: admitted.repository.stateSchema.typeName,
     };
@@ -6349,6 +6355,82 @@ export class AgentModelCommandHandler extends AsyncCommandHandler {
       admitted.tenantId,
     );
     return { source, metadata, scope };
+  }
+
+  /**
+   * Reads the saved request's exact triggering signal for model and tool policy.
+   *
+   * @param admitted Command and repository admitted by the Command Bus.
+   * @param call Trusted model call identity.
+   * @returns Original Agent signal, or the admitted Command if no request was saved.
+   */
+  private async originalSource(
+    admitted: AdmittedModelCommand,
+    call: ModelCall,
+  ): Promise<AgentLiveInvocation["source"]> {
+    const runtime = repositoryRuntimes.get(admitted.repository);
+    if (runtime === undefined) throw new Error("Model Command Agent repository is inactive.");
+    const input = RepositoryStorage.entityStorageInput(
+      admitted.repository,
+      RepositoryTenants.storageContextForTenant(runtime.context, admitted.tenantId),
+    );
+    const history = RepositoryStorage.openRepositoryAgentHistory(
+      admitted.repository,
+      runtime.storageFactory,
+      input,
+    );
+    const entry = await history.readModelRequest(admitted.entityId, call.id?.value ?? "");
+    if (entry === undefined) return { case: "command", value: admitted.command };
+    if (entry.item.case !== "modelRequest")
+      throw new ModelRequestCorrelationError(
+        "Model request history returned a different category.",
+      );
+    const record = entry.item.value;
+    if (
+      !this.matchesSavedRequest(admitted.command, record.request, call) ||
+      record.source.case === undefined
+    )
+      throw new ModelRequestCorrelationError(
+        "Admitted model Command differs from its saved request.",
+      );
+    return record.source.case === "command"
+      ? { case: "command", value: clone(CommandSchema, record.source.value) }
+      : { case: "event", value: clone(EventSchema, record.source.value) };
+  }
+
+  /**
+   * Compares a submitted Command with its saved prepared envelope.
+   *
+   * @param submittedCommand Admitted complete Command envelope.
+   * @param request Saved prepared Command envelope.
+   * @param call Trusted call identity from admission.
+   * @returns Whether the envelopes differ only by the attempt timestamp.
+   */
+  private matchesSavedRequest(
+    submittedCommand: Command,
+    request: Command | undefined,
+    call: ModelCall,
+  ): boolean {
+    const submitted =
+      submittedCommand.message && AnyPacker.tryUnpack(submittedCommand.message, CallModelSchema);
+    const prepared = request?.message && AnyPacker.tryUnpack(request.message, CallModelSchema);
+    if (prepared !== undefined) prepared.whenSubmissionAttempted = undefined;
+    if (submitted !== undefined) submitted.whenSubmissionAttempted = undefined;
+    return (
+      submitted !== undefined &&
+      prepared !== undefined &&
+      request !== undefined &&
+      prepared.call?.id?.value === call.id?.value &&
+      equals(CallModelSchema, prepared, submitted) &&
+      equals(
+        CommandSchema,
+        create(CommandSchema, {
+          ...submittedCommand,
+          message: AnyPacker.pack(CallModelSchema, submitted),
+        }),
+        request,
+      )
+    );
   }
 
   /**

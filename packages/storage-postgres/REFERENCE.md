@@ -131,12 +131,11 @@ larger than the returned byte budget.
 
 Agent audit entries use the indexed tenant-scoped `agent_history` family above.
 `appendAll()` writes the complete immutable group in one PostgreSQL transaction.
-Live Agent completion uses `EntityCommitStorage.commitAgent()` to compare the
-exact Entity state image and model preferences, and to commit state, preference,
-and history changes atomically. A no-op or preference-only turn does not need a
-new Entity Version. The typed admission receipt is a separate record family;
-it is not a replayable execution record. No database transaction remains open
-while a model request runs. Factory shutdown drains admitted operations before
+Agent saves use `EntityCommitStorage.commitAgent()` to compare the
+exact Entity state and Agent attributes, then commit state, attributes,
+and history atomically. An attributes-only turn need not advance the
+Entity Version. A saved pending call does not replay execution after restart.
+No database transaction remains open while a model request runs. Factory shutdown drains admitted operations before
 closing their retained connections.
 
 ## Lifecycle and errors

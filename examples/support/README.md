@@ -18,9 +18,9 @@ Application ──posts──> OpenSupportTicket ──> SupportTicket Aggregate
                                SupportReview query state
 ```
 
-The Command acknowledgement means work was accepted; it is not the draft. The model call and later Event delivery happen asynchronously, so the client waits for the outcome Event or queries the Projection.
+Posting accepts the Command for processing. Delivery marks the Agent Inbox row `DELIVERED` after its handler and save finish. The model reply and later domain Event arrive afterward, so the client waits for the outcome Event or queries the Projection.
 
-## Run the example
+## Running the example
 
 From the repository root:
 
@@ -31,11 +31,11 @@ pnpm exec tsc -b examples/support
 pnpm exec vitest run examples/support/test/support-blackbox.test.ts
 ```
 
-The test uses `AiTestBackend` and needs no provider credential or paid model request. It covers a usable draft, malformed output, a blank reply corrected on a second attempt, and a later failed request that leaves the last usable draft available.
+The test uses `AiTestBackend` and needs no provider credential or paid model request. It covers a usable draft, malformed output, a blank reply corrected on a second attempt, changed facts that clear an earlier draft, and an out-of-order reply in the same conversation.
 
-## 1. Give the Agent a ticket ID and state
+## 1. Agent identity and state
 
-The Agent is a stateful Entity, separate from the ticket Aggregate. Both use the generated `SupportTicketId`, so a draft stays attached to its ticket. The Agent state holds the latest accepted reply; the review Projection exposes the outcome to a reader. In [states.proto](proto/spine/examples/support/states.proto):
+The Agent is a stateful Entity, separate from the ticket Aggregate. Both use the generated `SupportTicketId`, so a draft stays attached to its ticket. The Agent state holds the latest request and its matching reply; the review Projection exposes the outcome to a reader. In [states.proto](proto/spine/examples/support/states.proto):
 
 ```proto
 message SupportDraftState {
@@ -48,9 +48,9 @@ message SupportDraftState {
 }
 ```
 
-The separate conversation ID identifies which drafting conversation the request belongs to. A later request can continue it or start another. The [domain Protos](proto/spine/examples/support) also define distinct Command, Event, and reply messages.
+The separate conversation ID identifies the drafting conversation for the request. A later request can continue it or start another. The [domain Protos](proto/spine/examples/support) also define distinct Command, Event, and reply messages.
 
-## 2. Describe the model task
+## 2. Model operation definition
 
 `AiModel.define()` describes what the Agent asks for. The generated Command and reply schemas make the input and result typed. The example uses `prompt-and-validate`, so it parses and checks a model response locally before accepting a reply. This compact version shows the public API; [model.ts](src/model.ts) contains the full instructions and the application's text validation rules.
 
@@ -84,69 +84,59 @@ const draftSupportReply = AiModel.define({
 
 The application chooses its instructions and validation rules. Defining this task makes no model request and does not select a provider account. For provider setup, see the [adapter guide](../../packages/ai-vercel-ax/README.md).
 
-## 3. Invoke the task from the Agent
+## 3. Agent model Command
 
-The [Agent handler](src/index.ts) receives `DraftSupportReply`. It supplies the Command as typed input and the explicit conversation ID. A successful result updates the Agent's draft and emits `SupportReplySuggested`; a failed result emits `SupportReplyFailed` without overwriting a previous accepted draft.
+The [Agent handler](src/support-domain.ts) imports the definition from [model.ts](src/model.ts). It saves the current facts and returns a `CallModel` Command. The framework saves the prepared request and submits the Command after the Agent commit. The framework’s model handler runs the request asynchronously in the same process. `ModelReplied` or `ModelCallFailed` later reaches the same Agent through ordinary delivery.
 
 <!-- prettier-ignore-start -->
 
-<!-- docs-snippet-path: examples/support/src/index.ts -->
+<!-- docs-snippet-path: examples/support/src/support-domain.ts -->
 
 ```ts
-import { create } from "@bufbuild/protobuf";
-import { Agent, Assign } from "@spine-event-engine/server";
+import type { CallModel } from "@spine-event-engine/proto/generated/spine/agent/commands_pb.js";
+import { Agent, Command } from "@spine-event-engine/server";
 import type { DraftSupportReply } from "../generated/spine/examples/support/commands_pb.js";
-import {
-    SupportReplyFailedSchema,
-    SupportReplySuggestedSchema,
-    type SupportReplyFailed,
-    type SupportReplySuggested,
-} from "../generated/spine/examples/support/events_pb.js";
 import { SupportDraftStateSchema } from "../generated/spine/examples/support/states_pb.js";
-import type { SupportTicketId } from "../generated/spine/examples/support/types_pb.js";
+import { type SupportTicketId } from
+    "../generated/spine/examples/support/types_pb.js";
 import { draftSupportReply } from "./model.js";
 
+/**
+ * Prepares reviewable support replies for a ticket.
+ */
 class SupportDraftAgent extends Agent<SupportTicketId, typeof SupportDraftStateSchema> {
     /**
-     * Drafts a reply from the submitted ticket facts.
+     * Prepares a model Command from the latest ticket facts.
      *
-     * @param command Ticket facts and explicit conversation identity.
-     * @returns A reviewable proposal or the failed-request Event.
+     * @param command Current facts and conversation.
+     * @returns Model Command submitted after the Agent saves.
      */
-    @Assign
-    async draft(command: DraftSupportReply): Promise<SupportReplySuggested | SupportReplyFailed> {
+    @Command draft(command: DraftSupportReply): CallModel {
         if (command.conversation === undefined || command.request === undefined)
             throw new TypeError("A draft requires ticket facts and a conversation.");
-        const result = await this.ai.invoke(draftSupportReply, {
-            call: "draft-support-reply",
-            conversation: command.conversation,
-            input: command,
-        });
-        const outcome = {
-            id: this.id,
-            request: command.request,
-            conversation: command.conversation,
-            operation: result.operationId,
-        };
-        if (!result.ok) return create(SupportReplyFailedSchema, outcome);
+        const request = command.request;
+        const conversation = command.conversation;
         this.update((state) => {
             state.id = this.id;
-            state.request = command.request;
-            state.reply = result.value;
-            state.conversation = command.conversation;
+            state.request = request;
+            state.reply = undefined;
+            state.conversation = conversation;
         });
-        return create(SupportReplySuggestedSchema, { ...outcome, reply: result.value });
+        return this.modelCommands.create(draftSupportReply, {
+            conversation,
+            input: command,
+        });
     }
 }
 ```
 
 <!-- prettier-ignore-end -->
 
-The Agent emits a domain Event for the application. The framework records the model request and result separately, so a support person can inspect how a proposal was produced. The [SupportReview Projection](src/index.ts) handles the outcome Events and exposes the latest review state; it sends no message to the employee.
+The [complete Agent](src/support-domain.ts) handles the typed reply and rejection. Each handler calls `modelCallHistory(callId)` to read the exact triggering `DraftSupportReply` envelope, then checks its facts and conversation against the current Agent state. A late result for replaced facts cannot overwrite the newer draft. A valid reply emits `SupportReplySuggested`; a failure emits `SupportReplyFailed`. `SupportReview` exposes only the matching proposal for a person to inspect. No code sends a reply to the employee.
 
-## 4. Configure and test the full flow
+## 4. Bounded Context and BlackBox test
 
-The [context factory](src/index.ts) registers the ticket Aggregate, Agent, and review Projection with generated handler metadata. It also installs an `AiRegistry` and persists the Agent's System Events. In the BlackBox test, `AiTestBackend` supplies a controlled model deployment and a typed reply:
+The [Bounded Context factory](src/support-domain.ts) registers the ticket Aggregate, Agent, and review Projection with generated handler metadata. It also installs an `AiRegistry`, registers `draftSupportReply` in the Agent repository, and persists Agent System Events. The framework resolves the registered definition by Agent state type, name, and revision; application code does not create a model service. In the BlackBox test, `AiTestBackend` supplies a controlled model deployment and a typed reply:
 
 <!-- prettier-ignore-start -->
 
@@ -250,6 +240,6 @@ async function observeDraft(box: BlackBox, command: DraftSupportReply) {
 
 <!-- prettier-ignore-end -->
 
-The [complete BlackBox test](test/support-blackbox.test.ts) first posts `OpenSupportTicket`, then posts the draft Command, waits for `SupportReplySuggested`, checks the reply and conversation, and queries `SupportReview`. It also calls `BlackBox.readAgentHistory(SupportDraftAgent, ticketId, ...)` to inspect recorded interactions. A failed result produces `SupportReplyFailed`; the review state marks that request as failed while retaining any earlier usable draft.
+The [complete BlackBox test](test/support-blackbox.test.ts) first posts `OpenSupportTicket`, then posts the draft Command, waits for `SupportReplySuggested`, checks the reply and conversation, and queries `SupportReview`. It also calls `BlackBox.readAgentHistory(SupportDraftAgent, ticketId, ...)` to inspect recorded interactions. A failed result produces `SupportReplyFailed`; the review state marks that request as failed. A draft for replaced facts or another conversation is cleared.
 
 A model can still be wrong about facts it cannot verify. The proposal remains for a person to review before any reply is sent. The test's memory storage lasts only for its process; a deployed application chooses persistent storage if tickets, drafts, and history must survive restart. For exact Protobuf fields, deployment requirements, and history behavior, see the [coding-agent reference](REFERENCE.md).

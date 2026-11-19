@@ -87,6 +87,13 @@ const visibleText = (content: Fields | undefined): string[] => {
  */
 export const historyKey = (entry: unknown): string => {
   const item = fields(entry);
+  const request = fields(item?.modelRequest);
+  const preparedId = fields(fields(request?.request)?.id)?.uuid;
+  if (typeof preparedId === "string") return `request:${preparedId}`;
+  for (const category of ["submissionAttempt", "handledOutcome", "abandonment"]) {
+    const id = fields(item?.[category])?.id;
+    if (typeof id === "string") return `${category}:${id}`;
+  }
   const conversation = fields(item?.conversationRecord);
   const event = fields(item?.systemEvent ?? item?.domainEvent);
   const id = fields(conversation?.id ?? event?.id);
@@ -233,6 +240,134 @@ const recordText = (content: Fields | undefined, name: string): string => {
 };
 
 /**
+ * Reads a typed value from the JSON form of a model call.
+ *
+ * @param value Field containing a value wrapper.
+ * @returns Human-readable value when present.
+ */
+const wrappedValue = (value: unknown): string | undefined => {
+  const result = fields(value)?.value;
+  return typeof result === "string" ? result : undefined;
+};
+
+/**
+ * Names a model history entry from its recorded category and outcome.
+ *
+ * @param request Prepared request fields, when present.
+ * @param attempt Submission attempt fields, when present.
+ * @param handled Handled outcome fields, when present.
+ * @param outcomeType Saved outcome type URL, when present.
+ * @returns Timeline title for the model action.
+ */
+const modelHistoryTitle = (
+  request: Fields | undefined,
+  attempt: Fields | undefined,
+  handled: Fields | undefined,
+  outcomeType: unknown,
+): string => {
+  if (request) return "Model request prepared";
+  if (attempt) return "Model submission attempted";
+  if (!handled) return "Model call abandoned";
+  return typeof outcomeType === "string" && outcomeType.endsWith(".ModelCallFailed")
+    ? "Model failure handled"
+    : "Model reply handled";
+};
+
+/**
+ * Summarizes one model call for its history row.
+ *
+ * @param call Saved CallModel metadata, when present.
+ * @param handled Saved handled outcome, when present.
+ * @param abandonment Saved abandonment, when present.
+ * @returns Human-readable call, capability, and conversation.
+ */
+const modelHistorySummary = (
+  call: Fields | undefined,
+  handled: Fields | undefined,
+  abandonment: Fields | undefined,
+): string => {
+  const callId = wrappedValue(call?.id) ?? wrappedValue(handled?.call ?? abandonment?.call);
+  const conversation = wrappedValue(
+    call?.conversation ?? handled?.conversation ?? abandonment?.conversation,
+  );
+  const capability = wrappedValue(call?.capability);
+  const revision = wrappedValue(call?.capabilityRevision);
+  return [
+    callId ? `Call ${callId}` : "Model call",
+    capability ? `for ${capability}${revision ? `@${revision}` : ""}` : "",
+    conversation ? `in conversation ${conversation}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+};
+
+/**
+ * Formats the complete source, request, and outcome shown in history detail.
+ *
+ * @param summary Short model action summary.
+ * @param source Triggering Command or Event, when saved.
+ * @param payload Model Command payload, when saved.
+ * @param outcome Handled outcome envelope, when saved.
+ * @returns Readable complete history detail.
+ */
+const modelHistoryDetail = (
+  summary: string,
+  source: Fields | undefined,
+  payload: Fields | undefined,
+  outcome: Fields | undefined,
+): string => {
+  const sourceType = fields(source?.message)?.["@type"];
+  return [
+    summary,
+    typeof sourceType === "string"
+      ? `Triggered by ${sourceType.split(".").at(-1) ?? sourceType}`
+      : "",
+    payload ? JSON.stringify(readable(payload), null, 2) : "",
+    outcome ? JSON.stringify(readable(fields(outcome.message) ?? outcome), null, 2) : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+};
+
+/**
+ * Presents framework model history using its saved request and outcome envelopes.
+ *
+ * @param item Combined history entry fields.
+ * @param entry Original JSON record retained for detail.
+ * @returns Display record for a model action, when present.
+ */
+const modelHistoryRecord = (
+  item: Fields | undefined,
+  entry: unknown,
+): HistoryRecord | undefined => {
+  const request = fields(item?.modelRequest);
+  const attempt = fields(item?.submissionAttempt);
+  const handled = fields(item?.handledOutcome);
+  const abandonment = fields(item?.abandonment);
+  if (!request && !attempt && !handled && !abandonment) return undefined;
+  const command = fields(request?.request ?? attempt?.command);
+  const payload = fields(command?.message);
+  const call = fields(payload?.call);
+  const outcome = fields(handled?.outcome);
+  const outcomeType = fields(outcome?.message)?.["@type"];
+  const title = modelHistoryTitle(request, attempt, handled, outcomeType);
+  const summary = modelHistorySummary(call, handled, abandonment);
+  const source = fields(
+    request?.command ?? request?.event ?? abandonment?.command ?? abandonment?.event,
+  );
+  const exact = modelHistoryDetail(summary, source, payload, outcome);
+  return {
+    kind: "App",
+    speaker: "App",
+    title,
+    preview: summary,
+    exact,
+    detail: JSON.stringify(entry, null, 2),
+    occurredAt: typeof item?.occurredAt === "string" ? item.occurredAt : undefined,
+  };
+};
+
+/**
  * Human summary plus unchanged recorded fields for one audit entry.
  */
 export interface HistoryRecord {
@@ -280,6 +415,8 @@ export interface HistoryRecord {
  */
 export const historyRecord = (entry: unknown): HistoryRecord => {
   const item = fields(entry);
+  const model = modelHistoryRecord(item, entry);
+  if (model !== undefined) return model;
   const record = fields(item?.conversationRecord);
   const event = fields(item?.systemEvent ?? item?.domainEvent);
   const content = fields(record?.content);

@@ -8,10 +8,11 @@ includes an in-memory implementation for local development and tests. Use it
 when an application needs a small record store, or when an adapter needs to
 implement the same storage contract for a durable provider.
 
-Agents use the configured storage provider to retain typed admission receipts,
-Entity state, and recorded model interactions. The in-memory factory keeps
+Agents use the configured storage provider to retain Entity state, complete
+attributes, and recorded model interactions. The in-memory factory keeps
 these records only while the process runs; choose a database provider when the
-records must survive a restart. An interrupted handler does not resume from them.
+records must survive a restart. Saved pending calls are not automatically resubmitted after interruption. An
+original input still pending in the Inbox can redeliver and create a new call.
 Applications read an Agent's history through its repository, as shown in the
 [support example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md). Adapter implementation
 details are in the [coding-agent reference](REFERENCE.md#provider-spi).

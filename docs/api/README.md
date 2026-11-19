@@ -331,12 +331,11 @@ after every productive page. The 30-second Inbox
 deduplication window controls how long delivered rows remain available as
 duplicate evidence. It is not a delivery-retention period; ordinary accepted rows
 follow their Inbox lifecycle and may be redelivered after the duplicate window has
-elapsed. An accepted Agent interaction has a stored receipt and never resumes
-handler or model execution after interruption. The receipt survives process
-termination with persistent storage; memory storage retains it only within that
-process. Ordinary Delivery persists no
-attempts, quarantine, receipts, markers, timers, backoff, dead-letter storage,
-or scheduler policy.
+elapsed. Agent inputs use the same ordinary Inbox acknowledgement and redelivery rules.
+A saved `CallModel` request or pending call is not a durable execution queue;
+restart does not automatically resubmit it. An original input still marked
+`TO_DELIVER` may redeliver and create a new call ID. Ordinary Delivery persists
+no quarantine, dead-letter storage, or scheduler policy.
 Process-manager
 repositories with authentic generated metadata do execute through the local
 command/event buses: default command routing reads the first command field,
@@ -636,6 +635,11 @@ wait on remote work. Register it with `addAssignee()` and declare its method wit
 Command to run. Its declared Event or rejection retains the original Command
 context. Closing a Bounded Context waits for the method and its accepted
 follow-up signals before releasing the buses and storage.
+`AgentModelCommands` is the Agent's protected model Command constructor and
+abandonment API. `AgentSource` and `ModelCallHistory` describe the complete
+triggering signal and indexed saved request returned by protected
+`modelCallHistory(callId)`. The provider operation definition and deployment
+reference remain separate; the framework registers the model Command handler.
 Register an assignee with `addAssignee()`, a commander with
 `addCommandDispatcher()`, and reactors or subscribers with
 `addEventDispatcher()`, then call `build()` so the generated receiver

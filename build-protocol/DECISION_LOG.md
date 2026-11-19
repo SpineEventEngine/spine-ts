@@ -7499,3 +7499,12 @@ direct `ai.invoke()`. They must not run before every Agent handler: denying mode
 use there prevents the Agent from returning CallModel or handling ModelCallFailed.
 The authorization check remains before remote use, with connection identity
 retained in model history.
+
+Agent handlers that request no model work can run without a deployment default.
+The application may select a deployment only for its original input, then handle
+the reply or failure without selecting another. Invalid explicit choices and
+resolver exceptions still fail; actual model use still requires a selection.
+Detached model execution reads the exact saved triggering signal through indexed
+request history so existing provider/tool policies retain their original input.
+It verifies the admitted request before using that authorization information.
+This lookup neither loads the Agent nor reconstructs work after a restart.

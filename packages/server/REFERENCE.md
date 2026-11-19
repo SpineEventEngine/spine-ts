@@ -57,7 +57,82 @@ or rejection use the original Command context. Bounded Context shutdown waits
 for the method, every output publication attempt, and accepted follow-up work
 before closing the buses and storage. Unexpected method failures are logged
 with the original Command identity. A failed publication is logged and does not
-establish delivery.
+establish delivery. The work runs asynchronously in this process; this base does
+not create a durable queue or a worker thread. An interrupted standalone
+Command does not restart from a task record. An original Entity input still
+`TO_DELIVER` can be redelivered and may produce a new Command.
+
+For example, a standalone Bounded Context can wait for an external ticket
+registry before announcing a ticket. The service is passed to the handler at
+construction, and the generated receiver metadata registers its `@Assign`
+method.
+
+<!-- prettier-ignore-start -->
+<!-- docs-snippet-path: packages/server/src/index.ts -->
+```ts
+import { create } from "@bufbuild/protobuf";
+import { Assign, AsyncCommandHandler, BoundedContext } from "@spine-event-engine/server";
+import type { OpenSupportTicket } from "../../../examples/support/generated/spine/examples/support/commands_pb.js";
+import {
+    SupportTicketOpenedSchema,
+    type SupportTicketOpened,
+} from "../../../examples/support/generated/spine/examples/support/events_pb.js";
+
+/**
+ * Stores ticket facts in an external registry.
+ */
+interface TicketRegistry {
+    /**
+     * Saves the accepted ticket before its Event is published.
+     *
+     * @param command Accepted ticket facts.
+     */
+    record(command: OpenSupportTicket): Promise<void>;
+}
+
+/**
+ * Records a ticket asynchronously and announces completion.
+ */
+class RecordTicket extends AsyncCommandHandler {
+    /**
+     * Creates the handler with its external ticket service.
+     *
+     * @param registry External ticket service for this handler.
+     */
+    constructor(private readonly registry: TicketRegistry) {
+        super();
+    }
+
+    /**
+     * Records the ticket and returns its domain Event.
+     *
+     * @param command Accepted ticket facts.
+     * @returns Event published after the external write succeeds.
+     */
+    @Assign async record(command: OpenSupportTicket): Promise<SupportTicketOpened> {
+        await this.registry.record(command);
+        return create(SupportTicketOpenedSchema, { id: command.id, request: command.request });
+    }
+}
+
+/**
+ * Adds the asynchronous receiver to one Bounded Context.
+ *
+ * @param ticketRegistry Application service supplied during assembly.
+ * @returns Builder with the receiver registered.
+ */
+function ticketContext(ticketRegistry: TicketRegistry) {
+    return BoundedContext.singleTenant("TicketRegistry").addAssignee(
+        new RecordTicket(ticketRegistry),
+    );
+}
+```
+<!-- prettier-ignore-end -->
+
+Here `ticketRegistry` is the application service supplied during assembly.
+The work runs in this process. A method failure is reported with the Command
+identity; closing the Bounded Context waits for the method and any Event
+publication attempts.
 
 ## Entity constructor dependencies
 
@@ -424,8 +499,9 @@ partition in a multitenant destination. The query never replaces the tenant to
 suit the target. A valid query with no matching record keeps its ordinary empty
 result (`undefined` from `findById()`). Reads remain eventually consistent.
 
-Routes are available before ordinary Inbox work resumes. An accepted Agent
-interaction never resumes after interruption; a fresh signal starts fresh work.
+Routes are available before ordinary Inbox work resumes. Saved model calls are
+not replayed after interruption. An original input still marked `TO_DELIVER` may
+redeliver and create a new model call with a new identity.
 Server shutdown drains admitted handlers across contexts before closing any
 target read-side; failed startup validation participates in context and
 resource cleanup.
@@ -686,8 +762,7 @@ server installs that logger into its runtime components, where warnings and
 failures carry operation context. Record durable facts in Events or storage.
 Ordinary Aggregate, Process Manager, and Projection Inbox delivery sends persisted
 accepted work through the normal handler path. Handler effects must tolerate
-redelivery after an uncertain acknowledgement. An accepted Agent interaction is recorded by its receipt and is
-never re-executed after interruption.
+redelivery after an uncertain acknowledgement. Agent inputs follow the same redelivery rules when acknowledgement is uncertain.
 
 ## Context assembly and entities
 
@@ -856,7 +931,7 @@ payload. A concrete result overrides preference and default precedence for that
 signal; `undefined` preserves it. This allows an Agent without a configured
 default to start after a deployment is appended to the bound registry. The
 runtime checks repository allowlists, capabilities and `authorizeSelection`
-before saving the selection and connection identity. A saved selection is reused
+before saving the selection. A saved selection is reused
 for the current signal. Resolver and authorization callbacks receive linked cancellation
 and the smaller of the invocation deadline and registry hook timeout. An
 effective `this.ai.select()` change, including reset to inheritance, is
@@ -872,30 +947,63 @@ See [adapter configuration](../ai-vercel-ax/README.md).
 
 ### Acceptance and completion
 
-An accepted signal and recipient are admitted through ordinary Delivery. A
-typed receipt prevents a duplicate signal from starting the same Agent turn.
-Within one process, live capacity serializes turns for one Agent instance and
-permits different instances up to configured limits. The shared registry's
-capacity applies across Bounded Contexts using that registry. A waiting signal
-stays in the ordinary Inbox until capacity can admit it; capacity release wakes
-the ordinary Delivery worker. There is no Agent-specific discovery scheduler.
+An Agent input follows ordinary Inbox delivery. The Agent handler runs and its
+state, attributes, and history commit before the Inbox row is acknowledged.
+While the handler or save is pending, the row remains `TO_DELIVER`. A handler can
+still call and await `this.ai.invoke()` directly. Connection and use authorization
+run when that invocation begins. Direct calls finish before the Agent commits;
+there is no Agent-specific duration limit or acceptance receipt.
 
-The signal's matching handlers share one Entity draft. Each handler can await
-`this.ai.invoke()` through the protected Spine facade. Calls in one handler
-must be sequential and finish before it returns. Requests, results, and
-validation failures are saved as audited history while work progresses. The
-final accepted state, Version, preference changes, and Agent history use an
-atomic live Agent commit. Outgoing Commands enter ordinary command delivery;
-there is no saved Agent-private list to finish after a restart. Emitted domain Events
-enter immutable Agent history before normal EventBus publication. A no-op or
-preference-only turn can commit without a state Version increase. Waiting for a
-provider does not hold a database transaction open.
+An Agent may instead return a `CallModel` from an `@Command` handler using
+`this.modelCommands.create(definition, { conversation, input })`. Construction
+contacts no provider. On a successful Agent commit, the returned Command's call
+metadata enters `pendingModelCalls`, and the complete prepared Command and its
+triggering envelope enter indexed history. The framework then saves a complete
+submission-attempt envelope before posting the Command. Its registered
+`AsyncCommandHandler` invokes the pinned `ModelRef` and publishes `ModelReplied`
+or the `ModelCallFailed` rejection through ordinary buses. The provider may still
+be running after the original Agent Inbox row becomes `DELIVERED`.
 
-An admitted turn uses a current session and cancellation guard. Shutdown drains
-tracked work and prevents late results from changing Entity state or emitting
-signals. It cannot undo external effects already performed by application code.
-A restarted process can read retained receipts and audit history, but it does
-not replay a model response or re-enter an interrupted Agent handler.
+`modelCommands.create()` needs a definition registered in `.add(AgentClass,
+{ ai: { models: [definition] } })`. The Agent and registration import that same
+factory-created definition object. The framework resolves it by Agent state type
+URL, operation name, and revision; a duplicate name/revision for one Agent is
+rejected at Bounded Context build. `.withAi(registry)` supplies the deployment
+registry. A definition describes typed input/output and instructions; `ModelRef`
+identifies the selected deployment. The provider connection and use checks happen
+when the detached invocation starts. A handler that does not use a model may
+run without a configured deployment. A constructed Command not returned by the
+handler creates no pending call or remote work.
+
+`this.pendingModelCalls` gives an Agent handler detached copies of calls pending
+at its start. The matching outcome remains visible during that handler. The
+Agent removes it only when the matching handler commits successfully. A failed
+handler, missing application handler, or unmatched `@Where` leaves it pending and reports the outcome. The
+protected `modelCallHistory(callId)` reads the original prepared `CallModel` and
+complete triggering Command or Event envelope by typed call ID. Application code
+can use these and the observed persisted Agent Version to interpret overlapping
+and out-of-order replies. The framework does not reject an older reply. Explicit
+`modelCommands.abandon(callId)` saves an abandonment record; it does not cancel
+remote work or suppress a late reply.
+
+State, complete Agent attributes, and corresponding history save atomically.
+Current state remains in the common `EntityRecord`; Agent attributes store its
+typed identity, preferences, and outstanding calls. Persistent providers load
+state and attributes together in one native current-data read. A request history
+entry retains exact Command identity, actor metadata, and causation. Attempt
+history is a separate write after the Agent commit. If Agent save fails, its
+input is not acknowledged and no model Command is submitted. If an attempt
+append fails after the Agent commit, the input is delivered but that submission
+is prevented and reported. There is no durable outgoing queue or startup replay
+of saved pending calls. Ordinary redelivery of an original `TO_DELIVER` input
+can construct a new call ID after interruption. A saved call is never
+resubmitted solely from pending attributes or history.
+
+Graceful Bounded Context and Application close wait for accepted asynchronous
+handlers, their output publication attempts, ordinary Delivery, and follow-up
+Agent Commands to settle. They do not impose a new timeout. An unfinished task
+can keep close waiting; an interrupted process may leave a saved request without
+remote execution.
 
 ### Retained history
 
@@ -905,12 +1013,12 @@ reads use dedicated repository indexes for that instance and tenant, rather than
 scanning the Bounded Context-wide stores. Memory storage lasts for the process; choose a
 persistent provider when records must survive process termination.
 
-| Protected method               | Returned `HistoryPage.items`                                                   |
-| ------------------------------ | ------------------------------------------------------------------------------ |
-| `fullHistory(request)`         | `AgentHistoryEntry` oneof: conversation record, System Event, or domain Event. |
-| `conversationHistory(request)` | `ConversationRecord` for the required `conversation` ID.                       |
-| `systemEventHistory(request)`  | Original System Event envelopes.                                               |
-| `domainEventHistory(request)`  | Original domain Event envelopes emitted by this Agent.                         |
+| Protected method               | Returned `HistoryPage.items`                                                                             |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `fullHistory(request)`         | `AgentHistoryEntry` oneof: provider exchange, Events, request, attempt, handled outcome, or abandonment. |
+| `conversationHistory(request)` | `ConversationRecord` for the required `conversation` ID.                                                 |
+| `systemEventHistory(request)`  | Original System Event envelopes.                                                                         |
+| `domainEventHistory(request)`  | Original domain Event envelopes emitted by this Agent.                                                   |
 
 All methods return newest entries first. A request supplies positive `pageSize`
 and an optional opaque cursor; `nextCursor` continues toward older entries.
@@ -944,11 +1052,10 @@ For a trusted in-process caller, the scope can also include detached
 `reader` leaves principal and authority facts absent. The bridge supplies
 verified facts explicitly and cannot derive them from `actorContext`.
 
-If a selected model's `authorizeUse` callback explicitly returns `false`
-before the handler, the turn records one `AgentInvocationTerminated` System
-Event carrying `MODEL_USE_DENIED`. No handler runs, no application-domain
-result Event is invented, and other failures remain distinct. Applications
-may correlate this fact with the original source through paged Agent history.
+Provider connection and `authorizeUse` run when a direct or model-Command
+invocation starts. Failure of a detached model Command produces `ModelCallFailed`
+with the rejected `CallModel` context. The application failure handler can run
+even when the provider connection or authorization fails.
 
 ## Signals, validation, and rejection behavior
 
@@ -966,7 +1073,7 @@ Entity transition validation failures that escape service processing map to
 reception of ordinary Entity work sends post-handler transition rejection to `DeliveryMonitor`;
 its default action acknowledges the failed input without storing invalid state.
 Framework-created runtime command and event metadata uses fresh Node secure
-UUIDs; fixed IDs belong only to existing source envelopes retained through the
+UUIDs; fixed IDs are retained only from existing source envelopes through the
 normal origin chain.
 
 An application handler throws a generated core `RejectionThrowable` for a
@@ -1356,7 +1463,7 @@ future updates.
 
 `ServerOptions` is native-only: it configures contexts, resources, services,
 and the native listener. It has no `browser` option and the root package does
-not load `@spine-event-engine/auth`. Browser hosting belongs to the explicit
+not load `@spine-event-engine/auth`. The explicit browser entry point handles browser hosting:
 `@spine-event-engine/server/browser` entry point; see the [browser/auth guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
 
 Browser unary gateway admission has a fixed 1 MiB (1,048,576-byte) request
@@ -1761,16 +1868,14 @@ or Bounded Context name parameter.
 
 Local repository-backed posting waits for recipient Inbox writes and scheduling,
 while handler execution and row acknowledgement continue through Delivery. For an
-Agent, successful acceptance and Inbox acknowledgement let posting finish while
-the live handler continues. If Agent execution capacity is unavailable, the input
-stays pending and the local call reports the existing command-posting error.
+Agent, the handler and save finish before its Inbox row is acknowledged. A detached
+model Command may keep running after that acknowledgement.
 
 With remote Delivery and its environment supervisor, posting completes after the
 remote Inbox accepts the input and the shard notification is submitted. Processing
 may still be pending on another process. For example, importing an Event can return
 while another process holds its shard; the Projection update arrives after that
-process can dispatch the Event. Reception alone does not acknowledge delivery,
-create an Agent acceptance receipt, or prove that a handler ran.
+process can dispatch the Event. Reception alone does not acknowledge delivery or prove that a handler ran.
 
 A rejected remote receive operation rejects posting. If a local notification
 observer fails after reception succeeds, the failure is logged and the existing
@@ -1781,9 +1886,8 @@ supervision. Explicit `Delivery.run()` still returns the actual run result,
 including `SKIPPED` when another process is handling the shard.
 For ordinary Entity Inbox work, post-handler output and transition validation
 failures reach the reception monitor. Pre-handler input and routing errors and
-storage failures remain outside that monitor. Accepted Agent work has already
-acknowledged its Inbox row and does not enter this reception action. A detached
-run that throws emits a contained terminal error without exposing its message.
+storage failures remain outside that monitor. Agent work uses the same ordinary Inbox row and monitor path. A detached model
+handler failure is observed with its original Command identity.
 
 `DeliveryBuilder` constructs a controlled `Delivery`; `DeliverySupervisor`
 receives `{ source, delivery, onMessage }`, manages bounded shard notifications

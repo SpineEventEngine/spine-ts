@@ -109,6 +109,30 @@ interface AgentModelSelectionAccess {
   ): Promise<AgentLiveModel>;
 
   /**
+   * Finds a model when a deployment preference exists for this kind.
+   *
+   * @param registry Effective AI registry.
+   * @param repository Repository policy and capabilities.
+   * @param scope Original authorization scope.
+   * @param preferences Current committed instance preferences.
+   * @param signal Invocation cancellation.
+   * @param deadlineEpochMs Actual live deadline.
+   * @param kind Generation or decision kind.
+   * @param sourceMessage Original source payload for selection hooks.
+   * @returns Validated model, or absence when no selection was configured.
+   */
+  selectOptionalLiveKind(
+    registry: AiRegistry,
+    repository: RepositoryAiOptions,
+    scope: AiScope,
+    preferences: readonly ModelPreference[],
+    signal: AbortSignal,
+    deadlineEpochMs: number | undefined,
+    kind: "generation" | "decision",
+    sourceMessage?: Any,
+  ): Promise<AgentLiveModel | undefined>;
+
+  /**
    * Resolves and copies one explicit model from the accepted payload.
    *
    * @param registry Effective registry and hook bound.
@@ -141,6 +165,7 @@ interface AgentModelSelectionAccess {
    * @param deadlineEpochMs Absolute invocation deadline.
    * @param kind Generation or decision kind.
    * @param sourceMessage Original accepted payload.
+   * @param optional Whether an absent selection returns without error.
    * @returns A registered authorized deployment.
    */
   deployment(
@@ -152,7 +177,22 @@ interface AgentModelSelectionAccess {
     deadlineEpochMs: number | undefined,
     kind: "generation" | "decision",
     sourceMessage?: Any,
-  ): Promise<ReturnType<typeof selectDeployment>>;
+    optional?: boolean,
+  ): Promise<ReturnType<typeof selectDeployment> | undefined>;
+
+  /**
+   * Checks whether any selection source specifies a deployment.
+   *
+   * @param registry Effective registry defaults.
+   * @param normal Repository and persisted selection image.
+   * @param override Explicit resolver result.
+   * @returns Whether a deployment was selected.
+   */
+  hasSelection(
+    registry: AiRegistry,
+    normal: Parameters<typeof selectDeployment>[1],
+    override: ModelRef | undefined,
+  ): boolean;
 
   /**
    * Checks a concrete or inherited selection with repository policy.
@@ -329,7 +369,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     kind: "generation" | "decision",
     sourceMessage?: Any,
   ): Promise<AgentLiveModel> {
-    const registration = await this.deployment(
+    const selected = await this.selectOptionalLiveKind(
       registry,
       repository,
       scope,
@@ -339,6 +379,35 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
       kind,
       sourceMessage,
     );
+    if (selected === undefined) throw new TypeError(`${kind} has no deployment default`);
+    return selected;
+  },
+
+  /**
+   * Finds a live model only when one was configured or explicitly resolved.
+   */
+  async selectOptionalLiveKind(
+    registry: AiRegistry,
+    repository: RepositoryAiOptions,
+    scope: AiScope,
+    preferences: readonly ModelPreference[],
+    signal: AbortSignal,
+    deadlineEpochMs: number | undefined,
+    kind: "generation" | "decision",
+    sourceMessage?: Any,
+  ): Promise<AgentLiveModel | undefined> {
+    const registration = await this.deployment(
+      registry,
+      repository,
+      scope,
+      preferences,
+      signal,
+      deadlineEpochMs,
+      kind,
+      sourceMessage,
+      true,
+    );
+    if (registration === undefined) return undefined;
     const model = clone(ModelRefSchema, registration.ref);
     Validate.check(ModelRefSchema, model);
     return {
@@ -369,7 +438,8 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     deadlineEpochMs: number | undefined,
     kind: "generation" | "decision",
     sourceMessage?: Any,
-  ): Promise<ReturnType<typeof selectDeployment>> {
+    optional = false,
+  ): Promise<ReturnType<typeof selectDeployment> | undefined> {
     const override = await this.resolveOverride(
       registry,
       repository,
@@ -380,6 +450,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
       sourceMessage,
     );
     const normal = this.selection(registry, repository, preferences, kind);
+    if (optional && !this.hasSelection(registry, normal, override)) return undefined;
     const registration = selectDeployment(registry, {
       ...normal,
       ...(override === undefined ? {} : { instancePreference: override }),
@@ -387,6 +458,28 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     if (override !== undefined)
       await this.authorizeSelection(registry, repository, scope, override, signal, deadlineEpochMs);
     return registration;
+  },
+
+  /**
+   * Checks whether any selection source specifies a deployment.
+   *
+   * @param registry Effective registry defaults.
+   * @param normal Repository and persisted selection image.
+   * @param override Explicit resolver result.
+   * @returns Whether a deployment was selected.
+   */
+  hasSelection(
+    registry: AiRegistry,
+    normal: Parameters<typeof selectDeployment>[1],
+    override: ModelRef | undefined,
+  ): boolean {
+    return (
+      override !== undefined ||
+      normal.instancePreference !== undefined ||
+      normal.repositoryDefault !== undefined ||
+      normal.contextDefault !== undefined ||
+      registryOptions(registry).defaultModels[normal.kind] !== undefined
+    );
   },
 
   /**

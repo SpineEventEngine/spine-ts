@@ -44,6 +44,16 @@ The no-durable-publication decision is recorded in DECISION_LOG.md under
   and use checks when actual direct or asynchronous model invocation starts.
   Otherwise provider denial prevents the Agent from requesting work or handling
   its failure. Authorization still precedes remote model use.
+- An Agent handler may run without a selected deployment if it requests no
+  model work. Missing defaults must not block reply or rejection handling.
+  Explicit invalid selections, denied selections, and resolver exceptions still
+  fail. Model construction/direct invocation require a deployment when used.
+- Detached model execution uses the exact saved triggering signal for existing
+  provider and tool authorization policies. Resolve it through indexed request
+  history and verify the admitted request matches, without loading an Agent or
+  replaying work. This preserves policies bound to the original domain input.
+  A mismatched saved request is reported against the invalid Command without
+  publishing an outcome for the genuine pending call.
 - Bind transported input type URLs to the registered definition in ordinary
   signal admission/output preparation. Do not revalidate incoming messages
   during asynchronous dispatch.
@@ -146,6 +156,9 @@ The no-durable-publication decision is recorded in DECISION_LOG.md under
 - Push every feature-branch commit to official origin. No GitHub PR/issue writes.
 - Include the required common unused package version in a version-only commit
   before completion; update internal pins/lockfile separately.
+  Selected version: `2.0.0-snapshot.32`, checked unused across the public package
+  inventory on 2026-11-19. Apply it to every workspace manifest, including private
+  workspaces, after example generation stops.
 
 ## Acceptance and milestones
 
@@ -232,21 +245,32 @@ is not a model mismatch. Subagents may not spawn subagents.
   lint/format/Proto/generated/TSDoc/cleanup checks passed. Explicit Sol/medium
   configured profile retained; runtime introspection is unavailable.
 - Implementation slice 5: same implementer, gpt-6-sol/medium profile retained.
-  Scope: support and release-notes examples, history display, maintained guides
-  and references, and final affected preflight after the runtime contracts
-  stabilize. Active after the slice 4 runtime checkpoint. The three requested
-  fresh reviews start only after this implementation work is complete.
+  Completed. Support and Release Notes use model Commands and typed outcomes;
+  Studio correlates terminal results with request history and displays the new
+  history categories. Documentation covers actual registration, storage costs,
+  failure windows, and a generic asynchronous-handler example. Indexed source
+  lookup preserves original authorization. A changed repost is reported against
+  its invalid Command without failing the genuine pending model call. Decision
+  requests, tenant/Version metadata, discarded or changed requests, unavailable
+  bindings, and closed capabilities have focused coverage. Affected tests,
+  builds, lint/TSDoc/format, documentation/API/snippets, Proto checks, and parsed
+  Mermaid diagrams passed. Explicit Sol/medium configured profile retained;
+  runtime introspection is unavailable. Versioning and the requested reviews
+  follow this checkpoint.
+  New model-Command construction meets the coverage threshold. Focused combined
+  coverage also inspected the shared selection and standalone runtime; the full
+  repository coverage threshold remains a final release gate.
 - Review rounds 1–3: each a fresh no-memory Astra/high reviewer, explicit model
   and reasoning, as requested by the human. Pending implementation completion.
 
 ## Current status
 
-Requirements recorded. Official master fetched and already contained by this
-branch. Architecture pass and slices 1–4 accepted. Slice 5 updates the maintained
-examples and broader documentation, then runs the final affected preflight.
-The three requested fresh Astra reviews and release verification remain. No
-unresolved human design question; implementation discoveries must preserve the
-accepted contract or be raised with concrete evidence.
+Architecture and implementation slices 1–5 are complete. Required common-version
+metadata is next, followed by three sequential fresh Astra/high reviews and
+shared-runtime release verification. The selected verification profile is
+`verify:release` because Delivery, Bounded Context shutdown, storage providers,
+public protocol, and model execution change together. No unresolved human design
+question. No GitHub PR or issue changes are authorized.
 
 ## Implementation seams
 

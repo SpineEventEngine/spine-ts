@@ -11,10 +11,12 @@ with live acceptance recorded against PostgreSQL 16.15 and 18.6.
 This is an experimental snapshot package. Use Node 24 or newer. For the precise
 public API and operational rules, see the [coding-agent reference](REFERENCE.md).
 
-Agent repositories can use this factory to retain state, typed admission receipts,
-and conversation history across restarts. An interrupted Agent handler does not
-restart from those records. Atomic live Agent commits save accepted state and
-audit together; a model call does not keep a database transaction open.
+Agent repositories use this factory to retain state, complete attributes, and
+Agent history across restarts. Atomic Agent commits save state, attributes, and
+request history together. A separate submission-attempt append precedes model
+Command posting. Saved pending calls are not automatically resubmitted after
+restart; an original Inbox input still pending may redeliver and create a new
+call. Model work does not keep a database transaction open.
 
 ## Install
 

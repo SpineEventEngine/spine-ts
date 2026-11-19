@@ -20,6 +20,7 @@ import {
   ActorContextSchema,
   BoundedContextNameSchema,
   CommandContextSchema,
+  CommandSchema,
   EventContextSchema,
   InternetDomainSchema,
   TenantIdSchema,
@@ -128,6 +129,8 @@ class ModelCommandAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAg
 
   static failures = 0;
 
+  static mutateReturned = false;
+
   static rejectedCommand: Command | undefined;
 
   static abandonedCallId: AiOperationId | undefined;
@@ -137,7 +140,7 @@ class ModelCommandAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAg
   async draft(command: DraftSupportReply) {
     ModelCommandAgent.gate?.entered();
     await ModelCommandAgent.gate?.release;
-    return this.modelCommands.create(proposal, {
+    const request = this.modelCommands.create(proposal, {
       conversation: create(ConversationIdSchema, { value: "support-draft" }),
       input: create(SupportTicketFactsSchema, {
         ticketNumber: create(SupportTicketNumberSchema, {
@@ -146,6 +149,8 @@ class ModelCommandAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAg
         customerQuestion: command.question,
       }),
     });
+    if (ModelCommandAgent.mutateReturned) request.model = ModelRef.of("different-deployment", "v1");
+    return request;
   }
 
   inspect(command: InspectSupportReplyDraft) {
@@ -1081,6 +1086,7 @@ describe("Agent model Commands", () => {
     const ref = ModelRef.of("model-command-test", "v1");
     const registry = AiRegistry.create({ defaultModels: { generation: ref } });
     const executed = vi.fn();
+    ModelCommandAgent.failures = 0;
     registry.register(
       createBackendRegistration({
         ref,
@@ -1158,6 +1164,158 @@ describe("Agent model Commands", () => {
       expect(executed).not.toHaveBeenCalled();
     } finally {
       await application.close();
+    }
+  });
+
+  it("rejects a changed returned CallModel before saving or invoking the provider", async () => {
+    const executed = vi.fn();
+    const repository = modelRepository();
+    const environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (configuration) => {
+        configuration.use({ storageFactory: new InMemoryStorageFactory() });
+      })
+      .build();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(environment)
+      .add(
+        BoundedContext.singleTenant("ChangedModelCommand")
+          .withAi(
+            replyingRegistry("Unexpected", () => {
+              executed();
+              return Promise.resolve();
+            }),
+          )
+          .persistSystemEvents()
+          .add(repository),
+      )
+      .build();
+    const [context] = application.contexts();
+    if (context === undefined) throw new Error("Expected a Bounded Context.");
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-changed-call" });
+    const command = SignalEnvelopes.command({
+      schema: DraftSupportReplySchema,
+      message: create(DraftSupportReplySchema, { agent: id, question: "Where is my parcel?" }),
+      context: create(CommandContextSchema, {
+        actorContext: create(ActorContextSchema, {
+          actor: create(UserIdSchema, { value: "support-user" }),
+        }),
+      }),
+    });
+    ModelCommandAgent.mutateReturned = true;
+    try {
+      await context.commandBus().post(command);
+      await expect(serverEnvironmentAccess.whenDeliveryIdle(environment)).rejects.toThrow(
+        "Returned CallModel was not constructed",
+      );
+      const rows = await serverEnvironmentAccess
+        .coreDelivery(environment)
+        .inbox.read(ShardIndex.single());
+      expect(rows.find((row) => row.signalId === command.id?.uuid)?.status).toBe("TO_DELIVER");
+      const history = await readAgentHistoryPage(context, repository, id, { pageSize: 20 });
+      expect(history.items.some((entry) => entry.item.case === "modelRequest")).toBe(false);
+      expect(executed).not.toHaveBeenCalled();
+    } finally {
+      ModelCommandAgent.mutateReturned = false;
+      await application.close();
+    }
+  });
+
+  it("does not borrow saved source authorization for a reposted changed Command", async () => {
+    const started = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const executed = vi.fn();
+    const reported = vi.spyOn(SignalPublisher.prototype, "reportFailure");
+    ModelCommandAgent.failures = 0;
+    ModelCommandAgent.replies = 0;
+    const repository = modelRepository();
+    const storageFactory = new ObservedMemoryFactory();
+    const environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (configuration) => {
+        configuration.use({ storageFactory });
+      })
+      .build();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(environment)
+      .add(
+        BoundedContext.singleTenant("SavedSourceGuard")
+          .withAi(
+            replyingRegistry("Original reply", async () => {
+              executed();
+              started.resolve(undefined);
+              await release.promise;
+            }),
+          )
+          .persistSystemEvents()
+          .add(repository),
+      )
+      .build();
+    const [context] = application.contexts();
+    if (context === undefined) throw new Error("Expected a Bounded Context.");
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-saved-source" });
+    try {
+      await context.commandBus().post(
+        SignalEnvelopes.command({
+          schema: DraftSupportReplySchema,
+          message: create(DraftSupportReplySchema, { agent: id, question: "Original facts" }),
+          context: create(CommandContextSchema, {
+            actorContext: create(ActorContextSchema, {
+              actor: create(UserIdSchema, { value: "authorized-user" }),
+            }),
+          }),
+        }),
+      );
+      await started.promise;
+      const page = await readAgentHistoryPage(context, repository, id, { pageSize: 20 });
+      const request = page.items.find((entry) => entry.item.case === "modelRequest");
+      if (request?.item.case !== "modelRequest" || request.item.value.request === undefined)
+        throw new Error("Saved model request was not found.");
+      const saved = request.item.value.request;
+      const changedInput = clone(CommandSchema, saved);
+      const payload =
+        changedInput.message && AnyPacker.tryUnpack(changedInput.message, CallModelSchema);
+      if (payload === undefined) throw new Error("Saved CallModel was not found.");
+      payload.input = AnyPacker.pack(
+        SupportTicketFactsSchema,
+        create(SupportTicketFactsSchema, {
+          ticketNumber: create(SupportTicketNumberSchema, { value: id.ticketNumber }),
+          customerQuestion: "Altered facts",
+        }),
+      );
+      changedInput.message = AnyPacker.pack(CallModelSchema, payload);
+      changedInput.context = create(CommandContextSchema, {
+        actorContext: create(ActorContextSchema, {
+          actor: create(UserIdSchema, { value: "other-user" }),
+        }),
+      });
+      await context.commandBus().post(changedInput);
+      await vi.waitFor(() => {
+        expect(reported).toHaveBeenCalledWith(
+          "command",
+          expect.objectContaining({ id: changedInput.id }),
+          expect.objectContaining({
+            message: "Admitted model Command differs from its saved request.",
+          }),
+        );
+      });
+      expect(ModelCommandAgent.failures).toBe(0);
+      expect(
+        (await storageFactory.commitStorage?.readAgentCurrent(id))?.attributes?.pendingModelCalls,
+      ).toHaveLength(1);
+      release.resolve(undefined);
+      await vi.waitFor(() => {
+        expect(ModelCommandAgent.replies).toBe(1);
+      });
+      expect(
+        (await storageFactory.commitStorage?.readAgentCurrent(id))?.attributes?.pendingModelCalls,
+      ).toHaveLength(0);
+      await application.close();
+      expect(executed).toHaveBeenCalledOnce();
+      expect(ModelCommandAgent.replies).toBe(1);
+      expect(ModelCommandAgent.failures).toBe(0);
+    } finally {
+      release.resolve(undefined);
+      await application.close();
+      reported.mockRestore();
     }
   });
 

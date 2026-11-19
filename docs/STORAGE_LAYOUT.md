@@ -27,7 +27,6 @@ the startup calls that prepare the application.
       - [Support domain Events: `spine.support_event`](#support-domain-events-spinesupport_event)
       - [Support System Events: `spine.support_system_event`](#support-system-events-spinesupport_system_event)
       - [Agent audit: `spine.agent_history_agenthistoryrecord`](#agent-audit-spineagent_history_agenthistoryrecord)
-      - [Agent acceptance receipts: `spine.spine_agent_acceptance_agentacceptancereceipt`](#agent-acceptance-receipts-spinespine_agent_acceptance_agentacceptancereceipt)
       - [Agent attributes: `spine.spine_agent_attributes_agentattributesrecord`](#agent-attributes-spinespine_agent_attributes_agentattributesrecord)
       - [Subscription registry: `spine.spine_client_subscriptionrecord`](#subscription-registry-spinespine_client_subscriptionrecord)
       - [Entity Inbox messages: `spine.spine_server_delivery_inboxmessage`](#entity-inbox-messages-spinespine_server_delivery_inboxmessage)
@@ -47,7 +46,6 @@ the startup calls that prepare the application.
       - [Support domain Events: `Support_Event`](#support-domain-events-support_event)
       - [Support System Events: `Support_System_Event`](#support-system-events-support_system_event)
       - [Agent audit: `agent_history_AgentHistoryRecord`](#agent-audit-agent_history_agenthistoryrecord)
-      - [Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`](#agent-acceptance-receipts-spine_agent_acceptance_agentacceptancereceipt)
       - [Agent attributes: `spine_agent_attributes_AgentAttributesRecord`](#agent-attributes-spine_agent_attributes_agentattributesrecord)
       - [Subscription registry: `spine_client_SubscriptionRecord`](#subscription-registry-spine_client_subscriptionrecord)
       - [Entity Inbox messages: `spine_server_delivery_InboxMessage`](#entity-inbox-messages-spine_server_delivery_inboxmessage)
@@ -67,7 +65,6 @@ the startup calls that prepare the application.
       - [Support domain Events: `Support-Event`](#support-domain-events-support-event)
       - [Support System Events: `Support_System-Event`](#support-system-events-support_system-event)
       - [Agent audit: `spine_agent_history`](#agent-audit-spine_agent_history)
-      - [Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`](#agent-acceptance-receipts-spine_agent_acceptance_agentacceptancereceipt-1)
       - [Agent attributes: `spine_agent_attributes`](#agent-attributes-spine_agent_attributes)
       - [Subscription registry: `spine.client.SubscriptionRecord`](#subscription-registry-spineclientsubscriptionrecord)
       - [Entity Inbox messages: `spine.server.delivery.InboxMessage`](#entity-inbox-messages-spineserverdeliveryinboxmessage)
@@ -91,7 +88,6 @@ the startup calls that prepare the application.
       - [Support domain Events: `spine.support_event`](#support-domain-events-spinesupport_event-1)
       - [Support System Events: `spine.support_system_event`](#support-system-events-spinesupport_system_event-1)
       - [Agent audit: `spine.agent_history_agenthistoryrecord`](#agent-audit-spineagent_history_agenthistoryrecord-1)
-      - [Agent acceptance receipts: `spine.spine_agent_acceptance_agentacceptancereceipt`](#agent-acceptance-receipts-spinespine_agent_acceptance_agentacceptancereceipt-1)
       - [Agent attributes: `spine.spine_agent_attributes_agentattributesrecord`](#agent-attributes-spinespine_agent_attributes_agentattributesrecord-1)
       - [Subscription registry: `spine.spine_client_subscriptionrecord`](#subscription-registry-spinespine_client_subscriptionrecord-1)
       - [Entity Inbox messages: `spine.spine_server_delivery_inboxmessage`](#entity-inbox-messages-spinespine_server_delivery_inboxmessage-1)
@@ -111,7 +107,6 @@ the startup calls that prepare the application.
       - [Support domain Events: `Support_Event`](#support-domain-events-support_event-1)
       - [Support System Events: `Support_System_Event`](#support-system-events-support_system_event-1)
       - [Agent audit: `agent_history_AgentHistoryRecord`](#agent-audit-agent_history_agenthistoryrecord-1)
-      - [Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`](#agent-acceptance-receipts-spine_agent_acceptance_agentacceptancereceipt-2)
       - [Agent attributes: `spine_agent_attributes_AgentAttributesRecord`](#agent-attributes-spine_agent_attributes_agentattributesrecord-1)
       - [Subscription registry: `spine_client_SubscriptionRecord`](#subscription-registry-spine_client_subscriptionrecord-1)
       - [Entity Inbox messages: `spine_server_delivery_InboxMessage`](#entity-inbox-messages-spine_server_delivery_inboxmessage-1)
@@ -131,7 +126,6 @@ the startup calls that prepare the application.
       - [Support domain Events: `Support-Event`](#support-domain-events-support-event-1)
       - [Support System Events: `Support_System-Event`](#support-system-events-support_system-event-1)
       - [Agent audit: `spine_agent_history`](#agent-audit-spine_agent_history-1)
-      - [Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`](#agent-acceptance-receipts-spine_agent_acceptance_agentacceptancereceipt-3)
       - [Agent attributes: `spine_agent_attributes`](#agent-attributes-spine_agent_attributes-1)
       - [Subscription registry: `spine.client.SubscriptionRecord`](#subscription-registry-spineclientsubscriptionrecord-1)
       - [Entity Inbox messages: `spine.server.delivery.InboxMessage`](#entity-inbox-messages-spineserverdeliveryinboxmessage-1)
@@ -174,7 +168,6 @@ the startup calls that prepare the application.
     - [In-memory: records without database structures](#in-memory-records-without-database-structures)
 - [4. Agent storage](#4-agent-storage)
   - [Current Agent state](#current-agent-state)
-  - [Acceptance receipt](#acceptance-receipt)
   - [Audit trail for a reply](#audit-trail-for-a-reply)
   - [Model preferences](#model-preferences)
   - [How Agent record keys are calculated](#how-agent-record-keys-are-calculated)
@@ -201,11 +194,11 @@ indexes. Each provider checklist explains the required work.
 The example is a support application with one domain Bounded Context named
 `Support`. Its paired System Context is named `Support_System`.
 
-| Entity                           | Kind       | Identifier                         | Persistence enabled for this example                                                                    |
-| -------------------------------- | ---------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `example.support.Ticket`         | Aggregate  | `example.support.TicketId`         | Current state, `stateHistory: true`, Aggregate diagnostic Event history                                 |
-| `example.support.TicketList`     | Projection | `example.support.TicketListId`     | Current state; state history disabled                                                                   |
-| `example.support.ReplyAssistant` | Agent      | `example.support.ReplyAssistantId` | Current state, mandatory Agent audit, acceptance receipts and model preferences; state history disabled |
+| Entity                           | Kind       | Identifier                         | Persistence enabled for this example                                                   |
+| -------------------------------- | ---------- | ---------------------------------- | -------------------------------------------------------------------------------------- |
+| `example.support.Ticket`         | Aggregate  | `example.support.TicketId`         | Current state, `stateHistory: true`, Aggregate diagnostic Event history                |
+| `example.support.TicketList`     | Projection | `example.support.TicketListId`     | Current state; state history disabled                                                  |
+| `example.support.ReplyAssistant` | Agent      | `example.support.ReplyAssistantId` | Current state, mandatory Agent history and complete attributes; state history disabled |
 
 System Event persistence is enabled with `persistSystemEvents()`, as required
 for Agents. The example also uses the default persistent subscription registry,
@@ -338,13 +331,13 @@ Public clients query/subscribe to the Projection. The index checklist includes
 that specified storage query and the built-in queries for the enabled features.
 An application adding different queries must add the indexes those queries need.
 
-The full example has **15 record families**: ten for domain/Agent data and five
+The full example has **14 record families**: nine for domain/Agent data and five
 for shared framework services. A family means a table in SQL, a kind within a
 namespace in Datastore, or the corresponding logical collection in memory.
 The provider inventories below list every family, including optional features
 that this example deliberately enables.
 
-All 15 families use one SQL database named `support`, or one Datastore namespace
+All 14 families use one SQL database named `support`, or one Datastore namespace
 named `support`. For PostgreSQL the selected schema is `spine`. In-memory storage
 keeps the corresponding logical records in one backend.
 
@@ -353,13 +346,13 @@ flowchart TD
   E[ServerEnvironment factory] --> D[One destination: support]
   D --> S[Three Entity states and two Ticket histories]
   D --> V[Domain and System Events]
-  D --> A[Agent audit, receipts and preferences]
+  D --> A[Agent history and attributes]
   D --> F[Subscriptions, Entity Inbox messages and shard sessions]
   D --> G[Gateway bindings and node leases]
 ```
 
 The gateway/node families appear only because this example explicitly enables
-those components. Omitting the Agent removes its state/audit/receipt/preference
+those components. Omitting the Agent removes its state/history/attributes
 requirements; omitting optional Ticket state history removes that history
 family. Enabling further Entity repositories adds their corresponding families.
 
@@ -612,47 +605,18 @@ postgresBuilder.setTableName(
 );
 ```
 
-##### Agent acceptance receipts: `spine.spine_agent_acceptance_agentacceptancereceipt`
-
-**Table location:** `support` database, `spine` schema.
-
-**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
-
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                         |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894` |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentAcceptanceReceipt`                                       | Protobuf message serialized into binary array                         |
-
-The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
-
-**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
-
-<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
-
-```ts
-import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
-
-const postgresBuilder = PostgresStorageFactory.newBuilder();
-postgresBuilder.setTableName(
-  AgentAcceptanceReceiptSchema,
-  AgentAcceptanceReceiptSchema,
-  "support_agent_receipts",
-);
-```
-
 ##### Agent attributes: `spine.spine_agent_attributes_agentattributesrecord`
 
 **Table location:** `support` database, `spine` schema.
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                        | Example value                                                         |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentAttributesRecord`                                           | Protobuf message serialized into binary array                         |
+| Physical field     | Database type           | Exact source                                                                                   | Example value                                 |
+| ------------------ | ----------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentId(state_type_url, typed entity_id), encoded with the configured key conversion | `v1:<digest of typed AgentId>`                |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentAttributesRecord`                                                      | Protobuf message serialized into binary array |
 
-The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
+The complete AgentId, model preferences, and pending model calls stay in bytes. The pending list grows with outstanding calls; it stores no model weights, credentials, or runnable task.
 
 **Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
 
@@ -666,7 +630,7 @@ const postgresBuilder = PostgresStorageFactory.newBuilder();
 postgresBuilder.setTableName(
   AgentAttributesRecordSchema,
   AgentAttributesRecordSchema,
-  "support_agent_preferences",
+  "support_agent_attributes",
 );
 ```
 
@@ -1171,47 +1135,18 @@ mysqlBuilder.setTableName(
 );
 ```
 
-##### Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`
-
-**Table location:** `support` database.
-
-**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
-
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                         |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894` |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentAcceptanceReceipt`                                       | Protobuf message serialized into binary array                         |
-
-The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
-
-**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
-
-<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
-
-```ts
-import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
-import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
-
-const mysqlBuilder = MysqlStorageFactory.newBuilder();
-mysqlBuilder.setTableName(
-  AgentAcceptanceReceiptSchema,
-  AgentAcceptanceReceiptSchema,
-  "support_agent_receipts",
-);
-```
-
 ##### Agent attributes: `spine_agent_attributes_AgentAttributesRecord`
 
 **Table location:** `support` database.
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                        | Example value                                                         |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentAttributesRecord`                                           | Protobuf message serialized into binary array                         |
+| Physical field     | Database type           | Exact source                                                                                   | Example value                                 |
+| ------------------ | ----------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentId(state_type_url, typed entity_id), encoded with the configured key conversion | `v1:<digest of typed AgentId>`                |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentAttributesRecord`                                                      | Protobuf message serialized into binary array |
 
-The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
+The complete AgentId, model preferences, and pending model calls stay in bytes. The pending list grows with outstanding calls; it stores no model weights, credentials, or runnable task.
 
 **Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
 
@@ -1225,7 +1160,7 @@ const mysqlBuilder = MysqlStorageFactory.newBuilder();
 mysqlBuilder.setTableName(
   AgentAttributesRecordSchema,
   AgentAttributesRecordSchema,
-  "support_agent_preferences",
+  "support_agent_attributes",
 );
 ```
 
@@ -1633,43 +1568,18 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 
 **Change this layout:** This family uses an explicit internal layout. There is no supported narrow builder setting to rename it.
 
-##### Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`
-
-**Kind location:** namespace `support`.
-
-**Created by:** The Datastore adapter makes this kind visible on the first Agent receipt write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
-
-| Physical field                     | Database type      | Exact source                                                                     | Example value                                                         |
-| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894` |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentAcceptanceReceipt`                                       | Protobuf message serialized into binary array                         |
-
-The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
-
-**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
-
-<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
-
-```ts
-import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
-
-const datastoreBuilder = DatastoreStorageFactory.newBuilder();
-datastoreBuilder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_agent_receipts" });
-```
-
 ##### Agent attributes: `spine_agent_attributes`
 
 **Kind location:** namespace `support`.
 
-**Created by:** The Datastore adapter makes this kind visible on the first Agent model-preference write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
+**Created by:** The Datastore adapter makes this kind visible on the first Agent attributes write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                                        | Example value                                                         |
-| ---------------------------------- | ------------------ | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentAttributesRecord`                                           | Protobuf message serialized into binary array                         |
+| Physical field                     | Database type      | Exact source                                                                                   | Example value                                 |
+| ---------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | digest of AgentId(state_type_url, typed entity_id), encoded with the configured key conversion | `v1:<digest of typed AgentId>`                |
+| `bytes`                            | Unindexed Blob     | Entire serialized `AgentAttributesRecord`                                                      | Protobuf message serialized into binary array |
 
-The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
+The complete AgentId, model preferences, and pending model calls stay in bytes. The pending list grows with outstanding calls; it stores no model weights, credentials, or runnable task.
 
 **Change this layout:** This family uses an explicit internal layout. There is no supported narrow builder setting to rename it.
 
@@ -1899,7 +1809,7 @@ ascending provider scan yield newest-first history.
 
 Gateway expiry uses a single `when_expires` property and needs no extra
 composite. Node leases use key scans and check expiry in application code.
-Preference/receipt accesses use keys. Default domain/System EventStore reads
+Agent attributes use their typed identity key; exact model-request history reads use the existing history identity. Default domain/System EventStore reads
 are key scans; custom filtered/sorted EventStore queries may need additional
 indexes. `TicketList` and `ReplyAssistant` have no additional application query
 in this example. Enabling their state history later adds the analogous history
@@ -2017,7 +1927,7 @@ Sources: [Datastore index concepts](https://docs.cloud.google.com/datastore/docs
 
 In-memory storage has no database tables, Datastore kinds, external indexes or
 DDL. The same 15 record purposes apply to this example: the three Entity states,
-Ticket state/Event histories, domain/System Events, Agent audit/receipts/preferences,
+Ticket state/Event histories, domain/System Events, Agent history/attributes,
 subscription definitions, individual Inbox messages, shard sessions, gateway
 bindings and node leases. Storage handles retain the corresponding collections
 in the selected backend; this does not imply exactly 15 JavaScript `Map` objects.
@@ -2048,11 +1958,11 @@ Logical record identity still uses the storage specification and group. See
 The example is a support application with one domain Bounded Context named
 `Support`. Its paired System Context is named `Support_System`.
 
-| Entity                           | Kind       | Identifier                         | Persistence enabled for this example                                                                    |
-| -------------------------------- | ---------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `example.support.Ticket`         | Aggregate  | `example.support.TicketId`         | Current state, `stateHistory: true`, Aggregate diagnostic Event history                                 |
-| `example.support.TicketList`     | Projection | `example.support.TicketListId`     | Current state; state history disabled                                                                   |
-| `example.support.ReplyAssistant` | Agent      | `example.support.ReplyAssistantId` | Current state, mandatory Agent audit, acceptance receipts and model preferences; state history disabled |
+| Entity                           | Kind       | Identifier                         | Persistence enabled for this example                                                   |
+| -------------------------------- | ---------- | ---------------------------------- | -------------------------------------------------------------------------------------- |
+| `example.support.Ticket`         | Aggregate  | `example.support.TicketId`         | Current state, `stateHistory: true`, Aggregate diagnostic Event history                |
+| `example.support.TicketList`     | Projection | `example.support.TicketListId`     | Current state; state history disabled                                                  |
+| `example.support.ReplyAssistant` | Agent      | `example.support.ReplyAssistantId` | Current state, mandatory Agent history and complete attributes; state history disabled |
 
 System Event persistence is enabled with `persistSystemEvents()`, as required
 for Agents. The example also uses the default persistent subscription registry,
@@ -2185,7 +2095,7 @@ Public clients query/subscribe to the Projection. The index checklist includes
 that specified storage query and the built-in queries for the enabled features.
 An application adding different queries must add the indexes those queries need.
 
-The full example has **15 record families**: ten for domain/Agent data and five
+The full example has **14 record families**: nine for domain/Agent data and five
 for shared framework services. A family means a table in SQL, a kind within a
 namespace in Datastore, or the corresponding logical collection in memory.
 The provider inventories below list every family, including optional features
@@ -2470,47 +2380,18 @@ postgresBuilder.setTableName(
 );
 ```
 
-##### Agent acceptance receipts: `spine.spine_agent_acceptance_agentacceptancereceipt`
-
-**Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
-
-**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
-
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                         |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894` |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentAcceptanceReceipt`                                       | Protobuf message serialized into binary array                         |
-
-The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
-
-**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
-
-<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
-
-```ts
-import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
-
-const postgresBuilder = PostgresStorageFactory.newBuilder();
-postgresBuilder.setTableName(
-  AgentAcceptanceReceiptSchema,
-  AgentAcceptanceReceiptSchema,
-  "support_agent_receipts",
-);
-```
-
 ##### Agent attributes: `spine.spine_agent_attributes_agentattributesrecord`
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                        | Example value                                                         |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentAttributesRecord`                                           | Protobuf message serialized into binary array                         |
+| Physical field     | Database type           | Exact source                                                                                   | Example value                                 |
+| ------------------ | ----------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentId(state_type_url, typed entity_id), encoded with the configured key conversion | `v1:<digest of typed AgentId>`                |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentAttributesRecord`                                                      | Protobuf message serialized into binary array |
 
-The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
+The complete AgentId, model preferences, and pending model calls stay in bytes. The pending list grows with outstanding calls; it stores no model weights, credentials, or runnable task.
 
 **Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
 
@@ -2524,7 +2405,7 @@ const postgresBuilder = PostgresStorageFactory.newBuilder();
 postgresBuilder.setTableName(
   AgentAttributesRecordSchema,
   AgentAttributesRecordSchema,
-  "support_agent_preferences",
+  "support_agent_attributes",
 );
 ```
 
@@ -3047,47 +2928,18 @@ mysqlBuilder.setTableName(
 );
 ```
 
-##### Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`
-
-**Table locations:** one in `support_acme` and one in `support_globex`.
-
-**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
-
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                         |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894` |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentAcceptanceReceipt`                                       | Protobuf message serialized into binary array                         |
-
-The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
-
-**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
-
-<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
-
-```ts
-import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
-import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
-
-const mysqlBuilder = MysqlStorageFactory.newBuilder();
-mysqlBuilder.setTableName(
-  AgentAcceptanceReceiptSchema,
-  AgentAcceptanceReceiptSchema,
-  "support_agent_receipts",
-);
-```
-
 ##### Agent attributes: `spine_agent_attributes_AgentAttributesRecord`
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                        | Example value                                                         |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentAttributesRecord`                                           | Protobuf message serialized into binary array                         |
+| Physical field     | Database type           | Exact source                                                                                   | Example value                                 |
+| ------------------ | ----------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentId(state_type_url, typed entity_id), encoded with the configured key conversion | `v1:<digest of typed AgentId>`                |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentAttributesRecord`                                                      | Protobuf message serialized into binary array |
 
-The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
+The complete AgentId, model preferences, and pending model calls stay in bytes. The pending list grows with outstanding calls; it stores no model weights, credentials, or runnable task.
 
 **Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
 
@@ -3101,7 +2953,7 @@ const mysqlBuilder = MysqlStorageFactory.newBuilder();
 mysqlBuilder.setTableName(
   AgentAttributesRecordSchema,
   AgentAttributesRecordSchema,
-  "support_agent_preferences",
+  "support_agent_attributes",
 );
 ```
 
@@ -3585,43 +3437,18 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 
 **Change this layout:** This family uses an explicit internal layout. There is no supported narrow builder setting to rename it.
 
-##### Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`
-
-**Kind locations:** one in namespace `Vacme` and one in namespace `Vglobex`.
-
-**Created by:** The Datastore adapter makes this kind visible on the first Agent receipt write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
-
-| Physical field                     | Database type      | Exact source                                                                     | Example value                                                         |
-| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894` |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentAcceptanceReceipt`                                       | Protobuf message serialized into binary array                         |
-
-The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
-
-**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
-
-<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
-
-```ts
-import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
-
-const datastoreBuilder = DatastoreStorageFactory.newBuilder();
-datastoreBuilder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_agent_receipts" });
-```
-
 ##### Agent attributes: `spine_agent_attributes`
 
 **Kind locations:** one in namespace `Vacme` and one in namespace `Vglobex`.
 
-**Created by:** The Datastore adapter makes this kind visible on the first Agent model-preference write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
+**Created by:** The Datastore adapter makes this kind visible on the first Agent attributes write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                                        | Example value                                                         |
-| ---------------------------------- | ------------------ | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentAttributesRecord`                                           | Protobuf message serialized into binary array                         |
+| Physical field                     | Database type      | Exact source                                                                                   | Example value                                 |
+| ---------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | digest of AgentId(state_type_url, typed entity_id), encoded with the configured key conversion | `v1:<digest of typed AgentId>`                |
+| `bytes`                            | Unindexed Blob     | Entire serialized `AgentAttributesRecord`                                                      | Protobuf message serialized into binary array |
 
-The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
+The complete AgentId, model preferences, and pending model calls stay in bytes. The pending list grows with outstanding calls; it stores no model weights, credentials, or runnable task.
 
 **Change this layout:** This family uses an explicit internal layout. There is no supported narrow builder setting to rename it.
 
@@ -3859,7 +3686,7 @@ ascending provider scan yield newest-first history.
 
 Gateway expiry uses a single `when_expires` property and needs no extra
 composite. Node leases use key scans and check expiry in application code.
-Preference/receipt accesses use keys. Default domain/System EventStore reads
+Agent attributes use their typed identity key; exact model-request history reads use the existing history identity. Default domain/System EventStore reads
 are key scans; custom filtered/sorted EventStore queries may need additional
 indexes. `TicketList` and `ReplyAssistant` have no additional application query
 in this example. Enabling their state history later adds the analogous history
@@ -4020,7 +3847,7 @@ gcloud datastore indexes list --project=PROJECT_ID
 Wait until every required index is `READY`. Index creation is asynchronous.
 Renaming a kind or adding a new query requires corresponding index changes.
 The index definitions apply across namespaces in the database; do not copy
-the YAML once per namespace. No namespace field belongs in this YAML.
+the YAML once per namespace. This YAML has no namespace field.
 
 - [ ] **5. Assemble and prepare Spine.** Use the client/factory setup above,
       configure the environment, then build Support with the stated features.
@@ -4041,7 +3868,7 @@ the YAML once per namespace. No namespace field belongs in this YAML.
 
 In-memory storage has no database tables, Datastore kinds, external indexes or
 DDL. The same 15 record purposes apply to this example: the three Entity states,
-Ticket state/Event histories, domain/System Events, Agent audit/receipts/preferences,
+Ticket state/Event histories, domain/System Events, Agent history/attributes,
 subscription definitions, individual Inbox messages, shard sessions, gateway
 bindings and node leases. Storage handles retain the corresponding collections
 in the selected backend; this does not imply exactly 15 JavaScript `Map` objects.
@@ -4378,8 +4205,7 @@ For the separate query column, the default stringifier produces:
 ```
 
 PostgreSQL and MySQL/MariaDB store this as `TEXT`; Datastore stores it as a
-string. The `@type` entry tells the reader which message the remaining fields
-belong to.
+string. The `@type` entry tells the reader which message defines the remaining fields.
 
 To produce or read that JSON, Spine needs the generated `BrowserInfo` schema.
 Generated model modules register their schemas when imported. The shared
@@ -4952,15 +4778,15 @@ create a file or another persistent store.
 
 ## 4. Agent storage
 
-The `ReplyAssistant` Agent in this example uses four kinds of records: its
-current Entity state, acceptance receipts, audit history, and model preferences.
+The `ReplyAssistant` Agent in this example uses three record families: its
+current Entity state, Agent history, and complete Agent attributes.
 They answer different questions, so it helps to follow one Command through them.
 
 ### Current Agent state
 
 Suppose a Command asks Agent `assistant-7` to draft a reply for Ticket
-`billing/T-42`. The handler eventually saves the text in
-`ReplyAssistant.last_draft`.
+`billing/T-42`. The handler saves the current request, then returns a model Command. A later
+model reply can update `ReplyAssistant.last_draft` if application code accepts it.
 
 That state goes into an EntityRecord, just like the Ticket state in chapter 3.
 The complete record is stored in `bytes`. There is no separate `last_draft`
@@ -4977,30 +4803,14 @@ The current-state locations are:
 The tables in chapters 1 and 2 list the primary key, `bytes`, and the lifecycle
 and version fields for this record.
 
-### Acceptance receipt
-
-Before the accepted Command runs, Spine saves an acceptance receipt. It records
-which Agent accepted which original signal and for which delivery action.
-
-The receipt has only a key and the complete binary record. The record includes
-the Agent's typed ID, its state type, the Command/Event ID, and the action. The
-physical key is a digest calculated from that identity.
-
-This receipt prevents the same accepted work from starting again after an
-interruption. It does not contain steps that a background worker can resume.
-A genuinely new Command has a new signal identity and can start new work.
-
-| Provider      | Table or kind                                         |
-| ------------- | ----------------------------------------------------- |
-| PostgreSQL    | `spine.spine_agent_acceptance_agentacceptancereceipt` |
-| MySQL/MariaDB | `spine_agent_acceptance_AgentAcceptanceReceipt`       |
-| Datastore     | `spine_agent_acceptance_AgentAcceptanceReceipt`       |
-
 ### Audit trail for a reply
 
-Now the handler calls a model. Spine records the interaction as it happens.
-For example, conversation `conversation-5` can contain the request to draft the
-reply and the model's response, “I can help with your invoice.”
+After the Agent saves the request, the framework records the complete prepared
+`CallModel` Command and the complete input envelope that caused it. It records
+a separate submission-attempt entry, including the attempted Command envelope,
+before posting. The detached model handler records provider exchanges as they
+happen. The later Agent handler saves a handled-outcome entry with its reply or
+rejection, and application code may explicitly save an abandonment entry.
 
 These entries go into the Agent audit records:
 
@@ -5010,10 +4820,11 @@ These entries go into the Agent audit records:
 | MySQL/MariaDB | `agent_history_AgentHistoryRecord`       |
 | Datastore     | `spine_agent_history`                    |
 
-Each row's `bytes` contains a complete AgentHistoryRecord. A model request can
-include the typed input, rendered developer instructions, prompt JSON, available
-tools, and the expected output schema. A response can include the returned
-text, the validated typed result, the model name, and token usage.
+Each row's `bytes` contains a complete AgentHistoryRecord. Prepared and attempted
+Command envelopes retain their IDs, actor metadata, causation, and typed payloads.
+Provider request entries can include typed input, instructions, prompt JSON,
+available tools, and the expected output schema. Provider responses can include
+returned text, validated output, model name, and usage.
 
 Those details stay inside the binary record. There is no separate SQL prompt
 column or table of token counts in this layout.
@@ -5030,7 +4841,8 @@ The audit can contain more than a plain text conversation:
 - A decision records the question, answer, and the decision details supplied by
   that interaction.
 - System and domain Event entries retain the complete Event and its typed
-  payload.
+  payload. Prepared requests, submission attempts, handled outcomes, and explicit
+  abandonment are separate full-history categories.
 - Provider-specific response fields are retained when supplied. For example,
   Anthropic responses can contain thinking text/signatures or redacted thinking
   bytes. OpenAI responses can contain refusals, reasoning summaries, or encrypted
@@ -5039,7 +4851,7 @@ The audit can contain more than a plain text conversation:
 These values describe what occurred during the live execution. Reading them
 later does not make the framework repeat the model call or continue the handler.
 
-### Model preferences
+### Agent attributes
 
 An Agent can have a model choice that differs from its repository's default.
 For example, Agent `assistant-7` may select the generation model named
@@ -5053,9 +4865,17 @@ That choice is stored separately from the generated reply and its audit:
 | MySQL/MariaDB | `spine_agent_attributes_AgentAttributesRecord`       |
 | Datastore     | `spine_agent_attributes`                             |
 
-The record contains the Agent's typed identity and its explicit model
-selections. It has a key and `bytes`, with no extra query columns. The selection
-names a configured model; it does not save model weights or provider credentials.
+The record contains the AgentId, explicit model selections, and pending model
+calls. It has a physical identity key and `bytes`, with no extra query columns.
+The pending list is read together with current state and grows with outstanding
+calls. The selection names a configured model; it saves no model weights or
+provider credentials. PostgreSQL and MySQL/MariaDB load current state and
+attributes in one SQL data statement; Datastore uses one transactional batched
+get; memory reads both under one coordinated snapshot.
+The detached model handler later performs an indexed exact request-history read
+to recover the triggering Command or Event for authorization. That read and the
+separate submission-attempt write are outside the ordinary Agent current-data
+load. An ordinary handler does not read history unless application code asks.
 
 For each model use, such as `GENERATION` or `DECISION`, selection works in this
 order:
@@ -5069,7 +4889,7 @@ The Bounded Context gets that AI registry from `.withAi(ai)` or inherits it from
 explicit preference for that use. A preference staged by a handler is saved
 only when normal processing succeeds.
 
-In multitenant mode, all four Agent record types described here go into the
+In multitenant mode, Agent current, attributes, and history records described here go into the
 Agent's tenant database or namespace. Their table/kind names repeat in each
 tenant destination.
 
@@ -5092,31 +4912,35 @@ together identify the Agent. The `conversation_digest` field hashes the raw
 conversation ID, `conversation-5`. The complete original values remain in the
 record so they are available when it is read.
 
-Acceptance receipts and preferences also include the exact typed ID in their
-key calculation. For this example, ReplyAssistantId's encoded bytes are
-`Cgthc3Npc3RhbnQtNw==` in base64, and its type URL is
-`type.googleapis.com/example.support.ReplyAssistantId`. The receipt also
-includes the original signal identity and delivery action. The table examples
-show the resulting digest keys.
+Agent attributes identify the Agent with its state type URL and complete
+packed typed Entity ID. The physical slot hashes a versioned tuple of that type
+URL, the ID's type URL, and the ID bytes. The original AgentId remains in the
+record. Exact model-request history lookup uses the existing history identity
+with the request category and call ID; it does not scan paged history or create
+another current-state table.
 
 ### Restart and history reads
 
-Consider a stop between these two actions:
+A saved Agent request and pending call do not create a durable execution queue.
+If the process stops after the Agent commit but before submission-attempt history
+is appended, the original Inbox input may already be `DELIVERED`, while the
+model provider was never called. A failed attempt append prevents submission
+and reports the failure. If the process stops after an attempt but before the
+provider result returns, the saved call is still not automatically replayed.
 
-1. Spine records the model's response in audit history.
-2. The handler saves `ReplyAssistant.last_draft`.
+If the original Agent input is still `TO_DELIVER`, ordinary Inbox redelivery can
+run its handler again after restart. That handler creates a _new_ model call ID;
+the framework never resumes the saved call from attributes or history.
 
-After restart, the response from step 1 is still readable when persistent
-storage is used. Current state remains at its last committed version. The
-framework does not rerun the handler to finish step 2. A new Command can ask
-for new work explicitly.
+`repository.agentHistory(...)` exposes `fullHistory`, `conversationHistory`,
+`systemEventHistory`, and `domainEventHistory`. Full history includes the
+request, attempt, handled outcome, and abandonment categories. Conversation
+history reads provider exchanges only. Each view returns newest entries first
+and provides a continuation for the next page. An exact `modelCallHistory(callId)`
+read uses the existing history identity to find the original request and source.
+Reading history does not start an Agent execution.
 
-`repository.agentHistory(...)` exposes four views: `fullHistory`,
-`conversationHistory`, `systemEventHistory`, and `domainEventHistory`. Each
-returns entries newest first and provides a continuation for the next page.
-Reading these views does not start an Agent execution.
-
-Marking the Agent Entity deleted does not purge its audit, receipt, or preference
+Marking the Agent Entity deleted does not purge its history or attributes
 records. The current API has no per-Agent history purge or automatic cascade.
 
 Prompts and tool results can include sensitive application information. Provider

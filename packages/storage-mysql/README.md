@@ -14,9 +14,10 @@ record schemas, and a reachable MySQL database.
 For database requirements, query limits, lifecycle, and error details, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
-For an application using Agents, this provider retains typed admission receipts,
-Entity state, and recorded interactions across restarts, without resuming an
-interrupted handler. Use InnoDB for Agent repositories;
+For an application using Agents, this provider retains Entity state, complete
+attributes, and recorded interactions across restarts. Saved pending calls do
+not restart model execution; an original pending Inbox input may redeliver and
+create a new call. Use InnoDB for Agent repositories;
 see the [coding-agent reference](REFERENCE.md) for database requirements.
 
 ## 💡 Why use it?

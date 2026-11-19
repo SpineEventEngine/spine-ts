@@ -717,7 +717,11 @@ const AgentHistoryCursorValues = Object.freeze({
       typeof cursor.recordId !== "string" ||
       (cursor.category !== "conversation" &&
         cursor.category !== "system" &&
-        cursor.category !== "domain")
+        cursor.category !== "domain" &&
+        cursor.category !== "request" &&
+        cursor.category !== "attempt" &&
+        cursor.category !== "handled" &&
+        cursor.category !== "abandoned")
     )
       throw new Error();
     const key: AgentHistoryOrderKey = {
