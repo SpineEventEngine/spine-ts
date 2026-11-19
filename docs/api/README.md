@@ -731,10 +731,10 @@ rescan, while other shards continue. Other processes can each make a failed
 attempt before applying their local suppression. The interval is not a
 per-message delivery deadline.
 
-`DeliveryMonitor` handles ordinary Entity handler failures and post-handler
-output or transition validation failures. Accepted Agent work is acknowledged
-before its live handler and does not use this reception action. The default action
-marks the row delivered; a custom monitor may repeat failed processing.
+`DeliveryMonitor` handles Entity handler failures and post-handler output or
+transition validation failures, including Agent reception. Delivery acknowledges
+an Agent input after its handler and save finish. The default failure action marks
+the row delivered; a custom monitor may repeat failed processing.
 Any selected reception action that completes normally leads to delivered
 acknowledgement; a rejected action leaves the row `TO_DELIVER` and propagates.
 Managed repository infrastructure failures propagate and leave the row pending.

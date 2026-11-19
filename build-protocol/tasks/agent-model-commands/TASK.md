@@ -306,16 +306,26 @@ is not a model mismatch. Subagents may not spawn subagents.
   assessed; no additional architectural change was required. Prior review outputs
   were not supplied.
 - Review round 3: a new no-memory Astra/high review function with the same
-  concerns, explicit model/reasoning required. Read-only with no child agents;
-  dispatch follows the round-2 correction push. No previous review outputs are
-  supplied.
+  concerns, reviewing `d0fe36615`. Explicit gpt-6-astra/high dispatch fields are
+  confirmed; runtime introspection is unavailable. Completed read-only with no
+  child agents. Two findings accepted: Agent output packing must use the ordinary
+  post-handler validation classification so default/custom reception actions
+  apply; current guides must distinguish monitor-controlled handler failures,
+  pending storage failures, ordinary source redelivery, and no saved-call replay.
+  The same Sol/medium implementer corrected both. Command and Event output
+  regressions cover default acknowledgement and custom repeat, with no first-attempt
+  request/history/provider work. Focused behavior, build/tooling, documentation,
+  Proto, lint and formatting checks passed. Other canonical concerns were
+  accepted or clean on inspection, including security. No previous review outputs
+  were supplied. A bounded follow-up checks these corrections within this round.
 
 ## Current status
 
 Architecture, implementation slices 1–5, and required version metadata are
-complete. Common workspace version is `2.0.0-snapshot.32`. The second fresh
-Astra/high review and its corrections are complete. The third review is next;
-shared-runtime release verification follows convergence. The selected profile is
+complete. Common workspace version is `2.0.0-snapshot.32`. All three fresh
+Astra/high reviews and their corrections are complete; bounded confirmation of
+the third round's fixes is pending.
+Shared-runtime release verification follows convergence. The selected profile is
 `verify:release` because Delivery, Bounded Context shutdown, storage providers,
 public protocol, and model execution change together. No unresolved human design
 question. No GitHub PR or issue changes are authorized.
@@ -326,7 +336,7 @@ Returned model Commands have detached metadata, with a regression proving a
 changed discarded request cannot alter later trusted construction. Generation,
 production build, package imports/assets/links, and current-output consistency
 checks passed. Round 1's six and round 2's five accepted corrections are complete.
-Round 3 and the full release gate remain.
+Bounded confirmation of round 3's corrections and the full release gate remain.
 
 ## Implementation seams
 

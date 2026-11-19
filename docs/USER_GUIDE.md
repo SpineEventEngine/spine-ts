@@ -320,10 +320,12 @@ Use an exact route when the first field is not the correct target. `CommandRouti
 `.route(Token, via)`. Selection is exact schema, then the first registered
 matching token, then the replacement/default route. Route functions run once at
 accepted admission and stored typed targets are replayed on retry for ordinary
-Aggregate, Process Manager, and Projection work. An accepted Agent interaction
-does not replay after interruption. The
-callback may be asynchronous. Pass the receiving Entity class to `create()` to
-receive typed `findIds`, `findStates`, and `find` reads as the callback's third
+Aggregate, Process Manager, Projection, and Agent work. If an Agent input remains
+`TO_DELIVER` after interruption, ordinary redelivery can run its handler again
+and create a new model call. A saved model call is never automatically replayed
+from attributes or history. The callback may be asynchronous. Pass the receiving
+Entity class to `create()` to receive typed `findIds`, `findStates`, and `find`
+reads as the callback's third
 argument. Use the same Entity constructor when registering the repository;
 a different class is rejected even if its ID and state types match. A query reads
 the receiving repository in the incoming signal's tenant;

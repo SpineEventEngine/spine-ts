@@ -4907,7 +4907,7 @@ const AgentLiveOutputs = {
         : runtime.signalMetadata.eventFromEvent(source.value, { version: version.number });
     const event = create(EventSchema, {
       id: metadata.id,
-      message: RepositorySignals.packValidated(schema, signal as never),
+      message: RepositorySignals.packProduced(schema, signal as never),
       context: RepositorySignals.eventContextWithProducer(
         metadata.context,
         repository,
@@ -4939,7 +4939,7 @@ const AgentLiveOutputs = {
         : runtime.signalMetadata.commandFromEvent(source.value);
     const command = create(CommandSchema, {
       id: metadata.id,
-      message: RepositorySignals.packValidated(schema, signal as never),
+      message: RepositorySignals.packProduced(schema, signal as never),
       context: metadata.context,
     });
     return { case: "command", value: command };

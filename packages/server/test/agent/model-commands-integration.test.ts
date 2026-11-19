@@ -124,6 +124,8 @@ const proposal = AiModel.define({
 });
 
 class ModelCommandAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
+  static invalidOutput: "command" | "event" | undefined;
+
   static invalidTransition = false;
 
   static inspections = 0;
@@ -170,6 +172,10 @@ class ModelCommandAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAg
         customerQuestion: command.question,
       }),
     });
+    if (ModelCommandAgent.invalidOutput === "command") {
+      ModelCommandAgent.invalidOutput = undefined;
+      request.call = undefined;
+    }
     if (ModelCommandAgent.mutateReturned) request.model = ModelRef.of("different-deployment", "v1");
     return request;
   }
@@ -189,6 +195,10 @@ class ModelCommandAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAg
         customerQuestion: "Inspect the existing draft",
       }),
     });
+    if (ModelCommandAgent.invalidOutput === "event") {
+      ModelCommandAgent.invalidOutput = undefined;
+      return create(SupportReplyDraftInspectedSchema);
+    }
     return create(SupportReplyDraftInspectedSchema, { agent: command.agent });
   }
 
@@ -583,6 +593,90 @@ describe("Agent model Commands", () => {
         expect(await context.stand().read(SupportReplyAgentStateSchema, id)).toBeUndefined();
       } finally {
         ModelCommandAgent.invalidTransition = false;
+        monitor.mockRestore();
+        await application.close();
+      }
+    },
+  );
+
+  it.each([
+    { output: "command" as const, action: "default" as const },
+    { output: "command" as const, action: "custom" as const },
+    { output: "event" as const, action: "default" as const },
+    { output: "event" as const, action: "custom" as const },
+  ])(
+    "monitors an invalid declared Agent $output with the $action action",
+    async ({ output, action }) => {
+      ModelCommandAgent.invalidOutput = output;
+      const providerCalls = vi.fn();
+      const monitored: unknown[] = [];
+      const defaultMonitor = new DeliveryMonitor();
+      const original = defaultMonitor.onReceptionFailure.bind(defaultMonitor);
+      const monitor = vi
+        .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
+        .mockImplementation((reception) => {
+          monitored.push(reception.error);
+          expect(providerCalls).not.toHaveBeenCalled();
+          return action === "custom" ? reception.repeatDispatching() : original(reception);
+        });
+      const repository = modelRepository();
+      const environment = ServerEnvironment.newBuilder()
+        .under(EnvironmentType.Local, (configuration) => {
+          configuration.use({ storageFactory: new InMemoryStorageFactory() });
+        })
+        .build();
+      const application = await Application.newBuilder()
+        .setServerEnvironment(environment)
+        .add(
+          BoundedContext.singleTenant("InvalidAgentOutput")
+            .withAi(
+              replyingRegistry("Valid retry", () => {
+                providerCalls();
+                return Promise.resolve();
+              }),
+            )
+            .persistSystemEvents()
+            .add(repository),
+        )
+        .build();
+      const [context] = application.contexts();
+      if (context === undefined) throw new Error("Expected a Bounded Context.");
+      const id = create(SupportReplyAgentIdSchema, {
+        ticketNumber: `T-invalid-${output}-${action}`,
+      });
+      const command = SignalEnvelopes.command({
+        schema: output === "command" ? DraftSupportReplySchema : InspectSupportReplyDraftSchema,
+        message:
+          output === "command"
+            ? create(DraftSupportReplySchema, { agent: id, question: "Check output validation" })
+            : create(InspectSupportReplyDraftSchema, { agent: id }),
+        context: create(CommandContextSchema, {
+          actorContext: create(ActorContextSchema, {
+            actor: create(UserIdSchema, { value: "support-user" }),
+          }),
+        }),
+      });
+      try {
+        await context.commandBus().post(command);
+        await serverEnvironmentAccess.whenDeliveryIdle(environment);
+        expect(monitored).toHaveLength(1);
+        expect(monitored[0]).toMatchObject({ name: "ValidationException" });
+        const rows = await serverEnvironmentAccess
+          .coreDelivery(environment)
+          .inbox.read(ShardIndex.single());
+        expect(rows.find((row) => row.signalId === command.id?.uuid)?.status).toBe("DELIVERED");
+        const history = await readAgentHistoryPage(context, repository, id, { pageSize: 10 });
+        expect(history.items.filter((entry) => entry.item.case === "modelRequest")).toHaveLength(
+          action === "custom" && output === "command" ? 1 : 0,
+        );
+        expect(history.items.filter((entry) => entry.item.case === "domainEvent")).toHaveLength(
+          action === "custom" && output === "event" ? 1 : 0,
+        );
+        expect(providerCalls).toHaveBeenCalledTimes(
+          action === "custom" && output === "command" ? 1 : 0,
+        );
+      } finally {
+        ModelCommandAgent.invalidOutput = undefined;
         monitor.mockRestore();
         await application.close();
       }

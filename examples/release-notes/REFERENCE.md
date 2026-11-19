@@ -159,9 +159,13 @@ matches its pending generation and historical input Version. An older result
 is not automatically rejected by the framework; this application interprets
 it through its stored generation identity.
 
-If the Agent handler or commit fails, the original Inbox row remains
-`TO_DELIVER`. If the Agent saves but the separate attempt append fails, the
-original row can be `DELIVERED` while the provider was never called. A saved
+An Agent handler, declared output, or state transition failure follows the
+ordinary reception monitor: its default action acknowledges the Inbox row,
+while a custom action may repeat processing. A storage failure leaves the
+original row `TO_DELIVER`.
+
+If the Agent saves but the separate attempt append fails, the original row can
+be `DELIVERED` while the provider was never called. A saved
 pending call is not replayed at startup. Ordinary redelivery of an original
 `TO_DELIVER` signal may prepare a new call ID.
 

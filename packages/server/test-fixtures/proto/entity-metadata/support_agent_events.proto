@@ -41,7 +41,7 @@ message SupportTicketUpdated {
 // Records inspection of a draft without submitting its prepared model call.
 message SupportReplyDraftInspected {
   // Identifies the support ticket.
-  SupportReplyAgentId agent = 1;
+  SupportReplyAgentId agent = 1 [(required) = true];
 }
 
 // Records explicit cancellation of a pending support reply draft.
