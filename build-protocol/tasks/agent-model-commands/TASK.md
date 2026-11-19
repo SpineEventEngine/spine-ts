@@ -17,6 +17,9 @@ The no-durable-publication decision is recorded in DECISION_LOG.md under
   execution tied to shard sessions, Agent session renewals for remote calls,
   and `AgentAcceptanceReceipt` and its storage.
 - Introduce no Inbox status, including `DELIVERY_IN_PROGRESS`.
+- Use the existing reception monitor for rejected Agent state transitions,
+  including its existing default/custom actions. This is the ordinary Entity
+  error path, separate from successful handler/save acknowledgement.
 - Do not promise atomic saving and acknowledgement or exactly-once execution.
   Existing ordinary Delivery/redelivery semantics remain. Do not retain
   Agent-specific acceptance suppression to hide shared delivery gaps.
@@ -55,7 +58,7 @@ The no-durable-publication decision is recorded in DECISION_LOG.md under
   provider and tool authorization policies. Resolve it through indexed request
   history and verify the admitted request matches, without loading an Agent or
   replaying work. This preserves policies bound to the original domain input.
-  A mismatched saved request is reported against the invalid Command without
+  An absent or mismatched saved request is reported against the invalid Command without
   publishing an outcome for the genuine pending call.
 - Bind transported input type URLs to the registered definition in ordinary
   signal admission/output preparation. Do not revalidate incoming messages
@@ -286,17 +289,33 @@ is not a model mismatch. Subagents may not spawn subagents.
   Earlier review outputs were not supplied.
 - Review round 2: new no-memory review function, expected gpt-6-astra/high with
   explicit model and reasoning. Same canonical concerns and full branch diff,
-  read-only with no child agents. Dispatch follows the round-1 correction push;
-  prior review outputs are not supplied.
+  read-only with no child agents, reviewing `571d114d0`. Explicit Astra/high
+  dispatch fields confirmed; actual runtime introspection is unavailable.
+  Completed. Five findings accepted: require genuine saved model-request history
+  before execution; classify Agent transition failures through the ordinary
+  reception monitor; correct the documented interruption/acknowledgement order;
+  describe all full-history categories in Release Notes; document the remaining
+  authored types. Latest JVM TargetDelivery/DeliveryMonitor inspection confirms
+  reception-error monitoring and its default acknowledgement. The existing human
+  decision to use ordinary Entity delivery answers this parity question; existing
+  default/custom monitor policies are retained and tested. All five findings are
+  corrected by the same Sol/medium implementer. Missing-history requests produce
+  no provider execution or typed outcome; concurrent equal-call-ID tests use
+  complete saved request fixtures. Focused behavior, build/tooling, lint/format,
+  TSDoc and documentation/snippet checks passed. Every canonical concern was
+  assessed; no additional architectural change was required. Prior review outputs
+  were not supplied.
 - Review round 3: a new no-memory Astra/high review function with the same
-  concerns, after round 2's relevant findings are corrected.
+  concerns, explicit model/reasoning required. Read-only with no child agents;
+  dispatch follows the round-2 correction push. No previous review outputs are
+  supplied.
 
 ## Current status
 
-Architecture and implementation slices 1–5 are complete. Common workspace
-version is `2.0.0-snapshot.32`; dependency/Proto metadata checks precede the first
-of three sequential fresh Astra/high reviews and
-shared-runtime release verification. The selected verification profile is
+Architecture, implementation slices 1–5, and required version metadata are
+complete. Common workspace version is `2.0.0-snapshot.32`. The second fresh
+Astra/high review and its corrections are complete. The third review is next;
+shared-runtime release verification follows convergence. The selected profile is
 `verify:release` because Delivery, Bounded Context shutdown, storage providers,
 public protocol, and model execution change together. No unresolved human design
 question. No GitHub PR or issue changes are authorized.
@@ -306,8 +325,8 @@ fixtures to the current readiness/history contracts and consistent storage types
 Returned model Commands have detached metadata, with a regression proving a
 changed discarded request cannot alter later trusted construction. Generation,
 production build, package imports/assets/links, and current-output consistency
-checks passed. Review round 1's six accepted corrections are complete and checked.
-Round 2 is next; round 3 and the full release gate follow review convergence.
+checks passed. Round 1's six and round 2's five accepted corrections are complete.
+Round 3 and the full release gate remain.
 
 ## Implementation seams
 

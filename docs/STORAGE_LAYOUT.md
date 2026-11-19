@@ -4922,11 +4922,13 @@ another current-state table.
 ### Restart and history reads
 
 A saved Agent request and pending call do not create a durable execution queue.
-If the process stops after the Agent commit but before submission-attempt history
-is appended, the original Inbox input may already be `DELIVERED`, while the
-model provider was never called. A failed attempt append prevents submission
-and reports the failure. If the process stops after an attempt but before the
-provider result returns, the saved call is still not automatically replayed.
+The Agent handler waits for submission-attempt history to be appended before
+its original Inbox input can become `DELIVERED`. If the process stops while
+that append is pending, the input remains eligible for ordinary redelivery,
+which creates a new call. A failed attempt append prevents submission and
+reports the failure, then the original input can be acknowledged normally. If
+the process stops after acknowledgement while detached model work is pending,
+the saved call is not automatically replayed.
 
 If the original Agent input is still `TO_DELIVER`, ordinary Inbox redelivery can
 run its handler again after restart. That handler creates a _new_ model call ID;

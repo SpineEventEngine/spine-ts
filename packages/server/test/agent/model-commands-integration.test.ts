@@ -12,7 +12,8 @@
  * the License.
  */
 
-import { clone, create, isMessage, type Message } from "@bufbuild/protobuf";
+import { clone, create, isMessage, toBinary, type Message } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { AiModel, AiRegistry, ModelRef } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
 import {
@@ -37,6 +38,7 @@ import {
 import {
   AiContentDigestSchema,
   AiModelKind,
+  AgentHistoryEntrySchema,
   AgentIdSchema,
   AiOperationIdSchema,
   AiOutcome,
@@ -47,6 +49,7 @@ import {
   ModelRepliedSchema,
   ModelCallFailedSchema,
   ModelCallSchema,
+  ModelRequestRecordSchema,
   type ModelReplied,
   type ModelCallFailed,
   type AiOperationId,
@@ -58,6 +61,7 @@ import type {
   EntityCommitStorage,
   EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
+import { AgentHistoryStorageFactories } from "@spine-event-engine/storage/provider";
 import { describe, expect, it, vi } from "vitest";
 import { Agent } from "../../src/entity/entity.js";
 import { Application } from "../../src/server/application.js";
@@ -65,6 +69,7 @@ import { BoundedContext } from "../../src/context/bounded-context.js";
 import { EnvironmentType } from "../../src/server/environment.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "../../src/server/server-environment.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
+import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
 import { HandlerRegistryIngestor } from "../../src/handler/generated-handler-registry.js";
 import { Repository } from "../../src/repository/repository.js";
 import { SignalPublisher } from "../../src/runtime/signal-publisher.js";
@@ -119,6 +124,10 @@ const proposal = AiModel.define({
 });
 
 class ModelCommandAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
+  static invalidTransition = false;
+
+  static inspections = 0;
+
   static replies = 0;
 
   static pendingAtReply: {
@@ -166,6 +175,11 @@ class ModelCommandAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAg
   }
 
   inspect(command: InspectSupportReplyDraft) {
+    ModelCommandAgent.inspections++;
+    if (ModelCommandAgent.invalidTransition) {
+      ModelCommandAgent.invalidTransition = false;
+      this.update((state) => Object.assign(state, { id: undefined }));
+    }
     this.modelCommands.create(proposal, {
       conversation: create(ConversationIdSchema, { value: "discarded" }),
       input: create(SupportTicketFactsSchema, {
@@ -323,6 +337,61 @@ function preparedModelCommand(
   });
 }
 
+/**
+ * Seeds the exact prepared history required for a domain-correct model Command fixture.
+ *
+ * @param factory In-memory provider used by the Bounded Context.
+ * @param contextName Bounded Context storing the Agent's request.
+ * @param id Typed Agent ID for the request.
+ * @param command Complete prepared CallModel Command.
+ */
+async function seedPreparedRequest(
+  factory: InMemoryStorageFactory,
+  contextName: string,
+  id: SupportReplyAgentId,
+  command: Command,
+): Promise<void> {
+  const payload = command.message && AnyPacker.tryUnpack(command.message, CallModelSchema);
+  const whenRequested = payload?.call?.whenRequested;
+  if (whenRequested === undefined) throw new Error("Prepared model Command has no request time.");
+  const source = SignalEnvelopes.command({
+    schema: DraftSupportReplySchema,
+    message: create(DraftSupportReplySchema, { agent: id, question: "Scoped request" }),
+    context: create(CommandContextSchema, {
+      actorContext: create(ActorContextSchema, {
+        actor: create(UserIdSchema, { value: "support-user" }),
+      }),
+    }),
+  });
+  const history = AgentHistoryStorageFactories.create(factory, {
+    context: { name: contextName, multitenant: false },
+    stateType: SupportReplyAgentStateSchema.typeName,
+    id: {
+      key: (entityId: SupportReplyAgentId) =>
+        Buffer.from(
+          toBinary(AnySchema, AnyPacker.pack(SupportReplyAgentIdSchema, entityId)),
+        ).toString("base64"),
+    },
+  });
+  try {
+    await history.append(
+      id,
+      create(AgentHistoryEntrySchema, {
+        whenOccurred: whenRequested,
+        item: {
+          case: "modelRequest",
+          value: create(ModelRequestRecordSchema, {
+            request: clone(CommandSchema, command),
+            source: { case: "command", value: source },
+          }),
+        },
+      }),
+    );
+  } finally {
+    history.close();
+  }
+}
+
 class ObservedMemoryFactory extends InMemoryStorageFactory {
   commitStorage: EntityCommitStorage | undefined;
 
@@ -340,11 +409,12 @@ function modelRepository(
   unmatchedReply = false,
   noReplyHandler = false,
   models: readonly (typeof proposal)[] = [proposal],
+  authorizeSelection?: () => boolean,
 ) {
   return new Repository({
     entityType: ModelCommandAgent,
     schema: SupportReplyAgentStateSchema,
-    ai: { models },
+    ai: { models, ...(authorizeSelection ? { authorizeSelection } : {}) },
     handlers: new HandlerRegistryIngestor().ingest({
       receivers: [
         {
@@ -415,6 +485,110 @@ function modelRepository(
 }
 
 describe("Agent model Commands", () => {
+  it("rejects a model Command without saved prepared history before provider work", async () => {
+    const executed = vi.fn();
+    const denied = vi.fn(() => false);
+    const reported = vi.spyOn(SignalPublisher.prototype, "reportFailure");
+    const environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (configuration) => {
+        configuration.use({ storageFactory: new InMemoryStorageFactory() });
+      })
+      .build();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(environment)
+      .add(
+        BoundedContext.singleTenant("UnpreparedModelCommand")
+          .withAi(
+            replyingRegistry("Must not run", () => {
+              executed();
+              return Promise.resolve();
+            }),
+          )
+          .persistSystemEvents()
+          .add(modelRepository(false, false, false, [proposal], denied)),
+      )
+      .build();
+    const [context] = application.contexts();
+    if (context === undefined) throw new Error("Expected a Bounded Context.");
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-unprepared" });
+    const command = preparedModelCommand(id, "unprepared", "UnpreparedModelCommand");
+    try {
+      await context.commandBus().post(command);
+      await vi.waitFor(() => {
+        expect(reported).toHaveBeenCalledWith(
+          "command",
+          expect.objectContaining({ id: command.id }),
+          expect.objectContaining({ message: "Saved model request history is missing." }),
+        );
+      });
+      expect(executed).not.toHaveBeenCalled();
+      expect(denied).not.toHaveBeenCalled();
+      expect(ModelCommandAgent.failures).toBe(0);
+    } finally {
+      reported.mockRestore();
+      await application.close();
+    }
+  });
+
+  it.each(["default", "custom"])(
+    "monitors an invalid Agent transition with the %s reception action",
+    async (action) => {
+      ModelCommandAgent.invalidTransition = true;
+      ModelCommandAgent.inspections = 0;
+      const monitored: unknown[] = [];
+      const defaultMonitor = new DeliveryMonitor();
+      const original = defaultMonitor.onReceptionFailure.bind(defaultMonitor);
+      const monitor = vi
+        .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
+        .mockImplementation((reception) => {
+          monitored.push(reception.error);
+          return action === "custom" ? reception.repeatDispatching() : original(reception);
+        });
+      const environment = ServerEnvironment.newBuilder()
+        .under(EnvironmentType.Local, (configuration) => {
+          configuration.use({ storageFactory: new InMemoryStorageFactory() });
+        })
+        .build();
+      const application = await Application.newBuilder()
+        .setServerEnvironment(environment)
+        .add(
+          BoundedContext.singleTenant("InvalidAgentTransition")
+            .withAi(replyingRegistry("Unused backend"))
+            .persistSystemEvents()
+            .add(modelRepository()),
+        )
+        .build();
+      const [context] = application.contexts();
+      if (context === undefined) throw new Error("Expected a Bounded Context.");
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: `T-${action}-invalid` });
+      const command = SignalEnvelopes.command({
+        schema: InspectSupportReplyDraftSchema,
+        message: create(InspectSupportReplyDraftSchema, { agent: id }),
+        context: create(CommandContextSchema, {
+          actorContext: create(ActorContextSchema, {
+            actor: create(UserIdSchema, { value: "support-user" }),
+          }),
+        }),
+      });
+      try {
+        await context.commandBus().post(command);
+        await serverEnvironmentAccess.whenDeliveryIdle(environment);
+        expect(monitored).toHaveLength(1);
+        expect(monitored[0]).toMatchObject({ name: "TransitionValidationError" });
+        expect(ModelCommandAgent.inspections).toBe(action === "custom" ? 2 : 1);
+        const rows = await serverEnvironmentAccess
+          .coreDelivery(environment)
+          .inbox.read(ShardIndex.single());
+        expect(rows.find((row) => row.signalId === command.id?.uuid)?.status).toBe("DELIVERED");
+        expect(await context.stand().read(SupportReplyAgentStateSchema, id)).toBeUndefined();
+      } finally {
+        ModelCommandAgent.invalidTransition = false;
+        monitor.mockRestore();
+        await application.close();
+      }
+    },
+  );
+
   it("rejects ambiguous model definitions for one Agent state and revision", async () => {
     const competing = AiModel.define({
       name: proposal.definition.name,
@@ -687,9 +861,12 @@ describe("Agent model Commands", () => {
     ModelCommandAgent.replies = 0;
     const primaryUsed = vi.fn();
     const alternateUsed = vi.fn();
-    const registry = replyingRegistry("Pinned result", () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const registry = replyingRegistry("Pinned result", async () => {
       primaryUsed();
-      return Promise.resolve(undefined);
+      entered.resolve(undefined);
+      await release.promise;
     });
     const alternate = ModelRef.of("model-command-alternate", "v1");
     registry.register(
@@ -740,19 +917,30 @@ describe("Agent model Commands", () => {
       }),
     });
     try {
+      await context.commandBus().post(
+        SignalEnvelopes.command({
+          schema: DraftSupportReplySchema,
+          message: create(DraftSupportReplySchema, { agent: id, question: "Pinned deployment" }),
+          context: create(CommandContextSchema, {
+            actorContext: create(ActorContextSchema, {
+              actor: create(UserIdSchema, { value: "support-user" }),
+            }),
+          }),
+        }),
+      );
+      await entered.promise;
       await context.commandBus().post(preference);
       await serverEnvironmentAccess.whenDeliveryIdle(environment);
       const current = await storageFactory.commitStorage?.readAgentCurrent(id);
       expect(current?.attributes?.modelPreferences[0]?.selection.value).toEqual(alternate);
-      await context
-        .commandBus()
-        .post(preparedModelCommand(id, "pinned-after-preference", "ModelPinnedDeployment"));
+      release.resolve(undefined);
       await vi.waitFor(() => {
         expect(ModelCommandAgent.replies).toBe(1);
       });
       expect(primaryUsed).toHaveBeenCalledOnce();
       expect(alternateUsed).not.toHaveBeenCalled();
     } finally {
+      release.resolve(undefined);
       await application.close();
     }
   });
@@ -812,9 +1000,10 @@ describe("Agent model Commands", () => {
       await release.promise;
     });
     const repository = modelRepository();
+    const storageFactory = new InMemoryStorageFactory();
     const environment = ServerEnvironment.newBuilder()
       .under(EnvironmentType.Local, (configuration) => {
-        configuration.use({ storageFactory: new InMemoryStorageFactory() });
+        configuration.use({ storageFactory });
       })
       .build();
     const application = await Application.newBuilder()
@@ -830,11 +1019,12 @@ describe("Agent model Commands", () => {
     if (context === undefined) throw new Error("Expected a Bounded Context.");
     const firstId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-collision-A" });
     const secondId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-collision-B" });
+    const first = preparedModelCommand(firstId, "equal-call", "ModelCollision");
+    const second = preparedModelCommand(secondId, "equal-call", "ModelCollision");
     try {
-      await Promise.all([
-        context.commandBus().post(preparedModelCommand(firstId, "equal-call", "ModelCollision")),
-        context.commandBus().post(preparedModelCommand(secondId, "equal-call", "ModelCollision")),
-      ]);
+      await seedPreparedRequest(storageFactory, "ModelCollision", firstId, first);
+      await seedPreparedRequest(storageFactory, "ModelCollision", secondId, second);
+      await Promise.all([context.commandBus().post(first), context.commandBus().post(second)]);
       await secondEntered.promise;
       release.resolve(undefined);
       await vi.waitFor(async () => {

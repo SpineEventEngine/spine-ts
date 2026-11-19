@@ -12,6 +12,9 @@
  * the License.
  */
 
+/**
+ * Named fields read from an Agent history entry's Protobuf JSON value.
+ */
 type Fields = Record<string, unknown>;
 
 /**

@@ -257,6 +257,10 @@ export class ModelCommandSession implements AgentModelCommands {
 
 const bindings = new WeakMap<object, AgentModelCommands>();
 
+/**
+ * Provides the handler-scoped model Command session to a restored Agent.
+ * The binding is cleared when the handler finishes.
+ */
 interface ModelCommandBindingAccess {
   /**
    * Binds a session to the current Agent invocation.

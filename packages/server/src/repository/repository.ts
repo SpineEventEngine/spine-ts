@@ -5433,7 +5433,7 @@ class AgentLiveRunner {
         transactionalEntityAccess.commit(current),
       );
       if (commit.status === "rejected")
-        throw new TransitionValidationError(commit.validation.error);
+        throw EntityInvocation.rejectedTransition(commit.validation.error);
       return produced;
     } catch (error) {
       transactionalEntityAccess.rollback(loaded.entity);
@@ -6363,7 +6363,7 @@ export class AgentModelCommandHandler extends AsyncCommandHandler {
    *
    * @param admitted Command and repository admitted by the Command Bus.
    * @param call Trusted model call identity.
-   * @returns Original Agent signal, or the admitted Command if no request was saved.
+   * @returns Original Agent signal from the saved prepared request.
    */
   private async originalSource(
     admitted: AdmittedModelCommand,
@@ -6381,7 +6381,8 @@ export class AgentModelCommandHandler extends AsyncCommandHandler {
       input,
     );
     const entry = await history.readModelRequest(admitted.entityId, call.id?.value ?? "");
-    if (entry === undefined) return { case: "command", value: admitted.command };
+    if (entry === undefined)
+      throw new ModelRequestCorrelationError("Saved model request history is missing.");
     if (entry.item.case !== "modelRequest")
       throw new ModelRequestCorrelationError(
         "Model request history returned a different category.",

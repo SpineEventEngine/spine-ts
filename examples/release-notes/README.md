@@ -424,12 +424,12 @@ async function readHistory(
 size controls one read, not the total amount of retained history. Entries are
 returned newest first.
 
-| Method                | What it returns                                                                   |
-| --------------------- | --------------------------------------------------------------------------------- |
-| `fullHistory`         | A Protobuf oneof containing a conversation record, System Event, or domain Event. |
-| `conversationHistory` | Conversation records for a specified conversation.                                |
-| `systemEventHistory`  | Agent System Events, separate from model request and attempt records.             |
-| `domainEventHistory`  | Domain Events emitted by this Agent, such as its proposal or failure.             |
+| Method                | What it returns                                                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `fullHistory`         | Conversation records, System Events, domain Events, prepared model requests, submission attempts, handled outcomes, and abandonments. |
+| `conversationHistory` | Provider exchanges for a specified conversation.                                                                                      |
+| `systemEventHistory`  | Agent System Events, separate from model request and attempt records.                                                                 |
+| `domainEventHistory`  | Domain Events emitted by this Agent, such as its proposal or failure.                                                                 |
 
 Recording is mandatory. Agent handlers can also read these four histories through
 their Entity API. Reading a history does not send it to a model; the handler

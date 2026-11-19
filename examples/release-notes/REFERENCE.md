@@ -309,12 +309,12 @@ History is recorded for every Agent. There is no recording switch. Its repositor
 keeps indexes for that Agent instance; the desktop does not scan all System
 Events in the Bounded Context to find a few interactions.
 
-| Method                | Entries, newest first                                                                     |
-| --------------------- | ----------------------------------------------------------------------------------------- |
-| `fullHistory`         | A Protobuf oneof containing a conversation record, System Event, or emitted domain Event. |
-| `conversationHistory` | Conversation records for the supplied conversation ID.                                    |
-| `systemEventHistory`  | System Event envelopes.                                                                   |
-| `domainEventHistory`  | Domain Event envelopes emitted by this Agent.                                             |
+| Method                | Entries, newest first                                                                                                               |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `fullHistory`         | Provider exchanges, System Events, domain Events, prepared model requests, submission attempts, handled outcomes, and abandonments. |
+| `conversationHistory` | Provider exchanges for the supplied conversation ID.                                                                                |
+| `systemEventHistory`  | System Event envelopes.                                                                                                             |
+| `domainEventHistory`  | Domain Event envelopes emitted by this Agent.                                                                                       |
 
 Each call reads a page. Its `nextCursor` reads older entries. A page size is not
 a retention limit; continue until no cursor remains. An explicitly configured
