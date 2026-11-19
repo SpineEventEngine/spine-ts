@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { create } from "@bufbuild/protobuf";
+import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
 import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
@@ -88,6 +89,7 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
     env: {
       ...process.env,
       SPINE_MANAGED_REMOTE_DELIVERY_URL: delivery.baseUrl,
+      SPINE_MANAGED_REMOTE_DELIVERY_REPLACEMENT_URL: delivery.replacementUrl,
       SPINE_MANAGED_HANDLER_GATE: handlerGate.directory,
     },
     stdio: ["ignore", "ignore", "pipe", "ipc"],
@@ -174,6 +176,7 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
     env: {
       ...process.env,
       SPINE_MANAGED_REMOTE_DELIVERY_URL: delivery.baseUrl,
+      SPINE_MANAGED_REMOTE_DELIVERY_REPLACEMENT_URL: delivery.replacementUrl,
       SPINE_MANAGED_HANDLER_GATE: handlerGate.directory,
     },
     stdio: ["ignore", "ignore", "pipe", "ipc"],
@@ -205,6 +208,9 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
   if (removed === undefined) throw new Error("Managed fixture did not report an initial replica.");
   await bounded(subscriptions.cancel(subscription), "initial subscription cancellation");
   delivery.armSnapshot();
+  const admin = createClient(AdminService, createGrpcTransport({ baseUrl: delivery.baseUrl }));
+  await bounded(admin.getShardInfo(create(EmptySchema)), "survivor snapshot while gate armed");
+  await handlerGate.markReplacement();
   process.kill(removed.pid, "SIGKILL");
   await expect.poll(() => currentMembers(child, "retired")).toHaveLength(1);
   const whileSnapshotHeld = await currentMembers(child, "retired-confirmed");
@@ -324,6 +330,10 @@ class HandlerGate {
     await writeFile(this.#arm, "");
   }
 
+  async markReplacement(): Promise<void> {
+    await writeFile(join(this.directory, "replacement"), "");
+  }
+
   async entered(): Promise<void> {
     await expect.poll(() => fileExists(this.#entered), { timeout: 10_000 }).toBe(true);
   }
@@ -404,11 +414,19 @@ class GatedDeliveryListener {
   readonly #snapshotReleased = deferred<undefined>();
   #snapshotArmed = false;
   #server: http2.Http2Server | undefined;
+  #replacementServer: http2.Http2Server | undefined;
   #port: number | undefined;
+  #replacementPort: number | undefined;
 
   get baseUrl(): string {
     if (this.#port === undefined) throw new Error("Gated Delivery listener has not started.");
     return `http://127.0.0.1:${String(this.#port)}`;
+  }
+
+  get replacementUrl(): string {
+    if (this.#replacementPort === undefined)
+      throw new Error("Replacement Delivery listener has not started.");
+    return `http://127.0.0.1:${String(this.#replacementPort)}`;
   }
 
   get snapshotEntered(): Promise<undefined> {
@@ -428,6 +446,14 @@ class GatedDeliveryListener {
   }
 
   async start(): Promise<this> {
+    this.#server = this.#createServer(false);
+    this.#port = await listen(this.#server);
+    this.#replacementServer = this.#createServer(true);
+    this.#replacementPort = await listen(this.#replacementServer);
+    return this;
+  }
+
+  #createServer(gateSnapshot: boolean): http2.Http2Server {
     const server = http2.createServer(
       connectNodeAdapter({
         routes: (router) => {
@@ -436,7 +462,7 @@ class GatedDeliveryListener {
           router.service(AdminService, {
             ...this.#assembly.admin,
             getShardInfo: async (request, context) => {
-              if (this.#snapshotArmed) {
+              if (gateSnapshot && this.#snapshotArmed) {
                 this.#snapshotArmed = false;
                 this.#snapshotEntered.resolve(undefined);
                 await this.#snapshotReleased.promise;
@@ -451,9 +477,7 @@ class GatedDeliveryListener {
       this.#sessions.add(session);
       session.on("close", () => this.#sessions.delete(session));
     });
-    this.#server = server;
-    this.#port = await listen(server);
-    return this;
+    return server;
   }
 
   async close(): Promise<void> {
@@ -464,6 +488,8 @@ class GatedDeliveryListener {
     for (const session of this.#sessions) session.close();
     const server = this.#server;
     if (server?.listening) await closeListener(server);
+    const replacement = this.#replacementServer;
+    if (replacement?.listening) await closeListener(replacement);
   }
 }
 

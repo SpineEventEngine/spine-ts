@@ -351,7 +351,18 @@ full test suite; its only failure was an old schema-error assertion expecting
 `occurred_at` instead of the accepted `when_occurred` name. The same implementer
 corrected that literal; focused tests, lint, formatting and diff checks passed.
 The production tree is unchanged from the reviewed version. The release profile
-runs again to obtain a complete clean test and coverage result.
+reached all mechanical gates and the full suite. The readiness fixture then
+failed waiting for a surviving replica update; isolated runs passed. Inspection
+found its global snapshot gate can intercept the survivor's periodic recovery
+request instead of the intended replacement. The same Sol/medium implementer
+gave replacement processes a separate fixture listener sharing the same
+DeliveryAssembly, selected by a startup marker after initial readiness. Only that
+listener gates snapshots; an explicit primary-listener snapshot proves unrelated
+requests remain unblocked. The regression failed with the old global gate and
+passed with the targeted gate. Repeated readiness tests, tooling typecheck,
+file-level lint, syntax, formatting and diff checks passed. No production API or
+timeout changes. Bounded confirmation by the existing third Astra/high reviewer
+and the full release profile follow.
 
 ## Implementation seams
 
