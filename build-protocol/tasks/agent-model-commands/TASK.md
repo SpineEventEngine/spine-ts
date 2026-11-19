@@ -157,8 +157,13 @@ is not a model mismatch. Subagents may not spawn subagents.
 - Architecture pass: requirements_splitter, gpt-6-astra/high, fresh context.
   Scope: implementation seams, provider load/commit feasibility, ordered slices,
   relevant JVM comparison. Read-only; pending dispatch/result.
-- Implementation: existing implementer, gpt-6-sol/medium, bounded slices assigned
-  after architecture. One writer at a time for overlapping production files.
+- Implementation slice 1: implementer, gpt-6-sol/medium, fresh context.
+  Scope: language-neutral Agent Proto namespace, existing timestamp corrections,
+  new model Command/Event/rejection/identity contracts, generated exports and
+  maintained references, focused generation/type verification. Assigned
+  production files are exclusive to this implementer while the orchestrator
+  maintains task/coordination records. Explicit dispatch fields required.
+  Later runtime/provider slices remain sequential for overlapping files.
 - Review rounds 1–3: each a fresh no-memory Astra/high reviewer, explicit model
   and reasoning, as requested by the human. Pending implementation completion.
 
