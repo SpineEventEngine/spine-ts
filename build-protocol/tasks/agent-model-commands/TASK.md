@@ -346,7 +346,12 @@ removed them; affected live tests, tooling types, lint and formatting passed.
 Repository-wide preflight passed, including full ESLint, formatting, generated
 consistency, documentation and package checks. The release profile is repeated
 after this mechanical correction, which changes no production behavior and needs
-no new review.
+no new review. The repeated profile passed all mechanical gates and reached the
+full test suite; its only failure was an old schema-error assertion expecting
+`occurred_at` instead of the accepted `when_occurred` name. The same implementer
+corrected that literal; focused tests, lint, formatting and diff checks passed.
+The production tree is unchanged from the reviewed version. The release profile
+runs again to obtain a complete clean test and coverage result.
 
 ## Implementation seams
 
