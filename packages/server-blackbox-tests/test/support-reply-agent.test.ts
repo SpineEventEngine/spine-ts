@@ -82,8 +82,6 @@ function emptyModelRegistry(): AiRegistry {
       totalInputBytes: 4_000,
       totalOutputBytes: 4_000,
     },
-    concurrentOperations: 1,
-    queuedOperations: 0,
   });
 }
 

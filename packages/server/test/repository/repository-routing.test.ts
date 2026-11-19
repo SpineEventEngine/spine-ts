@@ -10469,8 +10469,6 @@ describe("repository signal routing", () => {
               totalInputBytes: 4_000,
               totalOutputBytes: 4_000,
             },
-            concurrentOperations: 1,
-            queuedOperations: 0,
           }),
         )
         .persistSystemEvents(),
@@ -10908,8 +10906,6 @@ describe("repository signal routing", () => {
               totalInputBytes: 4_000,
               totalOutputBytes: 4_000,
             },
-            concurrentOperations: 1,
-            queuedOperations: 0,
           }),
         )
         .persistSystemEvents(),

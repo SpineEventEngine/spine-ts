@@ -36,6 +36,7 @@ import {
   AiProviderModelNameSchema as ModelNameSchema,
   AiProviderNameSchema,
   ModelRefSchema,
+  type AiConnectionIdentity,
   type ModelPreference,
 } from "@spine-event-engine/proto/agent";
 import {
@@ -94,7 +95,7 @@ interface AgentModelSelectionAccess {
    * @param deadlineEpochMs Actual live deadline.
    * @param kind Generation or decision kind.
    * @param sourceMessage Original source payload for selection hooks.
-   * @returns Validated selected model and connection.
+   * @returns Validated selected model without opening its connection.
    */
   selectLiveKind(
     registry: AiRegistry,
@@ -204,7 +205,7 @@ interface AgentModelSelectionAccess {
     scope: AiScope,
     signal: AbortSignal,
     deadlineEpochMs: number | undefined,
-  ): Promise<AgentLiveModel["connection"]>;
+  ): Promise<AiConnectionIdentity>;
 
   /**
    * Converts a deployment role to its generated enum value.
@@ -316,7 +317,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
   },
 
   /**
-   * Selects a registered backend and its checked connection for one live kind.
+   * Selects a registered backend reference for one live kind.
    */
   async selectLiveKind(
     registry: AiRegistry,
@@ -338,18 +339,11 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
       kind,
       sourceMessage,
     );
-    const connection = await this.connection(
-      backendDefinition(registration),
-      scope,
-      signal,
-      deadlineEpochMs,
-    );
     const model = clone(ModelRefSchema, registration.ref);
     Validate.check(ModelRefSchema, model);
     return {
       kind: kind === "generation" ? AiModelKind.GENERATION : AiModelKind.DECISION,
       model,
-      connection,
     };
   },
 
@@ -533,8 +527,8 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
   },
 
   /**
-   * Resolves a connection identity within the deadline. An explicit use denial
-   * becomes a safe terminal execution fault before the Agent handler runs.
+   * Resolves a connection identity within the deadline when a model is invoked.
+   * An explicit use denial becomes a typed terminal execution fault.
    *
    * @param backend Factory-proven selected backend callbacks.
    * @param scope Authenticated accepted-invocation scope.
@@ -547,7 +541,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     scope: AiScope,
     signal: AbortSignal,
     deadlineEpochMs: number | undefined,
-  ): Promise<AgentLiveModel["connection"]> {
+  ): Promise<AiConnectionIdentity> {
     if (signal.aborted) throw new Error("Agent model selection cancelled.");
     if (deadlineEpochMs !== undefined && deadlineEpochMs <= Time.currentTimeMillis())
       throw new Error("Agent model selection expired.");

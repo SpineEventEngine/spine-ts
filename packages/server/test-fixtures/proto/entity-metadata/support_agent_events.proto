@@ -37,3 +37,21 @@ message SupportTicketUpdated {
   // Contains the customer's latest question.
   string question = 2;
 }
+
+// Records inspection of a draft without submitting its prepared model call.
+message SupportReplyDraftInspected {
+  // Identifies the support ticket.
+  SupportReplyAgentId agent = 1;
+}
+
+// Records explicit cancellation of a pending support reply draft.
+message SupportReplyDraftCancelled {
+  // Identifies the support ticket.
+  SupportReplyAgentId agent = 1;
+}
+
+// Records a new model preference for later support reply drafts.
+message SupportReplyModelPreferred {
+  // Identifies the support ticket.
+  SupportReplyAgentId agent = 1;
+}

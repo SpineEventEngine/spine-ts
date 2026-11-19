@@ -249,8 +249,6 @@ const ai = (defaultModel?: ModelRef, deadlineMs = 1_000) =>
       totalInputBytes: 4000,
       totalOutputBytes: 4000,
     },
-    concurrentOperations: 1,
-    queuedOperations: 0,
   });
 
 const proposal = AiModel.define({

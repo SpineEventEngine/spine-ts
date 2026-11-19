@@ -21,6 +21,7 @@ import {
   type Message,
   type MessageShape,
 } from "@bufbuild/protobuf";
+import { randomUUID } from "node:crypto";
 import type { EntityQueryPlan } from "@spine-event-engine/core/spi/entity-query-plan";
 import type { EntityQueryDescription } from "@spine-event-engine/core/codegen";
 import {
@@ -47,11 +48,9 @@ import {
   CommandContextSchema,
   ActorContextSchema,
   CommandIdSchema,
-  type CommandId,
   CommandSchema,
   EventContextSchema,
   EventIdSchema,
-  type EventId,
   EventSchema,
   MessageIdSchema,
   TenantIdSchema,
@@ -111,6 +110,10 @@ import {
 } from "@spine-event-engine/storage/provider";
 import {
   AgentHistoryEntrySchema,
+  CallModelSchema,
+  ModelCallSchema,
+  ModelRepliedSchema,
+  ModelCallFailedSchema,
   ModelRequestRecordSchema,
   ModelSubmissionAttemptRecordSchema as SubmissionAttemptSchema,
   ModelOutcomeHandledRecordSchema as HandledOutcomeSchema,
@@ -121,6 +124,8 @@ import {
   ModelRefSchema,
   ModelPreferenceSchema,
   type AgentHistoryEntry,
+  type ModelCall,
+  type CallModel,
   type ConversationRecord,
   ConversationRecordSchema,
   ConversationIdSchema,
@@ -138,10 +143,15 @@ import type {
   HistoryRead,
 } from "@spine-event-engine/ai";
 import type { ModelPreference, ModelRef } from "@spine-event-engine/proto/agent";
-import { registryOptions } from "@spine-event-engine/ai/spi/runtime";
+import {
+  backendDefinition,
+  registryOptions,
+  selectDeployment,
+} from "@spine-event-engine/ai/spi/runtime";
 
 import { CommandValidationError } from "../bus/command-errors.js";
 import { SignalPublisher } from "../runtime/signal-publisher.js";
+import { activeAsyncCommand } from "../runtime/standalone-handler-runtime.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "../server/server-environment.js";
 import { emitServerWarning } from "../server/server-log.js";
 import {
@@ -167,11 +177,7 @@ import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { EventDispatcherOriginSchemas } from "../bus/event-dispatcher-origin-schemas.js";
 import type { Delivery } from "../delivery/delivery.js";
 import { receptionObservation } from "../delivery/reception-observation.js";
-import {
-  commitFenced,
-  withDeliveryCommitFence,
-  withoutDeliveryCommitFence,
-} from "./commit-fence.js";
+import { commitFenced, withoutDeliveryCommitFence } from "./commit-fence.js";
 import {
   AgentHistoryReads,
   type AgentHistoryBinding,
@@ -188,11 +194,11 @@ import type {
   AgentLiveModel,
   AgentSource,
 } from "../agent/agent-live-inputs.js";
-import { AgentDeliveryScope } from "../delivery/agent-delivery-scope.js";
-import type { AgentCapacityReservation } from "../agent/agent-execution-capacity.js";
-import type { AgentAcceptanceReceipts } from "../agent/agent-acceptance-receipts.js";
 import { AgentModelSelection } from "../agent/agent-model-selection.js";
+import { AsyncCommandHandler } from "../handler/standalone.js";
+import type { GeneratedStandaloneHandlerGroup } from "../handler/generated-handler-registry.js";
 import { AgentAiBindings } from "../agent/agent-ai-binding.js";
+import { ModelCommandBindings, ModelCommandSession } from "../agent/model-commands.js";
 import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../delivery/inbox.js";
 import {
   Aggregate,
@@ -1057,6 +1063,9 @@ export class Repository<
    * @returns The calculated event route.
    */
   routeEvent(event: Event): Promise<RepositoryEventRoute<RepositoryEntityId<EntityType>>> {
+    const modelRoute = RepositoryRoutes.modelOutcomeRoute(this, event);
+    if (modelRoute !== undefined)
+      return Promise.resolve(modelRoute as RepositoryEventRoute<RepositoryEntityId<EntityType>>);
     return RepositoryRoutingReads.call(this, RepositoryTenants.readEventTenant(event), (reads) =>
       this.#routing.routeEvent(event, reads),
     ).then((route) => {
@@ -2544,10 +2553,6 @@ interface RepositoryRuntime {
   readonly registerSystemEventSchema: (schema: MessageSchema) => void;
   readonly publishAgentEvent: (event: Event) => Promise<void>;
   readonly publishAgentSystemEvent: (event: Event) => Promise<void>;
-  readonly agentReceipts: AgentAcceptanceReceipts;
-  readonly agentSignal: AbortSignal;
-  readonly reserveAgent: (key: string, signal: AbortSignal) => AgentCapacityReservation | undefined;
-  readonly deferAgent: (message: InboxMessage, tenantId: TenantId | undefined) => void;
 }
 
 /**
@@ -4998,22 +5003,37 @@ type AgentLiveResult =
   | { readonly case: "rejected"; readonly output: AgentOutput };
 
 /**
- * Captured inputs required to admit one live Agent inbox message.
+ * Applies repository bounds only when they narrow the configured AI registry policy.
+ *
+ * @param ai Application AI registry.
+ * @param policy Agent repository model policy.
+ * @returns Effective configured invocation bounds.
  */
-interface AgentLiveAdmit {
-  readonly repository: RepositoryView;
-  readonly runtime: RepositoryRuntime;
-  readonly context: StorageContext;
-  readonly message: InboxMessage;
-  readonly tenantId: TenantId | undefined;
-  readonly entityId: unknown;
-  readonly signal: AgentSource;
-  readonly handlers: readonly RegisteredHandlerMetadata[];
-  readonly reservation: AgentCapacityReservation;
-}
+const agentInvocationLimits = (ai: AiRegistry, policy: RepositoryAiOptions): AiInvocationLimits => {
+  const global = registryOptions(ai).invocationLimits ?? {};
+  const local = policy.invocationLimits ?? {};
+  const limits: Partial<Record<keyof AiInvocationLimits, number>> = {};
+  const keys = [
+    "operations",
+    "modelRequests",
+    "toolCalls",
+    "recordedReads",
+    "deadlineMs",
+    "totalInputBytes",
+    "totalOutputBytes",
+  ] as const;
+  for (const key of keys) {
+    const first = global[key];
+    const second = local[key];
+    const value =
+      first === undefined ? second : second === undefined ? first : Math.min(first, second);
+    if (value !== undefined) limits[key] = value;
+  }
+  return limits;
+};
 
 /**
- * Runs one receipt-admitted Agent signal without an execution record.
+ * Runs one ordinarily admitted Agent signal.
  */
 class AgentLiveRunner {
   #deadlineEpochMs: number | undefined;
@@ -5023,7 +5043,6 @@ class AgentLiveRunner {
   /**
    * Binds one original signal, resolved handlers, and the current repository runtime.
    *
-   * @param checkSession Callback that validates the current execution session.
    * @param entityId Typed Entity identifier.
    * @param handlers Registered generated handlers.
    * @param invocation Captured live Agent invocation.
@@ -5040,7 +5059,6 @@ class AgentLiveRunner {
     private readonly invocation: AgentLiveInvocation,
     private readonly handlers: readonly RegisteredHandlerMetadata[],
     private readonly signal: AbortSignal,
-    private readonly checkSession: () => Promise<void>,
   ) {}
 
   /**
@@ -5050,30 +5068,95 @@ class AgentLiveRunner {
    */
   async run(): Promise<void> {
     if (this.signal.aborted) return;
-    await this.checkSession();
     await this.runtime.onAdmit(this.tenantId);
-    await RepositoryStorage.track(this.repository, async () => {
-      const { loaded, attributes: expected } = await this.load();
-      if (this.signal.aborted) return;
-      const ai = this.runtime.ai;
-      if (ai === undefined) throw new Error("Live Agent execution requires an AI registry.");
-      const preferences =
-        expected?.modelPreferences.map((entry) => clone(ModelPreferenceSchema, entry)) ?? [];
-      const audit = this.audit(loaded);
-      let selected: ReadonlyMap<AiModelKind, AgentLiveModel>;
+    await RepositoryStorage.track(this.repository, () => this.runTracked());
+  }
+
+  /**
+   * Loads one Agent and selects its configured model deployments within the storage scope.
+   *
+   * @returns Completion after the tracked Agent turn finishes.
+   */
+  private async runTracked(): Promise<void> {
+    const { loaded, attributes: expected } = await this.load();
+    if (this.signal.aborted) return;
+    const ai = this.runtime.ai;
+    if (ai === undefined) throw new Error("Live Agent execution requires an AI registry.");
+    const preferences =
+      expected?.modelPreferences.map((entry) => clone(ModelPreferenceSchema, entry)) ?? [];
+    const audit = this.audit(loaded);
+    let selected: ReadonlyMap<AiModelKind, AgentLiveModel>;
+    try {
+      selected = await this.select(preferences);
+    } catch (error) {
+      if (!(error instanceof AgentLiveFault) || error.reason !== "MODEL_USE_DENIED") throw error;
+      await this.recordModelDenial(audit, error);
+      throw error;
+    }
+    await this.runSelected(loaded, expected, preferences, audit, selected, ai);
+  }
+
+  /**
+   * Executes the handler and saves its result with the selected deployments.
+   *
+   * @param loaded Restored Agent and current data.
+   * @param expected Previously saved Agent attributes.
+   * @param preferences Previously saved model preferences.
+   * @param audit Provider audit for this turn.
+   * @param selected Selected deployments for this turn.
+   * @param ai Effective AI registry.
+   * @returns Completion after the Agent handler and save finish.
+   */
+  private async runSelected(
+    loaded: LoadedRepositoryEntity,
+    expected: AgentAttributesRecord | undefined,
+    preferences: ModelPreference[],
+    audit: AgentLiveAudit<unknown>,
+    selected: ReadonlyMap<AiModelKind, AgentLiveModel>,
+    ai: AiRegistry,
+  ): Promise<void> {
+    const policy = repositoryAccess.agentConfiguration(this.repository).ai;
+    if (policy === undefined) throw new Error("Agent AI policy is missing.");
+    const budget = new AgentLiveBudget(agentInvocationLimits(ai, policy));
+    const commands = this.createCommands(loaded, expected, selected);
+    await this.dispatchStart(loaded);
+    try {
+      let produced: AgentLiveResult;
       try {
-        selected = await this.select(preferences);
+        produced = await this.produce(loaded, selected, preferences, audit, budget, commands);
       } catch (error) {
-        if (!(error instanceof AgentLiveFault) || error.reason !== "MODEL_USE_DENIED") throw error;
-        await this.recordModelDenial(audit, error);
+        if (error instanceof AgentLiveFault && error.reason === "MODEL_USE_DENIED")
+          await this.recordModelDenial(audit, error);
         throw error;
       }
-      const budget = new AgentLiveBudget(this.limits(ai));
-      await this.dispatchStart(loaded);
-      const produced = await this.produce(loaded, selected, preferences, audit, budget);
       this.signal.throwIfAborted();
-      await this.checkSession();
-      await this.complete(loaded, expected, preferences, produced);
+      await this.complete(loaded, expected, preferences, produced, commands);
+    } finally {
+      commands.close();
+    }
+  }
+
+  /**
+   * Captures loaded Agent identity, Version, and selected deployments for one turn.
+   *
+   * @param loaded Coordinated current Entity image.
+   * @param expected Persisted attributes, when present.
+   * @param selected Authorized model deployments.
+   * @returns Handler-bound model Command construction.
+   */
+  private createCommands(
+    loaded: LoadedRepositoryEntity,
+    expected: AgentAttributesRecord | undefined,
+    selected: ReadonlyMap<AiModelKind, AgentLiveModel>,
+  ): ModelCommandSession {
+    return new ModelCommandSession({
+      models: repositoryAccess.agentConfiguration(this.repository).ai?.models ?? [],
+      selected,
+      agent: expected?.agent ?? AgentAttributes.id(loaded.storageInput, this.entityId),
+      replyContext: this.runtime.context.name,
+      ...(this.tenantId === undefined ? {} : { tenant: this.tenantId }),
+      ...(loaded.current?.version === undefined ? {} : { version: loaded.current.version }),
+      pending: expected?.pendingModelCalls ?? [],
     });
   }
 
@@ -5139,10 +5222,10 @@ class AgentLiveRunner {
   }
 
   /**
-   * Writes only definite pre-handler model-use denial with its original source.
+   * Writes a definite model-use denial with its original source.
    *
    * @param audit Retained history audit for this invocation.
-   * @param denial Typed model-use denial to record.
+   * @param denial Typed model-use denial from selection or invocation.
    * @returns Completion after the exact pre-handler denial is saved to Agent history.
    */
   private async recordModelDenial(
@@ -5170,6 +5253,7 @@ class AgentLiveRunner {
    * @param loaded Current Entity and retained storage for this turn.
    * @param preferences Current or staged model preferences.
    * @param selected Models or selection retained for this invocation.
+   * @param commands Handler-bound model Command construction.
    * @returns The declared rejection Event, when a Command rejects.
    */
   private async produce(
@@ -5178,11 +5262,12 @@ class AgentLiveRunner {
     preferences: ModelPreference[],
     audit: AgentLiveAudit<unknown>,
     budget: AgentLiveBudget,
+    commands: ModelCommandSession,
   ): Promise<AgentLiveResult> {
     try {
       return {
         case: "produced",
-        values: await this.invoke(loaded, selected, preferences, audit, budget),
+        values: await this.invoke(loaded, selected, preferences, audit, budget, commands),
       };
     } catch (error) {
       if (!RejectionThrowable.is(error) || this.invocation.source.case !== "command") throw error;
@@ -5223,7 +5308,6 @@ class AgentLiveRunner {
     const selected = new Map<AiModelKind, AgentLiveModel>();
     for (const kind of ["generation", "decision"] as const) {
       if (!configuration.models.some((model) => model.definition.kind === kind)) continue;
-      await this.checkSession();
       const value = await AgentModelSelection.selectLiveKind(
         ai,
         configuration,
@@ -5248,39 +5332,12 @@ class AgentLiveRunner {
   private deadline(ai: AiRegistry): number | undefined {
     if (this.#deadlineSampled) return this.#deadlineEpochMs;
     this.#deadlineSampled = true;
-    const duration = this.limits(ai).deadlineMs;
+    const policy = repositoryAccess.agentConfiguration(this.repository).ai;
+    if (policy === undefined) throw new Error("Agent AI policy is missing.");
+    const duration = agentInvocationLimits(ai, policy).deadlineMs;
     this.#deadlineEpochMs =
       duration === undefined ? undefined : Time.currentTimeMillis() + duration;
     return this.#deadlineEpochMs;
-  }
-
-  /**
-   * Applies only the narrower per-repository bounds to the shared registry policy.
-   *
-   * @param ai Configured AI capability.
-   * @returns The current configured limits for the start audit.
-   */
-  private limits(ai: AiRegistry): AiInvocationLimits {
-    const global = registryOptions(ai).invocationLimits ?? {};
-    const local = repositoryAccess.agentConfiguration(this.repository).ai?.invocationLimits ?? {};
-    const limits: Partial<Record<keyof AiInvocationLimits, number>> = {};
-    const keys = [
-      "operations",
-      "modelRequests",
-      "toolCalls",
-      "recordedReads",
-      "deadlineMs",
-      "totalInputBytes",
-      "totalOutputBytes",
-    ] as const;
-    for (const key of keys) {
-      const first = global[key];
-      const second = local[key];
-      const value =
-        first === undefined ? second : second === undefined ? first : Math.min(first, second);
-      if (value !== undefined) limits[key] = value;
-    }
-    return limits;
   }
 
   /**
@@ -5301,11 +5358,6 @@ class AgentLiveRunner {
       this.runtime.signalMetadata,
       this.runtime.registerSystemEventSchema,
       this.runtime.publishAgentSystemEvent,
-      async () => {
-        this.signal.throwIfAborted();
-        await this.checkSession();
-        this.signal.throwIfAborted();
-      },
     );
   }
 
@@ -5316,7 +5368,6 @@ class AgentLiveRunner {
    * @returns Completion after the original dispatch System Event is saved.
    */
   private async dispatchStart(loaded: LoadedRepositoryEntity): Promise<void> {
-    await this.checkSession();
     const source = this.invocation.source;
     const event =
       source.case === "command"
@@ -5341,7 +5392,6 @@ class AgentLiveRunner {
         item: { case: "systemEvent", value: event },
       }),
     ]);
-    await this.checkSession();
     if (source.case === "command") HandlerDispatchPublisher.publishCommand(this.runtime, event);
     else HandlerDispatchPublisher.publishReactor(this.runtime, event);
   }
@@ -5354,6 +5404,7 @@ class AgentLiveRunner {
    * @param loaded Current Entity and retained storage for this turn.
    * @param preferences Current or staged model preferences.
    * @param selected Models or selection retained for this invocation.
+   * @param commands Handler-bound model Command construction.
    * @returns The typed model result with its operation identifier.
    */
   private async invoke(
@@ -5362,13 +5413,22 @@ class AgentLiveRunner {
     preferences: ModelPreference[],
     audit: AgentLiveAudit<unknown>,
     budget: AgentLiveBudget,
+    commands: ModelCommandSession,
   ): Promise<readonly unknown[]> {
     transactionalEntityAccess.start(loaded.entity);
     try {
       const produced: unknown[] = [];
       for (const handler of this.handlers)
         produced.push(
-          ...(await this.invokeHandler(loaded, handler, selected, preferences, audit, budget)),
+          ...(await this.invokeHandler(
+            loaded,
+            handler,
+            selected,
+            preferences,
+            audit,
+            budget,
+            commands,
+          )),
         );
       const commit = await commitFenced(loaded.entity, (current) =>
         transactionalEntityAccess.commit(current),
@@ -5391,6 +5451,7 @@ class AgentLiveRunner {
    * @param loaded Current Entity and retained storage for this turn.
    * @param preferences Current or staged model preferences.
    * @param selected Models or selection retained for this invocation.
+   * @param commands Handler-bound model Command construction.
    * @returns The declared handler result scoped to live capabilities.
    */
   private async invokeHandler(
@@ -5400,6 +5461,7 @@ class AgentLiveRunner {
     preferences: ModelPreference[],
     audit: AgentLiveAudit<unknown>,
     budget: AgentLiveBudget,
+    commands: ModelCommandSession,
   ): Promise<readonly unknown[]> {
     const { facade, actor, deadline } = this.handlerFacade(selected, preferences, audit, budget);
     const historyScope = repositoryAccess.agentHistoryScope(
@@ -5407,8 +5469,8 @@ class AgentLiveRunner {
       loaded.storageInput,
       this.entityId,
     );
-    const reads = new AgentLiveReadRuntime(historyScope, budget, this.checkSession);
-    const release = this.bind(loaded.entity, facade, reads, actor);
+    const reads = new AgentLiveReadRuntime(historyScope, budget);
+    const release = this.bind(loaded.entity, facade, reads, actor, commands);
     try {
       const output = await AgentLiveHandler.awaitHandler(
         this.callHandler(loaded.entity, handler),
@@ -5460,7 +5522,6 @@ class AgentLiveRunner {
         this.stage(preferences, kind, model);
       },
       audit,
-      this.checkSession,
     );
     return { facade, actor: scope.actor, deadline: this.deadline(ai) };
   }
@@ -5492,6 +5553,7 @@ class AgentLiveRunner {
    * @param entity Current Entity instance.
    * @param facade Handler-facing operation facade.
    * @param reads Retained Agent history reader.
+   * @param commands Handler-bound model Command construction.
    * @returns The handler bound to current protected history and AI capabilities.
    */
   private bind(
@@ -5499,6 +5561,7 @@ class AgentLiveRunner {
     facade: AgentLiveAiRuntime,
     reads: AgentLiveReadRuntime,
     actor: ActorContext,
+    commands: ModelCommandSession,
   ): () => void {
     const history = AgentHistoryReads.withReadInterceptor(
       entity,
@@ -5515,7 +5578,9 @@ class AgentLiveRunner {
         (schema, request, live) => reads.query(schema, request, live),
       );
       const ai = AgentAiBindings.bind(entity, facade);
+      const modelCommands = ModelCommandBindings.bind(entity, commands);
       return () => {
+        modelCommands();
         ai();
         query?.();
         history();
@@ -5573,6 +5638,7 @@ class AgentLiveRunner {
    * @param loaded Current Entity and retained storage for this turn.
    * @param preferences Current or staged model preferences.
    * @param produced Declared outgoing signals.
+   * @param commands Handler-bound model Command construction.
    * @returns Completion after the conditional state, preferences, and final audit commit.
    */
   private async complete(
@@ -5580,20 +5646,129 @@ class AgentLiveRunner {
     expected: AgentAttributesRecord | undefined,
     preferences: readonly ModelPreference[],
     produced: AgentLiveResult,
+    commands: ModelCommandSession,
   ): Promise<void> {
     const outputs = this.bindOutputs(loaded, produced);
+    const requested = this.preparedRequests(outputs, commands);
+    const abandoned = this.abandonedCalls(expected, commands);
+    const handled = this.handledOutcome();
     const priorPreferences = expected?.modelPreferences ?? [];
     await this.authorizePreferences(priorPreferences, preferences);
-    await this.checkSession();
     const preferenceEvents = this.preferenceEvents(priorPreferences, preferences);
     const history = [
       ...AgentLiveOutputs.emittedHistory(outputs),
       ...preferenceEvents.map((event) => this.systemEntry(event)),
+      ...requested.history,
+      ...abandoned.history,
+      ...(handled === undefined ? [] : [handled.history]),
     ];
-    await this.commit(loaded, expected, preferences, history);
-    await this.checkSession();
+    const removed = new Set([...abandoned.ids, ...(handled === undefined ? [] : [handled.callId])]);
+    const pending = [
+      ...(expected?.pendingModelCalls ?? []).filter((call) => !removed.has(call.id?.value ?? "")),
+      ...requested.calls,
+    ];
+    await this.commit(loaded, expected, preferences, pending, history);
     for (const event of preferenceEvents) await this.runtime.publishAgentSystemEvent(event);
-    this.publish(outputs);
+    await this.publish(outputs, loaded);
+  }
+
+  /**
+   * Captures each returned CallModel with its prepared Command and triggering signal.
+   *
+   * @param outputs Prepared handler outputs.
+   * @param commands Commands constructed during this turn.
+   * @returns New pending calls and immutable request history.
+   */
+  private preparedRequests(outputs: readonly AgentOutput[], commands: ModelCommandSession) {
+    const calls: ModelCall[] = [];
+    const history: AgentHistoryEntry[] = [];
+    for (const output of outputs) {
+      if (output.case !== "command" || output.value.message === undefined) continue;
+      const payload = AnyPacker.tryUnpack(output.value.message, CallModelSchema);
+      if (payload === undefined) continue;
+      const call = commands.returned(payload);
+      const whenOccurred = call.whenRequested;
+      if (whenOccurred === undefined) throw new Error("Model Command request time is absent.");
+      calls.push(call);
+      history.push(
+        create(AgentHistoryEntrySchema, {
+          whenOccurred,
+          item: {
+            case: "modelRequest",
+            value: create(ModelRequestRecordSchema, {
+              request: output.value,
+              source: this.invocation.source,
+            }),
+          },
+        }),
+      );
+    }
+    return { calls, history };
+  }
+
+  /**
+   * Records explicit abandonment and removes those calls from pending attributes.
+   *
+   * @param expected Attributes observed at handler entry.
+   * @param commands Handler-bound model Command operations.
+   * @returns Abandoned call IDs and corresponding immutable history.
+   */
+  private abandonedCalls(
+    expected: AgentAttributesRecord | undefined,
+    commands: ModelCommandSession,
+  ) {
+    const ids = commands.abandoned();
+    const history = ids.map((id) => {
+      const call = expected?.pendingModelCalls.find((candidate) => candidate.id?.value === id);
+      if (call?.id === undefined || call.conversation === undefined)
+        throw new Error("Abandoned model call was not pending at handler entry.");
+      const whenOccurred = Time.currentTime();
+      return create(AgentHistoryEntrySchema, {
+        whenOccurred,
+        item: {
+          case: "abandonment",
+          value: create(AbandonmentSchema, {
+            id: randomUUID(),
+            call: call.id,
+            conversation: call.conversation,
+            whenAbandoned: whenOccurred,
+            source: this.invocation.source,
+          }),
+        },
+      });
+    });
+    return { ids, history };
+  }
+
+  /**
+   * Prepares a handled model outcome to save with the successful Agent commit.
+   *
+   * @returns Handled call identity and history, when this is a model outcome.
+   */
+  private handledOutcome() {
+    const source = this.invocation.source;
+    if (source.case !== "event" || source.value.message === undefined) return undefined;
+    const replied = AnyPacker.tryUnpack(source.value.message, ModelRepliedSchema);
+    const failed = AnyPacker.tryUnpack(source.value.message, ModelCallFailedSchema);
+    const call = replied?.call ?? failed?.call;
+    if (call?.id === undefined || call.conversation === undefined) return undefined;
+    const whenOccurred = Time.currentTime();
+    return {
+      callId: call.id.value,
+      history: create(AgentHistoryEntrySchema, {
+        whenOccurred,
+        item: {
+          case: "handledOutcome",
+          value: create(HandledOutcomeSchema, {
+            id: randomUUID(),
+            call: call.id,
+            conversation: call.conversation,
+            outcome: source.value,
+            whenHandled: whenOccurred,
+          }),
+        },
+      }),
+    };
   }
 
   /**
@@ -5629,12 +5804,14 @@ class AgentLiveRunner {
    * @param history Retained history entries or history port.
    * @param loaded Current Entity and retained storage for this turn.
    * @param preferences Current or staged model preferences.
+   * @param pending Calls remaining pending after this transition.
    * @returns The atomic conditional commit result for the observed version.
    */
   private async commit(
     loaded: LoadedRepositoryEntity,
     expected: AgentAttributesRecord | undefined,
     preferences: readonly ModelPreference[],
+    pending: readonly ModelCall[],
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
     const deferred = await this.deferredUpdate(loaded);
@@ -5643,7 +5820,6 @@ class AgentLiveRunner {
         deferred === undefined
           ? undefined
           : RepositoryStand.preparedRecord(this.repository, deferred, this.entityId);
-      await this.checkSession();
       await loaded.commits.commitAgent({
         entityId: this.entityId,
         expectedVersion: loaded.current?.version?.number ?? 0,
@@ -5651,7 +5827,7 @@ class AgentLiveRunner {
         attributes: AgentAttributes.record(
           expected?.agent ?? AgentAttributes.id(loaded.storageInput, this.entityId),
           preferences,
-          expected?.pendingModelCalls ?? [],
+          pending,
         ),
         historyEntries: history,
         ...(prepared === undefined ? {} : { entityCommit: this.entityCommit(loaded, prepared) }),
@@ -5837,19 +6013,479 @@ class AgentLiveRunner {
   }
 
   /**
-   * Publishes produced signals through ordinary tracked publication after commit.
+   * Records model submission attempts before ordinary tracked publication.
    *
    * @param outputs Declared outgoing Command or Event envelopes.
+   * @param loaded Retained Agent history handle and typed ID.
+   * @returns Completion after every model attempt is recorded or reported.
    */
-  private publish(outputs: readonly AgentOutput[]): void {
+  private async publish(
+    outputs: readonly AgentOutput[],
+    loaded: LoadedRepositoryEntity,
+  ): Promise<void> {
     for (const output of outputs) {
-      if (output.case === "command") void this.runtime.publisher.publishCommand(output.value);
-      else if (output.value.context?.rejection !== undefined)
+      if (output.case === "command") {
+        const attempted = await this.attemptedModelCommand(output.value, loaded);
+        if (attempted !== undefined) void this.runtime.publisher.publishCommand(attempted);
+      } else if (output.value.context?.rejection !== undefined)
         void this.runtime.publisher.publishRejectionEvent(output.value);
       else void this.runtime.publisher.publishReactorEvent(output.value);
     }
   }
+
+  /**
+   * Records the complete attempted Command before posting a model request.
+   *
+   * @param command Prepared outgoing Command envelope.
+   * @param loaded Agent history used for immutable attempt evidence.
+   * @returns Attempted envelope, or undefined when its append failed.
+   */
+  private async attemptedModelCommand(
+    command: Command,
+    loaded: LoadedRepositoryEntity,
+  ): Promise<Command | undefined> {
+    const payload = command.message && AnyPacker.tryUnpack(command.message, CallModelSchema);
+    if (payload === undefined) return command;
+    const history = loaded.agentHistory;
+    if (history === undefined) throw new Error("Agent model attempts require history storage.");
+    const { attempted, entry } = this.prepareAttempt(command, payload);
+    try {
+      await history.appendAll(this.entityId, [entry]);
+      return attempted;
+    } catch (error) {
+      this.runtime.publisher.reportFailure("command", attempted, error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Prepares the exact attempted Command and immutable history row.
+   *
+   * @param command Original prepared outgoing Command.
+   * @param payload Validated CallModel payload.
+   * @returns Attempted envelope and indexed history entry.
+   */
+  private prepareAttempt(command: Command, payload: CallModel) {
+    const whenOccurred = Time.currentTime();
+    const attempted = clone(CommandSchema, command);
+    attempted.message = AnyPacker.pack(
+      CallModelSchema,
+      create(CallModelSchema, { ...payload, whenSubmissionAttempted: whenOccurred }),
+    );
+    const entry = create(AgentHistoryEntrySchema, {
+      whenOccurred,
+      item: {
+        case: "submissionAttempt",
+        value: create(SubmissionAttemptSchema, {
+          id: randomUUID(),
+          command: attempted,
+          whenAttempted: whenOccurred,
+        }),
+      },
+    });
+    return { attempted, entry };
+  }
 }
+
+/**
+ * A model Command admitted by the Command Bus with its exact registered definition.
+ */
+interface AdmittedModelCommand {
+  readonly command: Command;
+  readonly repository: RepositoryView;
+  readonly policy: RepositoryAiOptions;
+  readonly definition: AiModel<MessageSchema, MessageSchema>;
+  readonly input: Message;
+  readonly entityId: unknown;
+  readonly tenantId: TenantId | undefined;
+}
+
+/**
+ * Executes framework model Commands through the ordinary asynchronous assignee runtime.
+ */
+export class AgentModelCommandHandler extends AsyncCommandHandler {
+  readonly #admitted = new WeakMap<Command, AdmittedModelCommand>();
+
+  /**
+   * Captures the immutable Bounded Context registry and Agent repositories.
+   *
+   * @param repositories Agent repositories configured for this Bounded Context.
+   * @param ai Effective immutable AI registry.
+   * @param contextName Name used to verify the reply destination.
+   */
+  constructor(
+    private readonly repositories: readonly RepositoryView[],
+    private readonly ai: AiRegistry,
+    private readonly contextName: string,
+  ) {
+    super();
+  }
+
+  /**
+   * Binds a transported model Command during normal Command Bus admission.
+   *
+   * @param command Validated Command envelope from the Command Bus.
+   */
+  admit(command: Command): void {
+    if (command.message?.typeUrl !== TypeUrls.derive(CallModelSchema)) return;
+    const request = AnyPacker.tryUnpack(command.message, CallModelSchema);
+    const call = request?.call;
+    if (request === undefined || call?.id === undefined || call.agent?.entityId === undefined)
+      throw new TypeError("Model Command requires complete call and Agent identity.");
+    if (call.replyContext?.value !== this.contextName)
+      throw new TypeError("Model Command reply Bounded Context differs from admission.");
+    const tenantId = this.trustedTenant(command, call);
+    const { repository, entityId, policy } = this.target(call, tenantId);
+    const { definition, input } = this.definition(request, policy);
+    this.#admitted.set(command, {
+      command: clone(CommandSchema, command),
+      repository,
+      policy,
+      definition,
+      input,
+      entityId,
+      tenantId,
+    });
+  }
+
+  /**
+   * Checks the transported tenant against Command actor metadata.
+   *
+   * @param command Validated original Command envelope.
+   * @param call Transported model call metadata.
+   * @returns Trusted tenant, when configured.
+   */
+  private trustedTenant(command: Command, call: ModelCall): TenantId | undefined {
+    const tenantId = RepositoryTenants.readCommandTenant(command);
+    if (
+      (tenantId === undefined) !== (call.tenant === undefined) ||
+      (tenantId !== undefined &&
+        call.tenant !== undefined &&
+        !equals(TenantIdSchema, tenantId, call.tenant))
+    )
+      throw new TypeError("Model Command tenant differs from trusted Command actor metadata.");
+    return tenantId;
+  }
+
+  /**
+   * Resolves the exact registered Agent state and typed ID.
+   *
+   * @param call Transported model call metadata.
+   * @param tenantId Trusted Command tenant, when configured.
+   * @returns Registered Agent repository, ID, and model policy.
+   */
+  private target(call: ModelCall, tenantId: TenantId | undefined) {
+    const packedId = call.agent?.entityId;
+    if (packedId === undefined) throw new TypeError("Model Command Agent ID is absent.");
+    const repository = this.repositories.find(
+      (candidate) => TypeUrls.derive(candidate.stateSchema) === call.agent?.stateTypeUrl,
+    );
+    if (repository === undefined)
+      throw new TypeError("Model Command Agent state type is not registered here.");
+    const runtime = repositoryRuntimes.get(repository);
+    if (runtime === undefined) throw new Error("Model Command Agent repository is inactive.");
+    const storageInput = RepositoryStorage.entityStorageInput(
+      repository,
+      RepositoryTenants.storageContextForTenant(runtime.context, tenantId),
+    );
+    const entityId = storageInput.id.unpack(packedId);
+    if (entityId === undefined || !equals(AnySchema, storageInput.id.pack(entityId), packedId))
+      throw new TypeError("Model Command Agent identifier does not match its typed repository.");
+    const policy = repositoryAccess.agentConfiguration(repository).ai;
+    if (policy === undefined) throw new TypeError("Model Command Agent has no AI policy.");
+    return { repository, entityId, policy };
+  }
+
+  /**
+   * Resolves the exact registered definition and validates its typed input.
+   *
+   * @param request Admitted model Command payload.
+   * @param policy Registered Agent model policy.
+   * @returns Registered model definition and decoded input.
+   */
+  private definition(request: CallModel, policy: RepositoryAiOptions) {
+    const call = request.call;
+    const capability = call?.capability?.value;
+    const revision = call?.capabilityRevision?.value;
+    const definition = policy.models.find(
+      (model) => model.definition.name === capability && model.definition.version === revision,
+    );
+    if (definition === undefined || request.input === undefined || request.model === undefined)
+      throw new TypeError("Model Command definition or typed input is not registered.");
+    const input = AnyPacker.tryUnpack(request.input, definition.definition.input);
+    if (input === undefined)
+      throw new TypeError("Model Command input type differs from its registered definition.");
+    Validate.check(definition.definition.input, input);
+    selectDeployment(this.ai, {
+      kind: definition.definition.kind,
+      models: policy.models,
+      instancePreference: request.model,
+      ...(policy.allowedModels?.[definition.definition.kind] === undefined
+        ? {}
+        : { allowedModels: policy.allowedModels[definition.definition.kind] }),
+    });
+    return { definition, input };
+  }
+
+  /**
+   * Executes one admitted model operation and produces a typed outcome or declared rejection.
+   *
+   * @param request Admitted CallModel payload.
+   * @returns A validated model reply for ordinary Event publication.
+   */
+  async callModel(request: CallModel): Promise<MessageShape<typeof ModelRepliedSchema>> {
+    const admitted = this.takeAdmitted();
+    const call = this.requiredCall(request);
+    const model = request.model;
+    if (model === undefined) throw new TypeError("Admitted Model Command has no deployment.");
+    const whenStarted = Time.currentTime();
+    const limits = agentInvocationLimits(this.ai, admitted.policy);
+    const deadlineEpochMs =
+      limits.deadlineMs === undefined ? undefined : Time.currentTimeMillis() + limits.deadlineMs;
+    let execution: AgentLiveAiRuntime | undefined;
+    try {
+      execution = await this.createExecution(admitted, model, call, limits, deadlineEpochMs);
+      return await this.runExecution(execution, admitted, call, whenStarted);
+    } catch (error) {
+      if (RejectionThrowable.is(error)) throw error;
+      throw RejectionThrowable.create(ModelCallFailedSchema, {
+        call,
+        reason: error instanceof AgentLiveFault ? error.reason : "UNAVAILABLE",
+        outcomeUnknown: execution?.outcomeUnknown() ?? false,
+        whenStarted,
+        whenFailed: Time.currentTime(),
+      });
+    } finally {
+      execution?.close();
+    }
+  }
+
+  /**
+   * Validates the fields used after normal Command admission.
+   *
+   * @param request Admitted CallModel payload.
+   * @returns Complete model call metadata.
+   */
+  private requiredCall(request: CallModel): ModelCall {
+    const call = request.call;
+    if (
+      call?.id === undefined ||
+      call.agent?.entityId === undefined ||
+      call.conversation === undefined ||
+      request.model === undefined
+    )
+      throw new TypeError("Admitted Model Command is incomplete.");
+    return call;
+  }
+
+  /**
+   * Captures only the Command admitted for the current asynchronous invocation.
+   *
+   * @returns Captured Command, definition, and Agent destination.
+   */
+  private takeAdmitted(): AdmittedModelCommand {
+    const command = activeAsyncCommand();
+    const admitted = command === undefined ? undefined : this.#admitted.get(command);
+    if (admitted === undefined || command === undefined)
+      throw new Error("Model Command was not bound during ordinary admission.");
+    this.#admitted.delete(command);
+    return admitted;
+  }
+
+  /**
+   * Prepares a fresh AI runtime without retaining an Agent instance or shard session.
+   *
+   * @param admitted Bound Command and Agent repository.
+   * @param model Pinned deployment reference from the Command.
+   * @param call Trusted transported call metadata.
+   * @param limits Effective configured bounds.
+   * @param deadlineEpochMs Captured deadline, when configured.
+   * @returns A runtime with its own audit and budget.
+   */
+  private async createExecution(
+    admitted: AdmittedModelCommand,
+    model: ModelRef,
+    call: ModelCall,
+    limits: AiInvocationLimits,
+    deadlineEpochMs: number | undefined,
+  ): Promise<AgentLiveAiRuntime> {
+    const { source, metadata, scope } = this.executionScope(admitted, call);
+    const signal = new AbortController().signal;
+    const selected = await this.selectedModel(admitted, model, scope, signal, deadlineEpochMs);
+    const audit = this.executionAudit(admitted, source, metadata);
+    return new AgentLiveAiRuntime(
+      this.ai,
+      admitted.policy,
+      scope,
+      new Map([[selected.kind, selected]]),
+      new AgentLiveBudget(limits),
+      signal,
+      deadlineEpochMs,
+      () => undefined,
+      audit,
+    );
+  }
+
+  /**
+   * Captures the original Command, Agent, actor, and tenant for authorization.
+   *
+   * @param admitted Bound Command and Agent repository.
+   * @param call Transported call metadata.
+   * @returns Original invocation, metadata service, and authorization scope.
+   */
+  private executionScope(admitted: AdmittedModelCommand, call: ModelCall) {
+    const packedId = call.agent?.entityId;
+    if (packedId === undefined) throw new TypeError("Model Command Agent ID is absent.");
+    const source: AgentLiveInvocation = {
+      source: { case: "command", value: admitted.command },
+      recipientId: clone(AnySchema, packedId),
+      stateType: admitted.repository.stateSchema.typeName,
+    };
+    const metadata = new SignalMetadata();
+    const scope = AgentModelSelection.scopeLive(
+      source,
+      admitted.repository.stateSchema,
+      metadata,
+      admitted.tenantId,
+    );
+    return { source, metadata, scope };
+  }
+
+  /**
+   * Validates the pinned deployment and captures its authenticated connection.
+   *
+   * @param admitted Bound registered capability.
+   * @param model Pinned deployment from the Command.
+   * @param scope Trusted invocation scope.
+   * @param signal Cancellation for this detached operation.
+   * @param deadlineEpochMs Configured operation deadline, when present.
+   * @returns Authorized model and connection for this operation.
+   */
+  private async selectedModel(
+    admitted: AdmittedModelCommand,
+    model: ModelRef,
+    scope: AiScope,
+    signal: AbortSignal,
+    deadlineEpochMs: number | undefined,
+  ): Promise<AgentLiveModel> {
+    const kind = admitted.definition.definition.kind;
+    const deployment = selectDeployment(this.ai, {
+      kind,
+      models: admitted.policy.models,
+      instancePreference: model,
+      ...(admitted.policy.allowedModels?.[kind] === undefined
+        ? {}
+        : { allowedModels: admitted.policy.allowedModels[kind] }),
+    });
+    return {
+      kind: kind === "generation" ? AiModelKind.GENERATION : AiModelKind.DECISION,
+      model,
+      connection: await AgentModelSelection.connection(
+        backendDefinition(deployment),
+        scope,
+        signal,
+        deadlineEpochMs,
+      ),
+    };
+  }
+
+  /**
+   * Opens indexed Agent history for the detached operation's audit.
+   *
+   * @param admitted Bound Agent destination.
+   * @param source Complete original Command invocation.
+   * @param metadata Signal ID and causal metadata service.
+   * @returns Independent audit writer for this operation.
+   */
+  private executionAudit(
+    admitted: AdmittedModelCommand,
+    source: AgentLiveInvocation,
+    metadata: SignalMetadata,
+  ): AgentLiveAudit<unknown> {
+    const runtime = repositoryRuntimes.get(admitted.repository);
+    if (runtime === undefined) throw new Error("Model Command Agent repository is inactive.");
+    const input = RepositoryStorage.entityStorageInput(
+      admitted.repository,
+      RepositoryTenants.storageContextForTenant(runtime.context, admitted.tenantId),
+    );
+    return new AgentLiveAudit(
+      source,
+      admitted.repository.stateSchema,
+      admitted.entityId,
+      input.id.key(admitted.entityId),
+      RepositoryStorage.openRepositoryAgentHistory(
+        admitted.repository,
+        runtime.storageFactory,
+        input,
+      ),
+      metadata,
+      runtime.registerSystemEventSchema,
+      runtime.publishAgentSystemEvent,
+    );
+  }
+
+  /**
+   * Executes the transported operation ID and maps its validated outcome to a reply.
+   *
+   * @param execution Fresh operation runtime.
+   * @param admitted Bound model definition and input.
+   * @param call Original call metadata.
+   * @param whenStarted Time execution began.
+   * @returns Typed model reply or declared rejection.
+   */
+  private async runExecution(
+    execution: AgentLiveAiRuntime,
+    admitted: AdmittedModelCommand,
+    call: ModelCall,
+    whenStarted: Timestamp,
+  ): Promise<MessageShape<typeof ModelRepliedSchema>> {
+    if (call.id === undefined || call.conversation === undefined)
+      throw new TypeError("Model Command call identity is absent.");
+    const result = await execution.executeAdmitted(
+      admitted.definition,
+      {
+        call: call.id.value,
+        conversation: call.conversation,
+        input: admitted.input,
+      },
+      call.id,
+    );
+    if (!result.ok)
+      throw RejectionThrowable.create(ModelCallFailedSchema, {
+        call,
+        reason: result.failure.code,
+        outcomeUnknown:
+          result.failure.code === "TOOL_OUTCOME_UNKNOWN" || execution.outcomeUnknown(),
+        whenStarted,
+        whenFailed: Time.currentTime(),
+      });
+    return create(ModelRepliedSchema, {
+      call: clone(ModelCallSchema, call),
+      output: AnyPacker.pack(admitted.definition.definition.output, result.value),
+      whenStarted,
+      whenCompleted: Time.currentTime(),
+    });
+  }
+}
+
+/**
+ * Creates the framework model Command receptor with a normal rejection contract.
+ *
+ * @returns Generated-metadata compatible built-in receiver declaration.
+ */
+export const agentModelCommandHandlers = (): GeneratedStandaloneHandlerGroup => ({
+  receiverKind: "standalone",
+  receiverType: AgentModelCommandHandler,
+  handlers: [
+    {
+      kind: "command-assignment",
+      methodName: "callModel",
+      input: { schema: CallModelSchema, origin: "domestic" },
+      outcomes: { returned: [ModelRepliedSchema], thrown: [ModelCallFailedSchema] },
+      parameterCount: 1,
+    },
+  ],
+});
 
 /**
  * Executes one Process Manager Command against its loaded Entity state.
@@ -6315,6 +6951,12 @@ class ProcessManagerEventExecution {
     const intake = this.#readIntake(acceptedRoute);
 
     if (intake.reactors.length === 0 && intake.commanders.length === 0) {
+      RepositoryRoutes.reportUnmatchedModelOutcome(
+        this.#repository,
+        this.#runtime,
+        intake.route,
+        this.#event,
+      );
       return;
     }
 
@@ -9073,7 +9715,11 @@ const RepositoryRoutes = {
     const handlers = RepositoryHandlers.normalizeHandlers(input.handlersOption);
     RepositoryHandlers.validateHandlers(input.entityType, input.metadata, handlers);
     const readiness = RepositoryRoutes.readiness(handlers);
-    const schemas = RepositoryRoutes.routingSchemas(handlers, input.producedEvents);
+    const schemas = RepositoryRoutes.routingSchemas(
+      handlers,
+      input.producedEvents,
+      input.entityFamily,
+    );
     RepositoryRoutes.validateStateSchemas(input.entityFamily, input.metadata, schemas.state);
     const stateSubscriptions = RepositoryRoutes.stateSubscriptions(handlers);
     const filters = RepositoryRoutes.routingFilters(
@@ -9119,16 +9765,25 @@ const RepositoryRoutes = {
    *
    * @param handlers Registered Entity handler metadata.
    * @param producedEvents Additional Event schemas this repository may emit.
+   * @param entityFamily Aggregate, Process Manager, Projection, or Agent family.
    * @returns Schema groups used to build routes.
    */
   routingSchemas(
     handlers: readonly EntityHandlersMetadata[],
     producedEvents: readonly MessageSchema[],
+    entityFamily: EntityFamily,
   ): RoutingSchemas {
     const accepted = RepositoryRoutes.acceptedSchemas(handlers);
     const origins = RepositoryRoutes.originSchemas(handlers);
     const produced = RepositoryRoutes.producedSchemas(handlers, producedEvents);
-    return { ...accepted, ...origins, ...produced };
+    const outcomes = entityFamily === "agent" ? [ModelRepliedSchema, ModelCallFailedSchema] : [];
+    return {
+      ...accepted,
+      event: RepositoryHandlers.uniqueSchemas([...accepted.event, ...outcomes]),
+      ...origins,
+      domesticEvent: RepositoryHandlers.uniqueSchemas([...origins.domesticEvent, ...outcomes]),
+      ...produced,
+    };
   },
 
   /**
@@ -9649,6 +10304,114 @@ const RepositoryRoutes = {
       messageFullTypeName: schema.typeName,
       invocation: "deferred",
     });
+  },
+
+  /**
+   * Routes only the exact typed Agent destination carried by a model outcome.
+   *
+   * @param repository Receiving Agent repository.
+   * @param event Model reply or rejection Event.
+   * @returns An exact target, no targets for another Agent type, or undefined for other Events.
+   */
+  modelOutcomeRoute(repository: RepositoryView, event: Event): RepositoryEventRoute | undefined {
+    if (repository.entityFamily !== "agent" || event.message === undefined) return undefined;
+    const schema = [ModelRepliedSchema, ModelCallFailedSchema].find(
+      (candidate) => TypeUrls.derive(candidate) === event.message?.typeUrl,
+    );
+    if (schema === undefined) return undefined;
+    const routing = repositoryRoutings.get(repository);
+    if (!routing?.eventSchemas.some((candidate) => candidate.typeName === schema.typeName))
+      return undefined;
+    const replied = AnyPacker.tryUnpack(event.message, ModelRepliedSchema);
+    const failed = AnyPacker.tryUnpack(event.message, ModelCallFailedSchema);
+    const call = replied?.call ?? failed?.call;
+    if (call?.agent?.entityId === undefined || call.replyContext === undefined)
+      throw new TypeError("Model outcome has no exact Agent destination.");
+    const runtime = repositoryRuntimes.get(repository);
+    if (runtime === undefined) throw new Error("Model outcome Agent repository is inactive.");
+    const entityIds = RepositoryRoutes.modelOutcomeTargets(repository, runtime, event, call);
+    return Object.freeze({
+      entityIds: Object.freeze(entityIds),
+      messageFullTypeName: schema.typeName,
+      invocation: "deferred",
+    });
+  },
+
+  /**
+   * Checks trusted outcome metadata and decodes the exact typed Agent destination.
+   *
+   * @param repository Receiving Agent repository.
+   * @param runtime Active Bounded Context runtime.
+   * @param event Outcome Event with trusted actor metadata.
+   * @param call Model call carried by the Event.
+   * @returns One exact target or no targets for a different Agent state type.
+   */
+  modelOutcomeTargets(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    event: Event,
+    call: ModelCall,
+  ): readonly unknown[] {
+    if (call.replyContext?.value !== runtime.context.name)
+      throw new TypeError("Model outcome reply Bounded Context differs from recipient.");
+    const tenant = RepositoryTenants.readEventTenant(event);
+    if (
+      (tenant === undefined) !== (call.tenant === undefined) ||
+      (tenant !== undefined &&
+        call.tenant !== undefined &&
+        !equals(TenantIdSchema, tenant, call.tenant))
+    )
+      throw new TypeError("Model outcome tenant differs from trusted Event metadata.");
+    if (call.agent?.stateTypeUrl !== TypeUrls.derive(repository.stateSchema)) return [];
+    const packedId = call.agent.entityId;
+    if (packedId === undefined) throw new TypeError("Model outcome Agent ID is absent.");
+    const input = RepositoryStorage.entityStorageInput(
+      repository,
+      RepositoryTenants.storageContextForTenant(runtime.context, tenant),
+    );
+    const id = input.id.unpack(packedId);
+    if (id === undefined || !equals(AnySchema, input.id.pack(id), packedId))
+      throw new TypeError("Model outcome Agent identifier is not the registered typed ID.");
+    return [id];
+  },
+
+  /**
+   * Determines whether a model reply or rejection has its payload type URL.
+   *
+   * @param event Domain Event to inspect.
+   * @returns Whether the Event carries a model outcome.
+   */
+  isModelOutcome(event: Event): boolean {
+    return [ModelRepliedSchema, ModelCallFailedSchema].some(
+      (schema) => event.message?.typeUrl === TypeUrls.derive(schema),
+    );
+  },
+
+  /**
+   * Records an outcome with a valid Agent destination but no matching handler.
+   *
+   * @param repository Receiving Entity repository.
+   * @param runtime Bounded Context publication services.
+   * @param route Exact Event destination.
+   * @param event Unmatched model outcome.
+   */
+  reportUnmatchedModelOutcome(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    route: RepositoryEventRoute,
+    event: Event,
+  ): void {
+    if (
+      repository.entityFamily !== "agent" ||
+      route.entityIds.length === 0 ||
+      !RepositoryRoutes.isModelOutcome(event)
+    )
+      return;
+    runtime.publisher.reportFailure(
+      "event",
+      event,
+      new Error("Model outcome has no matching Agent handler."),
+    );
   },
 
   /**
@@ -12158,13 +12921,7 @@ const InboxDelivery = {
     message: InboxMessage,
     tenantId?: TenantId,
   ): Promise<void> {
-    const event = InboxMessages.readEntityInboxEvent(message);
-    InboxDelivery.validateEventTenant(runtime.context, tenantId, event);
-    InboxDelivery.validateDeliveredEventPayload(
-      routing,
-      event,
-      "Agent Inbox delivery requires an Event payload.",
-    );
+    const event = InboxDelivery.readAgentEvent(routing, runtime, message, tenantId);
     const route = InboxDelivery.deliverEventRoute(
       repository,
       routing,
@@ -12173,7 +12930,10 @@ const InboxDelivery = {
       "Agent Inbox delivery",
     );
     const handlers = InboxDelivery.agentEventHandlers(routing, route.messageFullTypeName, event);
-    if (handlers.length === 0) return;
+    if (handlers.length === 0) {
+      RepositoryRoutes.reportUnmatchedModelOutcome(repository, runtime, route, event);
+      return;
+    }
     await InboxDelivery.admitAgent(
       repository,
       runtime,
@@ -12183,6 +12943,31 @@ const InboxDelivery = {
       { case: "event", value: event },
       handlers,
     );
+  },
+
+  /**
+   * Decodes an Agent Inbox Event and checks its tenant and registered payload.
+   *
+   * @param routing Registered Agent Event schemas.
+   * @param runtime Active Bounded Context runtime.
+   * @param message Original Inbox row.
+   * @param tenantId Delivery tenant, when configured.
+   * @returns Validated original Event envelope.
+   */
+  readAgentEvent(
+    routing: RepositoryRouting,
+    runtime: RepositoryRuntime,
+    message: InboxMessage,
+    tenantId: TenantId | undefined,
+  ): Event {
+    const event = InboxMessages.readEntityInboxEvent(message);
+    InboxDelivery.validateEventTenant(runtime.context, tenantId, event);
+    InboxDelivery.validateDeliveredEventPayload(
+      routing,
+      event,
+      "Agent Inbox delivery requires an Event payload.",
+    );
+    return event;
   },
 
   /**
@@ -12209,16 +12994,16 @@ const InboxDelivery = {
   },
 
   /**
-   * Opens the actual tenant handle and records a selected invocation before handoff.
+   * Delivers one Agent receptor and its conditional save before Inbox acknowledgement.
    *
    * @param repository Registered Agent repository.
-   * @param runtime Bounded Context services including the effective registry.
-   * @param message Durable Inbox receipt.
+   * @param runtime Bounded Context services.
+   * @param message Original Inbox row.
    * @param tenantId Selected delivery tenant.
-   * @param entityId Typed target from the stored route.
-   * @param signal Original source envelope.
-   * @param handlers Selected handler metadata in execution order.
-   * @returns When the fenced repository operation completes.
+   * @param entityId Exact typed target.
+   * @param source Original Command or Event envelope.
+   * @param handlers Selected handler metadata.
+   * @returns Completion after the Agent turn settles.
    */
   async admitAgent(
     repository: RepositoryView,
@@ -12226,188 +13011,23 @@ const InboxDelivery = {
     message: InboxMessage,
     tenantId: TenantId | undefined,
     entityId: unknown,
-    signal: AgentSource,
+    source: AgentSource,
     handlers: readonly RegisteredHandlerMetadata[],
   ): Promise<void> {
-    const context = RepositoryTenants.storageContextForTenant(runtime.context, tenantId);
-    const input = RepositoryStorage.entityStorageInput(repository, context);
-    const deliverySignal = AgentDeliveryScope.signal();
-    if (deliverySignal === undefined) throw new Error("Agent admission requires delivery scope.");
-    const cancellation = AbortSignal.any([deliverySignal, runtime.agentSignal]);
-    const key = InboxDelivery.capacityKeyFor(repository, input.context, input.id.key(entityId));
-    const reservation = runtime.reserveAgent(key, cancellation);
-    if (reservation === undefined) {
-      runtime.deferAgent(message, tenantId);
-      AgentDeliveryScope.record({ kind: "deferred" });
-      return;
-    }
-    await InboxDelivery.admitReservedAgent({
-      repository,
-      runtime,
-      context: input.context,
-      message,
-      tenantId,
-      entityId,
-      signal,
-      handlers,
-      reservation,
-    });
-  },
-
-  /**
-   * Serializes the complete local Agent identity for one capacity slot.
-   *
-   * @param context Captured tenant storage context.
-   * @param stateType Declared Agent state type.
-   * @param id Canonical typed Agent identifier.
-   * @returns Stable local capacity key for this Agent and tenant.
-   */
-  agentCapacityKey(context: StorageContext, stateType: string, id: string): string {
-    return JSON.stringify([context.name, String(TenantBoundary.of(context).key), stateType, id]);
-  },
-
-  /**
-   * Builds a capacity key for one repository entity in the selected tenant.
-   *
-   * @param repository Agent repository declaring the state type.
-   * @param context Captured tenant storage context.
-   * @param id Canonical typed Agent identifier.
-   * @returns Stable local capacity key for this repository entity.
-   */
-  capacityKeyFor(repository: RepositoryView, context: StorageContext, id: string): string {
-    return this.agentCapacityKey(context, repository.stateSchema.typeName, id);
-  },
-
-  /**
-   * Completes receipt admission or returns a nonacknowledging provider error.
-   * @param input Captured signal, runtime, and local capacity reservation.
-   * @returns Completion of receipt admission or recorded provider failure.
-   */
-  async admitReservedAgent(input: AgentLiveAdmit): Promise<void> {
-    const { repository, runtime, context, message, signal, reservation } = input;
-    try {
-      const accepted = await InboxDelivery.acceptAgentReceipt(
-        runtime,
-        context,
-        repository,
-        message,
-        signal,
-      );
-      if (!accepted) {
-        reservation.release();
-        AgentDeliveryScope.record({ kind: "duplicate" });
-        return;
-      }
-      InboxDelivery.recordAcceptedAgent(input);
-    } catch (error) {
-      reservation.release();
-      AgentDeliveryScope.record({ kind: "error", error });
-    }
-  },
-
-  /**
-   * Records one accepted typed signal to its post-ack serialized live turn.
-   * @param input Accepted signal and its retained capacity reservation.
-   */
-  recordAcceptedAgent(input: AgentLiveAdmit): void {
-    const { repository, runtime, message, tenantId, entityId, signal, handlers, reservation } =
-      input;
     const invocation: AgentLiveInvocation = {
       stateType: repository.stateSchema.typeName,
       recipientId: clone(AnySchema, message.inboxId.targetId),
-      source: signal,
-    };
-    AgentDeliveryScope.record({
-      kind: "accepted",
-      discard: () => {
-        reservation.release();
-      },
-      run: (fence, checkSession) => {
-        const cancellation = AbortSignal.any([fence, runtime.agentSignal]);
-        const checkAgentSession = InboxDelivery.agentSessionGuard(cancellation, checkSession);
-        return reservation.run(() =>
-          withDeliveryCommitFence(checkAgentSession, () =>
-            new AgentLiveRunner(
-              repository,
-              runtime,
-              tenantId,
-              entityId,
-              invocation,
-              handlers,
-              cancellation,
-              checkAgentSession,
-            ).run(),
-          ),
-        );
-      },
-    });
-  },
-
-  /**
-   * Verifies context cancellation on both sides of asynchronous shard validation.
-   * @param cancellation Combined context and shard cancellation signal.
-   * @param checkSession Validates the current shard session.
-   * @returns A guard for live Agent effects and commits.
-   */
-  agentSessionGuard(
-    cancellation: AbortSignal,
-    checkSession: () => Promise<void>,
-  ): () => Promise<void> {
-    return async () => {
-      cancellation.throwIfAborted();
-      await checkSession();
-      cancellation.throwIfAborted();
-    };
-  },
-
-  /**
-   * Writes one typed receipt after a local Agent capacity reservation.
-   * @param context Captured tenant storage context.
-   * @param message Original Inbox row with the typed recipient.
-   * @param repository Agent repository declaring the state type.
-   * @param runtime Bound repository runtime containing the receipt port.
-   * @param signal Original Command or Event signal.
-   * @returns Whether this exact Agent signal was newly accepted.
-   */
-  acceptAgentReceipt(
-    runtime: RepositoryRuntime,
-    context: StorageContext,
-    repository: RepositoryView,
-    message: InboxMessage,
-    signal: AgentSource,
-  ): Promise<boolean> {
-    const source =
-      signal.case === "command"
-        ? { kind: "command" as const, id: InboxDelivery.requireAgentCommandId(signal.value) }
-        : { kind: "event" as const, id: InboxDelivery.requireAgentEventId(signal.value) };
-    return runtime.agentReceipts.accept(context, {
-      stateType: repository.stateSchema.typeName,
-      recipientId: message.inboxId.targetId,
       source,
-      action: message.label,
-    });
-  },
-
-  /**
-   * Validates the original typed Command ID before writing an Agent receipt.
-   * @param command Original Command addressed to the Agent.
-   * @returns Original nonempty typed Command ID.
-   */
-  requireAgentCommandId(command: Command): CommandId {
-    if (command.id === undefined || command.id.uuid.trim().length === 0)
-      throw new Error("Agent acceptance requires the original Command ID.");
-    return command.id;
-  },
-
-  /**
-   * Validates the original typed Event ID before writing an Agent receipt.
-   * @param event Original Event addressed to the Agent.
-   * @returns Original nonempty typed Event ID.
-   */
-  requireAgentEventId(event: Event): EventId {
-    if (event.id === undefined || event.id.value.trim().length === 0)
-      throw new Error("Agent acceptance requires the original Event ID.");
-    return event.id;
+    };
+    await new AgentLiveRunner(
+      repository,
+      runtime,
+      tenantId,
+      entityId,
+      invocation,
+      handlers,
+      new AbortController().signal,
+    ).run();
   },
 
   /**

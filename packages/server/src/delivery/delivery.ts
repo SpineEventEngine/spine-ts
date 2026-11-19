@@ -37,7 +37,6 @@ import { ShardedWorkRegistry } from "./sharded-work-registry.js";
 import { deliveryTenantKey } from "./delivery-tenant.js";
 import { withDeliveryCommitFence } from "../repository/commit-fence.js";
 import { receptionObservation, type ReceptionObservation } from "./reception-observation.js";
-import { AgentDeliveryScope, type AgentDeliveryOutcome } from "./agent-delivery-scope.js";
 import type { DeliveryResult, DeliveryRunOptions, DeliveryStrategy } from "./delivery-builder.js";
 import { emitServerError } from "../server/server-log.js";
 
@@ -378,7 +377,7 @@ export class Delivery {
     if (this.#closing) return;
     this.#closing = true;
     this.#closingRuns ??= [...this.#activeRuns];
-    for (const active of this.#closingRuns) active.drain?.stop(new Error("Delivery closed."));
+    for (const active of this.#closingRuns) active.drain?.stop();
   }
 
   /**
@@ -886,17 +885,11 @@ export class Delivery {
 class DeliveryDrain {
   readonly #statistics = counts();
 
-  readonly #agentController = new AbortController();
-
-  readonly #liveAgents = new Set<Promise<void>>();
-
   readonly #failures: DeliveryFailure[] = [];
 
   readonly #deduplication: DeliveryDeduplication;
 
   readonly #blockedTargets = new Set<string>();
-
-  readonly #capacityBlockedTargets = new Set<string>();
 
   readonly #removedInPage = new Set<InboxMessage>();
 
@@ -907,8 +900,6 @@ class DeliveryDrain {
   #wakeGate = Promise.withResolvers<undefined>();
 
   #sessionSerial: Promise<void> = Promise.resolve();
-
-  #renewalTimer: ReturnType<typeof setTimeout> | undefined;
 
   #current: DeliveryWorkSession;
 
@@ -949,22 +940,16 @@ class DeliveryDrain {
   wake(): boolean {
     if (!this.#reading) return false;
     this.#wakeGeneration += 1;
-    for (const target of this.#capacityBlockedTargets) this.#blockedTargets.delete(target);
-    this.#capacityBlockedTargets.clear();
     this.#wakeGate.resolve(undefined);
     this.#wakeGate = Promise.withResolvers<undefined>();
     return true;
   }
 
   /**
-   * Stops new work and cancels entered Agent work for explicit shutdown.
-   *
-   * @param reason Cause of cancellation or failure.
+   * Stops new work during explicit shutdown.
    */
-  stop(reason: unknown): void {
+  stop(): void {
     this.#stopped = true;
-    this.#agentController.abort(reason);
-    this.#clearRenewal();
     this.wake();
   }
 
@@ -984,53 +969,6 @@ class DeliveryDrain {
   }
 
   /**
-   * Schedules renewal before the issued lease expires while live work remains.
-   */
-  #scheduleRenewal(): void {
-    if (this.#stopped || this.#current.kind !== "LEASED" || this.input.shards.renew === undefined)
-      return;
-    this.#clearRenewal();
-    const life = this.#current.expiresAt.getTime() - this.#current.pickedUpAt.getTime();
-    const delay = Math.max(
-      1,
-      Math.min(
-        Math.floor(life / 2),
-        this.#current.expiresAt.getTime() - Time.currentTimeMillis() - 1,
-      ),
-    );
-    this.#renewalTimer = setTimeout(() => {
-      void this.#renewLease();
-    }, delay);
-    this.#renewalTimer.unref();
-  }
-
-  /**
-   * Updates one live lease and fences the run permanently on loss.
-   * @returns Completion of lease renewal or loss fencing.
-   */
-  async #renewLease(): Promise<void> {
-    await this.#sessionOperation(async () => {
-      const renew = this.input.shards.renew?.bind(this.input.shards);
-      if (this.#current.kind !== "LEASED" || this.#stopped || renew === undefined) return;
-      const renewed = await safelyValue(
-        () => renew(this.#current as import("./delivery-ports.js").LeasedDeliveryWorkSession),
-        undefined,
-      );
-      if (renewed === undefined) this.stop(new Error("Shard ownership was lost."));
-      else this.#current = renewed;
-    });
-    if (!this.#stopped && this.#liveAgents.size > 0) this.#scheduleRenewal();
-  }
-
-  /**
-   * Cancels the live lease timer after completion or loss.
-   */
-  #clearRenewal(): void {
-    if (this.#renewalTimer !== undefined) clearTimeout(this.#renewalTimer);
-    this.#renewalTimer = undefined;
-  }
-
-  /**
    * Executes delivery and releases the shard session.
    *
    * @returns The terminal delivery outcome and counts.
@@ -1041,7 +979,7 @@ class DeliveryDrain {
       run = (await this.#canStart()) ? await this.#readPages() : this.#complete("STOPPED");
     } catch (error) {
       this.#reading = false;
-      this.stop(error);
+      this.stop();
       await this.#release();
       throw error;
     }
@@ -1055,10 +993,6 @@ class DeliveryDrain {
    * @returns Whether the session was released.
    */
   async #release(): Promise<boolean> {
-    if (this.#stopped || this.#ownershipLost || this.input.options.operation?.signal?.aborted)
-      this.#agentController.abort();
-    await Promise.allSettled(this.#liveAgents);
-    this.#clearRenewal();
     let released = false;
     try {
       released = await this.#sessionOperation(() =>
@@ -1097,11 +1031,10 @@ class DeliveryDrain {
     for (;;) {
       if (this.#stopped || this.#ownershipLost || this.input.options.operation?.signal?.aborted)
         return this.#complete("STOPPED");
-      const wake = this.#wakeGate.promise;
       const messages = await this.#readPage(after);
       this.#removedInPage.clear();
       if (messages.length === 0) {
-        if (await this.#emptyPageDrained(deliveredInScan, scanGeneration, wake))
+        if (this.#emptyPageDrained(deliveredInScan, scanGeneration))
           return this.#complete("DRAINED");
         after = undefined;
         deliveredInScan = false;
@@ -1113,7 +1046,7 @@ class DeliveryDrain {
       if (!(await this.#cleanupPage(messages))) return this.#complete("STOPPED");
       deliveredInScan ||= this.#statistics.delivered !== deliveredBefore;
       if (messages.length < this.input.pageSize) {
-        if (await this.#shortPageDrained(deliveredInScan, scanGeneration, wake))
+        if (this.#shortPageDrained(deliveredInScan, scanGeneration))
           return this.#complete("DRAINED");
         after = undefined;
         deliveredInScan = false;
@@ -1126,42 +1059,25 @@ class DeliveryDrain {
   }
 
   /**
-   * Waits for admitted Agent work after an empty Inbox page.
-   * @param deliveredInScan Whether the current scan delivered a row.
-   * @param generation Wake generation captured before reading the page.
-   * @param wake Notification that new work became ready.
-   * @returns Whether the empty page ends this drain.
+   * Determines whether an empty Inbox page ends the current scan.
+   *
+   * @param deliveredInScan Whether the scan delivered a row.
+   * @param generation Wake generation captured before the read.
+   * @returns Whether the scan is drained.
    */
-  async #emptyPageDrained(
-    deliveredInScan: boolean,
-    generation: number,
-    wake: Promise<void>,
-  ): Promise<boolean> {
-    if (generation !== this.#wakeGeneration) return false;
-    if (this.#liveAgents.size > 0) {
-      await Promise.race([...this.#liveAgents, wake]);
-      return false;
-    }
-    return !deliveredInScan && this.#endScan(generation);
+  #emptyPageDrained(deliveredInScan: boolean, generation: number): boolean {
+    return generation === this.#wakeGeneration && !deliveredInScan && this.#endScan(generation);
   }
 
   /**
-   * Waits for live Agent work before deciding that a short page is drained.
-   * @param deliveredInScan Whether the current scan delivered a row.
-   * @param generation Wake generation captured before reading the page.
-   * @param wake Notification that new work became ready.
-   * @returns Whether the short page ends this drain.
+   * Determines whether a short Inbox page ends the current scan.
+   *
+   * @param deliveredInScan Whether the scan delivered a row.
+   * @param generation Wake generation captured before the read.
+   * @returns Whether the scan is drained.
    */
-  async #shortPageDrained(
-    deliveredInScan: boolean,
-    generation: number,
-    wake: Promise<void>,
-  ): Promise<boolean> {
-    if (deliveredInScan) return false;
-    if (generation !== this.#wakeGeneration) return false;
-    if (this.#liveAgents.size === 0) return this.#endScan(generation);
-    await Promise.race([...this.#liveAgents, wake]);
-    return false;
+  #shortPageDrained(deliveredInScan: boolean, generation: number): boolean {
+    return !deliveredInScan && generation === this.#wakeGeneration && this.#endScan(generation);
   }
 
   /**
@@ -1329,66 +1245,18 @@ class DeliveryDrain {
     acknowledgement: DeliveryAcknowledgement,
   ): Promise<void> {
     const observation = receptionObservation.create();
-    const generation = this.#wakeGeneration;
     try {
-      const agent = await this.#dispatch(message, observation);
-      if (agent === dispatchNotAdmitted) {
+      const admitted = await this.#dispatch(message, observation);
+      if (admitted === dispatchNotAdmitted) {
         acknowledgement.notAdmitted = true;
         return;
       }
       this.#statistics.accepted += 1;
-      if (agent?.kind === "deferred") {
-        this.#recordDeferred(message, target, generation);
-        return;
-      }
-      if (agent?.kind === "error") {
-        this.#recordFailure(message, agent.error);
-        this.#blockedTargets.add(target);
-        return;
-      }
-      if (agent?.kind === "accepted") {
-        await this.#completeAgentAttempt(message, target, acknowledgement, agent);
-        return;
-      }
     } catch (error) {
       await this.#handleReceptionFailure(message, target, acknowledgement, observation, error);
       if (this.#ownershipLost || this.input.options.operation?.signal?.aborted) return;
     }
     await this.#completeAttempt(message, target, acknowledgement);
-  }
-
-  /**
-   * Completes acknowledgement before starting an admitted Agent handler.
-   * @param message Persisted Inbox row.
-   * @param target Canonical target key.
-   * @param acknowledgement Status shared with immediate repeats.
-   * @param agent Admitted handler awaiting durable acknowledgement.
-   * @returns Completion after acknowledgement and handler start or discard.
-   */
-  async #completeAgentAttempt(
-    message: InboxMessage,
-    target: string,
-    acknowledgement: DeliveryAcknowledgement,
-    agent: Extract<AgentDeliveryOutcome, { kind: "accepted" }>,
-  ): Promise<void> {
-    await this.#completeAttempt(message, target, acknowledgement);
-    if (acknowledgement.completed) {
-      this.#messageOutcomes.set(message, { kind: "acknowledged", agent: true });
-      this.#startAgent(message, agent);
-    } else agent.discard();
-  }
-
-  /**
-   * Records a capacity deferral and revisits it if release raced with dispatch.
-   * @param generation Wake generation captured before admission.
-   * @param message Inbox row deferred for Agent capacity.
-   * @param target Canonical target key blocked in this scan.
-   */
-  #recordDeferred(message: InboxMessage, target: string, generation: number): void {
-    this.#messageOutcomes.set(message, { kind: "deferred" });
-    this.#blockedTargets.add(target);
-    this.#capacityBlockedTargets.add(target);
-    if (generation !== this.#wakeGeneration) this.wake();
   }
 
   /**
@@ -1505,72 +1373,33 @@ class DeliveryDrain {
   }
 
   /**
-   * Dispatches a message while validating the shard session before the call.
+   * Dispatches a message under ordinary shard and commit-fence validation.
    *
-   * @param message Supplies the inbox message for the endpoint.
+   * @param message Inbox message for the endpoint.
    * @param observation Records failure origin for this attempt.
-   * @returns Completion after endpoint dispatch.
+   * @returns Admission outcome after the receptor settles.
    */
   async #dispatch(
     message: InboxMessage,
     observation: ReceptionObservation,
-  ): Promise<AgentDeliveryOutcome | typeof dispatchNotAdmitted | undefined> {
-    const operation = this.input.options.operation?.signal;
-    const signal =
-      operation === undefined
-        ? this.#agentController.signal
-        : AbortSignal.any([this.#agentController.signal, operation]);
+  ): Promise<typeof dispatchNotAdmitted | undefined> {
     const admission = { rejected: false };
-    const outcome = await AgentDeliveryScope.run(
-      () =>
-        receptionObservation.run(observation, () =>
-          withDeliveryCommitFence(
-            async () => {
-              if (!(await this.#validate())) throw new Error("Shard ownership was lost.");
-            },
-            () => {
-              if (this.input.options.acceptMessage?.(message) === false) {
-                admission.rejected = true;
-                return Promise.resolve();
-              }
-              observation.entered = true;
-              return Promise.resolve(this.input.options.onMessage(message));
-            },
-          ),
-        ),
-      signal,
+    await receptionObservation.run(observation, () =>
+      withDeliveryCommitFence(
+        async () => {
+          if (!(await this.#validate())) throw new Error("Shard ownership was lost.");
+        },
+        async () => {
+          if (this.input.options.acceptMessage?.(message) === false) {
+            admission.rejected = true;
+            return;
+          }
+          observation.entered = true;
+          await this.input.options.onMessage(message);
+        },
+      ),
     );
-    return admission.rejected ? dispatchNotAdmitted : outcome;
-  }
-
-  /**
-   * Records admitted Agent work under this shard session after Inbox acknowledgement.
-   * @param agent Accepted Agent turn and discard callback.
-   * @param message Acknowledged Inbox row.
-   */
-  #startAgent(
-    message: InboxMessage,
-    agent: Extract<AgentDeliveryOutcome, { kind: "accepted" }>,
-  ): void {
-    const operation = this.input.options.operation?.signal;
-    const signal =
-      operation === undefined
-        ? this.#agentController.signal
-        : AbortSignal.any([this.#agentController.signal, operation]);
-    const checkSession = async () => {
-      if (!(await this.#validate())) throw new Error("Shard ownership was lost.");
-    };
-    const work = Promise.resolve()
-      .then(() => agent.run(signal, checkSession))
-      .catch((error: unknown) => {
-        this.#recordFailure(message, error);
-      })
-      .finally(() => {
-        this.#liveAgents.delete(work);
-        this.wake();
-      });
-    this.#liveAgents.add(work);
-    this.#scheduleRenewal();
+    return admission.rejected ? dispatchNotAdmitted : undefined;
   }
 
   /**
@@ -1666,7 +1495,7 @@ class DeliveryDrain {
       );
       if (current === undefined) {
         this.#ownershipLost = true;
-        this.stop(new Error("Shard ownership was lost."));
+        this.stop();
       } else this.#current = current;
       return current !== undefined;
     });

@@ -186,6 +186,10 @@ export {
   type TransactionalEntityScopeOperation,
 } from "./entity/entity.js";
 
+export type { AgentModelCommands, ModelCallHistory } from "./agent/model-commands.js";
+
+export type { AgentSource } from "./agent/agent-live-inputs.js";
+
 export {
   type DeclaredEntityVisibility,
   type DescriptorFieldMetadata,

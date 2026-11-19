@@ -408,8 +408,6 @@ async function configuredBox(
       totalInputBytes: 8000,
       totalOutputBytes: 8000,
     },
-    concurrentOperations: 1,
-    queuedOperations: 0,
   }).register(backend.registration);
   if (alternate !== undefined) registry = registry.register(alternate.registration);
   const storageBackend = new InMemoryStorageBackend();
@@ -607,8 +605,6 @@ async function configuredToolBox(closeFailure?: "throw" | "never") {
       totalInputBytes: 16_384,
       totalOutputBytes: 16_384,
     },
-    concurrentOperations: 1,
-    queuedOperations: 0,
   })
     .register(registration)
     .registerTools(tools);

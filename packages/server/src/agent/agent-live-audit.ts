@@ -49,9 +49,7 @@ export class AgentLiveAudit<Id> {
    * @param metadata Signal ID, Time, and causal context service.
    * @param onRegisterSchema Registers the System payload type before publication.
    * @param onPublish Publishes the original Event after its audit group commits.
-
-   * @param checkSession Callback that validates the current execution session.
-  */
+   */
   constructor(
     private readonly invocation: AgentLiveInvocation,
     private readonly stateSchema: MessageSchema,
@@ -61,7 +59,6 @@ export class AgentLiveAudit<Id> {
     private readonly metadata: SignalMetadata,
     private readonly onRegisterSchema: (schema: MessageSchema) => void,
     private readonly onPublish: (event: Event) => Promise<void>,
-    private readonly checkSession: () => Promise<void> = () => Promise.resolve(),
   ) {}
 
   /**
@@ -112,10 +109,8 @@ export class AgentLiveAudit<Id> {
       sizes.reduce((sum, size) => sum + size, 0) > capacity.transactionPayloadBytes
     )
       throw new RangeError("Agent audit history group exceeds provider capacity.");
-    await this.checkSession();
     this.onRegisterSchema(schema);
     await this.history.appendAll(this.entityId, entries);
-    await this.checkSession();
     await this.onPublish(event);
   }
 

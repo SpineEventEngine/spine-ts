@@ -69,8 +69,6 @@ describe("MCP connection and authorization configuration", () => {
     const registry = AiRegistry.create({
       defaultModels: {},
       invocationLimits: limits,
-      concurrentOperations: 1,
-      queuedOperations: 0,
     })
       .registerTools(first)
       .registerTools(second);
@@ -102,8 +100,6 @@ describe("MCP connection and authorization configuration", () => {
     const registry = AiRegistry.create({
       defaultModels: {},
       invocationLimits: limits,
-      concurrentOperations: 1,
-      queuedOperations: 0,
     }).registerTools(server);
     expect(() => registry.registerTools(server)).toThrow("Duplicate");
   });

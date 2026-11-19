@@ -133,27 +133,6 @@ describe("live Agent audit", () => {
     expect(publish).not.toHaveBeenCalled();
   });
 
-  it("does not append a termination fact after its live session is lost", async () => {
-    const appendAll = vi.fn(() => Promise.resolve());
-    const history = { capacity: {}, appendAll } as unknown as AgentHistoryStorage<string>;
-    const publish = vi.fn(() => Promise.resolve());
-    const lost = new Error("session lost");
-    const audit = new AgentLiveAudit(
-      invocation,
-      SupportReplyAgentStateSchema,
-      "T-audit",
-      "T-audit",
-      history,
-      metadata,
-      () => undefined,
-      publish,
-      () => Promise.reject(lost),
-    );
-    await expect(audit.save(AgentModelSelectionChangedSchema, payload)).rejects.toBe(lost);
-    expect(appendAll).not.toHaveBeenCalled();
-    expect(publish).not.toHaveBeenCalled();
-  });
-
   it("retains the committed audit fact when System publication fails", async () => {
     const retained: AgentHistoryEntry[] = [];
     const history = {

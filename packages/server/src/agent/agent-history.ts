@@ -14,13 +14,22 @@
 
 import { clone, create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { AnyPacker, Validate } from "@spine-event-engine/core";
 import type { ConversationHistoryRead, HistoryPage, HistoryRead } from "@spine-event-engine/ai";
-import type { ActorContext, Event } from "@spine-event-engine/proto";
+import {
+  CommandSchema,
+  EventSchema,
+  type ActorContext,
+  type Event,
+} from "@spine-event-engine/proto";
 import {
   AgentHistoryCursorSchema,
   AgentHistoryEntrySchema,
+  AiOperationIdSchema,
+  CallModelSchema,
   ConversationIdSchema,
   type AgentHistoryEntry,
+  type AiOperationId,
   type ConversationRecord,
 } from "@spine-event-engine/proto/agent";
 import {
@@ -30,6 +39,7 @@ import {
   type AgentHistoryStorage,
   type AgentHistoryView,
 } from "@spine-event-engine/storage/provider";
+import type { ModelCallHistory } from "./model-commands.js";
 
 /**
  * Identifies the exact repository and Agent instance for a continuation.
@@ -200,6 +210,15 @@ export interface AgentHistoryReadAccess {
   domain(entity: object, request: HistoryRead): Promise<HistoryPage<Event>>;
 
   /**
+   * Reads one prepared model request by its exact logical call ID.
+   *
+   * @param entity Restored Agent instance.
+   * @param callId Logical model call identifier.
+   * @returns Original request and triggering envelope, when present.
+   */
+  modelRequest(entity: object, callId: AiOperationId): Promise<ModelCallHistory | undefined>;
+
+  /**
    * Validates a cursor and reads one provider page.
    *
    * @param entity Agent instance.
@@ -244,6 +263,43 @@ export interface AgentHistoryReadAccess {
  * Binds protected Agent history reads to repository storage.
  */
 export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
+  /**
+   * Reads one immutable request without scanning an Agent history page.
+   *
+   * @param entity Restored Agent instance.
+   * @param callId Logical model call identifier.
+   * @returns Prepared Command and complete original source when present.
+   */
+  async modelRequest(entity: object, callId: AiOperationId): Promise<ModelCallHistory | undefined> {
+    Validate.check(AiOperationIdSchema, callId);
+    const binding = bindings.get(entity);
+    if (binding === undefined)
+      throw new Error("Agent model history is available only from repository execution.");
+    const entry = await binding.storage.readModelRequest(binding.entityId, callId.value);
+    if (entry === undefined) return undefined;
+    if (entry.item.case !== "modelRequest")
+      throw new Error("Agent request identity returned a different history category.");
+    const record = entry.item.value;
+    const command = record.request;
+    const request = command?.message && AnyPacker.tryUnpack(command.message, CallModelSchema);
+    if (command === undefined || request === undefined)
+      throw new Error("Stored Agent model request is incomplete.");
+    const source = record.source;
+    if (source.case === "command")
+      return {
+        command: clone(CommandSchema, command),
+        request,
+        source: { case: "command", value: clone(CommandSchema, source.value) },
+      };
+    if (source.case === "event")
+      return {
+        command: clone(CommandSchema, command),
+        request,
+        source: { case: "event", value: clone(EventSchema, source.value) },
+      };
+    throw new Error("Stored Agent model request has no triggering signal.");
+  },
+
   /**
    * Attaches one mandatory storage handle to a restored Agent.
    *

@@ -60,7 +60,6 @@ import * as nodeDiscoverySchemas from "../generated/spine/deployment/node_discov
 import * as systemEventSchemas from "../generated/spine/system/server/entity_log_events_pb.js";
 import * as systemTypeSchemas from "../generated/spine/system/server/entity_type_pb.js";
 import * as agentHistorySchemas from "../generated/spine/server/agent/history_record_pb.js";
-import * as agentReceiptSchemas from "../generated/spine/server/agent/acceptance_receipt_pb.js";
 import * as agentAttributesSchemas from "../generated/spine/server/agent/attributes_record_pb.js";
 import * as agentContentSchemas from "../generated/spine/agent/content_pb.js";
 import * as agentIdSchemas from "../generated/spine/agent/agent_id_pb.js";
@@ -191,7 +190,7 @@ describe("spineProtoModule", () => {
       dependencies: [],
       moduleExport: "spineProtoModule",
     });
-    expect(manifest.protoFiles).toHaveLength(68);
+    expect(manifest.protoFiles).toHaveLength(67);
     expect(manifest.generationId).toEqual(expect.stringMatching(/\S/u));
     expect(
       JSON.parse(
@@ -252,7 +251,6 @@ describe("spineProtoModule", () => {
       ...schemaNames(systemEventSchemas),
       ...schemaNames(systemTypeSchemas),
       ...schemaNames(agentHistorySchemas),
-      ...schemaNames(agentReceiptSchemas),
       ...schemaNames(agentAttributesSchemas),
       ...schemaNames(agentContentSchemas),
       ...schemaNames(agentIdSchemas),

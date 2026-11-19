@@ -35,13 +35,11 @@ export class AgentLiveReadRuntime {
    * Binds one handler to its exact Agent scope and invocation-wide budget.
    *
    * @param budget Invocation-wide resource budget.
-   * @param checkSession Callback that validates the current execution session.
    * @param scope Captured invocation or tenant scope.
    */
   constructor(
     private readonly scope: AgentHistoryScope,
     private readonly budget: AgentLiveBudget,
-    private readonly checkSession?: () => Promise<void>,
   ) {}
 
   /**
@@ -99,7 +97,6 @@ export class AgentLiveReadRuntime {
       if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes <= 0))
         throw new RangeError("Agent history maxBytes must be a positive safe integer.");
       this.budget.reserveRead();
-      if (this.checkSession !== undefined) await this.checkSession();
       const page = await live();
       const bytes = page.entries.reduce(
         (sum, entry) => sum + toBinary(AgentHistoryEntrySchema, entry).length,
@@ -128,7 +125,6 @@ export class AgentLiveReadRuntime {
       if (query.target?.type !== TypeUrls.derive(schema))
         throw new Error("Agent projection query target type changed.");
       this.budget.reserveRead();
-      if (this.checkSession !== undefined) await this.checkSession();
       return live();
     });
   }

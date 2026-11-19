@@ -29,6 +29,8 @@ interface RecoveryMessage {
   requests?: number;
   events?: number;
   calls?: number;
+  savedCalls?: string[];
+  executedCalls?: string[];
 }
 
 interface RecoveryScope {
@@ -196,11 +198,10 @@ const providers = [
   },
 ] as const;
 
-describe.each(providers)("$name live Agent interruption", (provider) => {
-  it.each(["accepted", "response"])(
-    "does not replay a %s interrupted turn and accepts a fresh signal",
+describe.each(providers)("$name model Command interruption", (provider) => {
+  it.skipIf(!provider.ready).each(["attempt", "response"])(
+    "preserves ordinary input redelivery and the saved %s publication gap",
     async (cut) => {
-      if (!provider.ready) return;
       const unique = randomUUID().replaceAll("-", "").slice(0, 16);
       const context = `agent_interruption_${unique}`;
       const ticket = `INT-${unique}`;
@@ -217,9 +218,7 @@ describe.each(providers)("$name live Agent interruption", (provider) => {
       );
       let second: RecoveryChild | undefined;
       try {
-        const barrier = await first.message(
-          cut === "accepted" ? "receipt-saved" : "response-saved",
-        );
+        const barrier = await first.message(cut === "attempt" ? "attempt-saved" : "response-saved");
         expect(barrier.error).toBeUndefined();
         expect((await first.kill()).signal).toBe("SIGKILL");
         second = new RecoveryChild(
@@ -236,11 +235,14 @@ describe.each(providers)("$name live Agent interruption", (provider) => {
         expect(reopened.state).toBeUndefined();
         expect(reopened.events).toBe(0);
         expect(reopened.requests).toBe(0);
-        if (cut === "response") expect(reopened.historyCount).toBeGreaterThan(0);
+        expect(reopened.historyCount).toBeGreaterThan(0);
+        expect(reopened.savedCalls).toHaveLength(1);
         const fresh = await second.message("fresh-complete", 65_000);
         expect(fresh.state).toBe("A reviewer can help.");
-        expect(fresh.requests).toBe(1);
-        expect(fresh.calls).toBe(1);
+        expect(fresh.requests).toBe(cut === "attempt" ? 2 : 1);
+        expect(fresh.calls).toBe(cut === "attempt" ? 2 : 1);
+        expect(fresh.executedCalls).not.toContain(reopened.savedCalls?.[0]);
+        expect(new Set(fresh.executedCalls).size).toBe(fresh.executedCalls?.length);
         expect(fresh.historyCount).toBeGreaterThan(reopened.historyCount ?? 0);
         expect((await second.exit()).code).toBe(0);
       } finally {

@@ -96,7 +96,9 @@ export class AgentLiveAiAudit {
   constructor(
     private readonly audit: AgentLiveAudit<unknown>,
     private readonly operation: AgentOperationIdentity,
-    private readonly selected: AgentLiveModel,
+    private readonly selected: AgentLiveModel & {
+      readonly connection: NonNullable<AgentLiveModel["connection"]>;
+    },
     private readonly model: Model,
   ) {}
 

@@ -14,8 +14,11 @@
 
 import { create } from "@bufbuild/protobuf";
 import { AiModel, type AiModel as AiCapability } from "@spine-event-engine/ai";
+import { AnyPacker } from "@spine-event-engine/core";
 import { ConversationIdSchema } from "@spine-event-engine/proto/agent";
-import { Agent, Assign } from "@spine-event-engine/server";
+import type { CallModel } from "@spine-event-engine/proto/generated/spine/agent/commands_pb.js";
+import type { ModelReplied } from "@spine-event-engine/proto/generated/spine/agent/events_pb.js";
+import { Agent, Command, React } from "@spine-event-engine/server";
 
 import {
   DraftRecoverySupportReplySchema as DraftRecoverySchema,
@@ -68,29 +71,38 @@ export class SupportRecoveryAgent extends Agent<
   // prettier-ignore
 
   /**
-   * Converts the saved model proposal into one domain Event after recovery.
+   * Prepares one model Command from the accepted support question.
    *
    * @param command Original accepted support question.
-   * @returns Reply proposed for human review.
+   * @returns Model Command to submit after the Agent saves its request.
    */
-  @Assign async draft(command: DraftRecoverySupportReply): Promise<SupportReplyDrafted> {
+  @Command draft(command: DraftRecoverySupportReply): CallModel {
     SupportRecoveryAgent.draftCalls += 1;
     const conversation = create(ConversationIdSchema, {
       value: `support-recovery-${this.id.ticketNumber}`,
     });
-    const result = await this.ai.invoke(recoveryReplyModel, {
-      call: "support-recovery-reply",
+    return this.modelCommands.create(recoveryReplyModel, {
       conversation,
       input: command,
     });
-    if (!result.ok) throw new Error("Support reply proposal was not usable.");
+  }
+
+  /**
+   * Records a completed proposal and emits it for human review.
+   *
+   * @param event The typed reply to the prepared model Command.
+   * @returns Reply proposed for human review.
+   */
+  @React replied(event: ModelReplied): SupportReplyDrafted {
+    const proposal = event.output && AnyPacker.tryUnpack(event.output, SupportReplyProposalSchema);
+    if (proposal === undefined) throw new Error("Support reply proposal was not usable.");
     this.update((state) => {
       state.id = this.id;
-      state.proposedReply = result.value.replyText;
+      state.proposedReply = proposal.replyText;
     });
     return create(SupportReplyDraftedSchema, {
       agent: this.id,
-      reply: result.value.replyText,
+      reply: proposal.replyText,
     });
   }
 }

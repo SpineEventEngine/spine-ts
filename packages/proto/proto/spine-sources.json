@@ -499,10 +499,6 @@
       "sha256": "7c300d215a1757c17b7bd1a89cebb4825df28a58fcc119f2aa6d5535d7520073"
     },
     {
-      "localPath": "packages/proto/proto/spine/server/agent/acceptance_receipt.proto",
-      "sha256": "daa0f8e724849523cb539b9b6a7503aa8eab0de3f23d926d1aa9d117bd44f007"
-    },
-    {
       "localPath": "packages/proto/proto/spine/server/agent/attributes_record.proto",
       "sha256": "b66a60c472e9e02eec00422f32e08ebb3221c3523bbc36b9e40900f66ad0f7a4"
     },

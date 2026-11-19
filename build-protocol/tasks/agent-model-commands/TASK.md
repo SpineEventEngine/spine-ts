@@ -29,6 +29,9 @@ The no-durable-publication decision is recorded in DECISION_LOG.md under
 - Add typed `this.modelCommands.create(definition, { conversation, input })`
   returning `CallModel`, without contacting a provider. An unused constructed
   Command creates no pending call or remote work.
+- Agent methods returning CallModel use the existing `@Command` contract.
+  `@Assign` still emits Events. Do not add an Agent-only or CallModel-specific
+  decorator/output exception to bypass ordinary handler metadata.
 - Register definitions through existing `.withAi(registry)` and
   `.add(AgentClass, { ai: { models: [...] } })`. The framework model handler
   resolves the registered definition by Agent state type URL, operation name,
@@ -36,6 +39,11 @@ The no-durable-publication decision is recorded in DECISION_LOG.md under
 - Preserve deployment selection, authorization, typed output checks, and
   explicitly configured corrective attempts. Capture selected `ModelRef`
   during construction; no credentials in Commands.
+- Selecting that reference must not require successful provider connection or
+  use authorization before the Agent handler runs. Perform provider connection
+  and use checks when actual direct or asynchronous model invocation starts.
+  Otherwise provider denial prevents the Agent from requesting work or handling
+  its failure. Authorization still precedes remote model use.
 - Bind transported input type URLs to the registered definition in ordinary
   signal admission/output preparation. Do not revalidate incoming messages
   during asynchronous dispatch.
@@ -121,7 +129,10 @@ The no-durable-publication decision is recorded in DECISION_LOG.md under
   persisted execution queue, startup replay, or automatic recovery from history
   or pending calls. Option 2 was rejected permanently, not deferred. A saved
   pending call may never reach its handler after process loss. Existing delivery
-  after ordinary bus admission remains unchanged.
+  after ordinary bus admission remains unchanged. If the original Agent input
+  is still TO_DELIVER at process loss, ordinary redelivery can run its handler
+  again and construct a new call. That is not replay of the previously saved
+  CallModel; restart tests distinguish the call identities.
 
 ### Examples, documentation, and release
 
@@ -206,18 +217,34 @@ is not a model mismatch. Subagents may not spawn subagents.
   Scope: typed model Command construction and pending-call/history bookkeeping,
   registered standalone model execution and exact outcome routing, ordinary
   Agent delivery, and removal of acceptance receipts and Agent-specific shard
-  execution. Update the support and release-notes examples to exercise the new
-  flow. Preserve direct invocation. Required tests cover simultaneous calls,
+  execution. Preserve direct invocation. Required tests cover simultaneous calls,
   out-of-order outcomes, failure, abandonment, failed or unmatched outcome
   handling, publication gaps without replay, and graceful follow-up draining.
-  Active after slice 3 acceptance; no second production writer.
+  Completed. Stored Inbox timing, failed saves and submission-history writes,
+  declared rejection context, failed/absent/filtered outcome handlers,
+  abandonment and late replies, overlapping calls and out-of-order results,
+  exact destination checks, pinned deployments, definition uniqueness, and
+  app-visible pending/history information passed focused tests. Live interruption
+  tests passed on PostgreSQL/MySQL/Datastore and MariaDB, distinguishing saved
+  call identities from new calls produced by ordinary input redelivery.
+  Shutdown now drains accepted local work to a joint fixed point, including a
+  second model call returned by an Agent reply handler. Type build and affected
+  lint/format/Proto/generated/TSDoc/cleanup checks passed. Explicit Sol/medium
+  configured profile retained; runtime introspection is unavailable.
+- Implementation slice 5: same implementer, gpt-6-sol/medium profile retained.
+  Scope: support and release-notes examples, history display, maintained guides
+  and references, and final affected preflight after the runtime contracts
+  stabilize. Active after the slice 4 runtime checkpoint. The three requested
+  fresh reviews start only after this implementation work is complete.
 - Review rounds 1–3: each a fresh no-memory Astra/high reviewer, explicit model
   and reasoning, as requested by the human. Pending implementation completion.
 
 ## Current status
 
 Requirements recorded. Official master fetched and already contained by this
-branch. Architecture pass and slices 1–3 accepted; slice 4 integration is next. No
+branch. Architecture pass and slices 1–4 accepted. Slice 5 updates the maintained
+examples and broader documentation, then runs the final affected preflight.
+The three requested fresh Astra reviews and release verification remain. No
 unresolved human design question; implementation discoveries must preserve the
 accepted contract or be raised with concrete evidence.
 

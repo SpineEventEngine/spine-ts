@@ -6936,6 +6936,10 @@ late-write notifications and managed shutdown.
 
 Date:2026-10-28. Status:accepted after the complete M8 review wave.
 
+The Agent-specific reservation, receipt, session-cancellation, and early recipient
+removal rules below are superseded by the 2026-11-19 Agent model Commands decision.
+Shared Delivery admission, fencing, and resource cleanup rules remain applicable.
+
 Track every admitted core drain by operation identity from before pickup through
 release, including explicit public custom-callback runs. Retain the existing
 per-shard map solely for joinable default replay. Public callbacks cannot silently
@@ -7477,11 +7481,21 @@ Abrupt termination during remote execution can likewise leave its outcome
 unknown. No automatic retry or reconstruction of that invocation is promised.
 
 This decision does not disable ordinary delivery or redelivery after a Command
-has entered existing delivery infrastructure. Orderly shutdown still observes
-and drains accepted asynchronous work and publication attempts.
+has entered existing delivery infrastructure. If the original Agent input is
+still `TO_DELIVER`, redelivery can run that handler again and construct a new
+model call. This is distinct from replaying the previously saved CallModel.
+Orderly shutdown still observes and drains accepted asynchronous work and
+publication attempts, keeping recipients available for accepted follow-ups.
 
 The accepted Agent flow uses ordinary handler completion and successful saving
 before Inbox acknowledgement, removes `AgentAcceptanceReceipt` and Agent
 execution tracking from shard sessions, and adds no `DELIVERY_IN_PROGRESS`
 status. Pending model calls are framework attributes, not a durable work queue.
 The asynchronous Command-handler base remains independent of Agents and models.
+
+Selecting the ModelRef and using the provider are separate operations. Provider
+connection and use authorization run when an actual invocation starts, including
+direct `ai.invoke()`. They must not run before every Agent handler: denying model
+use there prevents the Agent from returning CallModel or handling ModelCallFailed.
+The authorization check remains before remote use, with connection identity
+retained in model history.

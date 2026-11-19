@@ -107,14 +107,6 @@ Await each model call before starting the next one in the same handler. Concurre
 calls, an unfinished call when the handler returns, and reuse of a facade after
 its handler finishes are programming errors.
 
-Bounded Contexts that share one `AiRegistry` object also share any configured
-execution capacity within that process. `concurrentOperations` can limit active
-Agent executions; `queuedOperations` can limit additional work waiting in memory
-for a slot. Both settings are optional. If capacity is configured and full, further
-signals wait in the Inbox until a slot becomes available. Waiting
-before execution does not consume a configured execution deadline. An interrupted turn does not resume or retain its deadline for a later signal. Separate registries and
-processes do not share these settings.
-
 `Mcp.server()` validates an explicitly configured tool server. A generation
 capability lists the server/tool references it may use. Connection and per-call
 authorization receive the accepted actor, tenant and Agent scope. The runtime

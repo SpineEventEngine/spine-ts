@@ -13,6 +13,7 @@
  */
 
 import { clone, create } from "@bufbuild/protobuf";
+import { AsyncLocalStorage } from "node:async_hooks";
 import {
   AnyPacker,
   RejectionThrowable,
@@ -48,6 +49,15 @@ import { SignalMetadata } from "./signal-metadata.js";
 import { SignalPublisher } from "./signal-publisher.js";
 import { AsyncCommandHandler } from "../handler/standalone.js";
 import { withoutDeliveryCommitFence } from "../repository/commit-fence.js";
+
+const asyncCommandScope = new AsyncLocalStorage<Command>();
+
+/**
+ * Returns the exact Command envelope admitted for the current asynchronous assignee.
+ *
+ * @returns Original admitted Command, when invoked from an asynchronous assignee.
+ */
+export const activeAsyncCommand = (): Command | undefined => asyncCommandScope.getStore();
 
 /**
  * Materializes generated standalone receivers without treating them as Entities.
@@ -197,7 +207,7 @@ export class StandaloneHandlerRuntime {
       const message = AnyPacker.tryUnpack(command.message, binding.handler.input.schema);
       if (message === undefined) continue;
       if (binding.group.receiverType.prototype instanceof AsyncCommandHandler) {
-        this.#startAsyncCommand(binding, message, clone(CommandSchema, command));
+        this.#startAsyncCommand(binding, message, command);
         continue;
       }
       let output: unknown;
@@ -225,10 +235,13 @@ export class StandaloneHandlerRuntime {
    * @param command Stable original Command envelope used for outcomes and diagnostics.
    */
   #startAsyncCommand(binding: Binding, message: unknown, command: Command): void {
+    const stable = clone(CommandSchema, command);
     const task = withoutDeliveryCommitFence(() =>
-      Promise.resolve().then(() => this.#invokeAsyncCommand(binding, message, command)),
+      asyncCommandScope.run(command, () =>
+        Promise.resolve().then(() => this.#invokeAsyncCommand(binding, message, stable)),
+      ),
     ).catch((error: unknown) => {
-      this.#publisher.reportFailure("command", command, error);
+      this.#publisher.reportFailure("command", stable, error);
     });
     this.#asyncTasks.add(task);
     void task.finally(() => this.#asyncTasks.delete(task));
