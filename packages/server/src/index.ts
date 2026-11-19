@@ -314,6 +314,7 @@ export type { External } from "./handler/external.js";
 
 export {
   AbstractAssignee,
+  AsyncCommandHandler,
   AbstractCommander,
   AbstractEventReactor,
   AbstractEventSubscriber,

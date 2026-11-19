@@ -21,12 +21,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   AbstractAssignee,
+  AsyncCommandHandler,
   AbstractCommander,
   AbstractEventReactor,
   AbstractEventSubscriber,
 } from "../../src/handler/standalone.js";
 import type { GeneratedStandaloneHandlerGroup } from "../../src/handler/generated-handler-registry.js";
 import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-runtime.js";
+import { commitFenced, withDeliveryCommitFence } from "../../src/repository/commit-fence.js";
 import { EventDispatcherRegistry } from "../../src/bus/event-dispatcher-registry.js";
 import {
   ProjectStateSchema,
@@ -82,6 +84,27 @@ class EmptyCommandReceiver extends AbstractCommander {
 class RejectingAssignee extends AbstractAssignee {
   assign(): ReviewTaskAssigned {
     throw RejectionThrowable.create(ReviewRejectedSchema, { id: "rejected" });
+  }
+}
+
+class DeferredAssignee extends AsyncCommandHandler {
+  readonly calls: string[] = [];
+
+  readonly pending = new Map<string, (value: readonly ReviewTaskAssigned[]) => void>();
+
+  assign(command: AssignReviewTask): Promise<readonly ReviewTaskAssigned[]> {
+    this.calls.push(command.id);
+    return new Promise((resolve) => this.pending.set(command.id, resolve));
+  }
+}
+
+class ConfiguredAsyncAssignee extends AsyncCommandHandler {
+  constructor(readonly run: (command: AssignReviewTask) => Promise<readonly ReviewTaskAssigned[]>) {
+    super();
+  }
+
+  assign(command: AssignReviewTask): Promise<readonly ReviewTaskAssigned[]> {
+    return this.run(command);
   }
 }
 
@@ -211,6 +234,297 @@ class ContextCommander extends AbstractCommander {
 }
 
 describe("StandaloneHandlerRuntime", () => {
+  it("publishes a declared async rejection with its original rejected Command", async () => {
+    const rejected: Event[] = [];
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: ConfiguredAsyncAssignee,
+      handlers: [
+        {
+          kind: "command-assignment",
+          methodName: "assign",
+          input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [ReviewRejectedSchema] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const runtime = new StandaloneHandlerRuntime([
+      {
+        group,
+        instance: new ConfiguredAsyncAssignee(() =>
+          Promise.reject(RejectionThrowable.create(ReviewRejectedSchema, { id: "rejected" })),
+        ),
+        publisher: {
+          publishRejectionEvent: (event: Event) => {
+            rejected.push(event);
+            return Promise.resolve();
+          },
+        } as never,
+      },
+    ]);
+    const dispatcher = runtime.commandDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Command dispatcher.");
+    await dispatcher.dispatch(
+      create(CommandSchema, {
+        id: { uuid: "original" },
+        message: AnyPacker.pack(
+          AssignReviewTaskSchema,
+          create(AssignReviewTaskSchema, { id: "task" }),
+        ),
+      }),
+    );
+    await runtime.drain();
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]?.context?.rejection?.command?.id?.uuid).toBe("original");
+    const message = rejected[0]?.message;
+    if (message === undefined) throw new Error("Expected rejection payload.");
+    expect(AnyPacker.tryUnpack(message, ReviewRejectedSchema)?.id).toBe("rejected");
+  });
+
+  it("observes every async publication attempt and its failure before drain settles", async () => {
+    const second = Promise.withResolvers<undefined>();
+    const attempts: string[] = [];
+    const failures: string[] = [];
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: ConfiguredAsyncAssignee,
+      handlers: [
+        {
+          kind: "command-assignment",
+          methodName: "assign",
+          input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const runtime = new StandaloneHandlerRuntime([
+      {
+        group,
+        instance: new ConfiguredAsyncAssignee(() =>
+          Promise.resolve([
+            create(ReviewTaskAssignedSchema, { id: "one", name: "One" }),
+            create(ReviewTaskAssignedSchema, { id: "two", name: "Two" }),
+          ]),
+        ),
+        publisher: {
+          publishEvent: (event: Event) => {
+            const id =
+              event.message === undefined
+                ? undefined
+                : AnyPacker.tryUnpack(event.message, ReviewTaskAssignedSchema)?.id;
+            if (id === undefined) throw new Error("Expected assigned Event.");
+            attempts.push(id);
+            return id === "one"
+              ? Promise.reject(new Error("first publication failed"))
+              : second.promise;
+          },
+          reportFailure: (_kind: string, _event: Event, error: Error) => {
+            failures.push(error.message);
+          },
+        } as never,
+      },
+    ]);
+    const dispatcher = runtime.commandDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Command dispatcher.");
+    await dispatcher.dispatch(
+      create(CommandSchema, {
+        id: { uuid: "source" },
+        message: AnyPacker.pack(
+          AssignReviewTaskSchema,
+          create(AssignReviewTaskSchema, { id: "task" }),
+        ),
+      }),
+    );
+    let drained = false;
+    const drain = runtime.drain().then(() => {
+      drained = true;
+    });
+    await vi.waitFor(() => {
+      expect(attempts).toEqual(["one", "two"]);
+    });
+    expect(drained).toBe(false);
+    second.resolve(undefined);
+    await drain;
+    expect(failures).toEqual(["first publication failed"]);
+  });
+
+  it("observes an unexpected async invocation failure with the original Command identity", async () => {
+    const failures: { readonly id: string; readonly typeUrl: string; readonly reason: unknown }[] =
+      [];
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: ConfiguredAsyncAssignee,
+      handlers: [
+        {
+          kind: "command-assignment",
+          methodName: "assign",
+          input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const runtime = new StandaloneHandlerRuntime([
+      {
+        group,
+        instance: new ConfiguredAsyncAssignee(() =>
+          Promise.reject(new Error("provider unavailable")),
+        ),
+        publisher: {
+          reportFailure: (
+            _kind: string,
+            command: ReturnType<typeof create<typeof CommandSchema>>,
+            reason: unknown,
+          ) => {
+            failures.push({
+              id: command.id?.uuid ?? "",
+              typeUrl: command.message?.typeUrl ?? "",
+              reason,
+            });
+          },
+        } as never,
+      },
+    ]);
+    const dispatcher = runtime.commandDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Command dispatcher.");
+    await dispatcher.dispatch(
+      create(CommandSchema, {
+        id: { uuid: "failed-invocation" },
+        message: AnyPacker.pack(
+          AssignReviewTaskSchema,
+          create(AssignReviewTaskSchema, { id: "task" }),
+        ),
+      }),
+    );
+    await runtime.drain();
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      id: "failed-invocation",
+      typeUrl: TypeUrls.derive(AssignReviewTaskSchema),
+    });
+    expect(failures[0]?.reason).toBeInstanceOf(Error);
+    expect((failures[0]?.reason as Error).message).toBe("provider unavailable");
+  });
+
+  it("runs admitted async work outside the earlier Delivery commit fence", async () => {
+    let checked = 0;
+    let published = 0;
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: ConfiguredAsyncAssignee,
+      handlers: [
+        {
+          kind: "command-assignment",
+          methodName: "assign",
+          input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const runtime = new StandaloneHandlerRuntime([
+      {
+        group,
+        instance: new ConfiguredAsyncAssignee(async () => {
+          await commitFenced({}, () => ({ status: "COMMITTED" }));
+          return [create(ReviewTaskAssignedSchema, { id: "detached", name: "Detached" })];
+        }),
+        publisher: {
+          publishEvent: () => {
+            published += 1;
+            return Promise.resolve();
+          },
+        } as never,
+      },
+    ]);
+    const dispatcher = runtime.commandDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Command dispatcher.");
+    await withDeliveryCommitFence(
+      () => {
+        checked += 1;
+        return Promise.reject(new Error("stale shard"));
+      },
+      () =>
+        dispatcher.dispatch(
+          create(CommandSchema, {
+            id: { uuid: "original" },
+            message: AnyPacker.pack(
+              AssignReviewTaskSchema,
+              create(AssignReviewTaskSchema, { id: "task" }),
+            ),
+          }),
+        ),
+    );
+    await runtime.drain();
+    expect(checked).toBe(0);
+    expect(published).toBe(1);
+  });
+
+  it("dispatches another Command while an async assignee is waiting, then drains all outputs", async () => {
+    const assignee = new DeferredAssignee();
+    const published: string[] = [];
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: DeferredAssignee,
+      handlers: [
+        {
+          kind: "command-assignment",
+          methodName: "assign",
+          input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const runtime = new StandaloneHandlerRuntime([
+      {
+        group,
+        instance: assignee,
+        publisher: {
+          publishEvent: (event: Event) => {
+            const id =
+              event.message === undefined
+                ? undefined
+                : AnyPacker.tryUnpack(event.message, ReviewTaskAssignedSchema)?.id;
+            if (id === undefined) throw new Error("Expected assigned Event.");
+            published.push(id);
+            return Promise.resolve();
+          },
+        } as never,
+      },
+    ]);
+    const dispatcher = runtime.commandDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Command dispatcher.");
+    for (const id of ["first", "second"]) {
+      await dispatcher.dispatch(
+        create(CommandSchema, {
+          id: { uuid: id },
+          message: AnyPacker.pack(
+            AssignReviewTaskSchema,
+            create(AssignReviewTaskSchema, { id, name: id }),
+          ),
+        }),
+      );
+    }
+    expect(assignee.calls).toEqual(["first", "second"]);
+    let drained = false;
+    const drain = runtime.drain().then(() => {
+      drained = true;
+    });
+    assignee.pending.get("second")?.([
+      create(ReviewTaskAssignedSchema, { id: "second", name: "second" }),
+    ]);
+    await Promise.resolve();
+    expect(drained).toBe(false);
+    assignee.pending.get("first")?.([
+      create(ReviewTaskAssignedSchema, { id: "first", name: "first" }),
+    ]);
+    await drain;
+    expect(published).toEqual(["second", "first"]);
+  });
+
   it("omits absent optional tuple Events and keeps present results in order", async () => {
     const published: Event[] = [];
     const group: GeneratedStandaloneHandlerGroup = {

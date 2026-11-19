@@ -177,13 +177,25 @@ is not a model mismatch. Subagents may not spawn subagents.
   shutdown preserving accepted follow-ups. Focused deferred-handler, rejection,
   publication-failure and close-chain tests required. No provider or model
   execution integration changes in this slice except necessary shared seams.
+  Completed. Deferred invocation, declared rejection, failure observation,
+  every output attempt, inherited-fence exit, and real Process Manager follow-up
+  chains passed under Bounded Context/Application/Server close. Affected suites,
+  generated build, lint/docs/format checks passed. Same explicit Sol/medium
+  configured profile retained.
+- Implementation slice 3: same implementer, gpt-6-sol/medium profile retained.
+  Scope: replace preferences with Agent attributes, add model-call history and
+  indexed request lookup, implement combined current-data loading and atomic
+  saves across memory/PostgreSQL/MySQL/Datastore, and adapt existing Agent load
+  to that operation. Keep common EntityRecord unchanged. Required provider
+  acceptance scenarios are recorded below. Model-command execution and removal
+  of special Agent admission remain slice 4.
 - Review rounds 1–3: each a fresh no-memory Astra/high reviewer, explicit model
   and reasoning, as requested by the human. Pending implementation completion.
 
 ## Current status
 
 Requirements recorded. Official master fetched and already contained by this
-branch. Architecture pass and slice 1 accepted; slice 2 is next. No
+branch. Architecture pass and slices 1–2 accepted; slice 3 is next. No
 unresolved human design question; implementation discoveries must preserve the
 accepted contract or be raised with concrete evidence.
 

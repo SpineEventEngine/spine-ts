@@ -63,6 +63,7 @@ import {
   type ApplicationBuilder,
   type ApplicationBuildOptions,
   AbstractAssignee,
+  AsyncCommandHandler,
   AbstractCommander,
   AbstractEventReactor,
   AbstractEventSubscriber,
@@ -73,6 +74,7 @@ import {
   ProcessManager,
   Projection,
   Repository,
+  Server,
   SingleProcessServerRuntime,
   UniformAcrossAllShards,
   type CommandEndpoint,
@@ -332,6 +334,42 @@ class StandaloneAssignee extends AbstractAssignee {
 class OtherStandaloneAssignee extends AbstractAssignee {
   assign(): ReviewTaskAssigned {
     return create(ReviewTaskAssignedSchema, { id: "event-2", name: "other" });
+  }
+}
+class DeferredStandaloneAssignee extends AsyncCommandHandler {
+  readonly calls: string[] = [];
+  readonly firstStarted = Promise.withResolvers<undefined>();
+  readonly followUpStarted = Promise.withResolvers<undefined>();
+  readonly pending = new Map<string, () => void>();
+
+  assign(command: AssignReviewTask): Promise<ReviewTaskAssigned> {
+    this.calls.push(command.id);
+    if (command.id === "first") this.firstStarted.resolve(undefined);
+    if (command.id === "followup") this.followUpStarted.resolve(undefined);
+    return new Promise((resolve) => {
+      this.pending.set(command.id, () => {
+        resolve(
+          create(ReviewTaskAssignedSchema, {
+            id: command.id,
+            name: command.name,
+          }),
+        );
+      });
+    });
+  }
+}
+class FollowUpStandaloneCommander extends AbstractCommander {
+  react(event: ReviewTaskAssigned): AssignReviewTask | undefined {
+    return event.id === "first"
+      ? create(AssignReviewTaskSchema, { id: "followup", name: "Second" })
+      : undefined;
+  }
+}
+class EntityOutcomeCommander extends AbstractCommander {
+  react(event: ReviewStarted): AssignReviewTask | undefined {
+    return event.id === "first"
+      ? create(AssignReviewTaskSchema, { id: "followup", name: "From Entity" })
+      : undefined;
   }
 }
 class StandaloneCommander extends AbstractCommander {
@@ -1122,6 +1160,114 @@ describe("BoundedContext assembly", () => {
 
     expect(commands).toHaveLength(1);
   });
+
+  it("drains an async Command through an Event recipient and another async Command", async () => {
+    const setup = createTestSetup();
+    const assignee = new DeferredStandaloneAssignee();
+    registerStandaloneMetadata([
+      standaloneReceiver(
+        DeferredStandaloneAssignee,
+        "command-assignment",
+        "assign",
+        AssignReviewTaskSchema,
+        [ReviewTaskAssignedSchema],
+      ),
+      standaloneReceiver(
+        FollowUpStandaloneCommander,
+        "command-reaction",
+        "react",
+        ReviewTaskAssignedSchema,
+        [AssignReviewTaskSchema],
+      ),
+    ]);
+    const context = await buildContext(
+      BoundedContext.singleTenant("AsyncCloseChain")
+        .addAssignee(assignee)
+        .addCommandDispatcher(new FollowUpStandaloneCommander()),
+      setup,
+    );
+    try {
+      await context.commandBus().post(createAggregateCommand("async-first", "first"));
+      await assignee.firstStarted.promise;
+      let closed = false;
+      const close = context.close().then(() => {
+        closed = true;
+      });
+      await Promise.resolve();
+      expect(closed).toBe(false);
+      assignee.pending.get("first")?.();
+      await assignee.followUpStarted.promise;
+      expect(closed).toBe(false);
+      assignee.pending.get("followup")?.();
+      await close;
+      expect(assignee.calls).toEqual(["first", "followup"]);
+    } finally {
+      for (const release of assignee.pending.values()) release();
+      await context.close();
+    }
+  });
+
+  it.each(["context", "application", "server"] as const)(
+    "drains an async Event through a Process Manager and a second async Command on %s close",
+    async (closeThrough) => {
+      const setup = createTestSetup();
+      const assignee = new DeferredStandaloneAssignee();
+      createGeneratedRegistryFixture([deliveryProcessManagerRegistry(DeliveryTaskProcessManager)]);
+      registerStandaloneMetadata([
+        standaloneReceiver(
+          DeferredStandaloneAssignee,
+          "command-assignment",
+          "assign",
+          AssignReviewTaskSchema,
+          [ReviewTaskAssignedSchema],
+        ),
+        standaloneReceiver(
+          EntityOutcomeCommander,
+          "command-reaction",
+          "react",
+          ReviewStartedSchema,
+          [AssignReviewTaskSchema],
+        ),
+      ]);
+      const context = await buildContext(
+        BoundedContext.singleTenant("AsyncEntityCloseChain")
+          .addAssignee(assignee)
+          .add(DeliveryTaskProcessManager, {
+            eventRouting: EventRouting.create<string>().route(ReviewTaskAssignedSchema, (event) => [
+              event.id,
+            ]),
+          })
+          .addCommandDispatcher(new EntityOutcomeCommander()),
+        setup,
+      );
+      const server =
+        closeThrough === "server"
+          ? await Server.atPort(0).setApplication(applicationFor(setup)).start()
+          : undefined;
+      try {
+        await context.commandBus().post(createAggregateCommand("async-entity-first", "first"));
+        await assignee.firstStarted.promise;
+        let closed = false;
+        const close = (async () => {
+          if (server !== undefined) await server.close();
+          if (closeThrough === "context") await context.close();
+          else await applicationFor(setup).close();
+        })().then(() => {
+          closed = true;
+        });
+        assignee.pending.get("first")?.();
+        await assignee.followUpStarted.promise;
+        expect(closed).toBe(false);
+        assignee.pending.get("followup")?.();
+        await close;
+        expect(assignee.calls).toEqual(["first", "followup"]);
+      } finally {
+        for (const release of assignee.pending.values()) release();
+        await server?.close();
+        await context.close();
+      }
+    },
+  );
 
   it("drains an ordinary Entity Command handed off before close", async () => {
     const setup = createTestSetup();
@@ -5220,6 +5366,7 @@ function standaloneReceiver(
   kind:
     | "command-assignment"
     | "command-substitution"
+    | "command-reaction"
     | "event-reaction"
     | "event-subscription"
     | "state-subscription",

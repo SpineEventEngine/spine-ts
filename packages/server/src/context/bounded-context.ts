@@ -920,6 +920,11 @@ interface BoundedContextAssembly {
   readonly publisher: SignalPublisher;
 
   /**
+   * Registered standalone handlers whose asynchronous work joins context drain.
+   */
+  readonly standaloneRuntime?: StandaloneHandlerRuntime;
+
+  /**
    * Domain read-side Stand.
    */
   readonly stand: Stand;
@@ -1049,6 +1054,8 @@ export class BoundedContext {
   readonly #systemEventBus: EventBus;
 
   readonly #publisher: SignalPublisher;
+
+  #standaloneRuntime: StandaloneHandlerRuntime | undefined;
 
   readonly #commandEndpoint: CommandEndpoint;
 
@@ -1556,6 +1563,7 @@ export class BoundedContext {
    * @param delivery Tenant index and Inboxes prepared for this context.
    */
   #installReferences(input: BoundedContextAssembly, delivery: ContextDeliveryParts): void {
+    this.#standaloneRuntime = input.standaloneRuntime;
     contextEventBuses.set(this, [this.#eventBus, this.#systemEventBus]);
     contextRepositoryViews.set(this, this.#repositoryViews);
     eventSubscribers.set(this, (typeUrl, subscriber) =>
@@ -1960,8 +1968,6 @@ export class BoundedContext {
   #beginClose(): void {
     closingContexts.add(this);
     this.#preparationController.abort(new Error("Bounded Context closed."));
-    serverEnvironmentAccess.stopRecipients(this.#environment, this);
-    this.#agentController.abort(new Error("Bounded Context closed."));
     this.#publisher.beginClose();
     commandBusAccess.beginClose(this.#commandBus);
     eventBusAccess.beginClose(this.#eventBus);
@@ -1984,6 +1990,7 @@ export class BoundedContext {
           this.#eventBus,
           this.#systemEventBus,
           this.#publisher,
+          this.#standaloneRuntime,
         ),
       errors,
     );
@@ -2011,9 +2018,12 @@ export class BoundedContext {
           this.#eventBus,
           this.#systemEventBus,
           this.#publisher,
+          this.#standaloneRuntime,
         ),
       errors,
     );
+    serverEnvironmentAccess.stopRecipients(this.#environment, this);
+    this.#agentController.abort(new Error("Bounded Context closed."));
     await this.#closePart(() => this.#agentReceipts.close(), errors);
     await this.#closeBuses(errors);
     await this.#closePart(() => this.#stand.close(), errors);
@@ -2523,6 +2533,7 @@ interface ContextBuildBuses {
   readonly eventBus: EventBus;
   readonly systemEventBus: EventBus;
   readonly publisher: SignalPublisher;
+  standaloneRuntime?: StandaloneHandlerRuntime;
   readonly systemStand: Stand;
   readonly systemSpec: ContextSpecSnapshot;
 }
@@ -3274,6 +3285,7 @@ export class BoundedContextBuilder {
               buses.publisher,
             ),
           );
+    if (runtime !== undefined) buses.standaloneRuntime = runtime;
     const command = runtime?.commandDispatcher();
     const event = runtime?.eventDispatcher();
     const state = runtime?.stateDispatcher();
@@ -3809,6 +3821,9 @@ const ContextParts = Object.freeze({
       eventBus: buses.eventBus,
       systemEventBus: buses.systemEventBus,
       publisher: buses.publisher,
+      ...(buses.standaloneRuntime === undefined
+        ? {}
+        : { standaloneRuntime: buses.standaloneRuntime }),
       stand: running.stand,
       systemStand: buses.systemStand,
       subscriptionRuntime: running.runtime,
@@ -4663,6 +4678,7 @@ const ContextParts = Object.freeze({
    * @param eventBus Domain event bus.
    * @param systemEventBus System event bus.
    * @param publisher Signal publisher.
+   * @param standaloneRuntime Registered asynchronous standalone work, when present.
    * @returns Promise fulfilled when accepted work stabilizes.
    */
   async drainContextWork(
@@ -4670,6 +4686,7 @@ const ContextParts = Object.freeze({
     eventBus: EventBus,
     systemEventBus: EventBus,
     publisher: SignalPublisher,
+    standaloneRuntime?: StandaloneHandlerRuntime,
   ): Promise<void> {
     let observedCommandWork = -1;
     let observedEventWork = -1;
@@ -4683,10 +4700,12 @@ const ContextParts = Object.freeze({
       await eventBusAccess.drain(eventBus);
       await eventBusAccess.drain(systemEventBus);
       await publisher.drain();
+      await standaloneRuntime?.drain();
     } while (
       commandBusAccess.acceptedWorkCount(commandBus) !== observedCommandWork ||
       eventBusAccess.acceptedWorkCount(eventBus) !== observedEventWork ||
-      eventBusAccess.acceptedWorkCount(systemEventBus) !== observedSystemEventWork
+      eventBusAccess.acceptedWorkCount(systemEventBus) !== observedSystemEventWork ||
+      (standaloneRuntime?.activeAsyncTaskCount() ?? 0) > 0
     );
   },
 

@@ -49,6 +49,16 @@ consume Events, rejections, or Entity states and produce no signal. State
 subscribers use the System Event Bus. Produced signals are published in-process
 on a best-effort basis; this is not an exactly-once contract.
 
+`AsyncCommandHandler` extends `AbstractAssignee` and uses the same `@Assign`
+declarations and `addAssignee()` registration. Its method can return a Promise.
+Command dispatch returns after registering the invocation, so another Command
+can run while the method waits. When the method finishes, its declared Events
+or rejection use the original Command context. Bounded Context shutdown waits
+for the method, every output publication attempt, and accepted follow-up work
+before closing the buses and storage. Unexpected method failures are logged
+with the original Command identity. A failed publication is logged and does not
+establish delivery.
+
 ## Entity constructor dependencies
 
 Supply `onCreate` when an Entity constructor needs an application service:

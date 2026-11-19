@@ -597,6 +597,7 @@ const handlerDecorators = new Set<HandlerDecorator>(["Assign", "Command", "React
 const entityBaseNames = new Set(["Aggregate", "Projection", "ProcessManager", "Agent"]);
 const standaloneBaseNames = new Set([
   "AbstractAssignee",
+  "AsyncCommandHandler",
   "AbstractCommander",
   "AbstractEventReactor",
   "AbstractEventSubscriber",
@@ -2150,7 +2151,7 @@ const HandlerSources = Object.freeze({
    */
   allowsStandaloneDecorator(base: string | undefined, decorator: HandlerDecorator): boolean {
     return (
-      (base === "AbstractAssignee" && decorator === "Assign") ||
+      ((base === "AbstractAssignee" || base === "AsyncCommandHandler") && decorator === "Assign") ||
       (base === "AbstractCommander" && decorator === "Command") ||
       (base === "AbstractEventReactor" && decorator === "React") ||
       (base === "AbstractEventSubscriber" && decorator === "Subscribe")

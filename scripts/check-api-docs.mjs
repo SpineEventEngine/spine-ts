@@ -649,6 +649,7 @@ const expectedServerExports = [
   "AppQueryHandler",
   "Aggregate",
   "AbstractAssignee",
+  "AsyncCommandHandler",
   "AbstractCommander",
   "AbstractEventReactor",
   "AbstractEventSubscriber",

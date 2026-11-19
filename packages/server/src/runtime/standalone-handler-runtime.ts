@@ -46,6 +46,8 @@ import {
 } from "../handler/event-handler-filter.js";
 import { SignalMetadata } from "./signal-metadata.js";
 import { SignalPublisher } from "./signal-publisher.js";
+import { AsyncCommandHandler } from "../handler/standalone.js";
+import { withoutDeliveryCommitFence } from "../repository/commit-fence.js";
 
 /**
  * Materializes generated standalone receivers without treating them as Entities.
@@ -60,6 +62,8 @@ export class StandaloneHandlerRuntime {
   readonly #bindings: readonly Binding[];
 
   readonly #eventFilters: ReadonlyMap<string, EventHandlerFilterPlan<Binding>>;
+
+  readonly #asyncTasks = new Set<Promise<void>>();
 
   /**
    * Creates runtime bindings for registered standalone receivers.
@@ -93,6 +97,25 @@ export class StandaloneHandlerRuntime {
       dispatch: async (command) => this.#dispatchCommand(command, bindings),
     };
     return dispatcher;
+  }
+
+  /**
+   * Waits for every admitted asynchronous Command invocation and publication attempt.
+   * Work admitted while draining is included.
+   *
+   * @returns Completion once the task set is empty.
+   */
+  async drain(): Promise<void> {
+    while (this.#asyncTasks.size > 0) await Promise.all([...this.#asyncTasks]);
+  }
+
+  /**
+   * Returns the number of unsettled asynchronous Command invocations.
+   *
+   * @returns Number of unsettled asynchronous invocations.
+   */
+  activeAsyncTaskCount(): number {
+    return this.#asyncTasks.size;
   }
 
   /**
@@ -173,6 +196,10 @@ export class StandaloneHandlerRuntime {
     for (const binding of bindings) {
       const message = AnyPacker.tryUnpack(command.message, binding.handler.input.schema);
       if (message === undefined) continue;
+      if (binding.group.receiverType.prototype instanceof AsyncCommandHandler) {
+        this.#startAsyncCommand(binding, message, clone(CommandSchema, command));
+        continue;
+      }
       let output: unknown;
       try {
         output = await binding.invoke(message, StandaloneHandlerRuntime.commandContext(command));
@@ -188,6 +215,77 @@ export class StandaloneHandlerRuntime {
       }
       await this.#publish(binding, output, command);
     }
+  }
+
+  /**
+   * Registers an admitted invocation before returning control to Command dispatch.
+   *
+   * @param binding Registered asynchronous assignee method.
+   * @param message Decoded Command payload.
+   * @param command Stable original Command envelope used for outcomes and diagnostics.
+   */
+  #startAsyncCommand(binding: Binding, message: unknown, command: Command): void {
+    const task = withoutDeliveryCommitFence(() =>
+      Promise.resolve().then(() => this.#invokeAsyncCommand(binding, message, command)),
+    ).catch((error: unknown) => {
+      this.#publisher.reportFailure("command", command, error);
+    });
+    this.#asyncTasks.add(task);
+    void task.finally(() => this.#asyncTasks.delete(task));
+  }
+
+  /**
+   * Invokes one asynchronous assignee and observes every declared output publication.
+   *
+   * @param binding Registered asynchronous assignee method.
+   * @param message Decoded Command payload.
+   * @param command Original Command supplying outcome and rejection context.
+   * @returns Completion after all publication attempts settle.
+   */
+  async #invokeAsyncCommand(binding: Binding, message: unknown, command: Command): Promise<void> {
+    let output: unknown;
+    try {
+      output = await binding.invoke(message, StandaloneHandlerRuntime.commandContext(command));
+    } catch (error) {
+      if (!RejectionThrowable.is(error)) throw error;
+      DeclaredRejections.require(
+        binding.handler.methodName,
+        binding.handler.outcomes.thrown,
+        error,
+      );
+      await this.#publishRejection(command, error);
+      return;
+    }
+    await this.#publishAsync(binding, output, command);
+  }
+
+  /**
+   * Prepares the complete result, starts every publication, and observes each attempt.
+   *
+   * @param binding Handler declaration for output validation.
+   * @param output Returned Event or Events.
+   * @param command Original Command used for Event metadata and diagnostics.
+   * @returns Completion after all started publications settle.
+   */
+  async #publishAsync(binding: Binding, output: unknown, command: Command): Promise<void> {
+    const values = StandaloneHandlerRuntime.#outputValues(output);
+    if (!this.#canPublish(binding, values)) return;
+    const events = values.map((value) =>
+      this.#eventOutput(this.#returnedSchema(binding, value), value, command),
+    );
+    const attempts: Promise<void>[] = [];
+    for (const event of events) {
+      try {
+        attempts.push(
+          Promise.resolve(this.#publisher.publishEvent(event)).catch((error: unknown) => {
+            this.#publisher.reportFailure("event", event, error);
+          }),
+        );
+      } catch (error) {
+        this.#publisher.reportFailure("event", event, error);
+      }
+    }
+    await Promise.all(attempts);
   }
 
   /**

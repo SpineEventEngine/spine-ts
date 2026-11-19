@@ -630,6 +630,12 @@ decorator and generated-registry details.
 
 Standalone generated handlers extend one of `AbstractAssignee`,
 `AbstractCommander`, `AbstractEventReactor`, or `AbstractEventSubscriber`.
+`AsyncCommandHandler` extends `AbstractAssignee` for Commands whose method may
+wait on remote work. Register it with `addAssignee()` and declare its method with
+`@Assign`. Dispatch registers the invocation and returns, allowing another
+Command to run. Its declared Event or rejection retains the original Command
+context. Closing a Bounded Context waits for the method and its accepted
+follow-up signals before releasing the buses and storage.
 Register an assignee with `addAssignee()`, a commander with
 `addCommandDispatcher()`, and reactors or subscribers with
 `addEventDispatcher()`, then call `build()` so the generated receiver
