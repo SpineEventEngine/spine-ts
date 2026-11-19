@@ -7459,3 +7459,29 @@ cleanup for retry; safe dependency order takes precedence over releasing resourc
 that active work still needs. These asynchronous cleanup rules preserve TS behavior
 where the JVM's synchronous lifetime is insufficient. No migration utilities or
 legacy compatibility API are included.
+
+## Agent model Commands: no durable outgoing publication (2026-11-19)
+
+The human accepted option 1 of the Agent model-request proposal: asynchronous
+Command execution remains process-local, without automatic recovery. Durable
+outgoing Command publication (option 2) is explicitly rejected, not deferred
+work. Do not introduce an outbox, persisted execution queue, startup replay, or
+automatic recovery from pending model calls or Agent history for this flow.
+
+An Agent may save its domain changes, pending model call, and request history,
+then stop before the returned `CallModel` reaches its handler. Its input may
+already be `DELIVERED`. The saved call can remain unanswered even though no
+provider request started. This failure window is accepted. Application code
+can inspect pending calls and history and explicitly request another call.
+Abrupt termination during remote execution can likewise leave its outcome
+unknown. No automatic retry or reconstruction of that invocation is promised.
+
+This decision does not disable ordinary delivery or redelivery after a Command
+has entered existing delivery infrastructure. Orderly shutdown still observes
+and drains accepted asynchronous work and publication attempts.
+
+The accepted Agent flow uses ordinary handler completion and successful saving
+before Inbox acknowledgement, removes `AgentAcceptanceReceipt` and Agent
+execution tracking from shard sessions, and adds no `DELIVERY_IN_PROGRESS`
+status. Pending model calls are framework attributes, not a durable work queue.
+The asynchronous Command-handler base remains independent of Agents and models.
