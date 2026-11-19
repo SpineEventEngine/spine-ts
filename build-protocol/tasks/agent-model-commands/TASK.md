@@ -29,6 +29,9 @@ The no-durable-publication decision is recorded in DECISION_LOG.md under
 - Add typed `this.modelCommands.create(definition, { conversation, input })`
   returning `CallModel`, without contacting a provider. An unused constructed
   Command creates no pending call or remote work.
+  Returned messages must not share mutable Agent, tenant, Version, or ModelRef
+  values with framework facts; changing a discarded request cannot change a
+  subsequent request.
 - Agent methods returning CallModel use the existing `@Command` contract.
   `@Assign` still emits Events. Do not add an Agent-only or CallModel-specific
   decorator/output exception to bypass ordinary handler metadata.
@@ -260,17 +263,29 @@ is not a model mismatch. Subagents may not spawn subagents.
   New model-Command construction meets the coverage threshold. Focused combined
   coverage also inspected the shared selection and standalone runtime; the full
   repository coverage threshold remains a final release gate.
-- Review rounds 1–3: each a fresh no-memory Astra/high reviewer, explicit model
-  and reasoning, as requested by the human. Pending implementation completion.
+- Review round 1: fresh no-memory review function requested by the human,
+  expected gpt-6-astra/high, explicit model and reasoning required. Scope:
+  correctness/DDD, persistence/concurrency, public TypeScript/Proto contracts,
+  security, maintainability, and documentation comprehension for the complete
+  branch diff. Dispatch follows version-metadata preflight. Read-only; no child
+  agents. Earlier review outputs are not supplied.
+- Review rounds 2–3: each a new no-memory Astra/high review function with the
+  same concerns, after the preceding round's relevant findings are corrected.
 
 ## Current status
 
-Architecture and implementation slices 1–5 are complete. Required common-version
-metadata is next, followed by three sequential fresh Astra/high reviews and
+Architecture and implementation slices 1–5 are complete. Common workspace
+version is `2.0.0-snapshot.32`; dependency/Proto metadata checks precede the first
+of three sequential fresh Astra/high reviews and
 shared-runtime release verification. The selected verification profile is
 `verify:release` because Delivery, Bounded Context shutdown, storage providers,
 public protocol, and model execution change together. No unresolved human design
 question. No GitHub PR or issue changes are authorized.
+
+The complete tooling typecheck found test fixtures that still referenced removed
+readiness methods, omitted the new history lookup, mixed source and built storage
+types, or violated exact optional-property types. The existing implementer fixes
+these before review, preserving the runtime contract and meaningful assertions.
 
 ## Implementation seams
 
