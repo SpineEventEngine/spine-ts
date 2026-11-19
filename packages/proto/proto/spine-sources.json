@@ -436,7 +436,7 @@
     },
     {
       "localPath": "packages/proto/proto/spine/agent/content.proto",
-      "sha256": "12a41fe62e92f6385969aab72a20433a1c053ec0d06c6dca813625ddc9c4e9fa"
+      "sha256": "b6af9ffb785e3539586a11462efa64b92a3a3b0d4e23ac4acbf93671c6741414"
     },
     {
       "localPath": "packages/proto/proto/spine/agent/events.proto",
@@ -452,7 +452,7 @@
     },
     {
       "localPath": "packages/proto/proto/spine/agent/model.proto",
-      "sha256": "51f273d79e098eee312fec3c90c621df41c0a8d0abef2241c577b8ea5c14fc06"
+      "sha256": "7246f92ed272879121291aadb2c8891dc99b5437397bae1544899f58bc095e10"
     },
     {
       "localPath": "packages/proto/proto/spine/agent/model_call.proto",

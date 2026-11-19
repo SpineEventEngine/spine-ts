@@ -363,7 +363,7 @@ const modelHistoryRecord = (
     preview: summary,
     exact,
     detail: JSON.stringify(entry, null, 2),
-    occurredAt: typeof item?.occurredAt === "string" ? item.occurredAt : undefined,
+    occurredAt: typeof item?.whenOccurred === "string" ? item.whenOccurred : undefined,
   };
 };
 
@@ -425,7 +425,7 @@ export const historyRecord = (entry: unknown): HistoryRecord => {
   const title = titles[name] ?? label(name || (record ? "Exchange" : "Event"));
   const kind = recordKind(record, item, name);
   const exact = recordText(content, name);
-  const occurredAt = typeof item?.occurredAt === "string" ? item.occurredAt : undefined;
+  const occurredAt = typeof item?.whenOccurred === "string" ? item.whenOccurred : undefined;
   return {
     kind,
     speaker: kind === "Tool" ? "MCP" : kind === "System" || kind === "Domain" ? "App" : kind,

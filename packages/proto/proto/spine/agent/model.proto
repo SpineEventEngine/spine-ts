@@ -62,9 +62,16 @@ enum AiModelKind {
 
 // Effective execution path fixed when a capability is accepted.
 enum AiExecutionMode {
+  // No execution mode has been selected.
   AI_EXECUTION_MODE_UNSPECIFIED = 0;
+
+  // Generation through a provider-native output schema.
   GENERATION_NATIVE_SCHEMA = 1;
+
+  // Generation followed by local parsing and validation.
   GENERATION_PROMPT_VALIDATE = 2;
+
+  // Direct typed decision answers without generated chat text.
   DECISION_DIRECT = 3;
 }
 
@@ -120,71 +127,85 @@ message AiToolCallId {
 
 // Name of one typed application capability, distinct from a deployment.
 message AiCapabilityName {
+  // Application-assigned name of the typed capability.
   string value = 1 [(required) = true];
 }
 
 // Revision of a typed application capability.
 message AiCapabilityRevision {
+  // Application-assigned revision of the typed capability.
   string value = 1 [(required) = true];
 }
 
 // Revision of a pure application validation rule.
 message AiValidationRevision {
+  // Application-assigned revision of validation rules.
   string value = 1 [(required) = true];
 }
 
 // Revision of a pure decision-to-Proto mapping.
 message AiMappingRevision {
+  // Application-assigned revision of decision mapping.
   string value = 1 [(required) = true];
 }
 
 // Safe reference to diagnostic information retained outside public events.
 message AiDiagnosticId {
+  // Safe reference to separately retained diagnostics.
   string value = 1 [(required) = true];
 }
 
 // Identity of one configured MCP server.
 message McpServerId {
+  // Application-configured MCP server identifier.
   string value = 1 [(required) = true];
 }
 
 // Exact name of one expressly permitted MCP tool.
 message McpToolName {
+  // Exact configured MCP tool name.
   string value = 1 [(required) = true];
 }
 
 // Number of physical provider requests permitted for one operation.
 message AiModelRequestLimit {
+  // Maximum physical model requests in one operation.
   uint32 value = 1 [(min).value = "1"];
 }
 
 // Number of external tool calls permitted for one operation; zero disables tools.
 message AiToolCallLimit {
+  // Maximum external tool calls in one operation; zero disables tools.
   uint32 value = 1;
 }
 
 // Maximum elapsed milliseconds for one operation.
 message AiDeadlineMillis {
+  // Maximum operation duration in milliseconds.
   uint64 value = 1 [(min).value = "1"];
 }
 
 // Maximum bytes in one materialized provider request.
 message AiInputByteLimit {
+  // Maximum serialized bytes in one provider request.
   uint64 value = 1 [(min).value = "1"];
 }
 
 // Maximum received bytes before provider parsing.
 message AiOutputByteLimit {
+  // Maximum received response bytes before parsing.
   uint64 value = 1 [(min).value = "1"];
 }
 
 // Generation-only maximum output tokens.
 message AiOutputTokenLimit {
+  // Maximum generation output tokens.
   uint64 value = 1 [(min).value = "1"];
 }
 
 // Provider-reported token count; known zero remains distinct from absence.
 message AiTokenCount {
+  // Provider-reported token count, including a known zero.
   uint64 value = 1;
 }
 
@@ -220,21 +241,25 @@ message AiUsage {
 
 // Provider or local service identifier, not an application deployment name.
 message AiProviderName {
+  // Provider or local service name reported by the authenticated connection.
   string value = 1 [(required) = true];
 }
 
 // Verified provider account or local execution identity.
 message AiAccountIdentity {
+  // Verified account or local execution identity without credentials.
   string value = 1 [(required) = true];
 }
 
 // Credential-free canonical endpoint identity.
 message AiEndpointIdentity {
+  // Canonical endpoint identity without secret connection details.
   string value = 1 [(required) = true];
 }
 
 // Concrete provider model name, independent of application deployment names.
 message AiProviderModelName {
+  // Concrete model name reported for this provider execution.
   string value = 1 [(required) = true];
 }
 

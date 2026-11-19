@@ -658,11 +658,11 @@ DraftSupportReply → SupportDraftAgent → CallModel
                               SupportReview query
 ```
 
-The Agent's `@Command` handler returns `this.modelCommands.create(draftSupportReply, { conversation, input: command })`. The definition comes from the example's `src/model.ts`; both the Agent and its Bounded Context registration import it. `.withAi(registry)` supplies a permitted provider deployment. The framework saves the returned Command with the Agent turn, then its registered asynchronous handler runs the model. A typed reply or rejection returns to the Agent, whose `@React` handler emits `SupportReplySuggested` or `SupportReplyFailed`. The review Projection stores the outcome for a person to inspect. Local Command posting waits for the Agent handler and save, while the provider may still be running.
+The Agent's `@Command` handler returns `this.modelCommands.create(draftSupportReply, { conversation, input: command })`. The definition comes from the example's `src/model.ts`; both the Agent and its Bounded Context registration import it. `.withAi(registry)` supplies a permitted provider deployment. The framework saves the returned Command with the Agent turn, then its registered asynchronous handler runs the model. A typed reply or rejection returns to the Agent, whose `@React` handler emits `SupportReplySuggested` or `SupportReplyFailed`. The review Projection stores the outcome for a person to inspect. Local Command posting waits for reception and scheduling. Delivery marks the Agent Inbox row `DELIVERED` only after its handler and save finish. To observe completion, wait for the domain outcome or read the resulting state; the provider reply may arrive later.
 
 A model can still be wrong about facts it cannot verify. Keep the review decision in application code. Configure the permitted provider and its credentials outside the Agent. For local tests, `AiTestBackend` supplies controlled replies without a paid model request. The example's [BlackBox test](../examples/support/test/support-blackbox.test.ts) checks the proposal, failure, review query, and recorded interaction history. See the [AI package guide](../packages/ai/README.md) for the task definition, [adapter guide](../packages/ai-vercel-ax/README.md) for deployment, and [Agent reference](../packages/server/REFERENCE.md#agent-execution) for exact runtime contracts.
 
-## 8. Run and observe it
+## 8. Running and observation
 
 Start a local Message Board server and UI in separate terminals after the
 workspace build:

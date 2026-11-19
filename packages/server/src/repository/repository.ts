@@ -5274,7 +5274,6 @@ class AgentLiveRunner {
       const handler = this.handlers[0];
       if (handler === undefined) throw new Error("Agent rejection requires a Command assignee.");
       RepositorySignals.requireDeclaredRejection(handler.handler, error);
-      preferences.length = 0;
       const output = RepositorySignals.rejectionEvent(
         this.runtime,
         this.repository,
@@ -5650,11 +5649,13 @@ class AgentLiveRunner {
   ): Promise<void> {
     const outputs = this.bindOutputs(loaded, produced);
     const requested = this.preparedRequests(outputs, commands);
-    const abandoned = this.abandonedCalls(expected, commands);
-    const handled = this.handledOutcome();
     const priorPreferences = expected?.modelPreferences ?? [];
-    await this.authorizePreferences(priorPreferences, preferences);
-    const preferenceEvents = this.preferenceEvents(priorPreferences, preferences);
+    const rejected = produced.case === "rejected";
+    const nextPreferences = rejected ? priorPreferences : preferences;
+    const abandoned = rejected ? { ids: [], history: [] } : this.abandonedCalls(expected, commands);
+    const handled = rejected ? undefined : this.handledOutcome();
+    await this.authorizePreferences(priorPreferences, nextPreferences);
+    const preferenceEvents = this.preferenceEvents(priorPreferences, nextPreferences);
     const history = [
       ...AgentLiveOutputs.emittedHistory(outputs),
       ...preferenceEvents.map((event) => this.systemEntry(event)),
@@ -5667,7 +5668,7 @@ class AgentLiveRunner {
       ...(expected?.pendingModelCalls ?? []).filter((call) => !removed.has(call.id?.value ?? "")),
       ...requested.calls,
     ];
-    await this.commit(loaded, expected, preferences, pending, history);
+    await this.commit(loaded, expected, nextPreferences, pending, history);
     for (const event of preferenceEvents) await this.runtime.publishAgentSystemEvent(event);
     await this.publish(outputs, loaded);
   }

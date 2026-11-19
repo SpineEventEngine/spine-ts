@@ -144,7 +144,7 @@ the startup calls that prepare the application.
     - [A string: `subject`](#a-string-subject)
     - [An enum: `priority`](#an-enum-priority)
     - [A message: `requester`](#a-message-requester)
-    - [A timestamp: `opened_at`](#a-timestamp-opened_at)
+    - [A timestamp: `when_opened`](#a-timestamp-when_opened)
     - [A packed message: `detail`](#a-packed-message-detail)
     - [Lists and maps: `tags` and `attributes`](#lists-and-maps-tags-and-attributes)
     - [Other field types and missing values](#other-field-types-and-missing-values)
@@ -288,7 +288,7 @@ message Ticket {
   Requester requester = 4 [(column) = true];
 
   // Opening time, available for filtering and ordering.
-  google.protobuf.Timestamp opened_at = 5 [(column) = true];
+  google.protobuf.Timestamp when_opened = 5 [(column) = true];
 
   // Labels retained in the state without a separate query column.
   repeated string tags = 6;
@@ -325,7 +325,7 @@ message ReplyAssistant {
 ```
 
 The one application-specific storage query in this example selects Tickets by
-`priority` and orders by `opened_at ASC`. This is a query against the Aggregate's
+`priority` and orders by `when_opened ASC`. This is a query against the Aggregate's
 record storage; it does not turn an Aggregate into a public query Projection.
 Public clients query/subscribe to the Projection. The index checklist includes
 that specified storage query and the built-in queries for the enabled features.
@@ -394,7 +394,7 @@ Copy the settings you need into your application's factory builder before callin
 | `subject`          | TEXT                           | `Ticket.subject`                                                | `Cannot download invoice`                                                         |
 | `priority`         | INTEGER                        | `Ticket.priority`                                               | `2 (URGENT)`                                                                      |
 | `requester`        | TEXT                           | `Ticket.requester`                                              | `{"name":"Billing desk","email":"billing@example.test","aliases":["Invoices"]}`   |
-| `opened_at`        | BIGINT                         | `Ticket.opened_at`                                              | `42000000007`                                                                     |
+| `when_opened`      | BIGINT                         | `Ticket.when_opened`                                            | `42000000007`                                                                     |
 | `detail`           | TEXT                           | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}` |
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
@@ -875,11 +875,11 @@ describes the required privileges.
 - [ ] **7. Add application query indexes.** Spine creates primary keys and the
       three Agent audit indexes described beside the audit table. It does not create
       an index for every `(column)`. For the example Ticket query, create an index
-      on `(priority, opened_at, ID)` in each database containing Ticket records:
+      on `(priority, when_opened, ID)` in each database containing Ticket records:
 
 ```sql
 CREATE INDEX support_ticket_priority_opened
-  ON spine.example_support_ticket (priority, opened_at, ID);
+  ON spine.example_support_ticket (priority, when_opened, ID);
 ```
 
 Evaluate indexes for diagnostic/state history, subscription expiry and Inbox
@@ -924,7 +924,7 @@ Copy the settings you need into your application's factory builder before callin
 | `subject`          | TEXT                           | `Ticket.subject`                                                | `Cannot download invoice`                                                         |
 | `priority`         | INT                            | `Ticket.priority`                                               | `2 (URGENT)`                                                                      |
 | `requester`        | TEXT                           | `Ticket.requester`                                              | `{"name":"Billing desk","email":"billing@example.test","aliases":["Invoices"]}`   |
-| `opened_at`        | BIGINT                         | `Ticket.opened_at`                                              | `42000000007`                                                                     |
+| `when_opened`      | BIGINT                         | `Ticket.when_opened`                                            | `42000000007`                                                                     |
 | `detail`           | TEXT                           | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}` |
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
@@ -1387,7 +1387,7 @@ Copy the settings you need into your application's factory builder before callin
 | `subject`                          | String              | `Ticket.subject`                                                | `Cannot download invoice`                                                         |
 | `priority`                         | Integer             | `Ticket.priority`                                               | `2 (URGENT)`                                                                      |
 | `requester`                        | String (Proto JSON) | `Ticket.requester`                                              | `{"name":"Billing desk","email":"billing@example.test","aliases":["Invoices"]}`   |
-| `opened_at`                        | Timestamp           | `Ticket.opened_at`                                              | `1970-01-01T00:00:42.000000007Z`                                                  |
+| `when_opened`                      | Timestamp           | `Ticket.when_opened`                                            | `1970-01-01T00:00:42.000000007Z`                                                  |
 | `detail`                           | String (Proto JSON) | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}` |
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
@@ -1790,7 +1790,7 @@ Entity schema alone.
 
 | Query                                                                | Required composite properties, in order                                          |
 | -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Ticket: priority equality, opened_at ascending                       | `priority`, `opened_at`                                                          |
+| Ticket: priority equality, when_opened ascending                     | `priority`, `when_opened`                                                        |
 | Ticket state history: Entity/version backward page or retention trim | `entity_id`, `version DESC`, `created DESC`                                      |
 | Ticket state history: state at a time                                | `entity_id`, `created DESC`, `version DESC`                                      |
 | Ticket state history: truncate by time                               | `created`, `version`                                                             |
@@ -1839,11 +1839,11 @@ indexes:
       - name: conversation_digest
       - name: order_key
 
-  # Ticket current-state query: priority equality, opened_at ascending.
+  # Ticket current-state query: priority equality, when_opened ascending.
   - kind: example.support.Ticket
     properties:
       - name: priority
-      - name: opened_at
+      - name: when_opened
 
   # Ticket state history: Entity/version backward page and retention trim.
   - kind: example.support.Ticket_EntityRecord
@@ -2052,7 +2052,7 @@ message Ticket {
   Requester requester = 4 [(column) = true];
 
   // Opening time, available for filtering and ordering.
-  google.protobuf.Timestamp opened_at = 5 [(column) = true];
+  google.protobuf.Timestamp when_opened = 5 [(column) = true];
 
   // Labels retained in the state without a separate query column.
   repeated string tags = 6;
@@ -2089,7 +2089,7 @@ message ReplyAssistant {
 ```
 
 The one application-specific storage query in this example selects Tickets by
-`priority` and orders by `opened_at ASC`. This is a query against the Aggregate's
+`priority` and orders by `when_opened ASC`. This is a query against the Aggregate's
 record storage; it does not turn an Aggregate into a public query Projection.
 Public clients query/subscribe to the Projection. The index checklist includes
 that specified storage query and the built-in queries for the enabled features.
@@ -2169,7 +2169,7 @@ Copy the settings you need into your application's factory builder before callin
 | `subject`          | TEXT                           | `Ticket.subject`                                                | `Cannot download invoice`                                                         |
 | `priority`         | INTEGER                        | `Ticket.priority`                                               | `2 (URGENT)`                                                                      |
 | `requester`        | TEXT                           | `Ticket.requester`                                              | `{"name":"Billing desk","email":"billing@example.test","aliases":["Invoices"]}`   |
-| `opened_at`        | BIGINT                         | `Ticket.opened_at`                                              | `42000000007`                                                                     |
+| `when_opened`      | BIGINT                         | `Ticket.when_opened`                                            | `42000000007`                                                                     |
 | `detail`           | TEXT                           | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}` |
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
@@ -2668,11 +2668,11 @@ describes the required privileges.
 - [ ] **7. Add application query indexes.** Spine creates primary keys and the
       three Agent audit indexes described beside the audit table. It does not create
       an index for every `(column)`. For the example Ticket query, create an index
-      on `(priority, opened_at, ID)` in each database containing Ticket records:
+      on `(priority, when_opened, ID)` in each database containing Ticket records:
 
 ```sql
 CREATE INDEX support_ticket_priority_opened
-  ON spine.example_support_ticket (priority, opened_at, ID);
+  ON spine.example_support_ticket (priority, when_opened, ID);
 ```
 
 Evaluate indexes for diagnostic/state history, subscription expiry and Inbox
@@ -2717,7 +2717,7 @@ Copy the settings you need into your application's factory builder before callin
 | `subject`          | TEXT                           | `Ticket.subject`                                                | `Cannot download invoice`                                                         |
 | `priority`         | INT                            | `Ticket.priority`                                               | `2 (URGENT)`                                                                      |
 | `requester`        | TEXT                           | `Ticket.requester`                                              | `{"name":"Billing desk","email":"billing@example.test","aliases":["Invoices"]}`   |
-| `opened_at`        | BIGINT                         | `Ticket.opened_at`                                              | `42000000007`                                                                     |
+| `when_opened`      | BIGINT                         | `Ticket.when_opened`                                            | `42000000007`                                                                     |
 | `detail`           | TEXT                           | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}` |
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
@@ -3213,7 +3213,7 @@ retain the required privileges for those components.
 
 ```sql
 CREATE INDEX support_ticket_priority_opened
-  ON example_support_Ticket (priority, opened_at, ID);
+  ON example_support_Ticket (priority, when_opened, ID);
 ```
 
 Review the other query shapes listed in the Datastore index matrix for
@@ -3256,7 +3256,7 @@ Copy the settings you need into your application's factory builder before callin
 | `subject`                          | String              | `Ticket.subject`                                                | `Cannot download invoice`                                                         |
 | `priority`                         | Integer             | `Ticket.priority`                                               | `2 (URGENT)`                                                                      |
 | `requester`                        | String (Proto JSON) | `Ticket.requester`                                              | `{"name":"Billing desk","email":"billing@example.test","aliases":["Invoices"]}`   |
-| `opened_at`                        | Timestamp           | `Ticket.opened_at`                                              | `1970-01-01T00:00:42.000000007Z`                                                  |
+| `when_opened`                      | Timestamp           | `Ticket.when_opened`                                            | `1970-01-01T00:00:42.000000007Z`                                                  |
 | `detail`                           | String (Proto JSON) | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}` |
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
@@ -3667,7 +3667,7 @@ Entity schema alone.
 
 | Query                                                                | Required composite properties, in order                                          |
 | -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Ticket: priority equality, opened_at ascending                       | `priority`, `opened_at`                                                          |
+| Ticket: priority equality, when_opened ascending                     | `priority`, `when_opened`                                                        |
 | Ticket state history: Entity/version backward page or retention trim | `entity_id`, `version DESC`, `created DESC`                                      |
 | Ticket state history: state at a time                                | `entity_id`, `created DESC`, `version DESC`                                      |
 | Ticket state history: truncate by time                               | `created`, `version`                                                             |
@@ -3716,11 +3716,11 @@ indexes:
       - name: conversation_digest
       - name: order_key
 
-  # Ticket current-state query: priority equality, opened_at ascending.
+  # Ticket current-state query: priority equality, when_opened ascending.
   - kind: example.support.Ticket
     properties:
       - name: priority
-      - name: opened_at
+      - name: when_opened
 
   # Ticket state history: Entity/version backward page and retention trim.
   - kind: example.support.Ticket_EntityRecord
@@ -4041,7 +4041,7 @@ message Ticket {
   Requester requester = 4 [(column) = true];
 
   // Opening time, available for filtering and ordering.
-  google.protobuf.Timestamp opened_at = 5 [(column) = true];
+  google.protobuf.Timestamp when_opened = 5 [(column) = true];
 
   // Labels retained in the state without a separate query column.
   repeated string tags = 6;
@@ -4075,16 +4075,16 @@ message BrowserInfo {
 The full file in chapter 1 also supplies the imports, `Priority`, and
 `TicketId`. For the following example, assume these field values:
 
-| Field        | Value in the Protobuf message                                                              |
-| ------------ | ------------------------------------------------------------------------------------------ |
-| `id`         | `TicketId { queue: "billing", number: "T-42" }`                                            |
-| `subject`    | `"Cannot download invoice"`                                                                |
-| `priority`   | `URGENT`, whose enum number is `2`                                                         |
-| `requester`  | `Requester { name: "Billing desk", email: "billing@example.test", aliases: ["Invoices"] }` |
-| `opened_at`  | `Timestamp { seconds: 42, nanos: 7 }`                                                      |
-| `tags`       | `["invoice"]`                                                                              |
-| `attributes` | `{ "tier": "pro" }`                                                                        |
-| `detail`     | A packed `BrowserInfo { browser: "Firefox" }`                                              |
+| Field         | Value in the Protobuf message                                                              |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| `id`          | `TicketId { queue: "billing", number: "T-42" }`                                            |
+| `subject`     | `"Cannot download invoice"`                                                                |
+| `priority`    | `URGENT`, whose enum number is `2`                                                         |
+| `requester`   | `Requester { name: "Billing desk", email: "billing@example.test", aliases: ["Invoices"] }` |
+| `when_opened` | `Timestamp { seconds: 42, nanos: 7 }`                                                      |
+| `tags`        | `["invoice"]`                                                                              |
+| `attributes`  | `{ "tier": "pro" }`                                                                        |
+| `detail`      | A packed `BrowserInfo { browser: "Firefox" }`                                              |
 
 The timestamp is deliberately close to the Unix epoch so its stored number
 is easy to check. It means `1970-01-01T00:00:42.000000007Z`.
@@ -4123,7 +4123,7 @@ A database cannot use a normal `WHERE priority = 2` condition to look inside
 arbitrary Protobuf bytes. The `(column) = true` option tells Spine to save an
 additional, queryable copy of a field beside `bytes`.
 
-In this model, `subject`, `priority`, `requester`, `opened_at`, and `detail`
+In this model, `subject`, `priority`, `requester`, `when_opened`, and `detail`
 have that option. The next sections show exactly what is copied. A column
 makes a query possible; it does not automatically create an SQL index.
 
@@ -4176,7 +4176,7 @@ filter by email alone, add a suitable field to a queryable Entity state and
 mark that field as a column. Declaring the entire Requester as a column does
 not turn its nested fields into independently searchable fields.
 
-#### A timestamp: `opened_at`
+#### A timestamp: `when_opened`
 
 For PostgreSQL and MySQL/MariaDB, Spine calculates:
 

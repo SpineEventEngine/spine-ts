@@ -38,12 +38,20 @@ The test uses `AiTestBackend` and needs no provider credential or paid model req
 The Agent is a stateful Entity, separate from the ticket Aggregate. Both use the generated `SupportTicketId`, so a draft stays attached to its ticket. The Agent state holds the latest request and its matching reply; the review Projection exposes the outcome to a reader. In [states.proto](proto/spine/examples/support/states.proto):
 
 ```proto
+// Current reply request and its validated result for one support ticket.
 message SupportDraftState {
     option (entity).kind = ENTITY;
 
+    // Ticket for which this reply was drafted.
     SupportTicketId id = 1;
+
+    // Most recently submitted request facts.
     SupportRequest request = 2 [(validate) = true];
+
+    // Validated reply for these facts and conversation, when available.
     SupportReply reply = 3 [(validate) = true];
+
+    // Conversation used for the most recent request.
     spine.agent.ConversationId conversation = 4 [(validate) = true];
 }
 ```

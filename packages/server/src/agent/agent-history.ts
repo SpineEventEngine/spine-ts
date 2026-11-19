@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, create } from "@bufbuild/protobuf";
+import { clone, create, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, Validate } from "@spine-event-engine/core";
 import type { ConversationHistoryRead, HistoryPage, HistoryRead } from "@spine-event-engine/ai";
@@ -275,7 +275,10 @@ export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
     const binding = bindings.get(entity);
     if (binding === undefined)
       throw new Error("Agent model history is available only from repository execution.");
-    const entry = await binding.storage.readModelRequest(binding.entityId, callId.value);
+    const actor = binding.captureActor?.();
+    const onRead = () => AgentHistoryPages.readExact(binding, callId.value, actor);
+    const page = binding.onAdmit === undefined ? await onRead() : await binding.onAdmit(onRead);
+    const entry = page.items[0];
     if (entry === undefined) return undefined;
     if (entry.item.case !== "modelRequest")
       throw new Error("Agent request identity returned a different history category.");
@@ -492,6 +495,44 @@ export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
  * Loads and presents complete provider pages at the protected read boundary.
  */
 const AgentHistoryPages = Object.freeze({
+  /**
+   * Reads one indexed model request through the protected history boundary.
+   *
+   * @typeParam Id Typed Agent identifier.
+   * @param binding Current Agent history binding.
+   * @param callId Exact logical model call ID.
+   * @param actorContext Actor captured before admission and provider work.
+   * @returns Visible exact entry, or an empty page when denied by policy.
+   */
+  async readExact<Id>(
+    binding: AgentHistoryBinding<Id>,
+    callId: string,
+    actorContext?: ActorContext,
+  ): Promise<HistoryPage<AgentHistoryEntry>> {
+    const request = { pageSize: 1 };
+    const view = { kind: "full" } as const;
+    const maxBytes = this.limit(binding.maxBytes);
+    const live = async (): Promise<AgentHistoryPage> => {
+      const entry = await binding.storage.readModelRequest(binding.entityId, callId);
+      return { entries: entry === undefined ? [] : [entry], hasMore: false };
+    };
+    const present = (page: AgentHistoryPage): Promise<HistoryPage<AgentHistoryEntry>> => {
+      const bytes = page.entries.reduce(
+        (sum, entry) => sum + toBinary(AgentHistoryEntrySchema, entry).length,
+        0,
+      );
+      if (maxBytes !== undefined && bytes > maxBytes)
+        throw new RangeError("Agent history exact request exceeds maxBytes.");
+      const result = this.present(binding.scope, view, page);
+      return binding.filterPage === undefined
+        ? Promise.resolve(result)
+        : binding.filterPage(result, view, request, actorContext);
+    };
+    return binding.interceptRead === undefined
+      ? present(await live())
+      : binding.interceptRead(binding.scope, request, live, maxBytes, present);
+  },
+
   /**
    * Reads and presents one complete protected Agent history page.
    * @typeParam Id Typed Agent identifier.

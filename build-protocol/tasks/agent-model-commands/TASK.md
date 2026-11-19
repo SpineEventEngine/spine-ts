@@ -267,10 +267,29 @@ is not a model mismatch. Subagents may not spawn subagents.
   expected gpt-6-astra/high, explicit model and reasoning required. Scope:
   correctness/DDD, persistence/concurrency, public TypeScript/Proto contracts,
   security, maintainability, and documentation comprehension for the complete
-  branch diff. Dispatch follows version-metadata preflight. Read-only; no child
-  agents. Earlier review outputs are not supplied.
-- Review rounds 2–3: each a new no-memory Astra/high review function with the
-  same concerns, after the preceding round's relevant findings are corrected.
+  branch diff at `79b9e8c95`. Explicit gpt-6-astra/high fields confirmed in the
+  dispatch, with fresh context. Runtime introspection is unavailable; the
+  configured dispatch is the profile evidence. Completed read-only with no child
+  agents. Six findings accepted: indexed protected history must apply admission,
+  actor capture, read accounting, and visibility controls; rejected handlers must
+  discard staged abandonment; Studio must consume whenOccurred from actual Proto
+  JSON; posting documentation must distinguish reception from delivery; authored
+  storage-guide Timestamp examples require when_opened; changed authored Proto
+  fields and snippets require complete documentation. All six are corrected by
+  the existing Sol/medium implementer. Focused behavior regressions, build and
+  tooling checks, lint/format, authored documentation and snippet checks, Proto
+  generation/lint/current-output consistency passed. No architectural expansion
+  was needed. The protected lookup retains indexed storage access; internal
+  provenance reads remain raw. Rejected handlers preserve prior preferences and
+  pending calls. Each canonical concern was assessed; relevant defects were
+  corrected, with durability/recovery and migrations N/A by explicit decision.
+  Earlier review outputs were not supplied.
+- Review round 2: new no-memory review function, expected gpt-6-astra/high with
+  explicit model and reasoning. Same canonical concerns and full branch diff,
+  read-only with no child agents. Dispatch follows the round-1 correction push;
+  prior review outputs are not supplied.
+- Review round 3: a new no-memory Astra/high review function with the same
+  concerns, after round 2's relevant findings are corrected.
 
 ## Current status
 
@@ -282,12 +301,13 @@ shared-runtime release verification. The selected verification profile is
 public protocol, and model execution change together. No unresolved human design
 question. No GitHub PR or issue changes are authorized.
 
-Complete tooling typechecking and affected behavior suites pass after updating
+Complete tooling typechecking and affected behavior suites passed after updating
 fixtures to the current readiness/history contracts and consistent storage types.
 Returned model Commands have detached metadata, with a regression proving a
 changed discarded request cannot alter later trusted construction. Generation,
 production build, package imports/assets/links, and current-output consistency
-checks pass. Review round 1 is next; the full release gate follows convergence.
+checks passed. Review round 1's six accepted corrections are complete and checked.
+Round 2 is next; round 3 and the full release gate follow review convergence.
 
 ## Implementation seams
 

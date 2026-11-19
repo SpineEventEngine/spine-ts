@@ -47,7 +47,10 @@ import {
 } from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import { TaskListSchema } from "../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
 import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
-import { SupportReplyAgentIdSchema } from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
+// prettier-ignore
+import {
+  SupportReplyAgentIdSchema,
+} from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 import { entityInput as supportAgentInput } from "../../storage/test/entity/agent-live-fixtures.js";
 import { conversation } from "../../storage/test/entity/agent-history-fixtures.js";
 import { PostgresRecordStorage } from "../src/postgres/record-storage.js";

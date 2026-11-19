@@ -15,7 +15,13 @@
 import { clone, create, isMessage, type Message } from "@bufbuild/protobuf";
 import { AiModel, AiRegistry, ModelRef } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
-import { AnyPacker, SignalEnvelopes, Time, TypeUrls } from "@spine-event-engine/core";
+import {
+  AnyPacker,
+  RejectionThrowable,
+  SignalEnvelopes,
+  Time,
+  TypeUrls,
+} from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   BoundedContextNameSchema,
@@ -84,6 +90,10 @@ import {
   SupportReplyDraftCancelledSchema,
   SupportReplyModelPreferredSchema,
 } from "../../test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
+// prettier-ignore
+import {
+  SupportReplyUnavailableSchema,
+} from "../../test-fixtures/generated/entity-metadata/support_agent_rejections_pb.js";
 import {
   ProposedSupportReplySchema,
   SupportTicketFactsSchema,
@@ -135,6 +145,8 @@ class ModelCommandAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAg
 
   static abandonedCallId: AiOperationId | undefined;
 
+  static rejectCancel = false;
+
   static gate: { readonly entered: () => void; readonly release: Promise<void> } | undefined;
 
   async draft(command: DraftSupportReply) {
@@ -170,6 +182,8 @@ class ModelCommandAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAg
     const callId = ModelCommandAgent.abandonedCallId;
     if (callId === undefined) throw new Error("Missing pending call ID.");
     this.modelCommands.abandon(callId);
+    if (ModelCommandAgent.rejectCancel)
+      throw RejectionThrowable.create(SupportReplyUnavailableSchema, { agent: this.id });
     return create(SupportReplyDraftCancelledSchema, { agent: command.agent });
   }
 
@@ -356,7 +370,10 @@ function modelRepository(
               kind: "command-assignment",
               methodName: "cancel",
               input: { schema: CancelSupportReplyDraftSchema, origin: "domestic" },
-              outcomes: { returned: [SupportReplyDraftCancelledSchema], thrown: [] },
+              outcomes: {
+                returned: [SupportReplyDraftCancelledSchema],
+                thrown: [SupportReplyUnavailableSchema],
+              },
               parameterCount: 1,
             },
             {
@@ -1091,6 +1108,88 @@ describe("Agent model Commands", () => {
       expect(history.items.some((entry) => entry.item.case === "handledOutcome")).toBe(false);
     } finally {
       ModelCommandAgent.failReply = false;
+      await application.close();
+    }
+  });
+
+  it("keeps pending calls and omits abandonment when the handler rejects", async () => {
+    const started = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const publishedRejection = vi.spyOn(SignalPublisher.prototype, "publishRejectionEvent");
+    const storageFactory = new ObservedMemoryFactory();
+    const repository = modelRepository();
+    const environment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (configuration) => {
+        configuration.use({ storageFactory });
+      })
+      .build();
+    const application = await Application.newBuilder()
+      .setServerEnvironment(environment)
+      .add(
+        BoundedContext.singleTenant("RejectedAbandonment")
+          .withAi(
+            replyingRegistry("Accepted later", async () => {
+              started.resolve(undefined);
+              await release.promise;
+            }),
+          )
+          .persistSystemEvents()
+          .add(repository),
+      )
+      .build();
+    const [context] = application.contexts();
+    if (context === undefined) throw new Error("Expected a Bounded Context.");
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-rejected-abandonment" });
+    ModelCommandAgent.rejectCancel = true;
+    try {
+      await context.commandBus().post(
+        SignalEnvelopes.command({
+          schema: DraftSupportReplySchema,
+          message: create(DraftSupportReplySchema, { agent: id, question: "Current facts" }),
+          context: create(CommandContextSchema, {
+            actorContext: create(ActorContextSchema, {
+              actor: create(UserIdSchema, { value: "support-user" }),
+            }),
+          }),
+        }),
+      );
+      await started.promise;
+      const before = await readAgentHistoryPage(context, repository, id, { pageSize: 30 });
+      const request = before.items.find((entry) => entry.item.case === "modelRequest");
+      if (request?.item.case !== "modelRequest") throw new Error("Saved model request is absent.");
+      const payload = request.item.value.request?.message;
+      ModelCommandAgent.abandonedCallId =
+        payload && AnyPacker.tryUnpack(payload, CallModelSchema)?.call?.id;
+      if (ModelCommandAgent.abandonedCallId === undefined)
+        throw new Error("Pending call is absent.");
+      await context.commandBus().post(
+        SignalEnvelopes.command({
+          schema: CancelSupportReplyDraftSchema,
+          message: create(CancelSupportReplyDraftSchema, { agent: id }),
+          context: create(CommandContextSchema, {
+            actorContext: create(ActorContextSchema, {
+              actor: create(UserIdSchema, { value: "support-user" }),
+            }),
+          }),
+        }),
+      );
+      await serverEnvironmentAccess.whenDeliveryIdle(environment);
+      const current = await storageFactory.commitStorage?.readAgentCurrent(id);
+      expect(current?.attributes?.pendingModelCalls).toHaveLength(1);
+      const history = await readAgentHistoryPage(context, repository, id, { pageSize: 30 });
+      expect(history.items.some((entry) => entry.item.case === "abandonment")).toBe(false);
+      expect(publishedRejection).toHaveBeenCalledOnce();
+      const rejection = publishedRejection.mock.calls[0]?.[0];
+      expect(
+        rejection?.message && AnyPacker.tryUnpack(rejection.message, SupportReplyUnavailableSchema),
+      ).toBeDefined();
+      release.resolve(undefined);
+      await application.close();
+    } finally {
+      publishedRejection.mockRestore();
+      ModelCommandAgent.rejectCancel = false;
+      ModelCommandAgent.abandonedCallId = undefined;
+      release.resolve(undefined);
       await application.close();
     }
   });
