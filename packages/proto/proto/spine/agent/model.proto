@@ -14,7 +14,7 @@
 
 syntax = "proto3";
 
-package spine.ts.agent;
+package spine.agent;
 
 import "google/protobuf/empty.proto";
 import "spine/options.proto";

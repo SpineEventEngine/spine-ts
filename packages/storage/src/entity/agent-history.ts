@@ -282,7 +282,7 @@ export const AgentHistoryKeys: AgentHistoryKeyOperations = Object.freeze({
    * @returns Complete key after validating the enclosed occurrence time.
    */
   fromEntry(entry: AgentHistoryEntry): AgentHistoryOrderKey {
-    const occurredAt = entry.occurredAt;
+    const occurredAt = entry.whenOccurred;
     const item = entry.item;
     if (occurredAt === undefined || item.case === undefined)
       throw new TypeError("Agent history requires an occurrence time and one item.");
@@ -290,7 +290,7 @@ export const AgentHistoryKeys: AgentHistoryKeyOperations = Object.freeze({
       const record = item.value;
       if (record.conversation?.value === undefined || record.conversation.value.length === 0)
         throw new TypeError("Conversation history requires a ConversationId.");
-      HistoryValidation.sameTime(occurredAt, record.occurredAt);
+      HistoryValidation.sameTime(occurredAt, record.whenOccurred);
       return { occurredAt, category: "conversation", recordId: record.id?.value ?? "" };
     }
     const event = item.value;

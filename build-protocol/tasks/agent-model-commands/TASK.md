@@ -141,12 +141,13 @@ The no-durable-publication decision is recorded in DECISION_LOG.md under
    lifecycle. Remove obsolete acceptance/session work. Test simultaneous calls,
    steering/out-of-order results, failure, abandonment, and accepted crash gaps.
 5. Update examples, maintained docs, generated contracts, and versioning. Run
-   cheap preflight then shared-runtime release verification.
+   the mandatory cheap preflight before the independent reviews.
 6. Run three sequential fresh no-memory Astra/high reviews, addressing relevant
    findings after each round. Each covers correctness/DDD/API/persistence/
    concurrency/security and human comprehension for affected behavior. Complete
    required final security concern and record concise dispositions. Repeat only
-   affected checks after corrections; leave a clean pushed branch.
+   affected checks after corrections. Run shared-runtime release verification
+   after convergence and leave a clean pushed branch.
 
 ## Assignments and review status
 
@@ -165,14 +166,24 @@ is not a model mismatch. Subagents may not spawn subagents.
   maintained references, focused generation/type verification. Assigned
   production files are exclusive to this implementer while the orchestrator
   maintains task/coordination records. Explicit dispatch fields required.
-  Later runtime/provider slices remain sequential for overlapping files.
+  Completed; explicit model/reasoning confirmed, immutable implementer profile
+  Sol/medium, runtime introspection unavailable. Generation/build, focused
+  public-contract/history tests, Proto lint, docs/TSDoc/cleanup/format checks
+  passed. Tracked generation metadata stays synchronized; generated source is
+  untracked. No delivery/runtime behavior changed in this slice.
+- Implementation slice 2: same implementer, gpt-6-sol/medium profile retained.
+  Scope: generic AsyncCommandHandler public base, analyzer/registry recognition,
+  independent standalone invocation/publication tracking, and coordinated
+  shutdown preserving accepted follow-ups. Focused deferred-handler, rejection,
+  publication-failure and close-chain tests required. No provider or model
+  execution integration changes in this slice except necessary shared seams.
 - Review rounds 1–3: each a fresh no-memory Astra/high reviewer, explicit model
   and reasoning, as requested by the human. Pending implementation completion.
 
 ## Current status
 
 Requirements recorded. Official master fetched and already contained by this
-branch. Architecture pass accepted; slice 1 implementation is active. No
+branch. Architecture pass and slice 1 accepted; slice 2 is next. No
 unresolved human design question; implementation discoveries must preserve the
 accepted contract or be raised with concrete evidence.
 
@@ -217,9 +228,17 @@ new APIs, not claimed JVM equivalents.
   ID, while preserving direct invocation validation and behavior. The standalone
   model handler creates its own audit resources and never captures the requesting
   Agent or shard session.
+- Framework Proto output must not import core, since core already depends on
+  proto. Suppress generated runtime throwable companions for spine/agent using
+  the same layering rule as existing spine/delivery companions; retain the
+  public ModelCallFailed rejection message/schema. The built-in model handler
+  must declare that rejection in ordinary handler metadata and construct its
+  throwable through core. ModelCallFailed must not become an Event or gain an
+  extra ModelCallRejected substitute to work around generation.
 
 Provider test services are isolated containers named spine-agent-model-pg,
-spine-agent-model-mysql, and spine-agent-model-datastore. Local connection setup
-is outside Git in /tmp/agent-model-provider-env.sh. Provider acceptance must
+spine-agent-model-mysql, spine-agent-model-mariadb, and spine-agent-model-datastore.
+Local connection setup is outside Git in /tmp/agent-model-provider-env.sh.
+MariaDB overrides are in /tmp/agent-model-mariadb-env.sh. Provider acceptance must
 exercise missing-record combinations, combined-read counts, concurrent commits,
 attributes-only conflicts, atomic rollback, and tenant/type/ID isolation.

@@ -555,12 +555,12 @@ postgresBuilder.setEventStoreTable("Support", "support_events");
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the System Event store enabled by `persistSystemEvents()`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                          |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                           |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Protobuf message serialized into binary array          |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                          |
-| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted` |
+| Physical field     | Database type           | Exact source                                                  | Example value                                       |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | --------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                        |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Protobuf message serialized into binary array       |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                       |
+| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.agent.AgentAiOperationStarted` |
 
 This System Event table also stores the Agent interaction Events. Each row contains a complete Event envelope, including its typed payload.
 
@@ -1114,12 +1114,12 @@ mysqlBuilder.setEventStoreTable("Support", "support_events");
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the System Event store enabled by `persistSystemEvents()`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                          |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                           |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Protobuf message serialized into binary array          |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                          |
-| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted` |
+| Physical field     | Database type           | Exact source                                                  | Example value                                       |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | --------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                        |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Protobuf message serialized into binary array       |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                       |
+| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.agent.AgentAiOperationStarted` |
 
 This System Event table also stores the Agent interaction Events. Each row contains a complete Event envelope, including its typed payload.
 
@@ -1600,12 +1600,12 @@ The packed Event payload and its context stay in bytes; no table appears for eac
 
 **Created by:** The Datastore adapter makes this kind visible on the first System Event write after Support prepares the Event store enabled by `persistSystemEvents()`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                  | Example value                                          |
-| ---------------------------------- | ------------------ | ------------------------------------------------------------- | ------------------------------------------------------ |
-| Native key name (no `ID` property) | Datastore key name | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                           |
-| `bytes`                            | Unindexed Blob     | Entire serialized `Event`                                     | Protobuf message serialized into binary array          |
-| `created`                          | Timestamp          | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                       |
-| `type`                             | String             | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted` |
+| Physical field                     | Database type      | Exact source                                                  | Example value                                       |
+| ---------------------------------- | ------------------ | ------------------------------------------------------------- | --------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                        |
+| `bytes`                            | Unindexed Blob     | Entire serialized `Event`                                     | Protobuf message serialized into binary array       |
+| `created`                          | Timestamp          | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                    |
+| `type`                             | String             | `Event.message.type_url`                                      | `type.spine.io/spine.agent.AgentAiOperationStarted` |
 
 This System Event kind also stores the Agent interaction Events. Each entity contains a complete Event envelope, including its typed payload.
 
@@ -2413,12 +2413,12 @@ postgresBuilder.setEventStoreTable("Support", "support_events");
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the System Event store enabled by `persistSystemEvents()`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                          |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                           |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Protobuf message serialized into binary array          |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                          |
-| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted` |
+| Physical field     | Database type           | Exact source                                                  | Example value                                       |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | --------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                        |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Protobuf message serialized into binary array       |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                       |
+| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.agent.AgentAiOperationStarted` |
 
 This System Event table also stores the Agent interaction Events. Each row contains a complete Event envelope, including its typed payload.
 
@@ -2990,12 +2990,12 @@ mysqlBuilder.setEventStoreTable("Support", "support_events");
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the System Event store enabled by `persistSystemEvents()`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                          |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                           |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Protobuf message serialized into binary array          |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                          |
-| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted` |
+| Physical field     | Database type           | Exact source                                                  | Example value                                       |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | --------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                        |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Protobuf message serialized into binary array       |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                       |
+| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.agent.AgentAiOperationStarted` |
 
 This System Event table also stores the Agent interaction Events. Each row contains a complete Event envelope, including its typed payload.
 
@@ -3552,12 +3552,12 @@ The packed Event payload and its context stay in bytes; no table appears for eac
 
 **Created by:** The Datastore adapter makes this kind visible on the first System Event write after Support prepares the Event store enabled by `persistSystemEvents()`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                  | Example value                                          |
-| ---------------------------------- | ------------------ | ------------------------------------------------------------- | ------------------------------------------------------ |
-| Native key name (no `ID` property) | Datastore key name | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                           |
-| `bytes`                            | Unindexed Blob     | Entire serialized `Event`                                     | Protobuf message serialized into binary array          |
-| `created`                          | Timestamp          | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                       |
-| `type`                             | String             | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted` |
+| Physical field                     | Database type      | Exact source                                                  | Example value                                       |
+| ---------------------------------- | ------------------ | ------------------------------------------------------------- | --------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                        |
+| `bytes`                            | Unindexed Blob     | Entire serialized `Event`                                     | Protobuf message serialized into binary array       |
+| `created`                          | Timestamp          | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                    |
+| `type`                             | String             | `Event.message.type_url`                                      | `type.spine.io/spine.agent.AgentAiOperationStarted` |
 
 This System Event kind also stores the Agent interaction Events. Each entity contains a complete Event envelope, including its typed payload.
 
@@ -5124,9 +5124,9 @@ credentials are configured separately, but the recorded application content is
 not automatically redacted. Apply the access controls that this information
 requires.
 
-Sources: [typed interaction content](../packages/proto/proto/spine/ts/agent/content.proto),
-[conversation/history schema](../packages/proto/proto/spine/ts/agent/history.proto),
-[model selection types](../packages/proto/proto/spine/ts/agent/model.proto),
+Sources: [typed interaction content](../packages/proto/proto/spine/agent/content.proto),
+[conversation/history schema](../packages/proto/proto/spine/agent/history.proto),
+[model selection types](../packages/proto/proto/spine/agent/model.proto),
 [live AI audit](../packages/server/src/agent/agent-live-ai-audit.ts),
 [Agent model selection](../packages/server/src/agent/agent-model-selection.ts).
 

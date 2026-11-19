@@ -4649,7 +4649,7 @@ class ProcessManagerExecutionSupport {
       await history.append(
         id,
         create(AgentHistoryEntrySchema, {
-          occurredAt: event.context.timestamp,
+          whenOccurred: event.context.timestamp,
           item: { case: "domainEvent", value: event },
         }),
       );
@@ -4777,7 +4777,7 @@ const AgentLiveOutputs = {
         throw new Error("Agent emitted Event requires its original timestamp.");
       return [
         create(AgentHistoryEntrySchema, {
-          occurredAt,
+          whenOccurred: occurredAt,
           item: { case: "domainEvent", value: event },
         }),
       ];
@@ -5046,7 +5046,7 @@ class AgentLiveRunner {
       agent,
       sourceSignal: AgentLiveInteractionEvents.sourceRef(this.invocation),
       reason: "MODEL_USE_DENIED",
-      terminatedAt: Time.currentTime(),
+      whenTerminated: Time.currentTime(),
     });
     await audit.saveDenial(fact, denial);
   }
@@ -5225,7 +5225,10 @@ class AgentLiveRunner {
     if (occurredAt === undefined || loaded.agentHistory === undefined)
       throw new Error("Agent dispatch audit requires timestamp and history.");
     await loaded.agentHistory.appendAll(this.entityId, [
-      create(AgentHistoryEntrySchema, { occurredAt, item: { case: "systemEvent", value: event } }),
+      create(AgentHistoryEntrySchema, {
+        whenOccurred: occurredAt,
+        item: { case: "systemEvent", value: event },
+      }),
     ]);
     await this.checkSession();
     if (source.case === "command") HandlerDispatchPublisher.publishCommand(this.runtime, event);
@@ -5680,7 +5683,7 @@ class AgentLiveRunner {
       kind,
       ...(previous === undefined ? {} : { previousModel: previous }),
       ...(selected === undefined ? {} : { selectedModel: selected }),
-      changedAt: Time.currentTime(),
+      whenChanged: Time.currentTime(),
     });
     this.runtime.registerSystemEventSchema(SelectionChangedSchema);
     return AgentLiveInteractionEvents.envelope(
@@ -5702,7 +5705,7 @@ class AgentLiveRunner {
     const occurredAt = event.context?.timestamp;
     if (occurredAt === undefined) throw new Error("Agent System Event requires Time.");
     return create(AgentHistoryEntrySchema, {
-      occurredAt,
+      whenOccurred: occurredAt,
       item: { case: "systemEvent", value: event },
     });
   }
@@ -5823,7 +5826,7 @@ class ProcessManagerCommandExecution {
     await history.append(
       entityId,
       create(AgentHistoryEntrySchema, {
-        occurredAt: event.context.timestamp,
+        whenOccurred: event.context.timestamp,
         item: { case: "systemEvent", value: event },
       }),
     );

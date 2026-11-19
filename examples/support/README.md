@@ -44,7 +44,7 @@ message SupportDraftState {
     SupportTicketId id = 1;
     SupportRequest request = 2 [(validate) = true];
     SupportReply reply = 3 [(validate) = true];
-    spine.ts.agent.ConversationId conversation = 4 [(validate) = true];
+    spine.agent.ConversationId conversation = 4 [(validate) = true];
 }
 ```
 

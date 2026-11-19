@@ -143,7 +143,7 @@ export class AgentLiveAudit<Id> {
     const occurredAt = event.context?.timestamp;
     if (occurredAt === undefined) throw new Error("Agent audit Event requires Time.");
     return create(AgentHistoryEntrySchema, {
-      occurredAt,
+      whenOccurred: occurredAt,
       item: { case: "systemEvent", value: event },
     });
   }

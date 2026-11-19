@@ -90,7 +90,7 @@ describe("live Agent interaction facts", () => {
       sourceSignal: reference.sourceSignal,
       kind: AiModelKind.GENERATION,
       selectedModel: selected.model,
-      changedAt: create(TimestampSchema, { seconds: 1_800_100_000n }),
+      whenChanged: create(TimestampSchema, { seconds: 1_800_100_000n }),
     });
     const event = AgentLiveInteractionEvents.envelope(
       invocation,

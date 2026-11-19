@@ -284,7 +284,7 @@ export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
     return binding.storage.append(
       binding.entityId,
       create(AgentHistoryEntrySchema, {
-        occurredAt: event.context.timestamp,
+        whenOccurred: event.context.timestamp,
         item: { case: "systemEvent", value: event },
       }),
     );

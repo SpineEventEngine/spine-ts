@@ -15,10 +15,10 @@ syntax = "proto3";
 
 package spine.examples.releasenotes;
 
-import "spine/examples/releasenotes/types.proto";
+import "spine/agent/model.proto";
 import "spine/core/version.proto";
+import "spine/examples/releasenotes/types.proto";
 import "spine/options.proto";
-import "spine/ts/agent/model.proto";
 
 option (type_url_prefix) = "type.spine.examples.releasenotes";
 
@@ -51,7 +51,7 @@ message ReleaseDraftState {
   repeated ReleaseGenerationReceipt receipts = 10 [(validate) = true];
 
   // Conversation used across later generations.
-  spine.ts.agent.ConversationId conversation = 11 [(validate) = true];
+  spine.agent.ConversationId conversation = 11 [(validate) = true];
 
   // Shows a safe visible status for the latest accepted generation.
   string generation_status = 12;
@@ -68,7 +68,7 @@ message ReleaseNotesAgentState {
   ReleaseDraftId id = 1;
 
   // Conversation retained for generations for this draft.
-  spine.ts.agent.ConversationId conversation = 2 [(validate) = true];
+  spine.agent.ConversationId conversation = 2 [(validate) = true];
 
   // Correlates this outcome with one accepted model generation.
   ReleaseGenerationId generation = 3 [(validate) = true];

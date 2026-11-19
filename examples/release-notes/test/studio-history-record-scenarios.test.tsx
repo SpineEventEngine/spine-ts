@@ -104,7 +104,7 @@ test("the prepared request shows actual instructions and typed release input whi
     digest: create(AiContentDigestSchema, { value: "b".repeat(64) }),
   });
   const entry = recorded(
-    "type.spine.io/spine.ts.agent.GenerationRequest",
+    "type.spine.io/spine.agent.GenerationRequest",
     object(
       toJson(GenerationRequestSchema, request, {
         registry: createRegistry(ReleaseGenerationRequestedSchema),
@@ -131,7 +131,7 @@ test("MCP call and domain event show their labels and full saved records", async
     effect: ToolEffect.READ,
   });
   const toolEntry = recorded(
-    "type.spine.io/spine.ts.agent.ToolRequest",
+    "type.spine.io/spine.agent.ToolRequest",
     object(toJson(ToolRequestSchema, call)),
     "call",
   );
@@ -201,7 +201,7 @@ test("a failed model response without output exposes and copies its saved diagno
     diagnosticId: create(AiDiagnosticIdSchema, { value: "diagnostic-1" }),
   });
   const entry = recorded(
-    "type.spine.io/spine.ts.agent.GenerationResponse",
+    "type.spine.io/spine.agent.GenerationResponse",
     object(toJson(GenerationResponseSchema, failure)),
     "failure",
   );

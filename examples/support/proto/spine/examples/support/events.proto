@@ -15,9 +15,9 @@ syntax = "proto3";
 
 package spine.examples.support;
 
+import "spine/agent/model.proto";
 import "spine/examples/support/types.proto";
 import "spine/options.proto";
-import "spine/ts/agent/model.proto";
 
 option (type_url_prefix) = "type.spine.examples.support";
 
@@ -57,13 +57,13 @@ message SupportReplySuggested {
   ];
 
   // Model operation represented in the System audit.
-  spine.ts.agent.AiOperationId operation = 4 [
+  spine.agent.AiOperationId operation = 4 [
     (required) = true,
     (validate) = true
   ];
 
   // Explicit conversation used by the draft.
-  spine.ts.agent.ConversationId conversation = 5 [
+  spine.agent.ConversationId conversation = 5 [
     (required) = true,
     (validate) = true
   ];
@@ -84,13 +84,13 @@ message SupportReplyFailed {
   ];
 
   // Model operation represented in the System audit.
-  spine.ts.agent.AiOperationId operation = 3 [
+  spine.agent.AiOperationId operation = 3 [
     (required) = true,
     (validate) = true
   ];
 
   // Explicit conversation used by the failed request.
-  spine.ts.agent.ConversationId conversation = 4 [
+  spine.agent.ConversationId conversation = 4 [
     (required) = true,
     (validate) = true
   ];

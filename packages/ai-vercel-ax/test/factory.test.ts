@@ -770,7 +770,7 @@ describe("Vercel connection registration", () => {
         failure: { code: "UNAVAILABLE" },
       });
       const saved = vi.mocked(first.runtime.finishAttempt).mock.calls[0]?.[0].response;
-      if (saved?.$typeName !== "spine.ts.agent.GenerationResponse")
+      if (saved?.$typeName !== "spine.agent.GenerationResponse")
         throw new Error("Expected generation response");
       expect(saved).toMatchObject({
         outcome: AiOutcome.FAILED,
@@ -1029,7 +1029,7 @@ describe("Vercel connection registration", () => {
       failure: { code: "REFUSED", retryableByNewSignal: false },
     });
     const saved = vi.mocked(first.runtime.finishAttempt).mock.calls[0]?.[0].response;
-    if (saved?.$typeName !== "spine.ts.agent.GenerationResponse")
+    if (saved?.$typeName !== "spine.agent.GenerationResponse")
       throw new Error("Expected generation response");
     expect(saved).toMatchObject({
       outcome: AiOutcome.REFUSED,
@@ -1178,8 +1178,8 @@ describe("Vercel connection registration", () => {
     ]);
     expect(prompt.find((entry) => entry.role === "tool")).toBeDefined();
     const response = vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response;
-    expect(response?.$typeName).toBe("spine.ts.agent.GenerationResponse");
-    if (response?.$typeName === "spine.ts.agent.GenerationResponse")
+    expect(response?.$typeName).toBe("spine.agent.GenerationResponse");
+    if (response?.$typeName === "spine.agent.GenerationResponse")
       expect(response.openaiContent?.items).toHaveLength(2);
   });
 
@@ -1274,7 +1274,7 @@ describe("Vercel connection registration", () => {
     });
     await expect(first.run()).resolves.toMatchObject({ ok: true });
     const saved = vi.mocked(first.runtime.finishAttempt).mock.calls[0]?.[0].response;
-    if (saved?.$typeName !== "spine.ts.agent.GenerationResponse")
+    if (saved?.$typeName !== "spine.agent.GenerationResponse")
       throw new Error("Expected generation response");
     const restored = fromBinary(
       GenerationResponseSchema,
@@ -1391,7 +1391,7 @@ describe("Vercel connection registration", () => {
     expect(fixture.network).toHaveBeenCalledTimes(1);
     const response = vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response;
     expect(response).toMatchObject({ outcome: AiOutcome.ADMITTED });
-    if (response?.$typeName !== "spine.ts.agent.GenerationResponse")
+    if (response?.$typeName !== "spine.agent.GenerationResponse")
       throw new Error("Expected generation response");
     expect(response.actualModel).toBeUndefined();
   });
@@ -1703,7 +1703,7 @@ describe("Vercel connection registration", () => {
     if (firstResult.ok) throw new Error("Expected interrupted stream failure");
     expect(original.runtime.callTool).not.toHaveBeenCalled();
     const saved = vi.mocked(original.runtime.finishAttempt).mock.calls[0]?.[0].response;
-    if (saved?.$typeName !== "spine.ts.agent.GenerationResponse")
+    if (saved?.$typeName !== "spine.agent.GenerationResponse")
       throw new Error("Expected saved generation response");
     expect(saved).toMatchObject({
       outcome: AiOutcome.FAILED,
@@ -1979,7 +1979,7 @@ describe("Vercel connection registration", () => {
       response: { rounding: { probabilityDecimals: 0 }, usage: { outputTokens: { value: 0n } } },
     });
     const response = vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response;
-    if (response?.$typeName !== "spine.ts.agent.DecisionResponse")
+    if (response?.$typeName !== "spine.agent.DecisionResponse")
       throw new Error("Missing decision response");
     expect(response.rounding?.scoreDecimals).toBeUndefined();
     expect(response.usage?.inputTokens).toBeUndefined();
@@ -2011,7 +2011,7 @@ describe("Vercel connection registration", () => {
       const fixture = decisionFixture(model);
       expect(await fixture.run()).toMatchObject({ ok: true });
       const response = vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response;
-      if (response?.$typeName !== "spine.ts.agent.DecisionResponse")
+      if (response?.$typeName !== "spine.agent.DecisionResponse")
         throw new Error("Missing decision response");
       if (expected) expect(response.rounding).toMatchObject(expected);
       else expect(response.rounding).toBeUndefined();

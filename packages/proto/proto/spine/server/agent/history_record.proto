@@ -16,8 +16,8 @@ syntax = "proto3";
 
 package spine.server.agent;
 
+import "spine/agent/history.proto";
 import "spine/options.proto";
-import "spine/ts/agent/history.proto";
 
 option (SPI_all) = true;
 option (type_url_prefix) = "type.spine.io";
@@ -40,7 +40,7 @@ message AgentHistoryRecord {
   ];
 
   // Original conversation record or Event envelope and occurrence time.
-  spine.ts.agent.AgentHistoryEntry entry = 2 [
+  spine.agent.AgentHistoryEntry entry = 2 [
     (required) = true,
     (validate) = true
   ];

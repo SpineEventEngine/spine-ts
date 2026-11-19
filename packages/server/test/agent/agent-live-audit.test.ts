@@ -61,7 +61,7 @@ const payload = create(AgentModelSelectionChangedSchema, {
   }),
   kind: AiModelKind.GENERATION,
   selectedModel: create(ModelRefSchema, { name: { value: "support" }, revision: { value: "v1" } }),
-  changedAt: create(TimestampSchema, { seconds: 1_800_200_000n }),
+  whenChanged: create(TimestampSchema, { seconds: 1_800_200_000n }),
 });
 
 describe("live Agent audit", () => {
@@ -92,7 +92,7 @@ describe("live Agent audit", () => {
       },
     );
     const earlier = create(AgentHistoryEntrySchema, {
-      occurredAt: payload.changedAt,
+      whenOccurred: payload.whenChanged,
       item: {
         case: "systemEvent",
         value: AgentLiveInteractionEvents.envelope(
@@ -200,7 +200,7 @@ describe("live Agent audit", () => {
       agent: payload.agent,
       sourceSignal: payload.sourceSignal,
       reason: "MODEL_USE_DENIED",
-      terminatedAt: payload.changedAt,
+      whenTerminated: payload.whenChanged,
     });
     await expect(audit.saveDenial(fact, denial)).rejects.toMatchObject({
       errors: [denial, failure],

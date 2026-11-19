@@ -164,7 +164,7 @@ describe("Agent history binding", () => {
       await storage.append(
         id,
         create(AgentHistoryEntrySchema, {
-          occurredAt: timestamp,
+          whenOccurred: timestamp,
           item: { case: "domainEvent", value: event },
         }),
       );
@@ -264,7 +264,7 @@ describe("Agent history binding", () => {
     const saved = {
       entries: [
         create(AgentHistoryEntrySchema, {
-          occurredAt: create(TimestampSchema, { seconds: 1n }),
+          whenOccurred: create(TimestampSchema, { seconds: 1n }),
           item: {
             case: "domainEvent" as const,
             value: create(EventSchema, {
@@ -324,7 +324,7 @@ describe("Agent history binding", () => {
       version: create(VersionSchema),
     });
     const entry = create(AgentHistoryEntrySchema, {
-      occurredAt: create(TimestampSchema, { seconds: 1n }),
+      whenOccurred: create(TimestampSchema, { seconds: 1n }),
       item: {
         case: "domainEvent",
         value: create(EventSchema, {
@@ -399,7 +399,7 @@ describe("Agent history binding", () => {
         id: create(ConversationRecordIdSchema, { value: recordId }),
         conversation,
         operation: create(AiOperationIdSchema, { value: "draft-reply" }),
-        occurredAt: time,
+        whenOccurred: time,
         content: AnyPacker.pack(
           GenerationRequestSchema,
           create(GenerationRequestSchema, {
@@ -420,7 +420,7 @@ describe("Agent history binding", () => {
       await storage.append(
         id,
         create(AgentHistoryEntrySchema, {
-          occurredAt: time,
+          whenOccurred: time,
           item: { case: "conversationRecord", value: record },
         }),
       );
@@ -439,7 +439,7 @@ describe("Agent history binding", () => {
     await storage.append(
       id,
       create(AgentHistoryEntrySchema, {
-        occurredAt: time,
+        whenOccurred: time,
         item: { case: "domainEvent", value: event },
       }),
     );

@@ -47,7 +47,7 @@ message ReleaseNotesAgentState {
     ReleaseDraftId id = 1;
 
     // Conversation retained for generations for this draft.
-    spine.ts.agent.ConversationId conversation = 2 [(validate) = true];
+    spine.agent.ConversationId conversation = 2 [(validate) = true];
 
     // Identifies the most recently handled generation.
     ReleaseGenerationId generation = 3 [(validate) = true];

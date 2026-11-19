@@ -88,10 +88,10 @@ export type {
   AiOperationLimits,
   AiUsage,
   AiConnectionIdentity,
-} from "../../generated/spine/ts/agent/model_pb.js";
+} from "../../generated/spine/agent/model_pb.js";
 
 export {
-  file_spine_ts_agent_model,
+  file_spine_agent_model,
   ModelNameSchema,
   ModelRevisionSchema,
   ModelRefSchema,
@@ -130,7 +130,7 @@ export {
   AiOutcomeSchema,
   AiFailureCode,
   AiFailureCodeSchema,
-} from "../../generated/spine/ts/agent/model_pb.js";
+} from "../../generated/spine/agent/model_pb.js";
 
 export type {
   GenerationRequest,
@@ -158,10 +158,10 @@ export type {
   DecisionResponse,
   ToolRequest,
   ToolResponse,
-} from "../../generated/spine/ts/agent/content_pb.js";
+} from "../../generated/spine/agent/content_pb.js";
 
 export {
-  file_spine_ts_agent_content,
+  file_spine_agent_content,
   GenerationRequestSchema,
   GenerationResponseSchema,
   ModelToolCallSchema,
@@ -193,22 +193,22 @@ export {
   DecisionQuestionKindSchema,
   ToolEffect,
   ToolEffectSchema,
-} from "../../generated/spine/ts/agent/content_pb.js";
+} from "../../generated/spine/agent/content_pb.js";
 
 export type {
   ConversationRecordId,
   AgentHistoryCursor,
   ConversationRecord,
   AgentHistoryEntry,
-} from "../../generated/spine/ts/agent/history_pb.js";
+} from "../../generated/spine/agent/history_pb.js";
 
 export {
-  file_spine_ts_agent_history,
+  file_spine_agent_history,
   ConversationRecordIdSchema,
   AgentHistoryCursorSchema,
   ConversationRecordSchema,
   AgentHistoryEntrySchema,
-} from "../../generated/spine/ts/agent/history_pb.js";
+} from "../../generated/spine/agent/history_pb.js";
 
 export type {
   AgentOperationRef,
@@ -221,10 +221,10 @@ export type {
   AgentToolCallFinished,
   AgentModelSelectionChanged,
   AgentInvocationTerminated,
-} from "../../generated/spine/ts/agent/interaction_events_pb.js";
+} from "../../generated/spine/agent/interaction_events_pb.js";
 
 export {
-  file_spine_ts_agent_interaction_events,
+  file_spine_agent_interaction_events,
   AgentOperationRefSchema,
   AgentAiOperationStartedSchema,
   AgentModelAttemptStartedSchema,
@@ -235,4 +235,39 @@ export {
   AgentToolCallFinishedSchema,
   AgentModelSelectionChangedSchema,
   AgentInvocationTerminatedSchema,
-} from "../../generated/spine/ts/agent/interaction_events_pb.js";
+} from "../../generated/spine/agent/interaction_events_pb.js";
+
+export type { AgentId } from "../../generated/spine/agent/agent_id_pb.js";
+
+export {
+  file_spine_agent_agent_id,
+  AgentIdSchema,
+} from "../../generated/spine/agent/agent_id_pb.js";
+
+export type { ModelCall } from "../../generated/spine/agent/model_call_pb.js";
+
+export {
+  file_spine_agent_model_call,
+  ModelCallSchema,
+} from "../../generated/spine/agent/model_call_pb.js";
+
+export type { CallModel } from "../../generated/spine/agent/commands_pb.js";
+
+export {
+  file_spine_agent_commands,
+  CallModelSchema,
+} from "../../generated/spine/agent/commands_pb.js";
+
+export type { ModelReplied } from "../../generated/spine/agent/events_pb.js";
+
+export {
+  file_spine_agent_events,
+  ModelRepliedSchema,
+} from "../../generated/spine/agent/events_pb.js";
+
+export type { ModelCallFailed } from "../../generated/spine/agent/rejections_pb.js";
+
+export {
+  file_spine_agent_rejections,
+  ModelCallFailedSchema,
+} from "../../generated/spine/agent/rejections_pb.js";

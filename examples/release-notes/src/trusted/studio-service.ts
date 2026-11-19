@@ -53,9 +53,9 @@ import {
 import { file_spine_core_event as coreEventFile } from "@spine-event-engine/proto/generated/spine/core/event_pb.js";
 import { file_spine_core_command as coreCommandFile } from "@spine-event-engine/proto/generated/spine/core/command_pb.js";
 import { file_spine_system_server_entity_log_events as entityEventsFile } from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
-import { file_spine_ts_agent_history as agentHistoryFile } from "@spine-event-engine/proto/generated/spine/ts/agent/history_pb.js";
-import { file_spine_ts_agent_interaction_events as interactionEventsFile } from "@spine-event-engine/proto/generated/spine/ts/agent/interaction_events_pb.js";
-import { file_spine_ts_agent_content as agentContentFile } from "@spine-event-engine/proto/generated/spine/ts/agent/content_pb.js";
+import { file_spine_agent_history as agentHistoryFile } from "@spine-event-engine/proto/generated/spine/agent/history_pb.js";
+import { file_spine_agent_interaction_events as interactionEventsFile } from "@spine-event-engine/proto/generated/spine/agent/interaction_events_pb.js";
+import { file_spine_agent_content as agentContentFile } from "@spine-event-engine/proto/generated/spine/agent/content_pb.js";
 import {
   Application,
   BoundedContext,

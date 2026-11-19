@@ -77,11 +77,11 @@ function conversationRecord(
     id: create(ConversationRecordIdSchema, { value: id }),
     conversation: create(ConversationIdSchema, { value: conversationId }),
     operation: create(AiOperationIdSchema, { value: "draft-reply" }),
-    occurredAt: time,
+    whenOccurred: time,
     content: packed(schema, content),
   });
   return create(AgentHistoryEntrySchema, {
-    occurredAt: time,
+    whenOccurred: time,
     item: { case: "conversationRecord", value: record },
   });
 }
@@ -131,7 +131,7 @@ export function event(id: string, time: Timestamp, system: boolean): AgentHistor
             typeUrl: TypeUrls.derive(EventIdSchema),
           }),
           kind: AiModelKind.GENERATION,
-          changedAt: time,
+          whenChanged: time,
         }),
       )
     : packed(
@@ -144,7 +144,7 @@ export function event(id: string, time: Timestamp, system: boolean): AgentHistor
     message: payload,
   });
   return create(AgentHistoryEntrySchema, {
-    occurredAt: time,
+    whenOccurred: time,
     item: { case: system ? "systemEvent" : "domainEvent", value: envelope },
   });
 }

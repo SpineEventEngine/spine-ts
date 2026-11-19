@@ -14,13 +14,13 @@
 
 syntax = "proto3";
 
-package spine.ts.agent;
+package spine.agent;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
+import "spine/agent/model.proto";
 import "spine/core/event.proto";
 import "spine/options.proto";
-import "spine/ts/agent/model.proto";
 
 option (type_url_prefix) = "type.spine.io";
 
@@ -57,7 +57,7 @@ message ConversationRecord {
   ];
 
   // Occurrence timestamp supplied by Spine Time.
-  google.protobuf.Timestamp occurred_at = 4 [
+  google.protobuf.Timestamp when_occurred = 4 [
     (required) = true,
     (validate) = true
   ];
@@ -78,7 +78,7 @@ message ConversationRecord {
 // One entry in the Agent's combined repository history.
 message AgentHistoryEntry {
   // Original occurrence timestamp of the enclosed record or Event.
-  google.protobuf.Timestamp occurred_at = 1 [
+  google.protobuf.Timestamp when_occurred = 1 [
     (required) = true,
     (validate) = true
   ];

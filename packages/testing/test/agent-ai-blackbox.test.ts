@@ -802,10 +802,10 @@ describe("Agent scripted execution through BlackBox", () => {
           : [],
       );
       expect(contents.map((content) => content.typeUrl)).toContain(
-        "type.spine.io/spine.ts.agent.ToolRequest",
+        "type.spine.io/spine.agent.ToolRequest",
       );
       expect(contents.map((content) => content.typeUrl)).toContain(
-        "type.spine.io/spine.ts.agent.ToolResponse",
+        "type.spine.io/spine.agent.ToolResponse",
       );
       const request = contents
         .map((content) => AnyPacker.tryUnpack(content, ToolRequestSchema))
@@ -919,8 +919,8 @@ describe("Agent scripted execution through BlackBox", () => {
           (entry) => entry.item.case === "conversationRecord" && entry.item.value.content?.typeUrl,
         ),
       ).toEqual([
-        "type.spine.io/spine.ts.agent.GenerationRequest",
-        "type.spine.io/spine.ts.agent.GenerationResponse",
+        "type.spine.io/spine.agent.GenerationRequest",
+        "type.spine.io/spine.agent.GenerationResponse",
       ]);
       if (
         exchanges[0]?.item.case === "conversationRecord" &&

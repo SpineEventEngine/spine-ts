@@ -15,9 +15,9 @@ syntax = "proto3";
 
 package spine.examples.support;
 
+import "spine/agent/model.proto";
 import "spine/examples/support/types.proto";
 import "spine/options.proto";
-import "spine/ts/agent/model.proto";
 
 option (type_url_prefix) = "type.spine.examples.support";
 
@@ -46,7 +46,7 @@ message SupportDraftState {
   SupportReply reply = 3 [(validate) = true];
 
   // Conversation used for the current draft.
-  spine.ts.agent.ConversationId conversation = 4 [(validate) = true];
+  spine.agent.ConversationId conversation = 4 [(validate) = true];
 }
 
 // Queryable result visible to a support person.
@@ -64,7 +64,7 @@ message SupportReviewState {
   SupportReply reply = 3 [(validate) = true];
 
   // Conversation associated with this result.
-  spine.ts.agent.ConversationId conversation = 4 [(validate) = true];
+  spine.agent.ConversationId conversation = 4 [(validate) = true];
 
   // Whether the latest request produced a reviewable draft.
   bool has_draft = 5;

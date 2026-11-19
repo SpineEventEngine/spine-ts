@@ -15,9 +15,9 @@ syntax = "proto3";
 
 package spine.examples.support;
 
+import "spine/agent/model.proto";
 import "spine/examples/support/types.proto";
 import "spine/options.proto";
-import "spine/ts/agent/model.proto";
 
 option (type_url_prefix) = "type.spine.examples.support";
 
@@ -51,7 +51,7 @@ message DraftSupportReply {
   ];
 
   // Explicit conversation to start or continue for this ticket.
-  spine.ts.agent.ConversationId conversation = 3 [
+  spine.agent.ConversationId conversation = 3 [
     (required) = true,
     (validate) = true
   ];

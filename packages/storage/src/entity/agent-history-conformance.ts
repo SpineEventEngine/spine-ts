@@ -439,7 +439,7 @@ const Checks = Object.freeze({
       );
       const page = await this.read(storage, "ticket-duplicate", { kind: "full" }, 10);
       this.assert(
-        page.entries.length === 1 && page.entries[0]?.occurredAt?.nanos === 1,
+        page.entries.length === 1 && page.entries[0]?.whenOccurred?.nanos === 1,
         "identical duplicate append must retain the original occurrence exactly",
       );
     } finally {
@@ -591,7 +591,7 @@ const Checks = Object.freeze({
     const time = adapter.occurredAt(1n);
     const mismatch = {
       ...adapter.domain("wrong-time", time),
-      occurredAt: adapter.occurredAt(1n, 1),
+      whenOccurred: adapter.occurredAt(1n, 1),
     };
     try {
       await this.rejects(
