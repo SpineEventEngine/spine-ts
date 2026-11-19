@@ -323,55 +323,32 @@ is not a model mismatch. Subagents may not spawn subagents.
 
 ## Current status
 
-Architecture, implementation slices 1–5, and required version metadata are
-complete. Common workspace version is `2.0.0-snapshot.32`. All three fresh
-Astra/high reviews and their corrections are complete, including bounded
-confirmation of the final fixes.
-Shared-runtime release verification follows convergence. The selected profile is
-`verify:release` because Delivery, Bounded Context shutdown, storage providers,
-public protocol, and model execution change together. No unresolved human design
-question. No GitHub PR or issue changes are authorized.
+Implementation, documentation, and local acceptance are complete on
+`delivery-agent-analysis`. Common workspace version is `2.0.0-snapshot.32`.
+All three fresh no-memory Astra/high reviews are complete, with every relevant
+finding corrected. The third reviewer also confirmed the final output-failure
+fixes and the replacement-specific readiness fixture correction. No unresolved
+human design question remains.
 
-Complete tooling typechecking and affected behavior suites passed after updating
-fixtures to the current readiness/history contracts and consistent storage types.
-Returned model Commands have detached metadata, with a regression proving a
-changed discarded request cannot alter later trusted construction. Generation,
-production build, package imports/assets/links, and current-output consistency
-checks passed. Round 1's six and round 2's five accepted corrections are complete.
-Round 3's corrections are also confirmed. Live PostgreSQL, MySQL, MariaDB and
-Datastore Agent history, paired storage/commit, and interruption checks passed.
-The full release gate passed production/tooling/web builds, then stopped on
-five unnecessary assertions in provider tests. The same Sol/medium implementer
-removed them; affected live tests, tooling types, lint and formatting passed.
-Repository-wide preflight passed, including full ESLint, formatting, generated
-consistency, documentation and package checks. The release profile is repeated
-after this mechanical correction, which changes no production behavior and needs
-no new review. The repeated profile passed all mechanical gates and reached the
-full test suite; its only failure was an old schema-error assertion expecting
-`occurred_at` instead of the accepted `when_occurred` name. The same implementer
-corrected that literal; focused tests, lint, formatting and diff checks passed.
-The production tree is unchanged from the reviewed version. The release profile
-reached all mechanical gates and the full suite. The readiness fixture then
-failed waiting for a surviving replica update; isolated runs passed. Inspection
-found its global snapshot gate can intercept the survivor's periodic recovery
-request instead of the intended replacement. The same Sol/medium implementer
-gave replacement processes a separate fixture listener sharing the same
-DeliveryAssembly, selected by a startup marker after initial readiness. Only that
-listener gates snapshots; an explicit primary-listener snapshot proves unrelated
-requests remain unblocked. The regression failed with the old global gate and
-passed with the targeted gate. Repeated readiness tests, tooling typecheck,
-file-level lint, syntax, formatting and diff checks passed. No production API or
-timeout changes. The existing third Astra/high reviewer confirmed the bounded
-correction at `a57acac11`, including shared Delivery state, survivor progress,
-replacement admission/rejoin, and both listeners' cleanup. Its independent
-readiness suite passed. The full release profile then passed all tests but
-missed the required branch coverage threshold. The same Sol/medium implementer
-added behavior tests for Agent attribute identity, detached records and conflict
-checks, exact model-request history scope and malformed records, UTF-8 history
-ordering, protected reads, and duplicate binding rejection. Focused tests,
-tooling types, affected lint/formatting, cleanup and diff checks passed. LCOV
-comparison covers the missing branches with a small margin. Thresholds and
-exclusions remain unchanged. A complete release run must confirm global coverage.
+`pnpm verify:release` passed at `4aa9fd5d3`, including production/example builds,
+tooling types, lint, formatting, documentation/API examples, generated-output
+consistency, package readiness, all applicable tests, required coverage, and
+Node/JVM compatibility. `pnpm audit:release` passed. Live PostgreSQL, MySQL,
+MariaDB and Datastore checks passed for Agent history, paired storage/commit,
+and interruption behavior. Changed Mermaid diagrams parsed successfully.
+
+Final verification added meaningful regression coverage for Agent attributes,
+exact model-request history, protected history reads and duplicate bindings.
+The readiness fixture now gates only the replacement replica's endpoint,
+sharing the same Delivery state with the survivor. Its regression failed with
+the previous global gate and passes with the targeted gate. Production behavior,
+existing timeout values, coverage thresholds and exclusions were unchanged by
+these verification corrections.
+
+All feature commits are pushed to official `origin`. GitHub Build CI remains
+pending: no PR exists, and that workflow starts on PRs to `master`. PR creation
+and merge require explicit human instructions. This local acceptance does not
+claim a GitHub CI result or publication readiness on `master`.
 
 ## Implementation seams
 
@@ -382,15 +359,14 @@ delivery complete. Detached asynchronous lifecycle and Agent model Commands are
 new APIs, not claimed JVM equivalents.
 
 - AsyncCommandHandler subclasses AbstractAssignee and reuses @Assign and
-  addAssignee metadata. Extend build-time-handler-analyzer recognition; Promise
-  results already have generated support. The standalone runtime tracks method
+  addAssignee metadata, with build-time-handler-analyzer recognition and generated
+  Promise result support. The standalone runtime tracks method
   and all publication attempts; existing SignalPublisher logs contained errors,
   so settlement never establishes delivery.
-- Extend Bounded Context drain coordination, retaining recipients and accepted
-  internal follow-ups until the work reaches stability. Current beginClose
-  removes recipients and aborts Agent work too early. Cover direct and
-  Server/Application-coordinated close. Detach asynchronous invocations with the
-  existing withoutDeliveryCommitFence seam to avoid inherited shard state.
+- Bounded Context drain coordination retains recipients and accepted internal
+  follow-ups until work finishes, for direct and Server/Application-coordinated
+  close. Asynchronous invocations use withoutDeliveryCommitFence to avoid
+  inherited shard state.
 - Replace readAgentPreferences with combined current/attributes retrieval.
   SQL uses independently resolved current/attributes identities in one seeded
   join or tagged UNION statement. Datastore uses one transactional batch lookup
@@ -422,9 +398,6 @@ new APIs, not claimed JVM equivalents.
   throwable through core. ModelCallFailed must not become an Event or gain an
   extra ModelCallRejected substitute to work around generation.
 
-Provider test services are isolated containers named spine-agent-model-pg,
-spine-agent-model-mysql, spine-agent-model-mariadb, and spine-agent-model-datastore.
-Local connection setup is outside Git in /tmp/agent-model-provider-env.sh.
-MariaDB overrides are in /tmp/agent-model-mariadb-env.sh. Provider acceptance must
-exercise missing-record combinations, combined-read counts, concurrent commits,
-attributes-only conflicts, atomic rollback, and tenant/type/ID isolation.
+The isolated provider test containers were removed after verification. Provider
+acceptance covered missing-record combinations, combined-read counts, concurrent
+commits, attributes-only conflicts, atomic rollback, and tenant/type/ID isolation.
