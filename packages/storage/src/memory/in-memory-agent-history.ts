@@ -157,6 +157,21 @@ class MemoryAgentHistoryHandle<Id> implements AgentHistoryStorage<Id> {
   }
 
   /**
+   * Reads one prepared model request by its immutable identity.
+   *
+   * @param entityId Typed Agent identifier.
+   * @param callId Logical model call ID.
+   * @returns Independent original request entry, when present.
+   */
+  readModelRequest(entityId: Id, callId: string): Promise<AgentHistoryEntry | undefined> {
+    return Promise.resolve().then(() => {
+      this.#requireOpen();
+      if (!callId) throw new TypeError("Model call ID is required.");
+      return this.#records.get(this.#key(entityId))?.modelRequest(callId);
+    });
+  }
+
+  /**
    * Closes this handle while retaining backend history for a later handle.
    */
   close(): void {

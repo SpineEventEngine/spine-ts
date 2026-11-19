@@ -93,6 +93,12 @@ The no-durable-publication decision is recorded in DECISION_LOG.md under
   exchange history. Use stable entry IDs, conversation/call IDs, deterministic
   ordering, and when_occurred. fullHistory includes new entries;
   conversationHistory retains its provider-exchange result type.
+- Retain the complete prepared CallModel Command envelope and each attempted
+  Command envelope, preserving exact Command IDs, actor metadata and causation.
+  The protected lookup returns its decoded CallModel payload and original
+  triggering signal. Abandonment also identifies the input during which it was
+  requested. Call IDs and timestamps alone are insufficient history for these
+  actions; do not duplicate the payload alongside its containing envelope.
 - Application code decides how to handle steering, overlapping calls, and
   out-of-order results using versions, pending calls, inputs, and history.
   Never automatically cancel, supersede, or reject an older reply.
@@ -189,13 +195,29 @@ is not a model mismatch. Subagents may not spawn subagents.
   to that operation. Keep common EntityRecord unchanged. Required provider
   acceptance scenarios are recorded below. Model-command execution and removal
   of special Agent admission remain slice 4.
+  Completed. Native combined-read counts, all presence combinations, complete
+  attributes conflicts, atomic rollback, exact request lookup after reopening,
+  and direct-handler pending preservation passed on the affected providers,
+  including MariaDB. Ordinary dispatch performs no history read. Generated
+  build, affected suites, lint/format, Proto and documentation checks passed.
+  Explicit Sol/medium configured profile retained; runtime introspection is
+  unavailable.
+- Implementation slice 4: same implementer, gpt-6-sol/medium profile retained.
+  Scope: typed model Command construction and pending-call/history bookkeeping,
+  registered standalone model execution and exact outcome routing, ordinary
+  Agent delivery, and removal of acceptance receipts and Agent-specific shard
+  execution. Update the support and release-notes examples to exercise the new
+  flow. Preserve direct invocation. Required tests cover simultaneous calls,
+  out-of-order outcomes, failure, abandonment, failed or unmatched outcome
+  handling, publication gaps without replay, and graceful follow-up draining.
+  Active after slice 3 acceptance; no second production writer.
 - Review rounds 1–3: each a fresh no-memory Astra/high reviewer, explicit model
   and reasoning, as requested by the human. Pending implementation completion.
 
 ## Current status
 
 Requirements recorded. Official master fetched and already contained by this
-branch. Architecture pass and slices 1–2 accepted; slice 3 is next. No
+branch. Architecture pass and slices 1–3 accepted; slice 4 integration is next. No
 unresolved human design question; implementation discoveries must preserve the
 accepted contract or be raised with concrete evidence.
 

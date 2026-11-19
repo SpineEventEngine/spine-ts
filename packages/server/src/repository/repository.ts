@@ -94,7 +94,14 @@ import type {
   EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
 import type { EntityCommitStorage } from "@spine-event-engine/storage/provider";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
+import {
+  AgentAttributes,
+  EntityCommitStorageFactories,
+} from "@spine-event-engine/storage/provider";
+// prettier-ignore
+import type {
+  AgentAttributesRecord,
+} from "@spine-event-engine/proto/generated/spine/server/agent/attributes_record_pb.js";
 import {
   AgentHistoryStorageFactories,
   type AgentHistoryOrderKey,
@@ -104,6 +111,10 @@ import {
 } from "@spine-event-engine/storage/provider";
 import {
   AgentHistoryEntrySchema,
+  ModelRequestRecordSchema,
+  ModelSubmissionAttemptRecordSchema as SubmissionAttemptSchema,
+  ModelOutcomeHandledRecordSchema as HandledOutcomeSchema,
+  ModelCallAbandonedRecordSchema as AbandonmentSchema,
   AgentInvocationTerminatedSchema,
   AgentModelSelectionChangedSchema as SelectionChangedSchema,
   AiModelKind,
@@ -1299,10 +1310,52 @@ const RepositoryAgentReads = {
           item.case === "systemEvent"
             ? { case: "systemEvent", value }
             : { case: "domainEvent", value };
+    } else {
+      visible = await this.visibleModelEntry(stand, item, facts);
     }
     return visible === undefined
       ? undefined
       : create(AgentHistoryEntrySchema, { ...entry, item: visible });
+  },
+
+  /**
+   * Applies the read policy to one framework model history item.
+   *
+   * @param stand Producing Bounded Context Stand.
+   * @param item Prepared model history oneof.
+   * @param facts Trusted read operation facts.
+   * @returns Visible model item, or undefined when removed.
+   */
+  async visibleModelEntry(
+    stand: Stand,
+    item: AgentHistoryEntry["item"],
+    facts: ReadSideContext,
+  ): Promise<AgentHistoryEntry["item"] | undefined> {
+    let visible: AgentHistoryEntry["item"] | undefined;
+    if (item.case === "modelRequest") {
+      const value = await standAccess.filterState(
+        stand,
+        ModelRequestRecordSchema,
+        item.value,
+        facts,
+      );
+      if (value !== null) visible = { case: "modelRequest", value };
+    } else if (item.case === "submissionAttempt") {
+      const value = await standAccess.filterState(
+        stand,
+        SubmissionAttemptSchema,
+        item.value,
+        facts,
+      );
+      if (value !== null) visible = { case: "submissionAttempt", value };
+    } else if (item.case === "handledOutcome") {
+      const value = await standAccess.filterState(stand, HandledOutcomeSchema, item.value, facts);
+      if (value !== null) visible = { case: "handledOutcome", value };
+    } else if (item.case === "abandonment") {
+      const value = await standAccess.filterState(stand, AbandonmentSchema, item.value, facts);
+      if (value !== null) visible = { case: "abandonment", value };
+    }
+    return visible;
   },
 
   /**
@@ -5000,15 +5053,12 @@ class AgentLiveRunner {
     await this.checkSession();
     await this.runtime.onAdmit(this.tenantId);
     await RepositoryStorage.track(this.repository, async () => {
-      const loaded = await new ProcessManagerExecutionSupport(this.repository, this.runtime).load(
-        this.entityId,
-        this.tenantId === undefined ? {} : { tenantId: this.tenantId },
-      );
-      const expected = await loaded.commits.readAgentPreferences(this.entityId);
+      const { loaded, attributes: expected } = await this.load();
       if (this.signal.aborted) return;
       const ai = this.runtime.ai;
       if (ai === undefined) throw new Error("Live Agent execution requires an AI registry.");
-      const preferences = expected?.map((entry) => clone(ModelPreferenceSchema, entry)) ?? [];
+      const preferences =
+        expected?.modelPreferences.map((entry) => clone(ModelPreferenceSchema, entry)) ?? [];
       const audit = this.audit(loaded);
       let selected: ReadonlyMap<AiModelKind, AgentLiveModel>;
       try {
@@ -5025,6 +5075,67 @@ class AgentLiveRunner {
       await this.checkSession();
       await this.complete(loaded, expected, preferences, produced);
     });
+  }
+
+  /**
+   * Restores an Agent from one coordinated current-state and attributes provider read.
+   *
+   * @returns Restored Agent and the complete previously saved attributes image.
+   */
+  private async load(): Promise<{
+    readonly loaded: LoadedRepositoryEntity;
+    readonly attributes: AgentAttributesRecord | undefined;
+  }> {
+    const { storageInput, storage, current, attributes } = await this.openCurrent();
+    const stored = current && EntityRecords.unpack(this.repository.stateSchema, current);
+    const entity = RepositoryEntities.instantiate(this.repository, this.entityId, stored, false);
+    RepositoryHistoryInternals.bindEntityHistory(
+      this.repository,
+      entity,
+      storage,
+      this.entityId,
+      this.repository.stateSchema,
+      storageInput.context.tenantId,
+    );
+    RepositoryEntities.bindAgentHistory(
+      this.repository,
+      entity,
+      this.entityId,
+      storageInput,
+      storage.agentHistory,
+    );
+    return {
+      loaded: {
+        entity,
+        current,
+        commits: storage.commits,
+        events: storage.events,
+        ...(storage.agentHistory === undefined ? {} : { agentHistory: storage.agentHistory }),
+        storageInput,
+      },
+      attributes,
+    };
+  }
+
+  /**
+   * Admits the read and loads one coordinated state and attributes image.
+   *
+   * @returns Bound storage handles and their combined current image.
+   */
+  private async openCurrent() {
+    const options = this.tenantId === undefined ? {} : { tenantId: this.tenantId };
+    await standAccess.admitCurrent(this.runtime.stand, this.repository.stateSchema, options);
+    const storageInput = RepositoryStorage.entityStorageInput(
+      this.repository,
+      RepositoryTenants.storageContextForTenant(this.runtime.context, this.tenantId),
+    );
+    const storage = RepositoryStorage.openRepositoryEntityStorage(
+      this.repository,
+      this.runtime.storageFactory,
+      storageInput,
+    );
+    const { current, attributes } = await storage.commits.readAgentCurrent(this.entityId);
+    return { storageInput, storage, current, attributes };
   }
 
   /**
@@ -5466,30 +5577,15 @@ class AgentLiveRunner {
    */
   private async complete(
     loaded: LoadedRepositoryEntity,
-    expected: readonly ModelPreference[] | undefined,
+    expected: AgentAttributesRecord | undefined,
     preferences: readonly ModelPreference[],
     produced: AgentLiveResult,
   ): Promise<void> {
-    const version = RepositoryEntities.repositoryVersion(loaded.entity);
-    const routing = repositoryRoutings.get(this.repository);
-    if (routing === undefined) throw new Error("Live Agent output requires registered routing.");
-    const outputs =
-      produced.case === "rejected"
-        ? [produced.output]
-        : produced.values.map((item) =>
-            AgentLiveOutputs.bindOutput(
-              this.repository,
-              this.runtime,
-              routing,
-              this.invocation.source,
-              this.entityId,
-              version,
-              item,
-            ),
-          );
-    await this.authorizePreferences(expected ?? [], preferences);
+    const outputs = this.bindOutputs(loaded, produced);
+    const priorPreferences = expected?.modelPreferences ?? [];
+    await this.authorizePreferences(priorPreferences, preferences);
     await this.checkSession();
-    const preferenceEvents = this.preferenceEvents(expected ?? [], preferences);
+    const preferenceEvents = this.preferenceEvents(priorPreferences, preferences);
     const history = [
       ...AgentLiveOutputs.emittedHistory(outputs),
       ...preferenceEvents.map((event) => this.systemEntry(event)),
@@ -5498,6 +5594,32 @@ class AgentLiveRunner {
     await this.checkSession();
     for (const event of preferenceEvents) await this.runtime.publishAgentSystemEvent(event);
     this.publish(outputs);
+  }
+
+  /**
+   * Binds declared Agent outputs to their original signal and saved version.
+   *
+   * @param loaded Current Agent image.
+   * @param produced Handler result.
+   * @returns Routed output envelopes.
+   */
+  private bindOutputs(loaded: LoadedRepositoryEntity, produced: AgentLiveResult) {
+    const version = RepositoryEntities.repositoryVersion(loaded.entity);
+    const routing = repositoryRoutings.get(this.repository);
+    if (routing === undefined) throw new Error("Live Agent output requires registered routing.");
+    return produced.case === "rejected"
+      ? [produced.output]
+      : produced.values.map((item) =>
+          AgentLiveOutputs.bindOutput(
+            this.repository,
+            this.runtime,
+            routing,
+            this.invocation.source,
+            this.entityId,
+            version,
+            item,
+          ),
+        );
   }
 
   /**
@@ -5511,7 +5633,7 @@ class AgentLiveRunner {
    */
   private async commit(
     loaded: LoadedRepositoryEntity,
-    expected: readonly ModelPreference[] | undefined,
+    expected: AgentAttributesRecord | undefined,
     preferences: readonly ModelPreference[],
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
@@ -5525,8 +5647,12 @@ class AgentLiveRunner {
       await loaded.commits.commitAgent({
         entityId: this.entityId,
         expectedVersion: loaded.current?.version?.number ?? 0,
-        expectedPreferences: expected,
-        preferences,
+        expectedAttributes: expected,
+        attributes: AgentAttributes.record(
+          expected?.agent ?? AgentAttributes.id(loaded.storageInput, this.entityId),
+          preferences,
+          expected?.pendingModelCalls ?? [],
+        ),
         historyEntries: history,
         ...(prepared === undefined ? {} : { entityCommit: this.entityCommit(loaded, prepared) }),
       });

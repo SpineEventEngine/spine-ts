@@ -17,13 +17,30 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
+  ActorContextSchema,
+  BoundedContextNameSchema,
+  CommandContextSchema,
+  CommandIdSchema,
+  CommandSchema,
   EventContextSchema,
   EventIdSchema,
   EventSchema,
   MessageIdSchema,
+  UserIdSchema,
+  VersionSchema,
 } from "@spine-event-engine/proto";
 import {
   AgentHistoryEntrySchema,
+  AgentIdSchema,
+  AiCapabilityNameSchema,
+  AiCapabilityRevisionSchema,
+  CallModelSchema,
+  ModelCallSchema,
+  ModelNameSchema,
+  ModelRefSchema,
+  ModelRevisionSchema,
+  ModelRequestRecordSchema,
+  ModelSubmissionAttemptRecordSchema,
   AiOperationIdSchema,
   ConversationIdSchema,
   ConversationRecordIdSchema,
@@ -44,6 +61,7 @@ import {
 // prettier-ignore
 import {
   SupportReplyAgentIdSchema,
+  SupportReplyAgentStateSchema,
 } from "../../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 import {
   ProposedSupportReplySchema,
@@ -146,5 +164,110 @@ export function event(id: string, time: Timestamp, system: boolean): AgentHistor
   return create(AgentHistoryEntrySchema, {
     whenOccurred: time,
     item: { case: system ? "systemEvent" : "domainEvent", value: envelope },
+  });
+}
+
+/**
+ * Builds a prepared model request with complete Command and triggering Event envelopes.
+ *
+ * @param callId Logical model call ID and immutable request history ID.
+ * @param time Time when the request was prepared.
+ * @returns Original complete Agent history entry.
+ */
+export function modelRequest(callId: string, time: Timestamp): AgentHistoryEntry {
+  const ticket = create(SupportReplyAgentIdSchema, { ticketNumber: "T-history" });
+  const call = create(ModelCallSchema, {
+    id: create(AiOperationIdSchema, { value: callId }),
+    replyContext: create(BoundedContextNameSchema, { value: "Support" }),
+    agent: create(AgentIdSchema, {
+      stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+      entityId: packed(SupportReplyAgentIdSchema, ticket),
+    }),
+    capability: create(AiCapabilityNameSchema, { value: "draft-reply" }),
+    capabilityRevision: create(AiCapabilityRevisionSchema, { value: "v1" }),
+    conversation: create(ConversationIdSchema, { value: "draft-reply" }),
+    whenRequested: time,
+  });
+  const facts = create(SupportTicketFactsSchema, {
+    ticketNumber: create(SupportTicketNumberSchema, { value: ticket.ticketNumber }),
+    customerQuestion: "Delivery?",
+  });
+  const request = create(CallModelSchema, {
+    call,
+    model: create(ModelRefSchema, {
+      name: create(ModelNameSchema, { value: "support-generation" }),
+      revision: create(ModelRevisionSchema, { value: "v1" }),
+    }),
+    input: packed(SupportTicketFactsSchema, facts),
+  });
+  const command = create(CommandSchema, {
+    id: create(CommandIdSchema, { uuid: `request-${callId}` }),
+    message: packed(CallModelSchema, request),
+    context: create(CommandContextSchema, {
+      actorContext: create(ActorContextSchema, {
+        actor: create(UserIdSchema, { value: "support-agent" }),
+        timestamp: time,
+      }),
+      targetVersion: 7,
+      attributes: { purpose: packed(SupportTicketFactsSchema, facts) },
+    }),
+  });
+  const source = event(`trigger-${callId}`, time, false).item;
+  if (source.case !== "domainEvent") throw new Error("Model request fixture requires an Event.");
+  const originalSource = create(EventSchema, {
+    ...source.value,
+    context: create(EventContextSchema, {
+      ...source.value.context,
+      timestamp: time,
+      producerId: packed(SupportReplyAgentIdSchema, ticket),
+      version: create(VersionSchema, { number: 3 }),
+      rootCommandId: create(CommandIdSchema, { uuid: `root-${callId}` }),
+    }),
+  });
+  return create(AgentHistoryEntrySchema, {
+    whenOccurred: time,
+    item: {
+      case: "modelRequest",
+      value: create(ModelRequestRecordSchema, {
+        request: command,
+        source: { case: "event", value: originalSource },
+      }),
+    },
+  });
+}
+
+/**
+ * Builds an immutable submission attempt for an already prepared model request.
+ *
+ * @param id Stable attempt entry ID.
+ * @param request Complete prepared request history entry.
+ * @param time Time when posting was attempted.
+ * @returns Complete submission attempt history entry.
+ */
+export function submissionAttempt(
+  id: string,
+  request: AgentHistoryEntry,
+  time: Timestamp,
+): AgentHistoryEntry {
+  if (request.item.case !== "modelRequest" || request.item.value.request?.message === undefined)
+    throw new Error("Submission fixture requires a prepared request.");
+  const payload = AnyPacker.unpack(request.item.value.request.message, CallModelSchema);
+  const attempted = create(CommandSchema, {
+    ...request.item.value.request,
+    message: packed(
+      CallModelSchema,
+      create(CallModelSchema, { ...payload, whenSubmissionAttempted: time }),
+    ),
+  });
+  return create(AgentHistoryEntrySchema, {
+    whenOccurred: time,
+    item: {
+      case: "submissionAttempt",
+      value: create(ModelSubmissionAttemptRecordSchema, {
+        id,
+        command: attempted,
+        whenAttempted: time,
+      }),
+    },
   });
 }

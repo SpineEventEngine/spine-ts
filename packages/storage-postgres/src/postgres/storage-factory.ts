@@ -31,7 +31,7 @@ import {
   type TenantCatalogRead,
   type TenantCatalogPage,
 } from "@spine-event-engine/storage/provider";
-import { AgentHistoryRecords, AgentModelPreferences } from "@spine-event-engine/storage/provider";
+import { AgentHistoryRecords, AgentAttributes } from "@spine-event-engine/storage/provider";
 import {
   EntityCommitStorageFactories,
   AgentHistoryStorageFactories,
@@ -627,8 +627,8 @@ export class PostgresStorageFactory extends StorageFactory {
       await this.prepareAudit(input.context, audit, mode);
       await this.prepareRecordAdmitted(
         input.context,
-        AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
-        AgentModelPreferences.group,
+        AgentAttributes.spec((value) => AgentHistoryHash.value(value)),
+        AgentAttributes.group,
         mode,
       );
     });

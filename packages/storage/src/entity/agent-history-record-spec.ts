@@ -68,6 +68,32 @@ interface AgentHistoryRecordLayout {
   slot(record: AgentHistoryRecord): string;
 
   /**
+   * Encodes the exact immutable identity of one prepared model request.
+   *
+   * @param stateType Agent state type name.
+   * @param agentKey Canonical typed Agent identifier.
+   * @param callId Logical model call identifier.
+   * @returns Complete primary-record identity before provider hashing.
+   */
+  requestSlot(stateType: string, agentKey: string, callId: string): string;
+
+  /**
+   * Validates a directly read prepared request against its complete identity.
+   *
+   * @param record Provider history record.
+   * @param stateType Agent state type name.
+   * @param agentKey Canonical typed Agent identifier.
+   * @param callId Logical model call identifier.
+   * @returns Original prepared request entry.
+   */
+  requestEntry(
+    record: AgentHistoryRecord,
+    stateType: string,
+    agentKey: string,
+    callId: string,
+  ): AgentHistoryEntry;
+
+  /**
    * Encodes the complete Agent repository scope.
    *
    * @param stateType Generated Agent state type name.
@@ -166,6 +192,43 @@ export const AgentHistoryRecords: AgentHistoryRecordLayout = {
     const scope = AgentHistoryRecords.requiredScope(record);
     const key = AgentHistoryKeys.fromEntry(AgentHistoryRecords.requiredEntry(record));
     return JSON.stringify([scope.stateType, scope.agentKey, key.category, key.recordId]);
+  },
+
+  /**
+   * Builds one request identity without scanning chronological history.
+   *
+   * @param stateType Agent state type name.
+   * @param agentKey Canonical typed Agent identifier.
+   * @param callId Logical model call identifier.
+   * @returns Complete primary-record identity.
+   */
+  requestSlot(stateType: string, agentKey: string, callId: string): string {
+    if (!stateType || !agentKey || !callId)
+      throw new TypeError("Agent model request lookup requires complete identity.");
+    return JSON.stringify([stateType, agentKey, "request", callId]);
+  },
+
+  /**
+   * Rejects a physical collision or mismatched request body.
+   *
+   * @param record Provider history record.
+   * @param stateType Agent state type name.
+   * @param agentKey Canonical typed Agent identifier.
+   * @param callId Logical model call identifier.
+   * @returns Original prepared request entry.
+   */
+  requestEntry(
+    record: AgentHistoryRecord,
+    stateType: string,
+    agentKey: string,
+    callId: string,
+  ): AgentHistoryEntry {
+    if (this.slot(record) !== this.requestSlot(stateType, agentKey, callId))
+      throw new Error("Agent model request identity conflict.");
+    const entry = this.requiredEntry(record);
+    if (entry.item.case !== "modelRequest")
+      throw new Error("Agent model request category conflict.");
+    return entry;
   },
 
   /**

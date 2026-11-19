@@ -89,6 +89,8 @@ import {
   type StorageContext,
 } from "@spine-event-engine/storage";
 import type {
+  AgentHistoryStorage,
+  AgentHistoryStorageInput,
   EntityStorageConformance,
   EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
@@ -2195,6 +2197,38 @@ class GuardedSupportAgent extends Agent<SupportReplyAgentId, typeof SupportReply
     const reply = `Answer: ${event.question}`;
     this.update((state) => Object.assign(state, { id: this.id, proposedReply: reply }));
     return create(SupportReplyDraftedSchema, { agent: this.id, reply });
+  }
+}
+
+/**
+ * Counts provider history reads during ordinary Agent dispatch.
+ */
+class HistoryReadTrackingFactory extends InMemoryStorageFactory {
+  historyReads = 0;
+
+  /**
+   * Wraps one Agent history handle without changing its stored records.
+   *
+   * @param input Bound Agent repository scope.
+   * @returns Handle that counts chronological history reads.
+   */
+  protected override createAgentHistoryStorage<Id>(
+    input: AgentHistoryStorageInput<Id>,
+  ): AgentHistoryStorage<Id> {
+    const storage = super.createAgentHistoryStorage(input);
+    return {
+      capacity: storage.capacity,
+      append: (id, entry) => storage.append(id, entry),
+      appendAll: (id, entries) => storage.appendAll(id, entries),
+      read: (request) => {
+        this.historyReads += 1;
+        return storage.read(request);
+      },
+      readModelRequest: (id, callId) => storage.readModelRequest(id, callId),
+      close: () => {
+        storage.close();
+      },
+    };
   }
 }
 
@@ -10409,7 +10443,7 @@ describe("repository signal routing", () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-guard" });
     expect(() => createGuardedSupportAgentRepository(agent, false)).not.toThrow();
 
-    const factory = new InMemoryStorageFactory();
+    const factory = new HistoryReadTrackingFactory();
     await configureStorage(setup, factory);
     const event = SignalEnvelopes.event({
       schema: SupportTicketUpdatedSchema,
@@ -10453,6 +10487,7 @@ describe("repository signal routing", () => {
       await context.close();
     }
     expect(GuardedSupportAgent.reactions).toBe(1);
+    expect(factory.historyReads).toBe(0);
   });
 
   it("suppresses a duplicate Aggregate Event using its delivered Inbox receipt", async () => {
@@ -18156,7 +18191,7 @@ class RetainedEntityStorageFactory extends InMemoryStorageFactory {
     }
     const storage = super.createEntityCommitStorage(input);
     return {
-      readAgentPreferences: (id) => storage.readAgentPreferences(id),
+      readAgentCurrent: (id) => storage.readAgentCurrent(id),
       commitAgent: (work) => storage.commitAgent(work),
       commit: (work) => storage.commit(work),
       close: () => {
@@ -18578,7 +18613,7 @@ class GatedAggregateEventStorageFactory extends InMemoryStorageFactory {
   ): EntityCommitStorage {
     const storage = super.createEntityCommitStorage(input);
     return {
-      readAgentPreferences: (id) => storage.readAgentPreferences(id),
+      readAgentCurrent: (id) => storage.readAgentCurrent(id),
       commitAgent: (work) => storage.commitAgent(work),
       commit: async <I, S extends Message>(unit: EntityCommitInput<I, S>): Promise<void> => {
         this.#reached();
@@ -18601,7 +18636,7 @@ class FailingEntityCommitStorageFactory extends InMemoryStorageFactory {
   ): EntityCommitStorage {
     const storage = super.createEntityCommitStorage(input);
     return {
-      readAgentPreferences: (id) => storage.readAgentPreferences(id),
+      readAgentCurrent: (id) => storage.readAgentCurrent(id),
       commitAgent: (work) => storage.commitAgent(work),
       commit: async <I, S extends Message>(unit: EntityCommitInput<I, S>): Promise<void> => {
         if (this.#remainingFailures > 0) {
@@ -18661,7 +18696,7 @@ class FailingSourceDiagnosticStorageFactory extends InMemoryStorageFactory {
   ): EntityCommitStorage {
     const storage = super.createEntityCommitStorage(input);
     return {
-      readAgentPreferences: (id) => storage.readAgentPreferences(id),
+      readAgentCurrent: (id) => storage.readAgentCurrent(id),
       commitAgent: (work) => storage.commitAgent(work),
       commit: async <I, S extends Message>(unit: EntityCommitInput<I, S>): Promise<void> => {
         if (this.#failCommit && (unit.diagnostics?.length ?? 0) > 0) {
@@ -18709,7 +18744,7 @@ class FailingProcessManagerProducedEventFactory extends InMemoryStorageFactory {
   ): EntityCommitStorage {
     const storage = super.createEntityCommitStorage(input);
     return {
-      readAgentPreferences: (id) => storage.readAgentPreferences(id),
+      readAgentCurrent: (id) => storage.readAgentCurrent(id),
       commitAgent: (work) => storage.commitAgent(work),
       commit: async <T, R extends Message>(unit: EntityCommitInput<T, R>): Promise<void> => {
         if (this.#targetGroup === undefined)

@@ -199,6 +199,10 @@ export type {
   ConversationRecordId,
   AgentHistoryCursor,
   ConversationRecord,
+  ModelRequestRecord,
+  ModelSubmissionAttemptRecord,
+  ModelOutcomeHandledRecord,
+  ModelCallAbandonedRecord,
   AgentHistoryEntry,
 } from "../../generated/spine/agent/history_pb.js";
 
@@ -207,6 +211,10 @@ export {
   ConversationRecordIdSchema,
   AgentHistoryCursorSchema,
   ConversationRecordSchema,
+  ModelRequestRecordSchema,
+  ModelSubmissionAttemptRecordSchema,
+  ModelOutcomeHandledRecordSchema,
+  ModelCallAbandonedRecordSchema,
   AgentHistoryEntrySchema,
 } from "../../generated/spine/agent/history_pb.js";
 

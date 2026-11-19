@@ -29,6 +29,8 @@ import { AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 
 import {
   conversation,
+  modelRequest,
+  submissionAttempt,
   response,
   event,
   occurredAt,
@@ -48,6 +50,41 @@ function required(value: string | undefined): string {
 }
 
 describe.runIf(url !== undefined)("MySQL Agent history", () => {
+  it("reopens exact prepared requests and preserves their complete envelopes", async () => {
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: required(url) })
+      .build();
+    const agent = `request-${randomUUID()}`;
+    const callId = `call-${randomUUID()}`;
+    const time = occurredAt(21n, 5);
+    const request = modelRequest(callId, time);
+    const attempt = submissionAttempt(`attempt-${callId}`, request, time);
+    const first = AgentHistoryStorageFactories.create(factory, scope);
+    try {
+      await first.appendAll(agent, [request, attempt]);
+      first.close();
+      const reopened = AgentHistoryStorageFactories.create(factory, scope);
+      try {
+        const exact = await reopened.readModelRequest(agent, callId);
+        expect(exact && toBinary(AgentHistoryEntrySchema, exact)).toEqual(
+          toBinary(AgentHistoryEntrySchema, request),
+        );
+        await expect(reopened.readModelRequest("other-agent", callId)).resolves.toBeUndefined();
+        await expect(reopened.readModelRequest(agent, "missing")).resolves.toBeUndefined();
+        const page = await reopened.read({ entityId: agent, view: { kind: "full" }, count: 10 });
+        expect(page.entries).toHaveLength(2);
+        await expect(reopened.append(agent, modelRequest(callId, occurredAt(22n)))).rejects.toThrow(
+          /immutable|conflict/i,
+        );
+      } finally {
+        reopened.close();
+      }
+    } finally {
+      first.close();
+      await factory.close();
+    }
+  });
+
   it("rejects creation of an Agent history handle after factory closure", async () => {
     const factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: required(url) })

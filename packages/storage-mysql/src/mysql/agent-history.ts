@@ -183,6 +183,28 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
   }
 
   /**
+   * Reads a prepared request by its exact immutable primary identity.
+   *
+   * @param entityId Typed Agent identifier.
+   * @param callId Logical model call ID.
+   * @returns Original prepared request entry when present.
+   */
+  readModelRequest(entityId: Id, callId: string): Promise<AgentHistoryEntry | undefined> {
+    return this.onAdmit(async () => {
+      this.requireOpen();
+      await this.ready();
+      const agentKey = this.key(entityId);
+      const slot = AgentHistoryHash.value(
+        AgentHistoryRecords.requestSlot(this.input.stateType, agentKey, callId),
+      );
+      const record = await this.records.read(slot);
+      return record === undefined
+        ? undefined
+        : AgentHistoryRecords.requestEntry(record, this.input.stateType, agentKey, callId);
+    });
+  }
+
+  /**
    * Executes an admitted provider operation.
    *
    * @param request Typed history page request.

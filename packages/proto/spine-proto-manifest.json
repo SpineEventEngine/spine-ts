@@ -52,8 +52,8 @@
     "spine/net/internet_domain.proto",
     "spine/options.proto",
     "spine/server/agent/acceptance_receipt.proto",
+    "spine/server/agent/attributes_record.proto",
     "spine/server/agent/history_record.proto",
-    "spine/server/agent/model_preferences_record.proto",
     "spine/server/catchup/catch_up.proto",
     "spine/server/delivery/delivery.proto",
     "spine/server/delivery/delivery_events.proto",
@@ -122,8 +122,8 @@
     "spine/net/internet_domain.proto": "generated/spine/net/internet_domain_pb.js",
     "spine/options.proto": "generated/spine/options_pb.js",
     "spine/server/agent/acceptance_receipt.proto": "generated/spine/server/agent/acceptance_receipt_pb.js",
+    "spine/server/agent/attributes_record.proto": "generated/spine/server/agent/attributes_record_pb.js",
     "spine/server/agent/history_record.proto": "generated/spine/server/agent/history_record_pb.js",
-    "spine/server/agent/model_preferences_record.proto": "generated/spine/server/agent/model_preferences_record_pb.js",
     "spine/server/catchup/catch_up.proto": "generated/spine/server/catchup/catch_up_pb.js",
     "spine/server/delivery/delivery.proto": "generated/spine/server/delivery/delivery_pb.js",
     "spine/server/delivery/delivery_events.proto": "generated/spine/server/delivery/delivery_events_pb.js",
@@ -144,5 +144,5 @@
   },
   "dependencies": [],
   "moduleExport": "spineProtoModule",
-  "generationId": "e78589ff-d8e6-48af-a356-4446979c33d1"
+  "generationId": "2dc97763-6698-4b67-8ee4-2e2f553b578f"
 }

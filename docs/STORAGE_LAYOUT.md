@@ -28,7 +28,7 @@ the startup calls that prepare the application.
       - [Support System Events: `spine.support_system_event`](#support-system-events-spinesupport_system_event)
       - [Agent audit: `spine.agent_history_agenthistoryrecord`](#agent-audit-spineagent_history_agenthistoryrecord)
       - [Agent acceptance receipts: `spine.spine_agent_acceptance_agentacceptancereceipt`](#agent-acceptance-receipts-spinespine_agent_acceptance_agentacceptancereceipt)
-      - [Agent model preferences: `spine.spine_agent_model_preferences_agentmodelpreferencesrecord`](#agent-model-preferences-spinespine_agent_model_preferences_agentmodelpreferencesrecord)
+      - [Agent attributes: `spine.spine_agent_attributes_agentattributesrecord`](#agent-attributes-spinespine_agent_attributes_agentattributesrecord)
       - [Subscription registry: `spine.spine_client_subscriptionrecord`](#subscription-registry-spinespine_client_subscriptionrecord)
       - [Entity Inbox messages: `spine.spine_server_delivery_inboxmessage`](#entity-inbox-messages-spinespine_server_delivery_inboxmessage)
       - [Delivery shard sessions: `spine.spine_server_delivery_shardsessionrecord`](#delivery-shard-sessions-spinespine_server_delivery_shardsessionrecord)
@@ -48,7 +48,7 @@ the startup calls that prepare the application.
       - [Support System Events: `Support_System_Event`](#support-system-events-support_system_event)
       - [Agent audit: `agent_history_AgentHistoryRecord`](#agent-audit-agent_history_agenthistoryrecord)
       - [Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`](#agent-acceptance-receipts-spine_agent_acceptance_agentacceptancereceipt)
-      - [Agent model preferences: `spine_agent_model_preferences_AgentModelPreferencesRecord`](#agent-model-preferences-spine_agent_model_preferences_agentmodelpreferencesrecord)
+      - [Agent attributes: `spine_agent_attributes_AgentAttributesRecord`](#agent-attributes-spine_agent_attributes_agentattributesrecord)
       - [Subscription registry: `spine_client_SubscriptionRecord`](#subscription-registry-spine_client_subscriptionrecord)
       - [Entity Inbox messages: `spine_server_delivery_InboxMessage`](#entity-inbox-messages-spine_server_delivery_inboxmessage)
       - [Delivery shard sessions: `spine_server_delivery_ShardSessionRecord`](#delivery-shard-sessions-spine_server_delivery_shardsessionrecord)
@@ -68,7 +68,7 @@ the startup calls that prepare the application.
       - [Support System Events: `Support_System-Event`](#support-system-events-support_system-event)
       - [Agent audit: `spine_agent_history`](#agent-audit-spine_agent_history)
       - [Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`](#agent-acceptance-receipts-spine_agent_acceptance_agentacceptancereceipt-1)
-      - [Agent model preferences: `spine_agent_model_preferences`](#agent-model-preferences-spine_agent_model_preferences)
+      - [Agent attributes: `spine_agent_attributes`](#agent-attributes-spine_agent_attributes)
       - [Subscription registry: `spine.client.SubscriptionRecord`](#subscription-registry-spineclientsubscriptionrecord)
       - [Entity Inbox messages: `spine.server.delivery.InboxMessage`](#entity-inbox-messages-spineserverdeliveryinboxmessage)
       - [Delivery shard sessions: `spine.server.delivery.ShardSessionRecord`](#delivery-shard-sessions-spineserverdeliveryshardsessionrecord)
@@ -92,7 +92,7 @@ the startup calls that prepare the application.
       - [Support System Events: `spine.support_system_event`](#support-system-events-spinesupport_system_event-1)
       - [Agent audit: `spine.agent_history_agenthistoryrecord`](#agent-audit-spineagent_history_agenthistoryrecord-1)
       - [Agent acceptance receipts: `spine.spine_agent_acceptance_agentacceptancereceipt`](#agent-acceptance-receipts-spinespine_agent_acceptance_agentacceptancereceipt-1)
-      - [Agent model preferences: `spine.spine_agent_model_preferences_agentmodelpreferencesrecord`](#agent-model-preferences-spinespine_agent_model_preferences_agentmodelpreferencesrecord-1)
+      - [Agent attributes: `spine.spine_agent_attributes_agentattributesrecord`](#agent-attributes-spinespine_agent_attributes_agentattributesrecord-1)
       - [Subscription registry: `spine.spine_client_subscriptionrecord`](#subscription-registry-spinespine_client_subscriptionrecord-1)
       - [Entity Inbox messages: `spine.spine_server_delivery_inboxmessage`](#entity-inbox-messages-spinespine_server_delivery_inboxmessage-1)
       - [Delivery shard sessions: `spine.spine_server_delivery_shardsessionrecord`](#delivery-shard-sessions-spinespine_server_delivery_shardsessionrecord-1)
@@ -112,7 +112,7 @@ the startup calls that prepare the application.
       - [Support System Events: `Support_System_Event`](#support-system-events-support_system_event-1)
       - [Agent audit: `agent_history_AgentHistoryRecord`](#agent-audit-agent_history_agenthistoryrecord-1)
       - [Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`](#agent-acceptance-receipts-spine_agent_acceptance_agentacceptancereceipt-2)
-      - [Agent model preferences: `spine_agent_model_preferences_AgentModelPreferencesRecord`](#agent-model-preferences-spine_agent_model_preferences_agentmodelpreferencesrecord-1)
+      - [Agent attributes: `spine_agent_attributes_AgentAttributesRecord`](#agent-attributes-spine_agent_attributes_agentattributesrecord-1)
       - [Subscription registry: `spine_client_SubscriptionRecord`](#subscription-registry-spine_client_subscriptionrecord-1)
       - [Entity Inbox messages: `spine_server_delivery_InboxMessage`](#entity-inbox-messages-spine_server_delivery_inboxmessage-1)
       - [Delivery shard sessions: `spine_server_delivery_ShardSessionRecord`](#delivery-shard-sessions-spine_server_delivery_shardsessionrecord-1)
@@ -132,7 +132,7 @@ the startup calls that prepare the application.
       - [Support System Events: `Support_System-Event`](#support-system-events-support_system-event-1)
       - [Agent audit: `spine_agent_history`](#agent-audit-spine_agent_history-1)
       - [Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`](#agent-acceptance-receipts-spine_agent_acceptance_agentacceptancereceipt-3)
-      - [Agent model preferences: `spine_agent_model_preferences`](#agent-model-preferences-spine_agent_model_preferences-1)
+      - [Agent attributes: `spine_agent_attributes`](#agent-attributes-spine_agent_attributes-1)
       - [Subscription registry: `spine.client.SubscriptionRecord`](#subscription-registry-spineclientsubscriptionrecord-1)
       - [Entity Inbox messages: `spine.server.delivery.InboxMessage`](#entity-inbox-messages-spineserverdeliveryinboxmessage-1)
       - [Delivery shard sessions: `spine.server.delivery.ShardSessionRecord`](#delivery-shard-sessions-spineserverdeliveryshardsessionrecord-1)
@@ -641,7 +641,7 @@ postgresBuilder.setTableName(
 );
 ```
 
-##### Agent model preferences: `spine.spine_agent_model_preferences_agentmodelpreferencesrecord`
+##### Agent attributes: `spine.spine_agent_attributes_agentattributesrecord`
 
 **Table location:** `support` database, `spine` schema.
 
@@ -650,7 +650,7 @@ postgresBuilder.setTableName(
 | Physical field     | Database type           | Exact source                                                                        | Example value                                                         |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentModelPreferencesRecord`                                     | Protobuf message serialized into binary array                         |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentAttributesRecord`                                           | Protobuf message serialized into binary array                         |
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
@@ -660,12 +660,12 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 
 ```ts
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-import { AgentModelPreferencesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
+import { AgentAttributesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/attributes_record_pb.js";
 
 const postgresBuilder = PostgresStorageFactory.newBuilder();
 postgresBuilder.setTableName(
-  AgentModelPreferencesRecordSchema,
-  AgentModelPreferencesRecordSchema,
+  AgentAttributesRecordSchema,
+  AgentAttributesRecordSchema,
   "support_agent_preferences",
 );
 ```
@@ -1200,7 +1200,7 @@ mysqlBuilder.setTableName(
 );
 ```
 
-##### Agent model preferences: `spine_agent_model_preferences_AgentModelPreferencesRecord`
+##### Agent attributes: `spine_agent_attributes_AgentAttributesRecord`
 
 **Table location:** `support` database.
 
@@ -1209,7 +1209,7 @@ mysqlBuilder.setTableName(
 | Physical field     | Database type           | Exact source                                                                        | Example value                                                         |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentModelPreferencesRecord`                                     | Protobuf message serialized into binary array                         |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentAttributesRecord`                                           | Protobuf message serialized into binary array                         |
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
@@ -1219,12 +1219,12 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 
 ```ts
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
-import { AgentModelPreferencesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
+import { AgentAttributesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/attributes_record_pb.js";
 
 const mysqlBuilder = MysqlStorageFactory.newBuilder();
 mysqlBuilder.setTableName(
-  AgentModelPreferencesRecordSchema,
-  AgentModelPreferencesRecordSchema,
+  AgentAttributesRecordSchema,
+  AgentAttributesRecordSchema,
   "support_agent_preferences",
 );
 ```
@@ -1658,7 +1658,7 @@ const datastoreBuilder = DatastoreStorageFactory.newBuilder();
 datastoreBuilder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_agent_receipts" });
 ```
 
-##### Agent model preferences: `spine_agent_model_preferences`
+##### Agent attributes: `spine_agent_attributes`
 
 **Kind location:** namespace `support`.
 
@@ -1667,7 +1667,7 @@ datastoreBuilder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_
 | Physical field                     | Database type      | Exact source                                                                        | Example value                                                         |
 | ---------------------------------- | ------------------ | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | Native key name (no `ID` property) | Datastore key name | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentModelPreferencesRecord`                                     | Protobuf message serialized into binary array                         |
+| `bytes`                            | Unindexed Blob     | Entire serialized `AgentAttributesRecord`                                           | Protobuf message serialized into binary array                         |
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
@@ -2499,7 +2499,7 @@ postgresBuilder.setTableName(
 );
 ```
 
-##### Agent model preferences: `spine.spine_agent_model_preferences_agentmodelpreferencesrecord`
+##### Agent attributes: `spine.spine_agent_attributes_agentattributesrecord`
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
 
@@ -2508,7 +2508,7 @@ postgresBuilder.setTableName(
 | Physical field     | Database type           | Exact source                                                                        | Example value                                                         |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentModelPreferencesRecord`                                     | Protobuf message serialized into binary array                         |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentAttributesRecord`                                           | Protobuf message serialized into binary array                         |
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
@@ -2518,12 +2518,12 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 
 ```ts
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-import { AgentModelPreferencesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
+import { AgentAttributesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/attributes_record_pb.js";
 
 const postgresBuilder = PostgresStorageFactory.newBuilder();
 postgresBuilder.setTableName(
-  AgentModelPreferencesRecordSchema,
-  AgentModelPreferencesRecordSchema,
+  AgentAttributesRecordSchema,
+  AgentAttributesRecordSchema,
   "support_agent_preferences",
 );
 ```
@@ -3076,7 +3076,7 @@ mysqlBuilder.setTableName(
 );
 ```
 
-##### Agent model preferences: `spine_agent_model_preferences_AgentModelPreferencesRecord`
+##### Agent attributes: `spine_agent_attributes_AgentAttributesRecord`
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
 
@@ -3085,7 +3085,7 @@ mysqlBuilder.setTableName(
 | Physical field     | Database type           | Exact source                                                                        | Example value                                                         |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentModelPreferencesRecord`                                     | Protobuf message serialized into binary array                         |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentAttributesRecord`                                           | Protobuf message serialized into binary array                         |
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
@@ -3095,12 +3095,12 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 
 ```ts
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
-import { AgentModelPreferencesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
+import { AgentAttributesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/attributes_record_pb.js";
 
 const mysqlBuilder = MysqlStorageFactory.newBuilder();
 mysqlBuilder.setTableName(
-  AgentModelPreferencesRecordSchema,
-  AgentModelPreferencesRecordSchema,
+  AgentAttributesRecordSchema,
+  AgentAttributesRecordSchema,
   "support_agent_preferences",
 );
 ```
@@ -3610,7 +3610,7 @@ const datastoreBuilder = DatastoreStorageFactory.newBuilder();
 datastoreBuilder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_agent_receipts" });
 ```
 
-##### Agent model preferences: `spine_agent_model_preferences`
+##### Agent attributes: `spine_agent_attributes`
 
 **Kind locations:** one in namespace `Vacme` and one in namespace `Vglobex`.
 
@@ -3619,7 +3619,7 @@ datastoreBuilder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_
 | Physical field                     | Database type      | Exact source                                                                        | Example value                                                         |
 | ---------------------------------- | ------------------ | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | Native key name (no `ID` property) | Datastore key name | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentModelPreferencesRecord`                                     | Protobuf message serialized into binary array                         |
+| `bytes`                            | Unindexed Blob     | Entire serialized `AgentAttributesRecord`                                           | Protobuf message serialized into binary array                         |
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
@@ -5047,11 +5047,11 @@ For example, Agent `assistant-7` may select the generation model named
 
 That choice is stored separately from the generated reply and its audit:
 
-| Provider      | Table or kind                                                     |
-| ------------- | ----------------------------------------------------------------- |
-| PostgreSQL    | `spine.spine_agent_model_preferences_agentmodelpreferencesrecord` |
-| MySQL/MariaDB | `spine_agent_model_preferences_AgentModelPreferencesRecord`       |
-| Datastore     | `spine_agent_model_preferences`                                   |
+| Provider      | Table or kind                                        |
+| ------------- | ---------------------------------------------------- |
+| PostgreSQL    | `spine.spine_agent_attributes_agentattributesrecord` |
+| MySQL/MariaDB | `spine_agent_attributes_AgentAttributesRecord`       |
+| Datastore     | `spine_agent_attributes`                             |
 
 The record contains the Agent's typed identity and its explicit model
 selections. It has a key and `bytes`, with no extra query columns. The selection

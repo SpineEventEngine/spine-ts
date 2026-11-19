@@ -551,6 +551,25 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   }
 
   /**
+   * Compares a native batched result with one requested Datastore identity.
+   *
+   * @param entity Raw entity from a batched transaction get.
+   * @param key Requested complete native key.
+   * @returns Whether the entity has that exact namespace, kind, and path.
+   */
+  matchesTransactionKey(
+    entity: Record<string | symbol, unknown>,
+    key: ReturnType<Datastore["key"]>,
+  ): boolean {
+    const actual = entity[this.client.KEY] as ReturnType<Datastore["key"]> | undefined;
+    return (
+      actual !== undefined &&
+      (actual.namespace ?? "") === (key.namespace ?? "") &&
+      JSON.stringify(actual.path) === JSON.stringify(key.path)
+    );
+  }
+
+  /**
    * Checks whether one transaction-read entity is the exact expected record.
    *
    * @param entity The raw Datastore entity returned inside that transaction.

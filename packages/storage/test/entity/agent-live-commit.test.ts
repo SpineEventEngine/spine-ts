@@ -36,11 +36,65 @@ import {
   MemoryEntityStorageFactory,
 } from "../../src/memory/in-memory-entity-history.js";
 import { StoragePreparations } from "../../src/internal/storage-preparation.js";
+import { TenantBoundary } from "../../src/internal/tenancy.js";
+import { AgentHistoryMutationQueue } from "../../src/memory/agent-history-mutation-queue.js";
 import { vi } from "vitest";
-import { entityInput } from "./agent-live-fixtures.js";
+import { agentAttributes, entityInput } from "./agent-live-fixtures.js";
 import { conversation } from "./agent-history-fixtures.js";
 
 describe("live Agent conditional persistence", () => {
+  it("reads current state and complete attributes after the preceding memory mutation", async () => {
+    const backend = new InMemoryStorageBackend();
+    const factory = new InMemoryStorageFactory(backend);
+    const layout = entityInput();
+    const commits = EntityCommitStorageFactories.create(factory, layout);
+    const id = createAgentId();
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const gate = AgentHistoryMutationQueue.bind(backend, TenantBoundary.of(layout.context)).run(
+      id.ticketNumber,
+      async () => {
+        entered.resolve(undefined);
+        await release.promise;
+      },
+    );
+    await entered.promise;
+    const attributes = agentAttributes(id);
+    const next = create(EntityRecordSchema, {
+      entityId: layout.id.pack(id),
+      state: AnyPacker.pack(
+        SupportReplyAgentStateSchema,
+        create(SupportReplyAgentStateSchema, { id }),
+      ),
+      version: create(VersionSchema, { number: 1 }),
+    });
+    try {
+      const writing = commits.commitAgent({
+        entityId: id,
+        expectedVersion: 0,
+        expectedAttributes: undefined,
+        attributes,
+        entityCommit: { context: layout.context, entity: layout, entityId: id, next },
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      let readSettled = false;
+      const reading = commits.readAgentCurrent(id).then((image) => {
+        readSettled = true;
+        return image;
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(readSettled).toBe(false);
+      release.resolve(undefined);
+      await gate;
+      await writing;
+      expect(await reading).toEqual({ current: next, attributes });
+    } finally {
+      release.resolve(undefined);
+      await commits.close();
+      await factory.close();
+    }
+  });
+
   it("declares Agent families without creating storage or admitting a tenant", async () => {
     const backend = new InMemoryStorageBackend();
     const factory = new InMemoryStorageFactory(backend);
@@ -78,23 +132,29 @@ describe("live Agent conditional persistence", () => {
       }),
     ];
     try {
-      await expect(commits.readAgentPreferences(entityId)).resolves.toBeUndefined();
+      await expect(
+        commits.readAgentCurrent(entityId).then((data) => data.attributes?.modelPreferences),
+      ).resolves.toBeUndefined();
       await commits.commitAgent({
         entityId,
         expectedVersion: 0,
-        expectedPreferences: undefined,
-        preferences,
+        expectedAttributes: undefined,
+        attributes: agentAttributes(entityId, preferences),
       });
-      await expect(commits.readAgentPreferences(entityId)).resolves.toEqual(preferences);
+      await expect(
+        commits.readAgentCurrent(entityId).then((data) => data.attributes?.modelPreferences),
+      ).resolves.toEqual(preferences);
       await expect(
         commits.commitAgent({
           entityId,
           expectedVersion: 0,
-          expectedPreferences: undefined,
-          preferences: [],
+          expectedAttributes: undefined,
+          attributes: agentAttributes(entityId),
         }),
       ).rejects.toThrow(/preference|conflict/i);
-      await expect(commits.readAgentPreferences(entityId)).resolves.toEqual(preferences);
+      await expect(
+        commits.readAgentCurrent(entityId).then((data) => data.attributes?.modelPreferences),
+      ).resolves.toEqual(preferences);
     } finally {
       await commits.close();
       await factory.close();
@@ -133,8 +193,8 @@ describe("live Agent conditional persistence", () => {
       await commits.commitAgent({
         entityId,
         expectedVersion: 0,
-        expectedPreferences: undefined,
-        preferences: [],
+        expectedAttributes: undefined,
+        attributes: agentAttributes(entityId),
         entityCommit: { context: layout.context, entity: layout, entityId, next, states: [next] },
         historyEntries: [first],
       });
@@ -144,8 +204,8 @@ describe("live Agent conditional persistence", () => {
         commits.commitAgent({
           entityId,
           expectedVersion: 0,
-          expectedPreferences: [],
-          preferences: [],
+          expectedAttributes: agentAttributes(entityId),
+          attributes: agentAttributes(entityId),
           historyEntries: [second],
         }),
       ).rejects.toThrow(/Version/i);
@@ -211,38 +271,48 @@ describe("live Agent conditional persistence", () => {
       await first.commitAgent({
         entityId,
         expectedVersion: 0,
-        expectedPreferences: undefined,
-        preferences: [],
+        expectedAttributes: undefined,
+        attributes: agentAttributes(entityId),
         entityCommit: { context: layout.context, entity: layout, entityId, next: v1, states: [v1] },
         historyEntries: [firstAudit],
       });
       await second.commitAgent({
         entityId,
         expectedVersion: 1,
-        expectedPreferences: [],
-        preferences: selection,
+        expectedAttributes: agentAttributes(entityId),
+        attributes: agentAttributes(entityId, selection),
       });
       await expect(
-        first.commitAgent({ ...proposed, expectedPreferences: [], preferences: [] }),
+        first.commitAgent({
+          ...proposed,
+          expectedAttributes: agentAttributes(entityId),
+          attributes: agentAttributes(entityId),
+        }),
       ).rejects.toThrow(/preference|conflict/i);
       expect(await states.current.read(entityId)).toEqual(v1);
       expect(await states.states.backward(entityId, 10)).toEqual([v1]);
       expect((await history.read({ entityId, view: { kind: "full" }, count: 10 })).entries).toEqual(
         [firstAudit],
       );
-      expect(await first.readAgentPreferences(entityId)).toEqual(selection);
-      expect(await second.readAgentPreferences(entityId)).toEqual(selection);
+      expect(
+        await first.readAgentCurrent(entityId).then((data) => data.attributes?.modelPreferences),
+      ).toEqual(selection);
+      expect(
+        await second.readAgentCurrent(entityId).then((data) => data.attributes?.modelPreferences),
+      ).toEqual(selection);
       await first.commitAgent({
         ...proposed,
-        expectedPreferences: selection,
-        preferences: selection,
+        expectedAttributes: agentAttributes(entityId, selection),
+        attributes: agentAttributes(entityId, selection),
       });
       expect(await states.current.read(entityId)).toEqual(v2);
       expect(await states.states.backward(entityId, 10)).toEqual([v2, v1]);
       expect((await history.read({ entityId, view: { kind: "full" }, count: 10 })).entries).toEqual(
         [secondAudit, firstAudit],
       );
-      expect(await first.readAgentPreferences(entityId)).toEqual(selection);
+      expect(
+        await first.readAgentCurrent(entityId).then((data) => data.attributes?.modelPreferences),
+      ).toEqual(selection);
     } finally {
       states.close();
       history.close();
@@ -267,29 +337,33 @@ describe("live Agent conditional persistence", () => {
     try {
       expect(
         await Promise.all([
-          first.readAgentPreferences(entityId),
-          second.readAgentPreferences(entityId),
+          first.readAgentCurrent(entityId).then((data) => data.attributes?.modelPreferences),
+          second.readAgentCurrent(entityId).then((data) => data.attributes?.modelPreferences),
         ]),
       ).toEqual([undefined, undefined]);
       const outcomes = await Promise.allSettled([
         first.commitAgent({
           entityId,
           expectedVersion: 0,
-          expectedPreferences: undefined,
-          preferences: selection,
+          expectedAttributes: undefined,
+          attributes: agentAttributes(entityId, selection),
         }),
         second.commitAgent({
           entityId,
           expectedVersion: 0,
-          expectedPreferences: undefined,
-          preferences: [],
+          expectedAttributes: undefined,
+          attributes: agentAttributes(entityId),
         }),
       ]);
       expect(outcomes.filter((result) => result.status === "fulfilled")).toHaveLength(1);
       expect(outcomes.filter((result) => result.status === "rejected")).toHaveLength(1);
-      const current = await first.readAgentPreferences(entityId);
+      const current = await first
+        .readAgentCurrent(entityId)
+        .then((data) => data.attributes?.modelPreferences);
       expect([[], selection]).toContainEqual(current);
-      expect(await second.readAgentPreferences(entityId)).toEqual(current);
+      expect(
+        await second.readAgentCurrent(entityId).then((data) => data.attributes?.modelPreferences),
+      ).toEqual(current);
     } finally {
       await Promise.all([first.close(), second.close()]);
       await Promise.all([firstFactory.close(), secondFactory.close()]);
@@ -315,11 +389,13 @@ describe("live Agent conditional persistence", () => {
     await commits.commitAgent({
       entityId,
       expectedVersion: 0,
-      expectedPreferences: undefined,
-      preferences: [],
+      expectedAttributes: undefined,
+      attributes: agentAttributes(entityId),
     });
     await closing;
-    expect(() => commits.readAgentPreferences(entityId)).toThrow(/closed/i);
+    expect(() =>
+      commits.readAgentCurrent(entityId).then((data) => data.attributes?.modelPreferences),
+    ).toThrow(/closed/i);
   });
 });
 

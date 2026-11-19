@@ -325,6 +325,7 @@ export class Stand {
       this.#deferUpdate(schema, state, updateOptions, metadata),
     );
     currentReads.set(this, (schema, id, readOptions) => this.#readCurrent(schema, id, readOptions));
+    currentAdmissions.set(this, (schema, options) => this.#admitCurrent(schema, options));
     routedQueryPlans.set(this, (schema, plan, readOptions, readSide) =>
       this.#queryPlanVersioned(schema, plan, readOptions, readSide),
     );
@@ -1001,6 +1002,23 @@ export class Stand {
   }
 
   /**
+   * Checks the same registration, tenant, and admission rules before a combined provider read.
+   *
+   * @param schema Registered state schema.
+   * @param options Tenant selection.
+   * @returns Completion after read admission without a data retrieval.
+   */
+  async #admitCurrent(schema: MessageSchema, options: StandReadOptions): Promise<void> {
+    const finish = this.#beginOperation();
+    try {
+      this.#registration(schema, "read");
+      await this.#checkedTenantId(options.tenantId);
+    } finally {
+      finish();
+    }
+  }
+
+  /**
    * Subscribes to in-process updates for one registered state schema.
    *
    * @typeParam Schema The registered state schema.
@@ -1632,6 +1650,16 @@ interface StandCurrentRecord<Schema extends MessageSchema> {
  */
 interface StandAccess {
   /**
+   * Applies current-read registration and tenant checks before a combined Agent load.
+   *
+   * @param stand Producing Bounded Context Stand.
+   * @param schema Registered Agent state schema.
+   * @param options Tenant selection.
+   * @returns Completion after read admission.
+   */
+  admitCurrent(stand: Stand, schema: MessageSchema, options: StandReadOptions): Promise<void>;
+
+  /**
    * Reads a framework-routed Query with its actual operation metadata.
    * @typeParam Schema Registered state schema.
    * @param stand Producing context's Stand.
@@ -1792,6 +1820,21 @@ interface StandAccess {
  * @internal
  */
 export const standAccess: StandAccess = Object.freeze({
+  /**
+   * Applies current-read admission without retrieving a second data record.
+   *
+   * @param stand Producing Bounded Context Stand.
+   * @param schema Registered Agent state schema.
+   * @param options Tenant selection.
+   * @returns Completion after admission.
+   */
+  admitCurrent(stand: Stand, schema: MessageSchema, options: StandReadOptions): Promise<void> {
+    const admit = currentAdmissions.get(stand);
+    if (admit === undefined)
+      throw new TypeError("Stand current admission requires a Stand instance.");
+    return admit(schema, options);
+  },
+
   /**
    * Forwards trusted routed Query context to the private Stand read path.
    * @typeParam Schema Registered state schema.
@@ -2064,4 +2107,8 @@ const standReadFilters = new WeakMap<Stand, ReadSideFilterEngine>();
 const standProducingContexts = new WeakMap<Stand, BoundedContext>();
 
 const currentReads = new WeakMap<Stand, CurrentReadCall>();
+const currentAdmissions = new WeakMap<
+  Stand,
+  (schema: MessageSchema, options: StandReadOptions) => Promise<void>
+>();
 const routedQueryPlans = new WeakMap<Stand, RoutedQueryPlanCall>();

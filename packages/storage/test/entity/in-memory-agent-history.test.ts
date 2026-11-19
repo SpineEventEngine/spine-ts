@@ -44,6 +44,8 @@ import {
 } from "../../../server/test-fixtures/generated/entity-metadata/support_ai_types_pb.js";
 import {
   conversation as storedRequest,
+  modelRequest,
+  submissionAttempt,
   response as storedResponse,
 } from "./agent-history-fixtures.js";
 
@@ -154,6 +156,32 @@ function event(id: string, time: Timestamp, system: boolean): AgentHistoryEntry 
 }
 
 describe("in-memory Agent history", () => {
+  it("finds a prepared request exactly and orders equal-time model entries", async () => {
+    const factory = new InMemoryStorageFactory();
+    const storage = AgentHistoryStorageFactories.create(factory, scope);
+    const time = occurredAt(9n, 7);
+    const request = modelRequest("call-1", time);
+    const attempted = submissionAttempt("attempt-1", request, time);
+    try {
+      await storage.appendAll("T-history", [attempted, request]);
+      await expect(storage.readModelRequest("T-history", "call-1")).resolves.toEqual(request);
+      await expect(storage.readModelRequest("other", "call-1")).resolves.toBeUndefined();
+      await expect(storage.readModelRequest("T-history", "missing")).resolves.toBeUndefined();
+      const page = await storage.read({
+        entityId: "T-history",
+        view: { kind: "full" },
+        count: 10,
+      });
+      expect(page.entries).toEqual([request, attempted]);
+      await expect(
+        storage.append("T-history", modelRequest("call-1", occurredAt(10n))),
+      ).rejects.toThrow(/conflict/);
+    } finally {
+      storage.close();
+      await factory.close();
+    }
+  });
+
   it("appends a conversation and System audit group atomically", async () => {
     const factory = new InMemoryStorageFactory();
     const storage = AgentHistoryStorageFactories.create(factory, scope);

@@ -61,7 +61,7 @@ import * as systemEventSchemas from "../generated/spine/system/server/entity_log
 import * as systemTypeSchemas from "../generated/spine/system/server/entity_type_pb.js";
 import * as agentHistorySchemas from "../generated/spine/server/agent/history_record_pb.js";
 import * as agentReceiptSchemas from "../generated/spine/server/agent/acceptance_receipt_pb.js";
-import * as agentPreferencesSchemas from "../generated/spine/server/agent/model_preferences_record_pb.js";
+import * as agentAttributesSchemas from "../generated/spine/server/agent/attributes_record_pb.js";
 import * as agentContentSchemas from "../generated/spine/agent/content_pb.js";
 import * as agentIdSchemas from "../generated/spine/agent/agent_id_pb.js";
 import * as agentCommandSchemas from "../generated/spine/agent/commands_pb.js";
@@ -253,7 +253,7 @@ describe("spineProtoModule", () => {
       ...schemaNames(systemTypeSchemas),
       ...schemaNames(agentHistorySchemas),
       ...schemaNames(agentReceiptSchemas),
-      ...schemaNames(agentPreferencesSchemas),
+      ...schemaNames(agentAttributesSchemas),
       ...schemaNames(agentContentSchemas),
       ...schemaNames(agentIdSchemas),
       ...schemaNames(agentCommandSchemas),

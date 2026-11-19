@@ -222,6 +222,25 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
   }
 
   /**
+   * Reads a prepared request by its exact immutable primary identity.
+   *
+   * @param entityId Typed Agent identifier.
+   * @param callId Logical model call ID.
+   * @returns Original prepared request entry when present.
+   */
+  async readModelRequest(entityId: Id, callId: string): Promise<AgentHistoryEntry | undefined> {
+    this.requireOpen();
+    const agentKey = this.key(entityId);
+    const slot = AgentHistoryHash.value(
+      AgentHistoryRecords.requestSlot(this.input.stateType, agentKey, callId),
+    );
+    const record = await this.records.read(slot);
+    return record === undefined
+      ? undefined
+      : AgentHistoryRecords.requestEntry(record, this.input.stateType, agentKey, callId);
+  }
+
+  /**
    * Closes this handle without deleting stored records.
    */
   close(): void {

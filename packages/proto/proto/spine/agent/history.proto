@@ -19,6 +19,7 @@ package spine.agent;
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "spine/agent/model.proto";
+import "spine/core/command.proto";
 import "spine/core/event.proto";
 import "spine/options.proto";
 
@@ -75,6 +76,109 @@ message ConversationRecord {
   AiToolCallId tool_call = 7 [(validate) = true];
 }
 
+// One prepared model request and the complete signal that triggered its creation.
+message ModelRequestRecord {
+  // Complete prepared CallModel Command, including ID, context, and typed payload.
+  spine.core.Command request = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Complete triggering signal, retained without changing its metadata.
+  oneof source {
+    option (choice).required = true;
+
+    // Command received by the requesting Agent.
+    spine.core.Command command = 2 [(validate) = true];
+
+    // Event received by the requesting Agent.
+    spine.core.Event event = 3 [(validate) = true];
+  }
+}
+
+// One immutable attempt to submit an already prepared model request.
+message ModelSubmissionAttemptRecord {
+  // Stable identity of this attempt, independent of its timestamp.
+  string id = 1 [(required) = true];
+
+  // Complete CallModel Command attempted, including when_submission_attempted.
+  spine.core.Command command = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Time at which posting was attempted.
+  google.protobuf.Timestamp when_attempted = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// One model outcome successfully handled and saved by the Agent.
+message ModelOutcomeHandledRecord {
+  // Stable identity of this handled occurrence.
+  string id = 1 [(required) = true];
+
+  // Logical model request whose outcome was handled.
+  AiOperationId call = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Conversation continued by the handled outcome.
+  ConversationId conversation = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Complete model reply or rejection Event received by the Agent.
+  spine.core.Event outcome = 4 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Time at which handling completed; this record is retained only if the commit succeeds.
+  google.protobuf.Timestamp when_handled = 5 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// One explicit decision to stop tracking a pending model request.
+message ModelCallAbandonedRecord {
+  // Stable identity of this abandonment occurrence.
+  string id = 1 [(required) = true];
+
+  // Logical model request no longer tracked as pending.
+  AiOperationId call = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Conversation continued by the abandoned request.
+  ConversationId conversation = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Time at which the application requested abandonment; retained on a successful commit.
+  google.protobuf.Timestamp when_abandoned = 4 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Complete signal whose handler explicitly abandoned the pending request.
+  oneof source {
+    option (choice).required = true;
+
+    // Command received by the Agent before abandonment.
+    spine.core.Command command = 5 [(validate) = true];
+
+    // Event received by the Agent before abandonment.
+    spine.core.Event event = 6 [(validate) = true];
+  }
+}
+
 // One entry in the Agent's combined repository history.
 message AgentHistoryEntry {
   // Original occurrence timestamp of the enclosed record or Event.
@@ -95,5 +199,17 @@ message AgentHistoryEntry {
 
     // Original domain Event emitted by this Agent.
     spine.core.Event domain_event = 4 [(validate) = true];
+
+    // Prepared model request and complete triggering signal.
+    ModelRequestRecord model_request = 5 [(validate) = true];
+
+    // Attempt to submit a prepared model request.
+    ModelSubmissionAttemptRecord submission_attempt = 6 [(validate) = true];
+
+    // Model outcome successfully applied by an Agent handler.
+    ModelOutcomeHandledRecord handled_outcome = 7 [(validate) = true];
+
+    // Explicit abandonment of a pending model request.
+    ModelCallAbandonedRecord abandonment = 8 [(validate) = true];
   }
 }

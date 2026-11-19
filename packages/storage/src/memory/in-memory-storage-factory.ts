@@ -41,7 +41,7 @@ import {
 } from "../internal/entity-commit.js";
 import { AgentHistoryStorageFactories } from "../internal/agent-history.js";
 import { AgentHistoryRecords } from "../entity/agent-history-record-spec.js";
-import { AgentModelPreferences } from "../internal/agent-model-preferences.js";
+import { AgentAttributes } from "../internal/agent-attributes.js";
 import {
   StoragePreparations,
   type EntityStoragePreparationInput,
@@ -187,8 +187,8 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
       );
       this.declareRecord(
         input.context,
-        AgentModelPreferences.spec((value) => value),
-        AgentModelPreferences.group,
+        AgentAttributes.spec((value) => value),
+        AgentAttributes.group,
       );
       if (input.stateSchema.typeName.trim().length === 0)
         throw new TypeError("Agent state type is required.");

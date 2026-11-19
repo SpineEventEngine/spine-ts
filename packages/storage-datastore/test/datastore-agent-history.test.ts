@@ -26,6 +26,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   conversation,
+  modelRequest,
+  submissionAttempt,
   response,
   event,
   occurredAt,
@@ -38,6 +40,40 @@ import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/sp
 const emulatorHost = process.env.DATASTORE_EMULATOR_HOST;
 
 describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
+  it("reopens exact prepared requests and preserves their complete envelopes", async () => {
+    const client = new Datastore({ projectId: `spine-agent-request-${randomUUID()}` });
+    const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
+    const agent = `request-${randomUUID()}`;
+    const callId = `call-${randomUUID()}`;
+    const time = occurredAt(21n, 5);
+    const request = modelRequest(callId, time);
+    const attempt = submissionAttempt(`attempt-${callId}`, request, time);
+    const first = AgentHistoryStorageFactories.create(factory, scope);
+    try {
+      await first.appendAll(agent, [request, attempt]);
+      first.close();
+      const reopened = AgentHistoryStorageFactories.create(factory, scope);
+      try {
+        const exact = await reopened.readModelRequest(agent, callId);
+        expect(exact && toBinary(AgentHistoryEntrySchema, exact)).toEqual(
+          toBinary(AgentHistoryEntrySchema, request),
+        );
+        await expect(reopened.readModelRequest("other-agent", callId)).resolves.toBeUndefined();
+        await expect(reopened.readModelRequest(agent, "missing")).resolves.toBeUndefined();
+        const page = await reopened.read({ entityId: agent, view: { kind: "full" }, count: 10 });
+        expect(page.entries).toHaveLength(2);
+        await expect(reopened.append(agent, modelRequest(callId, occurredAt(22n)))).rejects.toThrow(
+          /immutable|conflict/i,
+        );
+      } finally {
+        reopened.close();
+      }
+    } finally {
+      first.close();
+      await factory.close();
+    }
+  });
+
   it("rejects creation of an Agent history handle after factory closure", async () => {
     const client = new Datastore({ projectId: `spine-agent-closed-${randomUUID()}` });
     const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
