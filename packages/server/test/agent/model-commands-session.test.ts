@@ -171,6 +171,26 @@ describe("Agent model Command construction", () => {
     expect(request.call?.agent?.entityId).toEqual(AnyPacker.pack(SupportReplyAgentIdSchema, id));
     expect(request.call?.whenRequested).toBeDefined();
     expect(commands.returned(request).id?.value).toBe(request.call?.id?.value);
+    if (
+      request.call?.agent === undefined ||
+      request.call.tenant === undefined ||
+      request.call.agentVersion === undefined ||
+      request.model === undefined
+    )
+      throw new Error("Decision request omitted trusted metadata.");
+    request.call.agent.stateTypeUrl = "type.spine.io/foreign.Agent";
+    request.call.tenant.kind = {
+      case: "domain",
+      value: create(InternetDomainSchema, { value: "foreign.test" }),
+    };
+    request.call.agentVersion.number = 99;
+    if (request.model.name === undefined) throw new Error("Decision deployment name is absent.");
+    request.model.name.value = "foreign-model";
+    const next = commands.create(decision, { conversation, input });
+    expect(next.call?.agent?.stateTypeUrl).toBe(TypeUrls.derive(SupportReplyAgentStateSchema));
+    expect(next.call?.tenant).toEqual(tenant);
+    expect(next.call?.agentVersion).toEqual(version);
+    expect(next.model).toEqual(ModelRef.of("support-router", "v2"));
   });
 
   it("allows abandonment only for a committed pending call", () => {

@@ -282,10 +282,12 @@ shared-runtime release verification. The selected verification profile is
 public protocol, and model execution change together. No unresolved human design
 question. No GitHub PR or issue changes are authorized.
 
-The complete tooling typecheck found test fixtures that still referenced removed
-readiness methods, omitted the new history lookup, mixed source and built storage
-types, or violated exact optional-property types. The existing implementer fixes
-these before review, preserving the runtime contract and meaningful assertions.
+Complete tooling typechecking and affected behavior suites pass after updating
+fixtures to the current readiness/history contracts and consistent storage types.
+Returned model Commands have detached metadata, with a regression proving a
+changed discarded request cannot alter later trusted construction. Generation,
+production build, package imports/assets/links, and current-output consistency
+checks pass. Review round 1 is next; the full release gate follows convergence.
 
 ## Implementation seams
 

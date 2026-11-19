@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, create, type Message } from "@bufbuild/protobuf";
+import { clone, create, isMessage, type Message } from "@bufbuild/protobuf";
 import { AiModel, AiRegistry, ModelRef } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
 import { AnyPacker, SignalEnvelopes, Time, TypeUrls } from "@spine-event-engine/core";
@@ -238,13 +238,15 @@ function replyingRegistry(
       authorizeUse: () => true,
       connect: (_scope, identity) => ({ model: {}, identity }),
       execute: async (execution) => {
-        const question = (execution.input as { customerQuestion: string }).customerQuestion;
+        if (!isMessage(execution.input, SupportTicketFactsSchema))
+          throw new TypeError("Support model received a different input type.");
+        const question = execution.input.customerQuestion;
         await beforeExecute?.(question);
         const answer = typeof replyText === "string" ? replyText : replyText(question);
         const attempt = await execution.control.beginAttempt({
           kind: "generation",
           content: create(GenerationRequestSchema, {
-            input: AnyPacker.pack(SupportTicketFactsSchema, execution.input as never),
+            input: AnyPacker.pack(SupportTicketFactsSchema, execution.input),
             instructions: "Draft a support reply.",
             outputSchemaJson: "{}",
             promptJson: "{}",
@@ -398,8 +400,14 @@ function modelRepository(
 describe("Agent model Commands", () => {
   it("rejects ambiguous model definitions for one Agent state and revision", async () => {
     const competing = AiModel.define({
-      ...proposal.definition,
+      name: proposal.definition.name,
+      version: proposal.definition.version,
+      kind: "generation",
+      input: SupportTicketFactsSchema,
+      output: ProposedSupportReplySchema,
       instructions: "Use a different support reply policy.",
+      outputMode: "prompt-and-validate",
+      limits: proposal.definition.limits,
     });
     const environment = ServerEnvironment.newBuilder()
       .under(EnvironmentType.Local, (configuration) => {
@@ -416,9 +424,14 @@ describe("Agent model Commands", () => {
       );
     await expect(application.build()).rejects.toThrow(/duplicate.*model|ambiguous.*model/i);
     const revised = AiModel.define({
-      ...proposal.definition,
+      name: proposal.definition.name,
       version: "v2",
+      kind: "generation",
+      input: SupportTicketFactsSchema,
+      output: ProposedSupportReplySchema,
       instructions: "Use the revised support reply policy.",
+      outputMode: "prompt-and-validate",
+      limits: proposal.definition.limits,
     });
     const distinct = await Application.newBuilder()
       .setServerEnvironment(environment)
@@ -1425,19 +1438,19 @@ describe("Agent model Commands", () => {
         authorizeUse: () => true,
         connect: (_scope, identity) => ({ model: {}, identity }),
         execute: async (execution) => {
+          if (!isMessage(execution.input, SupportTicketFactsSchema))
+            throw new TypeError("Support model received a different input type.");
           const attempt = await execution.control.beginAttempt({
             kind: "generation",
             content: create(GenerationRequestSchema, {
-              input: AnyPacker.pack(SupportTicketFactsSchema, execution.input as never),
+              input: AnyPacker.pack(SupportTicketFactsSchema, execution.input),
               instructions: "Draft a support reply.",
               outputSchemaJson: "{}",
               promptJson: "{}",
               digest: create(AiContentDigestSchema, { value: "a".repeat(64) }),
             }),
           });
-          if (
-            (execution.input as { customerQuestion: string }).customerQuestion === "Unavailable"
-          ) {
+          if (execution.input.customerQuestion === "Unavailable") {
             await execution.control.reserveTransport(attempt.id, 40, 80);
             const failure = await execution.control.recordFailure("UNAVAILABLE", true);
             await execution.control.finishAttempt({

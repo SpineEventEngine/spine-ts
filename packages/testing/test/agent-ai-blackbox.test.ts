@@ -20,7 +20,7 @@ import {
   createBackendRegistration,
   type AiMcpProtocolControl,
 } from "@spine-event-engine/ai/spi/adapter";
-import { AnyPacker, EntityQuery } from "@spine-event-engine/core";
+import { AnyPacker, EntityQuery, TypeUrls } from "@spine-event-engine/core";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import {
   AgentHistoryCursorSchema,
@@ -32,6 +32,7 @@ import {
   AgentToolCallStartedSchema,
   AgentToolCallFinishedSchema,
   AgentModelSelectionChangedSchema,
+  AgentIdSchema,
   AiContentDigestSchema,
   AiModelKind,
   AiOutcome,
@@ -241,9 +242,7 @@ class RecordingHistoryFactory extends InMemoryStorageFactory {
 
   private agentCommitStorage?: EntityCommitStorage;
 
-  private agentInput?: EntityStorageInput<SupportReplyAgentId, Message>;
-
-  private pendingSeed?: SupportReplyAgentId;
+  private pendingSeed: SupportReplyAgentId | undefined;
 
   private savedSeed?: ModelCall;
 
@@ -278,7 +277,6 @@ class RecordingHistoryFactory extends InMemoryStorageFactory {
   ): EntityCommitStorage {
     const storage = super.createEntityCommitStorage(input);
     if (input.stateSchema.typeName === SupportReplyAgentStateSchema.typeName) {
-      this.agentInput = input as EntityStorageInput<SupportReplyAgentId, Message>;
       this.agentCommitStorage = storage;
       return {
         readAgentCurrent: async (id) => {
@@ -316,10 +314,12 @@ class RecordingHistoryFactory extends InMemoryStorageFactory {
    * @param id Agent receiving the direct command.
    */
   private async writePendingSeed(id: SupportReplyAgentId): Promise<void> {
-    const input = this.agentInput;
     const storage = this.agentCommitStorage;
-    if (input === undefined || storage === undefined) throw new Error("Agent storage is absent.");
-    const agent = AgentAttributes.id(input, id);
+    if (storage === undefined) throw new Error("Agent storage is absent.");
+    const agent = create(AgentIdSchema, {
+      stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+      entityId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
+    });
     const call = create(ModelCallSchema, {
       id: { value: "pending-before-direct-turn" },
       replyContext: { value: "AiSupport" },

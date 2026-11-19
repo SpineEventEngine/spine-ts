@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, type Message } from "@bufbuild/protobuf";
+import { clone, create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
@@ -26,6 +26,7 @@ import {
   EventIdSchema,
   EventSchema,
   MessageIdSchema,
+  OriginSchema,
   UserIdSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
@@ -214,15 +215,22 @@ export function modelRequest(callId: string, time: Timestamp): AgentHistoryEntry
   });
   const source = event(`trigger-${callId}`, time, false).item;
   if (source.case !== "domainEvent") throw new Error("Model request fixture requires an Event.");
+  const context = clone(EventContextSchema, source.value.context ?? create(EventContextSchema));
+  context.timestamp = time;
+  context.producerId = packed(SupportReplyAgentIdSchema, ticket);
+  context.version = create(VersionSchema, { number: 3 });
+  context.origin = {
+    case: "pastMessage",
+    value: create(OriginSchema, {
+      message: create(MessageIdSchema, {
+        id: packed(CommandIdSchema, create(CommandIdSchema, { uuid: `root-${callId}` })),
+        typeUrl: TypeUrls.derive(CommandSchema),
+      }),
+    }),
+  };
   const originalSource = create(EventSchema, {
     ...source.value,
-    context: create(EventContextSchema, {
-      ...source.value.context,
-      timestamp: time,
-      producerId: packed(SupportReplyAgentIdSchema, ticket),
-      version: create(VersionSchema, { number: 3 }),
-      rootCommandId: create(CommandIdSchema, { uuid: `root-${callId}` }),
-    }),
+    context,
   });
   return create(AgentHistoryEntrySchema, {
     whenOccurred: time,

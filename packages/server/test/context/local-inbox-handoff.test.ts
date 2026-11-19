@@ -242,22 +242,6 @@ describe("DeliveryReadiness", () => {
     await closing;
     expect(closed).toBe(true);
   });
-
-  it("keeps deferred routes until capacity is available and discards them on close", async () => {
-    const sharedWake = vi.fn();
-    const shared = { wake: sharedWake } as unknown as Delivery;
-    const onWake = vi.fn();
-    const readiness = new DeliveryReadiness(undefined, shared, onWake);
-    readiness.defer(ready());
-    expect(onWake).not.toHaveBeenCalled();
-    readiness.retryDeferred();
-    expect(onWake).toHaveBeenCalledOnce();
-    readiness.defer(ready());
-    await readiness.close();
-    readiness.retryDeferred();
-    expect(onWake).toHaveBeenCalledOnce();
-    expect(sharedWake).not.toHaveBeenCalled();
-  });
 });
 
 function ready(tenantId?: string): DeliveryReady {

@@ -98,6 +98,7 @@ describe("Agent history binding", () => {
       capacity: {},
       append: () => Promise.resolve(),
       appendAll: () => Promise.resolve(),
+      readModelRequest: () => Promise.resolve(undefined),
       read: (request) => {
         expect(request.entityId).toEqual(id);
         expect(["full", "conversation"]).toContain(request.view.kind);
@@ -285,6 +286,7 @@ describe("Agent history binding", () => {
         capacity: {},
         append: () => Promise.resolve(),
         appendAll: () => Promise.resolve(),
+        readModelRequest: () => Promise.resolve(undefined),
         read: () => Promise.resolve(saved),
         close: () => undefined,
       },
@@ -299,6 +301,7 @@ describe("Agent history binding", () => {
         capacity: {},
         append: () => Promise.resolve(),
         appendAll: () => Promise.resolve(),
+        readModelRequest: () => Promise.resolve(undefined),
         read: () => {
           liveReads += 1;
           return Promise.resolve(saved);
@@ -348,6 +351,7 @@ describe("Agent history binding", () => {
         capacity: {},
         append: () => Promise.resolve(),
         appendAll: () => Promise.resolve(),
+        readModelRequest: () => Promise.resolve(undefined),
         read: (request) =>
           Promise.resolve(
             request.after === undefined
@@ -541,6 +545,7 @@ describe("Agent history binding", () => {
       capacity: {},
       append: () => Promise.resolve(),
       appendAll: () => Promise.resolve(),
+      readModelRequest: () => Promise.resolve(undefined),
       read: () => Promise.resolve({ entries: [], hasMore: true }),
       close: () => undefined,
     };
@@ -579,6 +584,7 @@ describe("Agent history binding", () => {
         capacity: {},
         append: () => Promise.resolve(),
         appendAll: () => Promise.resolve(),
+        readModelRequest: () => Promise.resolve(undefined),
         read,
         close: () => undefined,
       },
@@ -614,6 +620,7 @@ describe("Agent history binding", () => {
         capacity: {},
         append: () => Promise.resolve(),
         appendAll: () => Promise.resolve(),
+        readModelRequest: () => Promise.resolve(undefined),
         read: () => Promise.resolve({ entries: [wrong], hasMore: false }),
         close: () => undefined,
       },
@@ -634,6 +641,7 @@ describe("Agent history binding", () => {
         capacity: {},
         append: () => Promise.resolve(),
         appendAll: () => Promise.resolve(),
+        readModelRequest: () => Promise.resolve(undefined),
         read: () =>
           Promise.resolve({
             entries: [

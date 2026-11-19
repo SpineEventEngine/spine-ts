@@ -14,7 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyPacker } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { AiModelKind, ModelPreferenceSchema } from "@spine-event-engine/proto/agent";
 import { VersionSchema } from "@spine-event-engine/proto";
 import { TenantIdSchema } from "@spine-event-engine/proto";
@@ -39,14 +39,17 @@ import { StoragePreparations } from "../../src/internal/storage-preparation.js";
 import { TenantBoundary } from "../../src/internal/tenancy.js";
 import { AgentHistoryMutationQueue } from "../../src/memory/agent-history-mutation-queue.js";
 import { vi } from "vitest";
-import { agentAttributes, entityInput } from "./agent-live-fixtures.js";
+import { agentAttributes } from "./agent-live-fixtures.js";
+import { RecordSpec } from "../../src/record/record-spec.js";
+import type { EntityStorageInput } from "../../src/internal/entity-history.js";
+import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { conversation } from "./agent-history-fixtures.js";
 
 describe("live Agent conditional persistence", () => {
   it("reads current state and complete attributes after the preceding memory mutation", async () => {
     const backend = new InMemoryStorageBackend();
     const factory = new InMemoryStorageFactory(backend);
-    const layout = entityInput();
+    const layout = sourceEntityInput();
     const commits = EntityCommitStorageFactories.create(factory, layout);
     const id = createAgentId();
     const entered = Promise.withResolvers<undefined>();
@@ -99,7 +102,7 @@ describe("live Agent conditional persistence", () => {
     const backend = new InMemoryStorageBackend();
     const factory = new InMemoryStorageFactory(backend);
     const layout = {
-      ...entityInput(),
+      ...sourceEntityInput(),
       context: {
         name: "Support",
         multitenant: true as const,
@@ -123,7 +126,7 @@ describe("live Agent conditional persistence", () => {
 
   it("distinguishes absent preferences from a stale snapshot without Entity state", async () => {
     const factory = new InMemoryStorageFactory();
-    const commits = EntityCommitStorageFactories.create(factory, entityInput());
+    const commits = EntityCommitStorageFactories.create(factory, sourceEntityInput());
     const entityId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-live" });
     const preferences = [
       create(ModelPreferenceSchema, {
@@ -163,7 +166,7 @@ describe("live Agent conditional persistence", () => {
 
   it("commits changed Agent state and final audit together, then rejects stale state", async () => {
     const factory = new InMemoryStorageFactory();
-    const layout = { ...entityInput(), stateHistory: true };
+    const layout = { ...sourceEntityInput(), stateHistory: true };
     const commits = EntityCommitStorageFactories.create(factory, layout);
     const history = AgentHistoryStorageFactories.create(factory, {
       context: layout.context,
@@ -223,7 +226,7 @@ describe("live Agent conditional persistence", () => {
     const backend = new InMemoryStorageBackend();
     const firstFactory = new InMemoryStorageFactory(backend);
     const secondFactory = new InMemoryStorageFactory(backend);
-    const layout = { ...entityInput(), stateHistory: true };
+    const layout = { ...sourceEntityInput(), stateHistory: true };
     const first = EntityCommitStorageFactories.create(firstFactory, layout);
     const second = EntityCommitStorageFactories.create(secondFactory, layout);
     const states = firstFactory.createEntityStorage(layout) as InMemoryEntityStorage<
@@ -325,8 +328,8 @@ describe("live Agent conditional persistence", () => {
     const backend = new InMemoryStorageBackend();
     const firstFactory = new InMemoryStorageFactory(backend);
     const secondFactory = new InMemoryStorageFactory(backend);
-    const first = EntityCommitStorageFactories.create(firstFactory, entityInput());
-    const second = EntityCommitStorageFactories.create(secondFactory, entityInput());
+    const first = EntityCommitStorageFactories.create(firstFactory, sourceEntityInput());
+    const second = EntityCommitStorageFactories.create(secondFactory, sourceEntityInput());
     const entityId = createAgentId();
     const selection = [
       create(ModelPreferenceSchema, {
@@ -372,7 +375,7 @@ describe("live Agent conditional persistence", () => {
 
   it("drains a turn admitted before a reentrant factory close", async () => {
     const factory = new InMemoryStorageFactory();
-    const original = entityInput();
+    const original = sourceEntityInput();
     let closing: Promise<void> | undefined;
     const layout = {
       ...original,
@@ -401,4 +404,34 @@ describe("live Agent conditional persistence", () => {
 
 function createAgentId() {
   return create(SupportReplyAgentIdSchema, { ticketNumber: "T-live-commit" });
+}
+
+/**
+ * Builds the source-package layout used by internal memory storage tests.
+ *
+ * @returns Typed Support Agent Entity layout.
+ */
+function sourceEntityInput(): EntityStorageInput<SupportReplyAgentId, SupportReplyAgentState> {
+  return {
+    context: { name: "Support", multitenant: false },
+    id: {
+      clone: (id) => create(SupportReplyAgentIdSchema, { ticketNumber: id.ticketNumber }),
+      key: (id) => id.ticketNumber,
+      pack: (id) => AnyPacker.pack(SupportReplyAgentIdSchema, id),
+      unpack: (value) => AnyPacker.tryUnpack(value, SupportReplyAgentIdSchema),
+    },
+    columns: [],
+    recordSpec: new RecordSpec<SupportReplyAgentId, EntityRecord>({
+      sourceType: SupportReplyAgentStateSchema,
+      recordType: EntityRecordSchema,
+      idSchema: SupportReplyAgentIdSchema,
+      extractId: (record) => {
+        if (record.entityId?.typeUrl !== TypeUrls.derive(SupportReplyAgentIdSchema))
+          throw new TypeError("Support Agent current record requires its typed ID.");
+        return AnyPacker.unpack(record.entityId, SupportReplyAgentIdSchema);
+      },
+    }),
+    sourceType: SupportReplyAgentStateSchema,
+    stateSchema: SupportReplyAgentStateSchema,
+  };
 }

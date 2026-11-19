@@ -197,7 +197,7 @@ export class ModelCommandSession implements AgentModelCommands {
       input: AnyPacker.pack(definition.definition.input, request.input),
     });
     this.#created.set(id, clone(CallModelSchema, command));
-    return command;
+    return clone(CallModelSchema, command);
   }
 
   /**

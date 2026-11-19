@@ -17,11 +17,12 @@ import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import type { ModelCall, ModelPreference } from "@spine-event-engine/proto/agent";
 import { VersionSchema } from "@spine-event-engine/proto";
 import { expect } from "vitest";
-import type { StorageFactory } from "@spine-event-engine/storage";
+import { RecordSpec, type StorageFactory } from "@spine-event-engine/storage";
 import {
   AgentAttributes,
   EntityCommitStorageFactories,
   type AgentAttributesRecord,
+  type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
 import {
   EntityRecordSchema,
@@ -38,8 +39,6 @@ import {
   type SupportReplyAgentId,
   type SupportReplyAgentState,
 } from "../../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
-import type { EntityStorageInput } from "../../src/internal/entity-history.js";
-import { RecordSpec } from "../../src/record/record-spec.js";
 
 const idTypeUrl = TypeUrls.derive(SupportReplyAgentIdSchema);
 
