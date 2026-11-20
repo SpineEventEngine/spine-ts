@@ -169,6 +169,49 @@ function connectSelected(
 }
 
 describe("Agent model authorization scope", () => {
+  it("reports a missing required deployment without running connection hooks", async () => {
+    const authorized = vi.fn(() => true);
+    const resolveIdentity = vi.fn();
+    const { registry } = selectionRegistry(authorized, resolveIdentity, false);
+    await expect(
+      AgentModelSelection.selectLiveKind(
+        registry,
+        { models: [proposal] },
+        supportScope(),
+        [],
+        new AbortController().signal,
+        undefined,
+        "generation",
+        AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
+      ),
+    ).rejects.toThrow("generation has no deployment default");
+    expect(resolveIdentity).not.toHaveBeenCalled();
+    expect(authorized).not.toHaveBeenCalled();
+  });
+
+  it("does not start connection or hook work after cancellation or expiry", async () => {
+    const authorized = vi.fn(() => true);
+    const resolveIdentity = vi.fn();
+    const { registry, primary } = selectionRegistry(authorized, resolveIdentity);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      connectSelected(registry, primary, supportScope(), controller.signal, undefined),
+    ).rejects.toThrow("cancelled");
+    await expect(
+      AgentModelSelection.awaitHook(Promise.resolve("result"), controller.signal, undefined),
+    ).rejects.toThrow("cancelled");
+    await expect(
+      AgentModelSelection.awaitHook(
+        Promise.resolve("result"),
+        new AbortController().signal,
+        Time.currentTimeMillis() - 1,
+      ),
+    ).rejects.toThrow("expired");
+    expect(resolveIdentity).not.toHaveBeenCalled();
+    expect(authorized).not.toHaveBeenCalled();
+  });
+
   it("keeps absent selection distinct from a resolver exception", async () => {
     const { registry } = selectionRegistry(() => true, undefined, false);
     const source = AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema));

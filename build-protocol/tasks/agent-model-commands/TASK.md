@@ -345,10 +345,22 @@ the previous global gate and passes with the targeted gate. Production behavior,
 existing timeout values, coverage thresholds and exclusions were unchanged by
 these verification corrections.
 
-All feature commits are pushed to official `origin`. GitHub Build CI remains
-pending: no PR exists, and that workflow starts on PRs to `master`. PR creation
-and merge require explicit human instructions. This local acceptance does not
-claim a GitHub CI result or publication readiness on `master`.
+All feature commits are pushed to official `origin`. The human created
+[PR #27](https://github.com/SpineEventEngine/spine-ts/pull/27) and requested CI
+monitoring and corrections on 2026-11-20. While CI ran, a local test/coverage run
+without live provider services reproduced the CI environment's branch-coverage
+gap. GitHub run `44711052832` then confirmed the same coverage-only failure;
+all applicable tests passed and the publication trial was skipped. The previous
+acceptance run used live databases. This is a test-only
+correction: portable tests now cover protected Agent reads, source and operation
+identity, physical byte accounting, MCP admission, and model selection failure
+paths. New fixtures use valid typed scope/backend values. The existing
+Sol/medium implementer completed the bounded correction; focused tests and
+coverage, tooling types, affected lint/formatting, cleanup and diff checks passed.
+The saved LCOV comparison closes the measured gap. Thresholds and live checks
+remain unchanged. Full no-provider release verification and GitHub verification/
+publication trial must confirm the corrective revision. PR merge remains a
+human action.
 
 ## Implementation seams
 

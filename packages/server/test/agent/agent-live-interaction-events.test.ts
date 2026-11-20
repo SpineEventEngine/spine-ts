@@ -12,10 +12,10 @@
  * the License.
  */
 
-import { create, toBinary } from "@bufbuild/protobuf";
+import { clone, create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
-import { CommandIdSchema } from "@spine-event-engine/proto";
+import { CommandIdSchema, CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
   AgentModelSelectionChangedSchema,
   AiConnectionIdentitySchema,
@@ -29,6 +29,7 @@ import { AgentLiveInteractionEvents } from "../../src/agent/agent-live-interacti
 import type { AgentLiveInvocation } from "../../src/agent/agent-live-inputs.js";
 import { SignalMetadata } from "../../src/runtime/signal-metadata.js";
 import { DraftSupportReplySchema } from "../../test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
+import { SupportReplyDraftedSchema } from "../../test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
 import {
   SupportReplyAgentIdSchema,
   SupportReplyAgentStateSchema,
@@ -112,5 +113,91 @@ describe("live Agent interaction facts", () => {
         payload,
       ),
     ).toThrow(/producer/);
+  });
+
+  it("rejects changed Agent identity and operation metadata before creating an audit reference", () => {
+    expect(() =>
+      AgentLiveInteractionEvents.operationRef(
+        { ...invocation, stateType: "different.State" },
+        operation,
+        SupportReplyAgentStateSchema,
+        selected,
+      ),
+    ).toThrow("state type");
+    expect(() =>
+      AgentLiveInteractionEvents.operationRef(
+        { ...invocation, recipientId: create(AnySchema) },
+        operation,
+        SupportReplyAgentStateSchema,
+        selected,
+      ),
+    ).toThrow("typed Agent ID");
+    expect(() =>
+      AgentLiveInteractionEvents.operationRef(
+        { ...invocation },
+        { ...operation, operation: create(AiOperationIdSchema) },
+        SupportReplyAgentStateSchema,
+        selected,
+      ),
+    ).toThrow("operation and conversation");
+    expect(() =>
+      AgentLiveInteractionEvents.operationRef(
+        invocation,
+        { ...operation, conversation: create(ConversationIdSchema) },
+        SupportReplyAgentStateSchema,
+        selected,
+      ),
+    ).toThrow("operation and conversation");
+    const invalidSelection = { ...selected };
+    Reflect.set(invalidSelection, "kind", AiModelKind.AI_MODEL_KIND_UNSPECIFIED);
+    expect(() =>
+      AgentLiveInteractionEvents.operationRef(
+        invocation,
+        operation,
+        SupportReplyAgentStateSchema,
+        invalidSelection,
+      ),
+    ).toThrow("selected model and kind");
+  });
+
+  it("rejects incomplete original Command and Event envelopes before recording causation", () => {
+    const missingCommandId = clone(CommandSchema, source);
+    missingCommandId.id = undefined;
+    expect(() =>
+      AgentLiveInteractionEvents.sourceRef({
+        ...invocation,
+        source: { case: "command", value: missingCommandId },
+      }),
+    ).toThrow("source Command ID");
+    const missingCommandPayload = clone(CommandSchema, source);
+    missingCommandPayload.message = undefined;
+    expect(() =>
+      AgentLiveInteractionEvents.sourceRef({
+        ...invocation,
+        source: { case: "command", value: missingCommandPayload },
+      }),
+    ).toThrow("source payload type");
+
+    const originalEvent = SignalEnvelopes.event({
+      schema: SupportReplyDraftedSchema,
+      message: create(SupportReplyDraftedSchema, { agent: id, reply: "Review this reply." }),
+      context: metadata.eventContext({}),
+    });
+    const missingEventId = clone(EventSchema, originalEvent);
+    missingEventId.id = undefined;
+    expect(() =>
+      AgentLiveInteractionEvents.sourceRef({
+        ...invocation,
+        source: { case: "event", value: missingEventId },
+      }),
+    ).toThrow("source Event ID");
+    const missingEventPayload = clone(EventSchema, originalEvent);
+    missingEventPayload.message = undefined;
+    expect(() =>
+      AgentLiveInteractionEvents.sourceRef({
+        ...invocation,
+        source: { case: "event", value: missingEventPayload },
+      }),
+    ).toThrow("source payload type");
   });
 });

@@ -87,4 +87,29 @@ describe("live Agent invocation budget", () => {
     }).toThrow("receipt byte counts disagree");
     budget.settlePhysical(ticket, 4);
   });
+
+  it("rejects byte exhaustion before reserving another physical request", () => {
+    const inputBudget = new AgentLiveBudget({ totalInputBytes: 4 });
+    const first = inputBudget.reservePhysical(4, undefined, "model");
+    expect(() => inputBudget.reservePhysical(1, undefined, "model")).toThrow("input byte budget");
+    inputBudget.settlePhysical(first, 0);
+    const outputBudget = new AgentLiveBudget({ totalOutputBytes: 1 });
+    outputBudget.reservePhysical(0, 1, "protocol");
+    expect(() => outputBudget.reservePhysical(0, 1, "model")).toThrow("output byte credit");
+  });
+
+  it("rejects measurements on a settled physical ticket and invalid byte counts", () => {
+    const budget = new AgentLiveBudget({});
+    const ticket = budget.reservePhysical(0, 3, "protocol");
+    budget.settlePhysical(ticket, 1);
+    expect(() => {
+      budget.onReceived(ticket, 1);
+    }).toThrow("no longer active");
+    expect(() => {
+      budget.settlePhysical(ticket, 1);
+    }).toThrow("no longer active");
+    expect(() => budget.reservePhysical(-1, undefined, "model")).toThrow(
+      "nonnegative safe integer",
+    );
+  });
 });

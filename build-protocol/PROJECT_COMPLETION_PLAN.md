@@ -9,8 +9,10 @@ Entity state, and preserve call history and application-controlled steering.
 Durable outgoing Command publication is explicitly rejected. Implementation,
 three sequential fresh no-memory Astra/high reviews and their corrections, live
 provider checks, and local release verification are complete. All changes are
-pushed. GitHub Build CI awaits a human-authorized PR. No GitHub PR or issue
-changes are authorized.
+pushed. The human created [PR #27](https://github.com/SpineEventEngine/spine-ts/pull/27)
+and authorized CI monitoring and corrections. A coverage run without live
+provider services exposed a portability gap in the test coverage; that bounded
+correction and final-revision CI are in progress. PR merge remains a human action.
 
 Previous implementation: [Application API and lifecycle](tasks/application-migration/TASK.md)
 on `application-migration`, synchronized with official master `963282d10`.
