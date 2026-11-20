@@ -40,12 +40,17 @@ describe("generated rejection documentation", () => {
     );
   });
 
-  it("ignores non-rejection, frozen delivery, and nested-only message files", () => {
+  it("does not generate core-dependent companions for public framework rejections", () => {
     let generated = 0;
     const schema = {
       files: [
         { proto: { name: "message_board.proto" }, messages: [], name: "chat" },
         { proto: { name: "spine/delivery/rejections.proto" }, messages: [], name: "delivery" },
+        {
+          proto: { name: "spine/agent/rejections.proto" },
+          messages: [{ parent: undefined }],
+          name: "agent/rejections",
+        },
         {
           proto: { name: "chat/rejections.proto" },
           messages: [{ parent: {} }],

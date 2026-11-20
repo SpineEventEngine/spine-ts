@@ -17,6 +17,7 @@ import { type MessageSchema } from "@spine-event-engine/core";
 import type { Event } from "@spine-event-engine/proto";
 import {
   AgentHistoryEntrySchema,
+  AgentIdSchema,
   AgentInvocationTerminatedSchema,
   type AgentHistoryEntry,
   type AgentInvocationTerminated,
@@ -44,24 +45,19 @@ export class AgentLiveAudit<Id> {
    * @param invocation Original typed source and recipient.
    * @param stateSchema Generated Agent state descriptor.
    * @param entityId Typed Agent identifier for history writes.
-   * @param agentKey Canonical Agent storage key.
    * @param history Retained immutable audit storage.
    * @param metadata Signal ID, Time, and causal context service.
    * @param onRegisterSchema Registers the System payload type before publication.
    * @param onPublish Publishes the original Event after its audit group commits.
-
-   * @param checkSession Callback that validates the current execution session.
-  */
+   */
   constructor(
     private readonly invocation: AgentLiveInvocation,
     private readonly stateSchema: MessageSchema,
     private readonly entityId: Id,
-    private readonly agentKey: string,
     private readonly history: AgentHistoryStorage<Id>,
     private readonly metadata: SignalMetadata,
     private readonly onRegisterSchema: (schema: MessageSchema) => void,
     private readonly onPublish: (event: Event) => Promise<void>,
-    private readonly checkSession: () => Promise<void> = () => Promise.resolve(),
   ) {}
 
   /**
@@ -100,9 +96,11 @@ export class AgentLiveAudit<Id> {
       payload,
     );
     const entries = [...history, this.entry(event)];
-    const sizes = entries.map((entry) =>
-      AgentHistoryRecords.bytes(this.invocation.stateType, this.agentKey, entry),
-    );
+    const agent = create(AgentIdSchema, {
+      stateTypeUrl: this.invocation.stateType,
+      entityId: this.invocation.recipientId,
+    });
+    const sizes = entries.map((entry) => AgentHistoryRecords.bytes(agent, entry));
     const capacity = this.history.capacity;
     const maxRecord = capacity.historyRecordBytes;
     if (maxRecord !== undefined && sizes.some((size) => size > maxRecord))
@@ -112,10 +110,8 @@ export class AgentLiveAudit<Id> {
       sizes.reduce((sum, size) => sum + size, 0) > capacity.transactionPayloadBytes
     )
       throw new RangeError("Agent audit history group exceeds provider capacity.");
-    await this.checkSession();
     this.onRegisterSchema(schema);
     await this.history.appendAll(this.entityId, entries);
-    await this.checkSession();
     await this.onPublish(event);
   }
 
@@ -143,7 +139,7 @@ export class AgentLiveAudit<Id> {
     const occurredAt = event.context?.timestamp;
     if (occurredAt === undefined) throw new Error("Agent audit Event requires Time.");
     return create(AgentHistoryEntrySchema, {
-      occurredAt,
+      whenOccurred: occurredAt,
       item: { case: "systemEvent", value: event },
     });
   }

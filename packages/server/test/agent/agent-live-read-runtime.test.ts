@@ -13,12 +13,14 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { TypeUrls } from "@spine-event-engine/core";
 import { QuerySchema } from "@spine-event-engine/proto/client";
 import { describe, expect, it, vi } from "vitest";
 import { AgentLiveBudget } from "../../src/agent/agent-live-budget.js";
 import { AgentLiveReadRuntime } from "../../src/agent/agent-live-read-runtime.js";
 import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import { modelRequest } from "../../../storage/test/entity/agent-history-fixtures.js";
 
 const scope = {
   context: "Projects",
@@ -102,5 +104,45 @@ describe("live Agent reads", () => {
     reads.finish();
     await expect(reads.query(ProjectOverviewStateSchema, query, live)).rejects.toThrow("closed");
     expect(live).toHaveBeenCalledOnce();
+  });
+
+  it("rejects invalid history page bounds before reading and oversized responses afterward", async () => {
+    const reads = new AgentLiveReadRuntime(scope, new AgentLiveBudget({ recordedReads: 3 }));
+    const live = vi.fn(() => Promise.resolve(page));
+    await expect(reads.history(scope, { pageSize: 0 }, live, undefined)).rejects.toThrow(
+      "pageSize",
+    );
+    await expect(reads.history(scope, { pageSize: 1 }, live, 0)).rejects.toThrow("maxBytes");
+    expect(live).not.toHaveBeenCalled();
+    const entry = modelRequest("oversized-response", create(TimestampSchema, { seconds: 1n }));
+    await expect(
+      reads.history(
+        scope,
+        { pageSize: 1 },
+        () => Promise.resolve({ entries: [entry], hasMore: false }),
+        1,
+      ),
+    ).rejects.toThrow("exceeds maxBytes");
+    reads.finish();
+  });
+
+  it("rejects substituted Agent read scopes and query targets without invoking providers", async () => {
+    const live = vi.fn(() => Promise.resolve(page));
+    for (const key of ["context", "tenant", "repository", "entity"] as const) {
+      const reads = new AgentLiveReadRuntime(scope, new AgentLiveBudget({ recordedReads: 1 }));
+      await expect(
+        reads.history({ ...scope, [key]: "different" }, { pageSize: 1 }, live, undefined),
+      ).rejects.toThrow("scope changed");
+      reads.finish();
+    }
+    const reads = new AgentLiveReadRuntime(scope, new AgentLiveBudget({ recordedReads: 1 }));
+    const query = create(QuerySchema, { target: { type: "different.State" } });
+    const queryLive = vi.fn(() => Promise.resolve([]));
+    await expect(reads.query(ProjectOverviewStateSchema, query, queryLive)).rejects.toThrow(
+      "target type changed",
+    );
+    expect(live).not.toHaveBeenCalled();
+    expect(queryLive).not.toHaveBeenCalled();
+    reads.finish();
   });
 });

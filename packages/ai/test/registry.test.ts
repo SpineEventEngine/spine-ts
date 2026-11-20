@@ -71,8 +71,6 @@ describe("application AI registry", () => {
     const registry = AiRegistry.create({
       defaultModels: {},
       invocationLimits: {},
-      concurrentOperations: 1,
-      queuedOperations: 0,
     });
     expect(registryOptions(registry).invocationLimits).toEqual({});
     expect(registryOptions(registry).hookTimeoutMs).toBeUndefined();
@@ -81,8 +79,6 @@ describe("application AI registry", () => {
     const registry = AiRegistry.create({
       defaultModels: {},
       invocationLimits: limits,
-      concurrentOperations: 1,
-      queuedOperations: 0,
     });
     expect(() =>
       registry.register({ ref: ModelRef.of("fake", "v1"), kind: "generation" } as never),
@@ -91,40 +87,30 @@ describe("application AI registry", () => {
       AiRegistry.create({
         defaultModels: {},
         invocationLimits: { ...limits, totalOutputBytes: 0 },
-        concurrentOperations: 1,
-        queuedOperations: 0,
       }),
     ).toThrow("totalOutputBytes");
     expect(() =>
       AiRegistry.create({
         defaultModels: {},
         invocationLimits: null,
-        concurrentOperations: 1,
-        queuedOperations: 0,
       } as never),
     ).toThrow("invocationLimits must be an object");
     expect(() =>
       AiRegistry.create({
         defaultModels: undefined,
         invocationLimits: limits,
-        concurrentOperations: 1,
-        queuedOperations: 0,
       } as never),
     ).toThrow("defaultModels are required");
     expect(() =>
       AiRegistry.create({
         defaultModels: { generation: create(ModelRefSchema, { revision: { value: "v1" } }) },
         invocationLimits: limits,
-        concurrentOperations: 1,
-        queuedOperations: 0,
       }),
     ).toThrow("name must be nonblank");
     expect(() =>
       AiRegistry.create({
         defaultModels: { generation: create(ModelRefSchema, { name: { value: "writer" } }) },
         invocationLimits: limits,
-        concurrentOperations: 1,
-        queuedOperations: 0,
       }),
     ).toThrow("revision must be nonblank");
     const deploymentOnce = deployment("same");
@@ -139,8 +125,6 @@ describe("application AI registry", () => {
     const registry = AiRegistry.create({
       defaultModels: { generation: ModelRef.of("app", "v1") },
       invocationLimits: limits,
-      concurrentOperations: 1,
-      queuedOperations: 0,
     })
       .register(app)
       .register(repo)
@@ -182,8 +166,6 @@ describe("application AI registry", () => {
     const registry = AiRegistry.create({
       defaultModels: { generation: ModelRef.of("app", "v1") },
       invocationLimits: limits,
-      concurrentOperations: 1,
-      queuedOperations: 0,
     })
       .register(deployment("app"))
       .register(deployment("other"));
@@ -201,8 +183,6 @@ describe("application AI registry", () => {
     const registry = AiRegistry.create({
       defaultModels: {},
       invocationLimits: limits,
-      concurrentOperations: 1,
-      queuedOperations: 0,
     }).register(
       createBackendRegistration({
         ...deployment("unused"),
@@ -251,8 +231,6 @@ describe("application AI registry", () => {
       AiRegistry.create({
         defaultModels: {},
         invocationLimits: limits,
-        concurrentOperations: 1,
-        queuedOperations: 0,
       }).registerTools({ id: "fake" } as never),
     ).toThrow("factory");
     expect(() =>
@@ -296,8 +274,6 @@ describe("application AI registry", () => {
     const options = {
       defaultModels: { generation: ModelRef.of("missing", "v1") },
       invocationLimits: limits,
-      concurrentOperations: 2,
-      queuedOperations: 1,
     };
     const registry = AiRegistry.create(options);
     expect(() => {
@@ -315,20 +291,12 @@ describe("application AI registry", () => {
     options.invocationLimits.operations = 100;
     expect(registryOptions(registry).invocationLimits?.operations).toBe(2);
     expect(() => AiRegistry.create({ ...options, hookTimeoutMs: 1001 })).toThrow("hookTimeoutMs");
-    expect(() => AiRegistry.create({ ...options, concurrentOperations: 0 })).toThrow(
-      "concurrentOperations",
-    );
-    expect(() => AiRegistry.create({ ...options, queuedOperations: -1 })).toThrow(
-      "queuedOperations",
-    );
   });
 
   it("rejects absent, mismatched, unregistered and unsupported selections", () => {
     const registry = AiRegistry.create({
       defaultModels: {},
       invocationLimits: limits,
-      concurrentOperations: 1,
-      queuedOperations: 0,
     }).register(deployment("valid"));
     expect(() => selectDeployment(registry, { kind: "generation", models: [capability] })).toThrow(
       "default",

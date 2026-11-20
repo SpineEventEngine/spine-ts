@@ -13,10 +13,12 @@
  */
 
 import { createHash } from "node:crypto";
-import { clone, toBinary } from "@bufbuild/protobuf";
-import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
-import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
-import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+import { toBinary } from "@bufbuild/protobuf";
+import {
+  AgentHistoryEntrySchema,
+  type AgentHistoryEntry,
+  type AgentId,
+} from "@spine-event-engine/proto/agent";
 import {
   AgentHistoryKeys,
   AgentHistoryPages,
@@ -77,7 +79,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
    */
   constructor(
     private readonly input: AgentHistoryStorageInput<Id>,
-    private readonly records: DatastoreRecordStorage<string, AgentHistoryRecord>,
+    private readonly records: DatastoreRecordStorage<string, AgentHistoryEntry>,
     private readonly onAdmit: (work: () => Promise<void>) => Promise<void> = (work) => work(),
   ) {}
 
@@ -103,18 +105,15 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
     entries: readonly AgentHistoryEntry[],
   ): Promise<void> {
     this.requireOpen();
-    const key = this.key(entityId);
-    const unique = new Map<string, AgentHistoryRecord>();
+    const agent = this.input.agent(entityId);
+    const unique = new Map<string, AgentHistoryEntry>();
     for (const entry of entries) {
       if (AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry)).length > 1500)
         throw new RangeError(
           "Agent history ordering key exceeds the Datastore indexed-value limit.",
         );
-      const record = clone(
-        AgentHistoryRecordSchema,
-        AgentHistoryRecords.record(this.input.stateType, key, entry),
-      );
-      if (toBinary(AgentHistoryRecordSchema, record).length > 1_000_000)
+      const record = AgentHistoryRecords.capture(agent, entry);
+      if (toBinary(AgentHistoryEntrySchema, record).length > 1_000_000)
         throw new RangeError("Agent history record exceeds the Datastore entity limit.");
       const slot = AgentHistoryRecords.slot(record);
       const prior = unique.get(slot);
@@ -132,7 +131,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
    * @param records Complete persisted record group.
    * @returns Completion after immutable rows commit in one native transaction.
    */
-  private async commitGroup(records: readonly AgentHistoryRecord[]): Promise<void> {
+  private async commitGroup(records: readonly AgentHistoryEntry[]): Promise<void> {
     const rows = records.map((record) => this.records.transactionEntity(record));
     this.validateNativeGroup(rows);
     const tx = this.records.transaction();
@@ -163,7 +162,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
    */
   private validateNativeGroup(
     rows: readonly ReturnType<
-      DatastoreRecordStorage<string, AgentHistoryRecord>["transactionEntity"]
+      DatastoreRecordStorage<string, AgentHistoryEntry>["transactionEntity"]
     >[],
   ): void {
     if (rows.length > 25)
@@ -196,7 +195,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
     this.requireOpen();
     if (AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry)).length > 1500)
       throw new RangeError("Agent history ordering key exceeds the Datastore indexed-value limit.");
-    const record = AgentHistoryRecords.record(this.input.stateType, this.key(entityId), entry);
+    const record = AgentHistoryRecords.capture(this.input.agent(entityId), entry);
     const id = AgentHistoryHash.value(AgentHistoryRecords.slot(record));
     if (await this.records.compareAndSet(id, undefined, record)) return;
     const stored = await this.records.read(id);
@@ -212,13 +211,30 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
    */
   async read(request: AgentHistoryRead<Id>): Promise<AgentHistoryPage> {
     this.requireOpen();
-    const agentKey = this.key(request.entityId);
+    const agent = this.input.agent(request.entityId);
     const after =
       request.after === undefined ? undefined : AgentHistoryKeys.indexValue(request.after);
     this.validateView(request);
-    return AgentHistoryPages.read(request, after, (cursor, limit) =>
-      this.fetch(agentKey, request, cursor, limit),
+    return AgentHistoryPages.read(request, agent, after, (cursor, limit) =>
+      this.fetch(agent, request, cursor, limit),
     );
+  }
+
+  /**
+   * Reads a prepared request by its exact immutable primary identity.
+   *
+   * @param entityId Typed Agent identifier.
+   * @param callId Logical model call ID.
+   * @returns Original prepared request entry when present.
+   */
+  async readModelRequest(entityId: Id, callId: string): Promise<AgentHistoryEntry | undefined> {
+    this.requireOpen();
+    const agent = this.input.agent(entityId);
+    const slot = AgentHistoryHash.value(AgentHistoryRecords.requestSlot(agent, callId));
+    const record = await this.records.read(slot);
+    return record === undefined
+      ? undefined
+      : AgentHistoryRecords.requestEntry(record, agent, callId);
   }
 
   /**
@@ -233,28 +249,28 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
   /**
    * Reads bounded native pages with complete scope and view predicates.
    *
-   * @param agentKey Canonical Agent key.
+   * @param agent Complete typed Agent identity.
    * @param request View and response bounds.
    * @param after Exclusive encoded order key.
    * @param limit Maximum native rows for this chunk.
    * @returns Complete original stored records.
    */
   private async fetch(
-    agentKey: string,
+    agent: AgentId,
     request: AgentHistoryRead<Id>,
     after: string | undefined,
     limit: number,
-  ): Promise<readonly AgentHistoryRecord[]> {
+  ): Promise<readonly AgentHistoryEntry[]> {
     const filters: DatastoreRangeFilter[] = [
       {
         property: "scope_digest",
         operator: "=",
-        value: AgentHistoryHash.value(AgentHistoryRecords.scope(this.input.stateType, agentKey)),
+        value: AgentHistoryHash.value(AgentHistoryRecords.scope(agent)),
       },
     ];
     this.viewPredicate(request, filters);
     if (after !== undefined) filters.push({ property: "order_key", operator: ">", value: after });
-    const result: AgentHistoryRecord[] = [];
+    const result: AgentHistoryEntry[] = [];
     let cursor: DatastorePageCursor | undefined;
     do {
       const page = await this.records.queryProviderPage({
@@ -263,7 +279,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
         limit: limit - result.length,
         ...(cursor === undefined ? {} : { cursor }),
       });
-      result.push(...page.entries.map(({ record }) => this.assertScope(record, agentKey, request)));
+      result.push(...page.entries.map(({ record }) => this.assertScope(record, agent, request)));
       cursor = page.cursor;
       if (!page.hasMore) break;
     } while (result.length < limit && cursor !== undefined);
@@ -294,21 +310,20 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
    * Rejects a digest collision rather than exposing another repository's row.
    *
    * @param record Decoded original storage envelope.
-   * @param agentKey Complete requested Agent key.
+   * @param agent Complete requested Agent identity.
    * @param request Selected view and conversation.
    * @returns Record after its complete scope is checked.
    */
   private assertScope(
-    record: AgentHistoryRecord,
-    agentKey: string,
+    record: AgentHistoryEntry,
+    agent: AgentId,
     request: AgentHistoryRead<Id>,
-  ): AgentHistoryRecord {
-    if (record.scope?.stateType !== this.input.stateType || record.scope.agentKey !== agentKey)
-      throw new Error("Datastore Agent history scope digest collides.");
+  ): AgentHistoryEntry {
+    AgentHistoryRecords.requireIdentity(record, agent);
     if (
       request.view.kind === "conversation" &&
-      (record.entry?.item.case !== "conversationRecord" ||
-        record.entry.item.value.conversation?.value !== request.view.conversation.value)
+      (record.item.case !== "conversationRecord" ||
+        record.item.value.conversation?.value !== request.view.conversation.value)
     )
       throw new Error("Datastore Agent history conversation digest collides.");
     return record;
@@ -328,18 +343,6 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
   }
 
   /**
-   * Converts a typed Agent ID to its canonical key.
-   *
-   * @param id Typed Agent identifier.
-   * @returns Canonical storage key.
-   */
-  private key(id: Id): string {
-    const key = this.input.id.key(id);
-    if (key.length === 0) throw new TypeError("Agent history Entity ID is required.");
-    return key;
-  }
-
-  /**
    * Rejects calls after this handle closes.
    */
   private requireOpen(): void {
@@ -353,9 +356,9 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
    * @param right Requested complete storage record.
    * @returns Whether both records have identical serialized bytes.
    */
-  private sameRecord(left: AgentHistoryRecord, right: AgentHistoryRecord): boolean {
-    const first = toBinary(AgentHistoryRecordSchema, left);
-    const second = toBinary(AgentHistoryRecordSchema, right);
+  private sameRecord(left: AgentHistoryEntry, right: AgentHistoryEntry): boolean {
+    const first = toBinary(AgentHistoryEntrySchema, left);
+    const second = toBinary(AgentHistoryEntrySchema, right);
     return first.length === second.length && first.every((byte, index) => byte === second[index]);
   }
 }

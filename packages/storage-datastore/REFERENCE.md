@@ -198,10 +198,10 @@ metadata after an application entity is written in that namespace.
 
 `AgentHistoryStorage.appendAll()` saves one complete immutable audit group
 atomically. The live `EntityCommitStorage.commitAgent()` compares exact Entity
-state and model preferences before it writes accepted state, preferences, and
-history in one Datastore transaction. A no-op or preference-only turn can leave
-the Entity Version unchanged. Typed admission receipts persist separately and
-do not make an interrupted Agent handler replayable. Datastore entity, index,
+state and Agent attributes before it writes accepted state, attributes, and
+history in one Datastore transaction. An attributes-only turn can leave
+the Entity Version unchanged. Saved pending calls do not replay execution
+after restart. Datastore entity, index,
 and transaction limits still apply, including the adapter's 9 MiB staged
 transaction payload ceiling. No transaction remains open during a model call.
 

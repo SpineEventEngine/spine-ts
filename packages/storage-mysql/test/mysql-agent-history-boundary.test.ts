@@ -14,7 +14,7 @@
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AgentHistoryEntrySchema, ConversationIdSchema } from "@spine-event-engine/proto/agent";
-import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import { AgentHistoryKeys, AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 import { describe, expect, it, vi } from "vitest";
 
@@ -26,50 +26,48 @@ import {
 } from "../../storage/test/entity/agent-history-fixtures.js";
 import { MysqlAgentHistory } from "../src/mysql/agent-history.js";
 
-function entry(record: AgentHistoryRecord) {
-  if (record.entry === undefined) throw new Error("Stored history entry is required.");
-  return record.entry;
+/**
+ * Expected stored entry includes the identity supplied by the repository.
+ */
+function saved(entry: AgentHistoryEntry): AgentHistoryEntry {
+  return create(AgentHistoryEntrySchema, { ...entry, agent: scope.agent("ticket-a") });
 }
 
 describe("MySQL Agent history provider boundary", () => {
   it("reads binary ordered original entries through scoped native views", async () => {
-    const stored = new Map<string, AgentHistoryRecord>();
+    const stored = new Map<string, AgentHistoryEntry>();
     const historyPage = vi.fn((sql: string, values: (string | number)[]) => {
-      expect(sql).toContain(
-        "`scope_digest` = ? AND BINARY `state_type` = BINARY ? AND BINARY `agent_key` = BINARY ?",
-      );
-      expect(values[1]).toBe(scope.stateType);
+      expect(sql).toContain("`scope_digest` = ? AND BINARY `agent_key` = BINARY ?");
       const after = sql.includes("`order_key` > ?") ? String(values[values.length - 2]) : undefined;
       const selected = [...stored.values()].filter((record) => {
-        const entry = record.entry;
-        if (record.scope?.stateType !== values[1] || record.scope?.agentKey !== values[2])
+        const entry = record;
+        if (AgentHistoryRecords.scope(AgentHistoryRecords.requiredAgent(record)) !== values[1])
           return false;
-        if (entry === undefined) return false;
         const key = AgentHistoryKeys.fromEntry(entry);
         if (after !== undefined && AgentHistoryKeys.indexValue(key) <= after) return false;
         if (sql.includes("`conversation_digest` = ?"))
           return (
             entry.item.case === "conversationRecord" &&
-            entry.item.value.conversation?.value === values[4]
+            entry.item.value.conversation?.value === values[3]
           );
-        if (sql.includes("`category` = ?")) return key.category === values[3];
+        if (sql.includes("`category` = ?")) return key.category === values[2];
         return true;
       });
       selected.sort((a, b) =>
-        AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry(a))).localeCompare(
-          AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry(b))),
+        AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(a)).localeCompare(
+          AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(b)),
         ),
       );
       return Promise.resolve(selected.slice(0, Number(values.at(-1))));
     });
     const ensureHistoryIndex = vi.fn(() => Promise.resolve());
-    const writeImmutable = vi.fn((record: AgentHistoryRecord) => {
+    const writeImmutable = vi.fn((record: AgentHistoryEntry) => {
       const slot = AgentHistoryRecords.slot(record);
       const prior = stored.get(slot);
       if (
         prior !== undefined &&
-        String(toBinary(AgentHistoryEntrySchema, entry(prior))) !==
-          String(toBinary(AgentHistoryEntrySchema, entry(record)))
+        String(toBinary(AgentHistoryEntrySchema, prior)) !==
+          String(toBinary(AgentHistoryEntrySchema, record))
       )
         throw new Error("Immutable history content differs.");
       stored.set(slot, record);
@@ -100,7 +98,7 @@ describe("MySQL Agent history provider boundary", () => {
         count: 1,
         maxBytes: 10_000,
       });
-      expect(page.entries).toEqual([first]);
+      expect(page.entries).toEqual([saved(first)]);
       expect(page.hasMore).toBe(true);
       const later = await history.read({
         entityId: "ticket-a",
@@ -109,7 +107,7 @@ describe("MySQL Agent history provider boundary", () => {
         count: 2,
         maxBytes: 10_000,
       });
-      expect(later.entries).toEqual([system, domain]);
+      expect(later.entries).toEqual([saved(system), saved(domain)]);
       expect(later.hasMore).toBe(false);
       const conversationPage = await history.read({
         entityId: "ticket-a",
@@ -120,7 +118,7 @@ describe("MySQL Agent history provider boundary", () => {
         count: 2,
         maxBytes: 10_000,
       });
-      expect(conversationPage.entries).toEqual([first]);
+      expect(conversationPage.entries).toEqual([saved(first)]);
       expect(
         (
           await history.read({
@@ -130,7 +128,7 @@ describe("MySQL Agent history provider boundary", () => {
             maxBytes: 10_000,
           })
         ).entries,
-      ).toEqual([domain]);
+      ).toEqual([saved(domain)]);
       expect(
         (
           await history.read({

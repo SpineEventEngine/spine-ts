@@ -16,6 +16,7 @@ import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   AgentHistoryEntrySchema,
+  AgentIdSchema,
   AiModelKind,
   GenerationResponseSchema,
   ModelPreferenceSchema,
@@ -26,10 +27,12 @@ import {
   Identifiers,
   StringifierRegistry,
   TypeRegistry,
+  TypeUrls,
 } from "@spine-event-engine/core";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import {
+  AgentAttributes,
   AgentHistoryRecords,
   AgentHistoryStorageFactories,
   EntityCommitStorageFactories,
@@ -48,7 +51,10 @@ import {
   type SupportReplyAgentId,
   type SupportReplyAgentState,
 } from "../../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
-import { entityInput as supportAgentInput } from "../../../storage/test/entity/agent-live-fixtures.js";
+import {
+  agentAttributes,
+  entityInput as supportAgentInput,
+} from "../../../storage/test/entity/agent-live-fixtures.js";
 import {
   conversation,
   event as agentEvent,
@@ -162,6 +168,45 @@ function factory(backend: HistoryDatastoreBackend, client = backend.client()) {
 }
 
 describe("Datastore generated Entity records", () => {
+  it("reads current Agent state and attributes in one native transaction batch", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const reads: unknown[][] = [];
+    const transaction = client.transaction.bind(client);
+    vi.spyOn(client, "transaction").mockImplementation(() => {
+      const tx = transaction();
+      const get = tx.get.bind(tx);
+      vi.spyOn(tx, "get").mockImplementation((keys) => {
+        reads.push(Array.isArray(keys) ? keys : [keys]);
+        return get(keys);
+      });
+      return tx;
+    });
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(new TypeRegistry([SupportReplyAgentIdSchema]));
+    const store = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const commits = EntityCommitStorageFactories.create(store, supportAgentInput());
+    try {
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-batched-current" });
+      await expect(commits.readAgentCurrent(id)).resolves.toEqual({
+        current: undefined,
+        attributes: undefined,
+      });
+      expect(reads).toHaveLength(1);
+      expect(reads[0]).toHaveLength(2);
+      expect(reads[0]?.map((key) => (key as { path: readonly string[] }).path.at(-2))).toEqual([
+        "spine.server.testing.SupportReplyAgentState",
+        "spine_agent_attributes",
+      ]);
+    } finally {
+      await commits.close();
+      await store.close();
+    }
+  });
+
   it("rejects an oversized late Agent audit row before opening a transaction and permits retry", async () => {
     const backend = new HistoryDatastoreBackend();
     const client = backend.client();
@@ -180,7 +225,7 @@ describe("Datastore generated Entity records", () => {
       GenerationResponseSchema,
       create(GenerationResponseSchema, { ...original, rawOutput: "x".repeat(1_000_000) }),
     );
-    expect(AgentHistoryRecords.bytes(agentScope.stateType, "ticket", oversized)).toBeGreaterThan(
+    expect(AgentHistoryRecords.bytes(agentScope.agent("ticket"), oversized)).toBeGreaterThan(
       1_000_000,
     );
     const before = client.transactionCalls;
@@ -198,9 +243,18 @@ describe("Datastore generated Entity records", () => {
         count: 3,
         maxBytes: 100_000,
       });
+      const expectedAgent = agentScope.agent("ticket");
+      expect(page.entries.map((entry) => entry.agent)).toEqual([expectedAgent, expectedAgent]);
       expect(page.entries.map((entry) => toBinary(AgentHistoryEntrySchema, entry))).toEqual(
-        [normal, small].map((entry) => toBinary(AgentHistoryEntrySchema, entry)),
+        [normal, small].map((entry) =>
+          toBinary(
+            AgentHistoryEntrySchema,
+            create(AgentHistoryEntrySchema, { ...entry, agent: expectedAgent }),
+          ),
+        ),
       );
+      expect(normal.agent).toBeUndefined();
+      expect(small.agent).toBeUndefined();
     } finally {
       history.close();
       await store.close();
@@ -217,7 +271,11 @@ describe("Datastore generated Entity records", () => {
     ];
     const bytes = (entry: (typeof entries)[number]) =>
       Buffer.from(toBinary(AgentHistoryEntrySchema, entry)).toString("hex");
-    const expected = entries.map(bytes).sort();
+    const expectedAgent = agentScope.agent("ticket");
+    const expected = entries
+      .map((entry) => bytes(create(AgentHistoryEntrySchema, { ...entry, agent: expectedAgent })))
+      .sort();
+    const original = entries.map(bytes).sort();
     try {
       backend.failCommitAppliedOnce = true;
       await expect(history.appendAll("ticket", entries)).rejects.toThrow(
@@ -231,8 +289,9 @@ describe("Datastore generated Entity records", () => {
         maxBytes: 100_000,
       });
       expect(page.hasMore).toBe(false);
+      expect(page.entries.map((entry) => entry.agent)).toEqual([expectedAgent, expectedAgent]);
       expect(page.entries.map(bytes).sort()).toEqual(expected);
-      expect(entries.map(bytes).sort()).toEqual(expected);
+      expect(entries.map(bytes).sort()).toEqual(original);
       expect(backend.entities.size).toBe(2);
     } finally {
       history.close();
@@ -248,7 +307,8 @@ describe("Datastore generated Entity records", () => {
       const tx = transaction();
       const get = tx.get.bind(tx);
       vi.spyOn(tx, "get").mockImplementation((key) => {
-        inspectedKinds.push(key.path.at(-2) ?? "");
+        if (!Array.isArray(key))
+          inspectedKinds.push((key as { path: readonly string[] }).path.at(-2) ?? "");
         return get(key);
       });
       return tx;
@@ -286,8 +346,8 @@ describe("Datastore generated Entity records", () => {
     const initial = {
       entityId: id,
       expectedVersion: 0,
-      expectedPreferences: undefined,
-      preferences: [],
+      expectedAttributes: undefined,
+      attributes: agentAttributes(id, []),
       entityCommit: {
         context: layout.context,
         entity: layout,
@@ -307,7 +367,7 @@ describe("Datastore generated Entity records", () => {
       const attempted = {
         ...initial,
         expectedVersion: 1,
-        expectedPreferences: [],
+        expectedAttributes: agentAttributes(id, []),
         entityCommit: {
           ...initial.entityCommit,
           next,
@@ -382,10 +442,7 @@ describe("Datastore generated Entity records", () => {
       .setClient(backend.client() as never)
       .setStringifierRegistry(stringifiers)
       .build();
-    const layout = supportAgentInput() as unknown as EntityStorageInput<
-      SupportReplyAgentId,
-      SupportReplyAgentState
-    >;
+    const layout = supportAgentInput();
     const commits = EntityCommitStorageFactories.create(provider, layout);
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-atomic" });
     const preference = create(ModelPreferenceSchema, {
@@ -408,8 +465,8 @@ describe("Datastore generated Entity records", () => {
     const input = {
       entityId: id,
       expectedVersion: 0,
-      expectedPreferences: undefined,
-      preferences: [preference],
+      expectedAttributes: undefined,
+      attributes: agentAttributes(id, [preference]),
       entityCommit: { context: layout.context, entity: layout, entityId: id, next },
       historyEntries: [historyEntry],
     };
@@ -417,22 +474,34 @@ describe("Datastore generated Entity records", () => {
       backend.failTransactionCommit = new Error("final transaction failed");
       await expect(commits.commitAgent(input)).rejects.toThrow("final transaction failed");
       expect(backend.entities.size).toBe(0);
-      await expect(commits.readAgentPreferences(id)).resolves.toBeUndefined();
       backend.failTransactionCommit = undefined;
+      await expect(
+        commits.readAgentCurrent(id).then((data) => data.attributes?.modelPreferences),
+      ).resolves.toBeUndefined();
       await commits.commitAgent(input);
-      await expect(commits.readAgentPreferences(id)).resolves.toEqual([preference]);
+      await expect(
+        commits.readAgentCurrent(id).then((data) => data.attributes?.modelPreferences),
+      ).resolves.toEqual([preference]);
       const current = provider.createRecordStorage(layout.context, layout.recordSpec);
       const history = AgentHistoryStorageFactories.create(provider, {
         context: layout.context,
-        stateType: layout.stateSchema.typeName,
-        id: { key: (value: typeof id) => value.ticketNumber },
+        agent: (value: typeof id) => AgentAttributes.id(layout, value),
       });
       try {
         await expect(current.read(id)).resolves.toEqual(next);
         const page = await history.read({ entityId: id, view: { kind: "full" }, count: 10 });
+        const expectedAgent = create(AgentIdSchema, {
+          stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          entityId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
+        });
+        expect(page.entries.map((entry) => entry.agent)).toEqual([expectedAgent]);
         expect(page.entries.map((entry) => toBinary(AgentHistoryEntrySchema, entry))).toEqual([
-          toBinary(AgentHistoryEntrySchema, historyEntry),
+          toBinary(
+            AgentHistoryEntrySchema,
+            create(AgentHistoryEntrySchema, { ...historyEntry, agent: expectedAgent }),
+          ),
         ]);
+        expect(historyEntry.agent).toBeUndefined();
         const nextHistory = conversation(
           "atomic-audit-next",
           "support",
@@ -450,8 +519,8 @@ describe("Datastore generated Entity records", () => {
           commits.commitAgent({
             entityId: id,
             expectedVersion: 0,
-            expectedPreferences: [preference],
-            preferences: [preference],
+            expectedAttributes: agentAttributes(id, [preference]),
+            attributes: agentAttributes(id, [preference]),
             historyEntries: [nextHistory],
           }),
         ).rejects.toThrow("Version");
@@ -459,7 +528,7 @@ describe("Datastore generated Entity records", () => {
           commits.commitAgent({
             ...input,
             expectedVersion: 1,
-            expectedPreferences: [],
+            expectedAttributes: agentAttributes(id, []),
             entityCommit: {
               context: layout.context,
               entity: layout,
@@ -468,21 +537,28 @@ describe("Datastore generated Entity records", () => {
             },
             historyEntries: [nextHistory],
           }),
-        ).rejects.toThrow("preferences changed");
+        ).rejects.toThrow("attributes changed");
         expect(backend.entities.size).toBe(3);
         await expect(current.read(id)).resolves.toEqual(next);
         await commits.commitAgent({
           ...input,
           expectedVersion: 1,
-          expectedPreferences: [preference],
+          expectedAttributes: agentAttributes(id, [preference]),
           entityCommit: { context: layout.context, entity: layout, entityId: id, next: nextState },
           historyEntries: [nextHistory],
         });
         await expect(current.read(id)).resolves.toEqual(nextState);
         const updated = await history.read({ entityId: id, view: { kind: "full" }, count: 10 });
+        expect(updated.entries.map((entry) => entry.agent)).toEqual([expectedAgent, expectedAgent]);
         expect(updated.entries.map((entry) => toBinary(AgentHistoryEntrySchema, entry))).toEqual(
-          [nextHistory, historyEntry].map((entry) => toBinary(AgentHistoryEntrySchema, entry)),
+          [nextHistory, historyEntry].map((entry) =>
+            toBinary(
+              AgentHistoryEntrySchema,
+              create(AgentHistoryEntrySchema, { ...entry, agent: expectedAgent }),
+            ),
+          ),
         );
+        expect(nextHistory.agent).toBeUndefined();
       } finally {
         current.close();
         history.close();
@@ -502,16 +578,12 @@ describe("Datastore generated Entity records", () => {
       .setClient(backend.client() as never)
       .setStringifierRegistry(stringifiers)
       .build();
-    const layout = supportAgentInput() as unknown as EntityStorageInput<
-      SupportReplyAgentId,
-      SupportReplyAgentState
-    >;
+    const layout = supportAgentInput();
     const commits = EntityCommitStorageFactories.create(provider, layout);
     const current = provider.createRecordStorage(layout.context, layout.recordSpec);
     const history = AgentHistoryStorageFactories.create(provider, {
       context: layout.context,
-      stateType: layout.stateSchema.typeName,
-      id: { key: (value: SupportReplyAgentId) => value.ticketNumber },
+      agent: (value: SupportReplyAgentId) => AgentAttributes.id(layout, value),
     });
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-no-state" });
     const preference = create(ModelPreferenceSchema, {
@@ -526,39 +598,51 @@ describe("Datastore generated Entity records", () => {
     const entry = conversation("audit-no-state", "support", time);
     const conflicting = conversation("audit-no-state", "other-conversation", time);
     const bytes = (value: typeof entry) => toBinary(AgentHistoryEntrySchema, value);
+    const expectedAgent = create(AgentIdSchema, {
+      stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+      entityId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
+    });
+    const expectedEntry = create(AgentHistoryEntrySchema, { ...entry, agent: expectedAgent });
     const first = {
       entityId: id,
       expectedVersion: 0,
-      expectedPreferences: undefined,
-      preferences: [preference],
+      expectedAttributes: undefined,
+      attributes: agentAttributes(id, [preference]),
       historyEntries: [entry],
     };
     const readHistory = () => history.read({ entityId: id, view: { kind: "full" }, count: 10 });
     try {
       await commits.commitAgent(first);
       await expect(current.read(id)).resolves.toBeUndefined();
-      await expect(commits.readAgentPreferences(id)).resolves.toEqual([preference]);
-      expect((await readHistory()).entries.map(bytes)).toEqual([bytes(entry)]);
+      await expect(
+        commits.readAgentCurrent(id).then((data) => data.attributes?.modelPreferences),
+      ).resolves.toEqual([preference]);
+      const firstHistory = await readHistory();
+      expect(firstHistory.entries.map((value) => value.agent)).toEqual([expectedAgent]);
+      expect(firstHistory.entries.map(bytes)).toEqual([bytes(expectedEntry)]);
+      expect(entry.agent).toBeUndefined();
 
       await commits.commitAgent({
         ...first,
-        expectedPreferences: [preference],
+        expectedAttributes: agentAttributes(id, [preference]),
       });
-      expect((await readHistory()).entries.map(bytes)).toEqual([bytes(entry)]);
+      expect((await readHistory()).entries.map(bytes)).toEqual([bytes(expectedEntry)]);
       expect(backend.entities.size).toBe(2);
 
       const rollbacks = backend.rollbacks;
       await expect(
         commits.commitAgent({
           ...first,
-          expectedPreferences: [preference],
-          preferences: [changedPreference],
+          expectedAttributes: agentAttributes(id, [preference]),
+          attributes: agentAttributes(id, [changedPreference]),
           historyEntries: [conflicting],
         }),
       ).rejects.toThrow("divergent");
       expect(backend.rollbacks).toBe(rollbacks + 1);
-      await expect(commits.readAgentPreferences(id)).resolves.toEqual([preference]);
-      expect((await readHistory()).entries.map(bytes)).toEqual([bytes(entry)]);
+      await expect(
+        commits.readAgentCurrent(id).then((data) => data.attributes?.modelPreferences),
+      ).resolves.toEqual([preference]);
+      expect((await readHistory()).entries.map(bytes)).toEqual([bytes(expectedEntry)]);
       await expect(current.read(id)).resolves.toBeUndefined();
       expect(backend.entities.size).toBe(2);
     } finally {
@@ -1381,7 +1465,7 @@ describe("Datastore generated Entity records", () => {
     const commitClose = vi.fn().mockResolvedValue(undefined);
     const commits = {
       commit: vi.fn().mockResolvedValue(undefined),
-      readAgentPreferences: vi.fn().mockResolvedValue(undefined),
+      readAgentCurrent: vi.fn().mockResolvedValue({ current: undefined, attributes: undefined }),
       commitAgent: vi.fn().mockResolvedValue(undefined),
       close: commitClose,
       closeIdle: vi.fn(),
@@ -1431,7 +1515,9 @@ describe("Datastore generated Entity records", () => {
             events: {} as never,
             commits: {
               commit: vi.fn(),
-              readAgentPreferences: vi.fn().mockResolvedValue(undefined),
+              readAgentCurrent: vi
+                .fn()
+                .mockResolvedValue({ current: undefined, attributes: undefined }),
               commitAgent: vi.fn().mockResolvedValue(undefined),
               close: vi.fn(),
               closeIdle: vi.fn(),
@@ -1469,7 +1555,9 @@ describe("Datastore generated Entity records", () => {
         events: {} as never,
         commits: {
           commit: vi.fn(),
-          readAgentPreferences: vi.fn().mockResolvedValue(undefined),
+          readAgentCurrent: vi
+            .fn()
+            .mockResolvedValue({ current: undefined, attributes: undefined }),
           commitAgent: vi.fn().mockResolvedValue(undefined),
           close: vi.fn(),
           closeIdle: vi.fn(),
@@ -1515,7 +1603,9 @@ describe("Datastore generated Entity records", () => {
         events: {} as never,
         commits: {
           commit: vi.fn(),
-          readAgentPreferences: vi.fn().mockResolvedValue(undefined),
+          readAgentCurrent: vi
+            .fn()
+            .mockResolvedValue({ current: undefined, attributes: undefined }),
           commitAgent: vi.fn().mockResolvedValue(undefined),
           close: vi.fn(),
           closeIdle: vi.fn(),
@@ -1653,7 +1743,9 @@ describe("Datastore generated Entity records", () => {
           events: {} as never,
           commits: {
             commit: vi.fn(),
-            readAgentPreferences: vi.fn().mockResolvedValue(undefined),
+            readAgentCurrent: vi
+              .fn()
+              .mockResolvedValue({ current: undefined, attributes: undefined }),
             commitAgent: vi.fn().mockResolvedValue(undefined),
             close: vi.fn(),
             closeIdle: vi.fn(),

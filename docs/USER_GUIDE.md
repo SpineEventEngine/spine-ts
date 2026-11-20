@@ -262,7 +262,7 @@ the source Event's producer version.
 ### Give an Entity an application service
 
 Suppose an assignment Process Manager needs your application's service to
-decide how much work a newly created task represents. That service belongs in
+decide how much work a newly created task represents. Pass that service to
 its constructor, but Spine creates the Process Manager when a message arrives.
 Use `onCreate` to connect the two: Spine supplies the Entity's state, and your
 callback supplies the service.
@@ -320,10 +320,12 @@ Use an exact route when the first field is not the correct target. `CommandRouti
 `.route(Token, via)`. Selection is exact schema, then the first registered
 matching token, then the replacement/default route. Route functions run once at
 accepted admission and stored typed targets are replayed on retry for ordinary
-Aggregate, Process Manager, and Projection work. An accepted Agent interaction
-does not replay after interruption. The
-callback may be asynchronous. Pass the receiving Entity class to `create()` to
-receive typed `findIds`, `findStates`, and `find` reads as the callback's third
+Aggregate, Process Manager, Projection, and Agent work. If an Agent input remains
+`TO_DELIVER` after interruption, ordinary redelivery can run its handler again
+and create a new model call. A saved model call is never automatically replayed
+from attributes or history. The callback may be asynchronous. Pass the receiving
+Entity class to `create()` to receive typed `findIds`, `findStates`, and `find`
+reads as the callback's third
 argument. Use the same Entity constructor when registering the repository;
 a different class is rejected even if its ID and state types match. A query reads
 the receiving repository in the incoming signal's tenant;
@@ -649,18 +651,20 @@ const command = create(DraftSupportReplySchema, {
 <!-- prettier-ignore-end -->
 
 ```text
-DraftSupportReply → SupportDraftAgent → model proposal
+DraftSupportReply → SupportDraftAgent → CallModel
+                                          ↓
+                             ModelReplied or ModelCallFailed
                                           ↓
                        SupportReplySuggested or SupportReplyFailed
                                           ↓
                               SupportReview query
 ```
 
-The Agent's `@Assign` handler calls `this.ai.invoke(...)` with a typed task defined by `AiModel.define()`. It checks the reply before emitting `SupportReplySuggested`; unusable output leads to `SupportReplyFailed`. The review Projection stores the outcome for a person to inspect. Command acceptance means the work was saved, so the client waits for the later Event or queries the Projection to find the draft.
+The Agent's `@Command` handler returns `this.modelCommands.create(draftSupportReply, { conversation, input: command })`. The definition comes from the example's `src/model.ts`; both the Agent and its Bounded Context registration import it. `.withAi(registry)` supplies a permitted provider deployment. The framework saves the returned Command with the Agent turn, then its registered asynchronous handler runs the model. A typed reply or rejection returns to the Agent, whose `@React` handler emits `SupportReplySuggested` or `SupportReplyFailed`. The review Projection stores the outcome for a person to inspect. Local Command posting waits for reception and scheduling. Delivery marks the Agent Inbox row `DELIVERED` only after its handler and save finish. To observe completion, wait for the domain outcome or read the resulting state; the provider reply may arrive later.
 
 A model can still be wrong about facts it cannot verify. Keep the review decision in application code. Configure the permitted provider and its credentials outside the Agent. For local tests, `AiTestBackend` supplies controlled replies without a paid model request. The example's [BlackBox test](../examples/support/test/support-blackbox.test.ts) checks the proposal, failure, review query, and recorded interaction history. See the [AI package guide](../packages/ai/README.md) for the task definition, [adapter guide](../packages/ai-vercel-ax/README.md) for deployment, and [Agent reference](../packages/server/REFERENCE.md#agent-execution) for exact runtime contracts.
 
-## 8. Run and observe it
+## 8. Running and observation
 
 Start a local Message Board server and UI in separate terminals after the
 workspace build:
@@ -684,8 +688,9 @@ storage. See [receiver-specific shard policies](../packages/server/REFERENCE.md#
 for a complete example using the Orders Projections.
 
 All Bounded Contexts use the Delivery configured in `ServerEnvironment`. With
-local Delivery, posting waits for the signal's delivery result. An Agent's input
-can be accepted before its live handler finishes. With remote Delivery and its
+local Delivery, posting waits for Inbox reception and scheduling. Delivery
+acknowledges an Agent input after its handler and save finish. A returned model Command can
+continue running afterward. With remote Delivery and its
 environment supervisor, posting returns after the remote Inbox accepts the signal
 and the notification is submitted. Processing may happen afterward on another
 application process. For example, a successful Command submission can precede the
@@ -698,13 +703,12 @@ through its existing notifications and safety scan.
 
 Durable delivery stores pending and delivered Inbox rows. A shard lease prevents
 concurrent delivery, but a handler effect and the delivered transition are not
-one transaction. A lost acknowledgement can redeliver ordinary Aggregate,
-Process Manager or Projection work after restart, so make downstream effects
-idempotent. Agents retain an additional acceptance receipt: once an Agent input
-is accepted, interruption does not cause its handler to run again. Its saved
-history remains readable; a fresh signal can start new work.
-The framework does not add attempt history,
-quarantine records, scheduled retry policy, or exactly-once side effects.
+one transaction. A lost acknowledgement can redeliver Aggregate, Process Manager, Agent, or
+Projection work after restart, so make downstream effects idempotent. If an
+original Agent input is still `TO_DELIVER`, redelivery can prepare a new model
+call with a new ID. A previously saved pending call is not replayed from history
+or attributes. The framework does not add a durable outgoing queue, scheduled
+retry policy, or exactly-once side effects.
 Local and remote delivery removes a pending duplicate when its signal ID and
 typed Inbox target match a delivered row in the current page or a recent local
 delivery remembered by the bounded cache. This process-local cache holds at most

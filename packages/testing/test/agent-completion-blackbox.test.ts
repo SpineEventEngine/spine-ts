@@ -38,7 +38,6 @@ import { AiTestBackend } from "../src/index.js";
 import {
   SupportReplyAgentIdSchema,
   SupportReplyAgentStateSchema,
-  EscalatedSupportReplyAgentStateSchema,
   type SupportReplyAgentId,
 } from "../test-fixtures/generated/support_agent_states_pb.js";
 import {
@@ -55,7 +54,7 @@ import {
 } from "../test-fixtures/generated/support_ai_types_pb.js";
 
 const model = AiModel.define({
-  name: "capacity-support-reply",
+  name: "completion-support-reply",
   version: "v1",
   kind: "generation",
   input: SupportReplyFactsSchema,
@@ -72,7 +71,7 @@ const model = AiModel.define({
   },
 });
 
-class CapacityAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
+class CompletionAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
   async draft(command: DraftSupportReply) {
     if (!command.agent) throw new Error("Support Command requires an Agent ID.");
     const result = await this.ai.invoke(model, {
@@ -92,36 +91,9 @@ class CapacityAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentS
   }
 }
 
-class EscalatedCapacityAgent extends Agent<
-  SupportReplyAgentId,
-  typeof EscalatedSupportReplyAgentStateSchema
-> {
-  async draft(command: DraftSupportReply) {
-    if (!command.agent) throw new Error("Support Command requires an Agent ID.");
-    const result = await this.ai.invoke(model, {
-      call: "draft",
-      conversation: create(ConversationIdSchema, { value: `ticket-${command.agent.ticketNumber}` }),
-      input: create(SupportReplyFactsSchema, {
-        ticketNumber: command.agent.ticketNumber,
-        question: command.question,
-        ticketRevision: 1n,
-      }),
-    });
-    if (!result.ok) throw new Error(`Unexpected scripted failure: ${result.failure.code}`);
-    this.update((state) =>
-      Object.assign(state, {
-        id: this.id,
-        proposedReply: result.value.reply,
-        escalationCount: state.escalationCount + 1,
-      }),
-    );
-    return create(SupportReplyProposedSchema, { agent: this.id, reply: result.value.reply });
-  }
-}
+const alternateRef = ModelRef.of("completion-alternate", "v1");
 
-const alternateRef = ModelRef.of("capacity-alternate", "v1");
-
-class PreferenceCapacityAgent extends CapacityAgent {
+class PreferenceCompletionAgent extends CompletionAgent {
   override async draft(command: DraftSupportReply) {
     if (command.question === "Prefer alternate")
       this.ai.select(AiModelKind.GENERATION, alternateRef);
@@ -129,7 +101,7 @@ class PreferenceCapacityAgent extends CapacityAgent {
   }
 }
 
-class SelfReactingCapacityAgent extends CapacityAgent {
+class SelfReactingCompletionAgent extends CompletionAgent {
   static reactions = 0;
 
   override async draft(command: DraftSupportReply) {
@@ -139,11 +111,11 @@ class SelfReactingCapacityAgent extends CapacityAgent {
   react(proposed: SupportReplyProposed): void {
     if (proposed.agent?.ticketNumber !== this.id.ticketNumber)
       throw new Error("Follow-up Event reached a different Agent ID.");
-    SelfReactingCapacityAgent.reactions++;
+    SelfReactingCompletionAgent.reactions++;
   }
 }
 
-function repository(entityType: typeof CapacityAgent = CapacityAgent, selfReact = false) {
+function repository(entityType: typeof CompletionAgent = CompletionAgent, selfReact = false) {
   return new Repository({
     entityType,
     schema: SupportReplyAgentStateSchema,
@@ -176,45 +148,13 @@ function repository(entityType: typeof CapacityAgent = CapacityAgent, selfReact 
           ],
         },
       ],
-    })[0] as EntityHandlersMetadata<CapacityAgent, typeof SupportReplyAgentStateSchema>,
-    events: [SupportReplyProposedSchema],
-  });
-}
-
-function escalationRepository() {
-  return new Repository({
-    entityType: EscalatedCapacityAgent,
-    schema: EscalatedSupportReplyAgentStateSchema,
-    ai: { models: [model] },
-    handlers: new HandlerRegistryIngestor().ingest({
-      receivers: [
-        {
-          receiverKind: "entity",
-          receiverType: EscalatedCapacityAgent,
-          stateSchema: EscalatedSupportReplyAgentStateSchema,
-          handlers: [
-            {
-              kind: "command-assignment",
-              methodName: "draft",
-              input: { schema: DraftSupportReplySchema, origin: "domestic" },
-              outcomes: { returned: [SupportReplyProposedSchema], thrown: [] },
-              parameterCount: 1,
-            },
-          ],
-        },
-      ],
-    })[0] as EntityHandlersMetadata<
-      EscalatedCapacityAgent,
-      typeof EscalatedSupportReplyAgentStateSchema
-    >,
+    })[0] as EntityHandlersMetadata<CompletionAgent, typeof SupportReplyAgentStateSchema>,
     events: [SupportReplyProposedSchema],
   });
 }
 
 function registry(
   backend: AiTestBackend,
-  concurrent: number,
-  queued: number,
   held?: {
     readonly entered: PromiseWithResolvers<undefined>;
     readonly release: PromiseWithResolvers<undefined>;
@@ -257,8 +197,6 @@ function registry(
       totalInputBytes: 8_000,
       totalOutputBytes: 8_000,
     },
-    concurrentOperations: concurrent,
-    queuedOperations: queued,
   }).register(registration);
   return { ai, observed };
 }
@@ -266,16 +204,11 @@ function registry(
 async function contextBox(
   name: string,
   ai: AiRegistry,
-  entityType: typeof CapacityAgent = CapacityAgent,
-  escalated = false,
+  entityType: typeof CompletionAgent = CompletionAgent,
   selfReact = false,
 ) {
   const builder = BoundedContext.singleTenant(name).withAi(ai).persistSystemEvents();
-  if (escalated) {
-    builder.add(escalationRepository());
-  } else {
-    builder.add(repository(entityType, selfReact));
-  }
+  builder.add(repository(entityType, selfReact));
   const environment = ServerEnvironment.newBuilder()
     .under(EnvironmentType.Local, (setting) => {
       setting.use({
@@ -322,10 +255,10 @@ async function contextBox(
   return { box, environment };
 }
 
-type CapacityBox = Awaited<ReturnType<typeof contextBox>>["box"];
+type CompletionBox = Awaited<ReturnType<typeof contextBox>>["box"];
 
 async function post(
-  box: CapacityBox,
+  box: CompletionBox,
   ticketNumber: string,
   question = `Please draft ${ticketNumber}`,
 ) {
@@ -335,149 +268,17 @@ async function post(
     .post(DraftSupportReplySchema, create(DraftSupportReplySchema, { agent, question }));
 }
 
-async function produced(box: CapacityBox, count: number) {
+async function produced(box: CompletionBox, count: number) {
   return box.eventually(
     () => box.assertEvents(),
     (events) => events.length === count,
   );
 }
 
-describe("shared Agent registry capacity through BlackBox", () => {
-  it("wakes a deferred shard after another context frees the only active slot", async () => {
-    const backend = AiTestBackend.create({
-      ref: ModelRef.of("capacity-cross-context", "v1"),
-      kind: "generation",
-    });
-    const responses = backend.forModel(model);
-    const gate = responses.delay();
-    responses.respondWith(create(ProposedSupportReplySchema, { reply: "Reply A" }));
-    responses.respondWith(create(ProposedSupportReplySchema, { reply: "Reply B" }));
-    const { ai } = registry(backend, 1, 0);
-    const first = await contextBox("CapacityWakeA", ai);
-    const second = await contextBox("CapacityWakeB", ai, CapacityAgent, true);
-    try {
-      expect((await post(first.box, "T-A")).kind).toBe("ok");
-      await first.box.eventually(
-        () => backend.requests(),
-        (requests) => requests.length === 1,
-      );
-      const deferred = await post(second.box, "T-B");
-      expect(deferred).toMatchObject({ kind: "ok" });
-      expect(
-        await second.environment.delivery.inbox.read(ShardIndex.single(), {
-          statuses: ["TO_DELIVER"],
-        }),
-      ).toHaveLength(1);
-      expect(backend.requests()).toHaveLength(1);
-      gate.release();
-      await produced(first.box, 1);
-      await produced(second.box, 1);
-      expect(backend.requests()).toHaveLength(2);
-    } finally {
-      gate.release();
-      await Promise.all([first.box.close(), second.box.close()]);
-    }
-  });
-  it("keeps a second Bounded Context admitted but unstarted until one active slot releases", async () => {
-    const backend = AiTestBackend.create({
-      ref: ModelRef.of("capacity-scripted", "v1"),
-      kind: "generation",
-    });
-    const responses = backend.forModel(model);
-    const gate = responses.delay();
-    responses.respondWith(create(ProposedSupportReplySchema, { reply: "Reply A" }));
-    responses.respondWith(create(ProposedSupportReplySchema, { reply: "Reply B" }));
-    const { ai, observed } = registry(backend, 1, 1);
-    const first = await contextBox("CapacityA", ai);
-    const second = await contextBox("CapacityB", ai, CapacityAgent, true);
-    try {
-      expect((await post(first.box, "T-A")).kind).toBe("ok");
-      await first.box.eventually(
-        () => backend.requests(),
-        (requests) => requests.length === 1,
-      );
-      const whileFirstBlocked = { ...observed };
-      expect(whileFirstBlocked.identities).toBeGreaterThan(0);
-      expect(whileFirstBlocked.authorizations).toBeGreaterThan(0);
-      expect((await post(second.box, "T-B")).kind).toBe("ok");
-      expect(backend.requests()).toHaveLength(1);
-      expect(observed).toEqual(whileFirstBlocked);
-      expect(second.box.assertEvents()).toEqual([]);
-      gate.release();
-      await produced(first.box, 1);
-      await produced(second.box, 1);
-      expect(backend.requests()).toHaveLength(2);
-      backend.assertSatisfied();
-    } finally {
-      gate.release();
-      await Promise.all([first.box.close(), second.box.close()]);
-    }
-  });
-
-  it("starts two independent Agent IDs in the default single delivery shard with C=2", async () => {
-    const backend = AiTestBackend.create({
-      ref: ModelRef.of("capacity-parallel", "v1"),
-      kind: "generation",
-    });
-    const responses = backend.forModel(model);
-    const firstGate = responses.delay();
-    responses.respondWith(create(ProposedSupportReplySchema, { reply: "Reply A" }));
-    const secondGate = responses.delay();
-    responses.respondWith(create(ProposedSupportReplySchema, { reply: "Reply B" }));
-    const { ai } = registry(backend, 2, 0);
-    const { box } = await contextBox("CapacityParallel", ai);
-    try {
-      expect((await post(box, "T-A")).kind).toBe("ok");
-      expect((await post(box, "T-B")).kind).toBe("ok");
-      await box.eventually(
-        () => backend.requests(),
-        (requests) => requests.length === 2,
-      );
-      expect(box.assertEvents()).toEqual([]);
-      firstGate.release();
-      secondGate.release();
-      await produced(box, 2);
-      backend.assertSatisfied();
-    } finally {
-      firstGate.release();
-      secondGate.release();
-      await box.close();
-    }
-  });
-
-  it("closing one Bounded Context leaves a second Bounded Context's queued work runnable", async () => {
-    const backend = AiTestBackend.create({
-      ref: ModelRef.of("capacity-close", "v1"),
-      kind: "generation",
-    });
-    const responses = backend.forModel(model);
-    const gate = responses.delay();
-    responses.respondWith(create(ProposedSupportReplySchema, { reply: "Reply A" }));
-    responses.respondWith(create(ProposedSupportReplySchema, { reply: "Reply B" }));
-    const { ai } = registry(backend, 1, 1);
-    const first = await contextBox("CapacityCloseA", ai);
-    const second = await contextBox("CapacityCloseB", ai, CapacityAgent, true);
-    try {
-      expect((await post(first.box, "T-A")).kind).toBe("ok");
-      await first.box.eventually(
-        () => backend.requests(),
-        (requests) => requests.length === 1,
-      );
-      expect((await post(second.box, "T-B")).kind).toBe("ok");
-      expect(second.box.assertEvents()).toEqual([]);
-      await first.box.close();
-      gate.release();
-      await produced(second.box, 1);
-      expect(backend.requests()).toHaveLength(2);
-    } finally {
-      gate.release();
-      await Promise.all([first.box.close(), second.box.close()]);
-    }
-  }, 15_000);
-
+describe("Agent completion through BlackBox", () => {
   it("drains a held callback on close while another context continues", async () => {
     const backend = AiTestBackend.create({
-      ref: ModelRef.of("capacity-ignored-callback", "v1"),
+      ref: ModelRef.of("completion-ignored-callback", "v1"),
       kind: "generation",
     });
     const responses = backend.forModel(model);
@@ -488,15 +289,15 @@ describe("shared Agent registry capacity through BlackBox", () => {
       release: Promise.withResolvers<undefined>(),
       returned: Promise.withResolvers<undefined>(),
     };
-    const { ai } = registry(backend, 1, 1, held);
-    const first = await contextBox("CapacityIgnoredA", ai);
-    const second = await contextBox("CapacityIgnoredB", ai, CapacityAgent, true);
+    const { ai } = registry(backend, held);
+    const first = await contextBox("CompletionIgnoredA", ai);
+    const second = await contextBox("CompletionIgnoredB", ai);
     try {
       expect((await post(first.box, "T-A")).kind).toBe("ok");
       await held.entered.promise;
       expect(first.box.assertEvents()).toEqual([]);
       expect((await post(second.box, "T-B")).kind).toBe("ok");
-      expect(second.box.assertEvents()).toEqual([]);
+      await produced(second.box, 1);
       let closed = false;
       const closing = first.box.close().then(() => {
         closed = true;
@@ -506,7 +307,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
       held.release.resolve(undefined);
       await held.returned.promise;
       await closing;
-      await produced(second.box, 1);
+      await produced(first.box, 1);
       expect(backend.requests()).toHaveLength(2);
     } finally {
       held.release.resolve(undefined);
@@ -516,7 +317,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
 
   it("selects a committed alternate preference when a same-Agent waiting signal starts", async () => {
     const primary = AiTestBackend.create({
-      ref: ModelRef.of("capacity-preference-primary", "v1"),
+      ref: ModelRef.of("completion-preference-primary", "v1"),
       kind: "generation",
     });
     const alternate = AiTestBackend.create({ ref: alternateRef, kind: "generation" });
@@ -526,12 +327,12 @@ describe("shared Agent registry capacity through BlackBox", () => {
     alternate
       .forModel(model)
       .respondWith(create(ProposedSupportReplySchema, { reply: "Alternate reply" }));
-    const { ai: primaryRegistry } = registry(primary, 1, 1);
+    const { ai: primaryRegistry } = registry(primary);
     const ai = primaryRegistry.register(alternate.registration);
     const { box, environment } = await contextBox(
-      "CapacityPreference",
+      "CompletionPreference",
       ai,
-      PreferenceCapacityAgent,
+      PreferenceCompletionAgent,
     );
     try {
       expect((await post(box, "T-P", "Prefer alternate")).kind).toBe("ok");
@@ -546,7 +347,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
         await environment.delivery.inbox.read(ShardIndex.single(), {
           statuses: ["TO_DELIVER"],
         }),
-      ).toHaveLength(1);
+      ).toHaveLength(2);
       expect(primary.requests()).toHaveLength(1);
       expect(alternate.requests()).toHaveLength(0);
       gate.release();
@@ -570,24 +371,23 @@ describe("shared Agent registry capacity through BlackBox", () => {
 
   it("delivers an Agent's output back to the same Agent on the active shard", async () => {
     const backend = AiTestBackend.create({
-      ref: ModelRef.of("capacity-self-followup", "v1"),
+      ref: ModelRef.of("completion-self-followup", "v1"),
       kind: "generation",
     });
     backend.forModel(model).respondWith(create(ProposedSupportReplySchema, { reply: "Follow up" }));
-    const { ai } = registry(backend, 1, 1);
-    SelfReactingCapacityAgent.reactions = 0;
+    const { ai } = registry(backend);
+    SelfReactingCompletionAgent.reactions = 0;
     const { box } = await contextBox(
-      "CapacitySelfFollowup",
+      "CompletionSelfFollowup",
       ai,
-      SelfReactingCapacityAgent,
-      false,
+      SelfReactingCompletionAgent,
       true,
     );
     try {
       expect((await post(box, "T-self")).kind).toBe("ok");
       await produced(box, 1);
       await box.eventually(
-        () => SelfReactingCapacityAgent.reactions,
+        () => SelfReactingCompletionAgent.reactions,
         (count) => count === 1,
       );
       expect(backend.requests()).toHaveLength(1);

@@ -22,6 +22,13 @@ import * as clientSchemas from "../src/client/index.js";
 import * as authSchemas from "../src/auth/index.js";
 import * as deliverySchemas from "../src/delivery/index.js";
 import * as deliveryServerSchemas from "../src/delivery-server/index.js";
+import {
+  AgentIdSchema,
+  CallModelSchema,
+  ModelCallFailedSchema,
+  ModelCallSchema,
+  ModelRepliedSchema,
+} from "../src/agent/index.js";
 import * as errorSchemas from "../generated/spine/base/error_pb.js";
 import * as fieldPathSchemas from "../generated/spine/base/field_path_pb.js";
 import * as ackSchemas from "../generated/spine/core/ack_pb.js";
@@ -52,13 +59,16 @@ import * as transportSchemas from "../generated/spine/server/transport/transport
 import * as nodeDiscoverySchemas from "../generated/spine/deployment/node_discovery_pb.js";
 import * as systemEventSchemas from "../generated/spine/system/server/entity_log_events_pb.js";
 import * as systemTypeSchemas from "../generated/spine/system/server/entity_type_pb.js";
-import * as agentHistorySchemas from "../generated/spine/server/agent/history_record_pb.js";
-import * as agentReceiptSchemas from "../generated/spine/server/agent/acceptance_receipt_pb.js";
-import * as agentPreferencesSchemas from "../generated/spine/server/agent/model_preferences_record_pb.js";
-import * as agentContentSchemas from "../generated/spine/ts/agent/content_pb.js";
-import * as agentHistoryPublicSchemas from "../generated/spine/ts/agent/history_pb.js";
-import * as agentInteractionSchemas from "../generated/spine/ts/agent/interaction_events_pb.js";
-import * as agentModelSchemas from "../generated/spine/ts/agent/model_pb.js";
+import * as activeAgentSchemas from "../generated/spine/server/agent/active_agent_record_pb.js";
+import * as agentContentSchemas from "../generated/spine/agent/content_pb.js";
+import * as agentIdSchemas from "../generated/spine/agent/agent_id_pb.js";
+import * as agentCommandSchemas from "../generated/spine/agent/commands_pb.js";
+import * as agentEventSchemas from "../generated/spine/agent/events_pb.js";
+import * as agentHistoryPublicSchemas from "../generated/spine/agent/history_pb.js";
+import * as agentInteractionSchemas from "../generated/spine/agent/interaction_events_pb.js";
+import * as agentModelSchemas from "../generated/spine/agent/model_pb.js";
+import * as agentModelCallSchemas from "../generated/spine/agent/model_call_pb.js";
+import * as agentRejectionSchemas from "../generated/spine/agent/rejections_pb.js";
 import { spineProtoModule } from "../generated/proto-module.js";
 import { registerProtoModule, registeredProtoModules } from "../src/codegen/index.js";
 
@@ -86,6 +96,48 @@ function schemaNames(exports: object): string[] {
 }
 
 describe("spineProtoModule", () => {
+  it("publishes distinct Agent identity, Command, Event, and rejection contracts", () => {
+    expect(
+      [
+        AgentIdSchema,
+        ModelCallSchema,
+        CallModelSchema,
+        ModelRepliedSchema,
+        ModelCallFailedSchema,
+      ].map((schema) => schema.typeName),
+    ).toEqual([
+      "spine.agent.AgentId",
+      "spine.agent.ModelCall",
+      "spine.agent.CallModel",
+      "spine.agent.ModelReplied",
+      "spine.agent.ModelCallFailed",
+    ]);
+    expect(AgentIdSchema.fields.map((field) => field.localName)).toEqual([
+      "stateTypeUrl",
+      "entityId",
+    ]);
+    expect(ModelCallSchema.fields.map((field) => field.localName)).toEqual([
+      "id",
+      "replyContext",
+      "tenant",
+      "agent",
+      "agentVersion",
+      "capability",
+      "capabilityRevision",
+      "conversation",
+      "whenRequested",
+    ]);
+    expect(CallModelSchema.fields.at(-1)?.localName).toBe("whenSubmissionAttempted");
+    expect(ModelRepliedSchema.fields.slice(-2).map((field) => field.localName)).toEqual([
+      "whenStarted",
+      "whenCompleted",
+    ]);
+    expect(ModelCallFailedSchema.fields.slice(-2).map((field) => field.localName)).toEqual([
+      "whenStarted",
+      "whenFailed",
+    ]);
+  });
+
   it("registers the generated root once and keeps failed additions atomic", () => {
     const snapshot = registeredProtoModules();
     expect(snapshot).toContain(spineProtoModule);
@@ -137,7 +189,7 @@ describe("spineProtoModule", () => {
       dependencies: [],
       moduleExport: "spineProtoModule",
     });
-    expect(manifest.protoFiles).toHaveLength(63);
+    expect(manifest.protoFiles).toHaveLength(66);
     expect(manifest.generationId).toEqual(expect.stringMatching(/\S/u));
     expect(
       JSON.parse(
@@ -197,13 +249,16 @@ describe("spineProtoModule", () => {
       ...schemaNames(nodeDiscoverySchemas),
       ...schemaNames(systemEventSchemas),
       ...schemaNames(systemTypeSchemas),
-      ...schemaNames(agentHistorySchemas),
-      ...schemaNames(agentReceiptSchemas),
-      ...schemaNames(agentPreferencesSchemas),
+      ...schemaNames(activeAgentSchemas),
       ...schemaNames(agentContentSchemas),
+      ...schemaNames(agentIdSchemas),
+      ...schemaNames(agentCommandSchemas),
+      ...schemaNames(agentEventSchemas),
       ...schemaNames(agentHistoryPublicSchemas),
       ...schemaNames(agentInteractionSchemas),
       ...schemaNames(agentModelSchemas),
+      ...schemaNames(agentModelCallSchemas),
+      ...schemaNames(agentRejectionSchemas),
     ].sort();
 
     expect(spineProtoModule.name).toBe("@spine-event-engine/proto");

@@ -18,8 +18,7 @@ endpoint and model identity. They are separate from the application operation:
 the same drafting operation can use a different permitted deployment without
 putting provider SDK calls in its Entity handler.
 
-`AiRegistry.create()` validates deployment defaults and any configured invocation,
-concurrency or queue ceilings. Register deployments with `register()` and configured MCP servers with
+`AiRegistry.create()` validates deployment defaults and any configured invocation ceilings. Register deployments with `register()` and configured MCP servers with
 `registerTools()`. Defaults, limits and tool policy freeze when the runtime
 binds the registry. `register()` can append a unique deployment afterward;
 existing references and policy cannot be replaced.
@@ -29,7 +28,7 @@ repository integration; this package alone does not start a signal handler.
 
 ## Calls and results
 
-Inside a signal handler, `this.ai.invoke(model, { call, conversation, input })`
+For direct work inside an Agent signal handler, `this.ai.invoke(model, { call, conversation, input })`
 returns a `Promise<AiResult<Output>>`. `call` names the logical operation within
 that accepted signal, and `conversation` is an explicit `ConversationId`.
 `input` must be an instance of the declared input message. On success, inspect
@@ -50,6 +49,8 @@ deployment. The repository's allowed model list remains an authorization boundar
 an instance preference cannot bypass it. See the
 [server reference](../server/REFERENCE.md) for configuration precedence and
 execution lifecycle.
+
+An Agent can instead return a `CallModel` Command from `this.modelCommands.create(model, { conversation, input })`. The framework saves the request with the Agent turn, then runs the registered operation through a process-local asynchronous Command handler. The reply or `ModelCallFailed` rejection returns through ordinary Agent delivery. A constructed Command that is not returned does nothing. The [server Agent reference](../server/REFERENCE.md#agent-execution) describes pending calls, history, and interruption behavior. Direct `ai.invoke()` remains available when the handler needs the result before it can commit; provider connection and use authorization run when the invocation starts.
 
 ## Generation validation and corrections
 
@@ -106,14 +107,6 @@ they are different from model token counts.
 Await each model call before starting the next one in the same handler. Concurrent
 calls, an unfinished call when the handler returns, and reuse of a facade after
 its handler finishes are programming errors.
-
-Bounded Contexts that share one `AiRegistry` object also share any configured
-execution capacity within that process. `concurrentOperations` can limit active
-Agent executions; `queuedOperations` can limit additional work waiting in memory
-for a slot. Both settings are optional. If capacity is configured and full, further
-signals wait in the Inbox until a slot becomes available. Waiting
-before execution does not consume a configured execution deadline. An interrupted turn does not resume or retain its deadline for a later signal. Separate registries and
-processes do not share these settings.
 
 `Mcp.server()` validates an explicitly configured tool server. A generation
 capability lists the server/tool references it may use. Connection and per-call
@@ -218,7 +211,7 @@ System Events, and `domainEventHistory()` reads emitted domain Events.
 
 All four take a positive `pageSize` and an optional opaque `cursor`, return newest
 entries first, and provide `nextCursor` for older records. There is no 100-record
-retention limit. A cursor belongs to its Agent, tenant, repository, category and
+retention limit. A cursor is scoped to its Agent, tenant, repository, category, and
 conversation.
 Recording is mandatory and continues through logical Entity deletion or archive.
 
@@ -233,5 +226,5 @@ Entity code uses the public SDK-free facade. Adapter authors use the separate
 `spi/adapter` entry point. Server integration uses the internal runtime SPI;
 application code must not call those controls to bypass signal handling.
 Unknown usage stays absent in `AiUsage`; a reported zero has an explicit
-`AiTokenCount` message. Credentials belong in application connection callbacks
+`AiTokenCount` message. Applications supply credentials in connection callbacks
 and are not part of recorded model identity or diagnostic messages.

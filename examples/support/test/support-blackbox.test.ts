@@ -174,7 +174,7 @@ describe("warehouse support draft through BlackBox", () => {
     }
   });
 
-  it("keeps an earlier accepted reply when a later request fails", async () => {
+  it("clears an earlier draft when replacement facts produce no reply", async () => {
     const backend = AiTestBackend.create({
       ref: ModelRef.of("support-scripted", "v1"),
       kind: "generation",
@@ -235,14 +235,117 @@ describe("warehouse support draft through BlackBox", () => {
             .filter((row) => row !== undefined),
         (rows) => rows.length === 1 && rows[0]?.latestRequestFailed === true,
       );
-      expect(review[0]?.reply).toEqual(previousReply);
-      expect(review[0]?.hasDraft).toBe(true);
+      expect(review[0]?.reply).toBeUndefined();
+      expect(review[0]?.hasDraft).toBe(false);
       expect(review[0]?.request).toEqual(updated);
       expect(review[0]?.conversation).toEqual(
         create(ConversationIdSchema, { value: "SUP-47-draft-2" }),
       );
       backend.assertSatisfied();
     } finally {
+      await box.close();
+    }
+  });
+
+  it("ignores an older reply when replacement facts share its conversation", async () => {
+    const backend = AiTestBackend.create({
+      ref: ModelRef.of("support-scripted", "v1"),
+      kind: "generation",
+    });
+    const older = create(SupportReplySchema, {
+      subject: "Earlier facts",
+      body: "This draft uses the first warehouse report.",
+    });
+    const latest = create(SupportReplySchema, {
+      subject: "Updated facts",
+      body: "This draft uses the corrected warehouse report.",
+    });
+    const responses = backend.forModel(draftSupportReply);
+    const olderGate = responses.delay();
+    responses.respondWith(older).respondWith(latest);
+    const box = await BlackBox.from(SupportContext.create(registry(backend)), {
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const scope = box.asGuest();
+    const updated = create(SupportRequestSchema, {
+      ...request,
+      impact: "The corrected report includes the afternoon carrier cutoff.",
+    });
+    try {
+      expect(
+        (
+          await scope.post(
+            OpenSupportTicketSchema,
+            create(OpenSupportTicketSchema, {
+              id: ticketId,
+              request,
+            }),
+          )
+        ).kind,
+      ).toBe("ok");
+      expect(
+        (
+          await scope.post(
+            DraftSupportReplySchema,
+            create(DraftSupportReplySchema, {
+              id: ticketId,
+              request,
+              conversation,
+            }),
+          )
+        ).kind,
+      ).toBe("ok");
+      await box.eventually(
+        () => backend.requests(),
+        (requests) => requests.length === 1,
+      );
+      expect(
+        (
+          await scope.post(
+            DraftSupportReplySchema,
+            create(DraftSupportReplySchema, {
+              id: ticketId,
+              request: updated,
+              conversation,
+            }),
+          )
+        ).kind,
+      ).toBe("ok");
+      await box.eventually(
+        () =>
+          box.assertEvents().flatMap((event) => {
+            const reply =
+              event.message && AnyPacker.tryUnpack(event.message, SupportReplySuggestedSchema);
+            return reply ? [reply] : [];
+          }),
+        (events) => events.length === 1 && events[0]?.reply?.subject === "Updated facts",
+      );
+      olderGate.release();
+      await box.eventually(
+        () => backend.requests(),
+        (requests) => requests.length === 2,
+      );
+      const review = (await scope.send(reviewQuery())).message
+        .flatMap(({ state }) =>
+          state === undefined ? [] : [AnyPacker.tryUnpack(state, SupportReviewStateSchema)],
+        )
+        .find((value) => value !== undefined);
+      expect(review?.reply).toEqual(latest);
+      await box.eventually(
+        () => box.readAgentHistory(SupportDraftAgent, ticketId, { pageSize: 30 }),
+        (history) =>
+          history.items.filter((entry) => entry.item.case === "handledOutcome").length === 2,
+      );
+      const suggested = box.assertEvents().flatMap((event) => {
+        const reply =
+          event.message && AnyPacker.tryUnpack(event.message, SupportReplySuggestedSchema);
+        return reply ? [reply] : [];
+      });
+      expect(suggested).toHaveLength(1);
+      expect(suggested[0]?.request).toEqual(updated);
+      backend.assertSatisfied();
+    } finally {
+      olderGate.release();
       await box.close();
     }
   });

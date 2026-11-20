@@ -14,12 +14,12 @@
 
 syntax = "proto3";
 
-package spine.ts.agent;
+package spine.agent;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/wrappers.proto";
+import "spine/agent/model.proto";
 import "spine/options.proto";
-import "spine/ts/agent/model.proto";
 
 option (type_url_prefix) = "type.spine.io";
 
@@ -75,21 +75,32 @@ message AnthropicContentBlock {
   oneof content {
     option (choice).required = true;
 
+    // Visible assistant text in this block.
     string text = 1;
+
+    // Proposed external tool call in this block.
     ModelToolCall tool_call = 2 [(validate) = true];
+
+    // Provider reasoning text with its signature.
     AnthropicThinking thinking = 3 [(validate) = true];
+
+    // Provider-encrypted reasoning block.
     AnthropicRedactedThinking redacted_thinking = 4 [(validate) = true];
   }
 }
 
 // Provider reasoning text and its opaque signature.
 message AnthropicThinking {
+  // Reasoning text returned by the provider.
   string text = 1;
+
+  // Opaque provider signature associated with this reasoning block.
   string signature = 2;
 }
 
 // Provider-encrypted reasoning retained without transformation.
 message AnthropicRedactedThinking {
+  // Opaque encrypted provider content.
   string data = 1;
 }
 
@@ -104,13 +115,19 @@ message OpenAiAssistantContent {
 
 // One Responses assistant output item with its exact provider item ID.
 message OpenAiOutputItem {
+  // Exact provider identifier for this output item.
   string item_id = 1 [(required) = true];
 
   oneof content {
     option (choice).required = true;
 
+    // Assistant message item.
     OpenAiMessageItem message = 2 [(validate) = true];
+
+    // Reasoning item retained for continuation and audit.
     OpenAiReasoningItem reasoning = 3 [(validate) = true];
+
+    // Proposed local function call item.
     OpenAiFunctionCallItem function_call = 4 [(validate) = true];
   }
 }
@@ -118,12 +135,20 @@ message OpenAiOutputItem {
 // Output text and refusals in provider order.
 message OpenAiMessageItem {
   enum Phase {
+    // The provider did not specify a message phase.
     PHASE_UNSPECIFIED = 0;
+
+    // Intermediate commentary message.
     COMMENTARY = 1;
+
+    // Final answer message.
     FINAL_ANSWER = 2;
   }
 
+  // Provider phase assigned to this assistant message.
   Phase phase = 1;
+
+  // Visible text or refusal parts in provider order.
   repeated OpenAiMessagePart parts = 2 [(validate) = true];
 }
 
@@ -132,23 +157,32 @@ message OpenAiMessagePart {
   oneof content {
     option (choice).required = true;
 
+    // Text returned for this message part.
     string output_text = 1;
+
+    // Provider refusal returned for this message part.
     string refusal = 2;
   }
 }
 
 // Reasoning summaries and encrypted continuation state.
 message OpenAiReasoningItem {
+  // Provider-supplied reasoning summaries in their received order.
   repeated string summary = 1;
+
+  // Opaque encrypted continuation state for this reasoning item.
   string encrypted_content = 2 [(required) = true];
 }
 
 // Namespaced local function proposal.
 message OpenAiFunctionCallItem {
+  // Proposed function call with the provider's exact arguments and ID.
   ModelToolCall call = 1 [
     (required) = true,
     (validate) = true
   ];
+
+  // Provider namespace identifying the local function group.
   string namespace = 2 [(required) = true];
 }
 
@@ -188,11 +222,13 @@ message GenerationResponse {
 
 // Application-assigned identity of one non-generative question.
 message DecisionQuestionId {
+  // Application-assigned identity of the question.
   string value = 1 [(required) = true];
 }
 
 // Choice key or zero-based rubric-level index in a decision distribution.
 message DecisionAlternativeKey {
+  // Application-assigned choice key or rubric-level index.
   string value = 1 [(required) = true];
 }
 

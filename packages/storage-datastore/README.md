@@ -14,9 +14,10 @@ record schemas, and a configured Google Datastore client.
 For exact query limits, entity-storage behavior, and failure handling, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
-For an application using Agents, this provider keeps typed admission receipts,
-Entity state, and recorded interactions across restarts. An interrupted handler
-does not resume. Deploy the supplied `index.yaml` for Agent history queries;
+For an application using Agents, this provider keeps Entity state, complete
+attributes, and recorded interactions across restarts. Saved pending calls do
+not restart model execution; an original pending Inbox input may redeliver and
+create a new call. Deploy the supplied `index.yaml` for Agent history queries;
 see the [coding-agent reference](REFERENCE.md) for provider requirements.
 
 ## 💡 Why use it?
@@ -175,7 +176,7 @@ for each result.
 
 ## 🔐 Configure credentials and indexes
 
-Credential selection belongs to the official Google client. For example, an
+The official Google client selects credentials. For example, an
 application can use Application Default Credentials or pass `credentials` or
 `keyFilename` in its Datastore options. Keep credentials out of source code and
 logs.

@@ -12,9 +12,9 @@
  * the License.
  */
 
-import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, create, type Message } from "@bufbuild/protobuf";
 import { Code } from "@connectrpc/connect";
-import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AiModel, AiRegistry, ModelRef, type HistoryPage } from "@spine-event-engine/ai";
 import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import { Time } from "@spine-event-engine/core/time";
@@ -25,6 +25,7 @@ import {
 import { EntityTypeNameSchema } from "@spine-event-engine/proto/generated/spine/system/server/entity_type_pb.js";
 import {
   AgentHistoryEntrySchema,
+  AgentIdSchema,
   AgentHistoryCursorSchema,
   type AgentHistoryCursor,
   AiContentDigestSchema,
@@ -249,8 +250,6 @@ const ai = (defaultModel?: ModelRef, deadlineMs = 1_000) =>
       totalInputBytes: 4000,
       totalOutputBytes: 4000,
     },
-    concurrentOperations: 1,
-    queuedOperations: 0,
   });
 
 const proposal = AiModel.define({
@@ -699,13 +698,11 @@ describe("Agent registration readiness", () => {
     scope.reader.authorityFacts.roles.push("admin");
     const storage = AgentHistoryStorageFactories.create(factory, {
       context: { name: "TenantAgentReads", multitenant: true, tenantId: tenantA },
-      stateType: SupportReplyAgentStateSchema.typeName,
-      id: {
-        key: (value: SupportReplyAgentId) =>
-          Buffer.from(
-            toBinary(AnySchema, AnyPacker.pack(SupportReplyAgentIdSchema, value)),
-          ).toString("base64"),
-      },
+      agent: (value: SupportReplyAgentId) =>
+        create(AgentIdSchema, {
+          stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          entityId: AnyPacker.pack(SupportReplyAgentIdSchema, value),
+        }),
     });
     try {
       const occurredAt = create(TimestampSchema, { seconds: 1n });
@@ -720,7 +717,7 @@ describe("Agent registration readiness", () => {
       await storage.append(
         id,
         create(AgentHistoryEntrySchema, {
-          occurredAt,
+          whenOccurred: occurredAt,
           item: { case: "domainEvent", value: event },
         }),
       );
@@ -728,7 +725,7 @@ describe("Agent registration readiness", () => {
       await storage.append(
         id,
         create(AgentHistoryEntrySchema, {
-          occurredAt: privateAt,
+          whenOccurred: privateAt,
           item: {
             case: "domainEvent",
             value: create(EventSchema, {
@@ -748,7 +745,7 @@ describe("Agent registration readiness", () => {
         id: create(ConversationRecordIdSchema, { value: "tenant-request" }),
         conversation,
         operation: create(AiOperationIdSchema, { value: "draft-support" }),
-        occurredAt: recordAt,
+        whenOccurred: recordAt,
         content: AnyPacker.pack(
           GenerationRequestSchema,
           create(GenerationRequestSchema, {
@@ -766,17 +763,17 @@ describe("Agent registration readiness", () => {
       await storage.append(
         id,
         create(AgentHistoryEntrySchema, {
-          occurredAt: recordAt,
+          whenOccurred: recordAt,
           item: { case: "conversationRecord", value: record },
         }),
       );
       const olderRecord = clone(ConversationRecordSchema, record);
       olderRecord.id = create(ConversationRecordIdSchema, { value: "tenant-older-request" });
-      olderRecord.occurredAt = create(TimestampSchema, { seconds: 0n });
+      olderRecord.whenOccurred = create(TimestampSchema, { seconds: 0n });
       await storage.append(
         id,
         create(AgentHistoryEntrySchema, {
-          occurredAt: olderRecord.occurredAt,
+          whenOccurred: olderRecord.whenOccurred,
           item: { case: "conversationRecord", value: olderRecord },
         }),
       );
@@ -873,13 +870,11 @@ describe("Agent registration readiness", () => {
     const conversation = create(ConversationIdSchema, { value: "paged-draft" });
     const storage = AgentHistoryStorageFactories.create(factory, {
       context: { name: "PagedAgentReads", multitenant: false },
-      stateType: SupportReplyAgentStateSchema.typeName,
-      id: {
-        key: (value: SupportReplyAgentId) =>
-          Buffer.from(
-            toBinary(AnySchema, AnyPacker.pack(SupportReplyAgentIdSchema, value)),
-          ).toString("base64"),
-      },
+      agent: (value: SupportReplyAgentId) =>
+        create(AgentIdSchema, {
+          stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          entityId: AnyPacker.pack(SupportReplyAgentIdSchema, value),
+        }),
     });
     let nanos = 0;
     const previousTime = Time.setProvider({
@@ -910,7 +905,7 @@ describe("Agent registration readiness", () => {
         await storage.append(
           id,
           create(AgentHistoryEntrySchema, {
-            occurredAt: domainAt,
+            whenOccurred: domainAt,
             item: { case: "domainEvent", value: domain },
           }),
         );
@@ -940,7 +935,7 @@ describe("Agent registration readiness", () => {
         await storage.append(
           id,
           create(AgentHistoryEntrySchema, {
-            occurredAt: systemAt,
+            whenOccurred: systemAt,
             item: { case: "systemEvent", value: system },
           }),
         );
@@ -953,7 +948,7 @@ describe("Agent registration readiness", () => {
           id: create(ConversationRecordIdSchema, { value: recordId }),
           conversation,
           operation: create(AiOperationIdSchema, { value: "draft-support" }),
-          occurredAt: recordAt,
+          whenOccurred: recordAt,
           content: AnyPacker.pack(
             GenerationRequestSchema,
             create(GenerationRequestSchema, {
@@ -971,7 +966,7 @@ describe("Agent registration readiness", () => {
         await storage.append(
           id,
           create(AgentHistoryEntrySchema, {
-            occurredAt: recordAt,
+            whenOccurred: recordAt,
             item: { case: "conversationRecord", value: record },
           }),
         );

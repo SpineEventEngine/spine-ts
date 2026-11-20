@@ -96,7 +96,9 @@ export class AgentLiveAiAudit {
   constructor(
     private readonly audit: AgentLiveAudit<unknown>,
     private readonly operation: AgentOperationIdentity,
-    private readonly selected: AgentLiveModel,
+    private readonly selected: AgentLiveModel & {
+      readonly connection: NonNullable<AgentLiveModel["connection"]>;
+    },
     private readonly model: Model,
   ) {}
 
@@ -126,7 +128,7 @@ export class AgentLiveAiAudit {
         input: create(AiContentDigestSchema, { value: digest }),
         limits: this.limits(),
         connection: this.selected.connection,
-        startedAt: Time.currentTime(),
+        whenStarted: Time.currentTime(),
         mode,
       }),
     );
@@ -150,7 +152,7 @@ export class AgentLiveAiAudit {
       create(AttemptStartedSchema, {
         operation: this.audit.reference(this.operation, this.selected),
         attempt: create(AiAttemptIdSchema, { value: id }),
-        startedAt: Time.currentTime(),
+        whenStarted: Time.currentTime(),
         request: request.content.digest,
         ...(request.kind === "generation" && request.content.corrects !== undefined
           ? { previousAttempt: request.content.corrects }
@@ -179,7 +181,7 @@ export class AgentLiveAiAudit {
         operation: this.audit.reference(this.operation, this.selected),
         attempt: create(AiAttemptIdSchema, { value: completion.ticketId }),
         outcome: response.outcome,
-        finishedAt: Time.currentTime(),
+        whenFinished: Time.currentTime(),
         ...(generation && response.digest !== undefined ? { response: response.digest } : {}),
         ...(response.usage === undefined ? {} : { usage: response.usage }),
         ...(response.diagnosticId === undefined ? {} : { diagnosticId: response.diagnosticId }),
@@ -207,7 +209,7 @@ export class AgentLiveAiAudit {
           validationRevision: create(AiValidationRevisionSchema, {
             value: this.model.definition.validation?.version ?? this.model.definition.version,
           }),
-          admittedAt: Time.currentTime(),
+          whenAdmitted: Time.currentTime(),
         }),
       );
       return;
@@ -224,7 +226,7 @@ export class AgentLiveAiAudit {
         ...(this.#lastAttempt === undefined
           ? {}
           : { attempt: create(AiAttemptIdSchema, { value: this.#lastAttempt.id }) }),
-        failedAt: Time.currentTime(),
+        whenFailed: Time.currentTime(),
         failure: failureCodes[result.failure.code],
       }),
     );
@@ -250,7 +252,7 @@ export class AgentLiveAiAudit {
         tool: request.tool,
         arguments: create(AiContentDigestSchema, { value: digest }),
         effect: request.effect,
-        startedAt: Time.currentTime(),
+        whenStarted: Time.currentTime(),
       }),
       [this.toolConversation(request.call.value, AnyPacker.pack(ToolRequestSchema, request))],
     );
@@ -274,7 +276,7 @@ export class AgentLiveAiAudit {
           value: createHash("sha256").update(toBinary(ToolResponseSchema, response)).digest("hex"),
         }),
         ...(response.diagnosticId === undefined ? {} : { diagnosticId: response.diagnosticId }),
-        finishedAt: Time.currentTime(),
+        whenFinished: Time.currentTime(),
       }),
       [history],
     );
@@ -293,7 +295,7 @@ export class AgentLiveAiAudit {
   ): AgentHistoryEntry {
     const occurredAt = Time.currentTime();
     return create(AgentHistoryEntrySchema, {
-      occurredAt,
+      whenOccurred: occurredAt,
       item: {
         case: "conversationRecord",
         value: create(ConversationRecordSchema, {
@@ -301,7 +303,7 @@ export class AgentLiveAiAudit {
           conversation: this.operation.conversation,
           operation: this.operation.operation,
           toolCall: create(ToolCallIdSchema, { value: callId }),
-          occurredAt,
+          whenOccurred: occurredAt,
           content,
         }),
       },
@@ -321,7 +323,7 @@ export class AgentLiveAiAudit {
   ): ReturnType<typeof create<typeof AgentHistoryEntrySchema>> {
     const occurredAt = Time.currentTime();
     return create(AgentHistoryEntrySchema, {
-      occurredAt,
+      whenOccurred: occurredAt,
       item: {
         case: "conversationRecord",
         value: create(ConversationRecordSchema, {
@@ -329,7 +331,7 @@ export class AgentLiveAiAudit {
           conversation: this.operation.conversation,
           operation: this.operation.operation,
           attempt: create(AiAttemptIdSchema, { value: id }),
-          occurredAt,
+          whenOccurred: occurredAt,
           content,
         }),
       },

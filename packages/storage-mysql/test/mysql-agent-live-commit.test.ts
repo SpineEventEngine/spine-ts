@@ -24,7 +24,9 @@ import {
 import { VersionSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
+  AgentAttributes,
   AgentHistoryStorageFactories,
+  AgentHistoryRecords,
   EntityCommitStorageFactories,
   StoragePreparations,
   type EntityStorageInput,
@@ -37,7 +39,11 @@ import {
   type SupportReplyAgentState,
   SupportReplyAgentStateSchema,
 } from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
-import { entityInput } from "../../storage/test/entity/agent-live-fixtures.js";
+import {
+  agentAttributes,
+  checkAgentCurrentMatrix,
+  entityInput,
+} from "../../storage/test/entity/agent-live-fixtures.js";
 import { conversation } from "../../storage/test/entity/agent-history-fixtures.js";
 import { MysqlStorageFactory } from "../src/index.js";
 import { MysqlRecordStorage } from "../src/mysql/record-storage.js";
@@ -49,10 +55,7 @@ describe("MySQL Agent preparation without a database", () => {
     const factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: "mysql://db.example/offline_agent_preparation" })
       .build();
-    const layout = entityInput() as unknown as EntityStorageInput<
-      SupportReplyAgentId,
-      SupportReplyAgentState
-    >;
+    const layout = entityInput();
     const commits = EntityCommitStorageFactories.create(factory, layout);
     const release = Promise.withResolvers<undefined>();
     const started = Promise.withResolvers<undefined>();
@@ -67,11 +70,12 @@ describe("MySQL Agent preparation without a database", () => {
       return Promise.resolve();
     });
     try {
+      const entityId = create(SupportReplyAgentIdSchema, { ticketNumber: "gated-preparation" });
       const pending = commits.commitAgent({
-        entityId: create(SupportReplyAgentIdSchema, { ticketNumber: "gated-preparation" }),
+        entityId,
         expectedVersion: 0,
-        expectedPreferences: undefined,
-        preferences: [],
+        expectedAttributes: undefined,
+        attributes: agentAttributes(entityId),
       });
       await started.promise;
       let closed = false;
@@ -93,6 +97,24 @@ describe("MySQL Agent preparation without a database", () => {
 });
 
 describe.skipIf(url === undefined)("MySQL live Agent conditional persistence", () => {
+  it("reads every current-state and attributes presence combination", async () => {
+    if (url === undefined) throw new Error("Task MySQL URL is required.");
+    const registry = new StringifierRegistry();
+    registry.setTypeRegistry(new TypeRegistry([SupportReplyAgentIdSchema]));
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url })
+      .setStringifierRegistry(registry)
+      .build();
+    try {
+      await checkAgentCurrentMatrix(
+        factory,
+        `mysql-matrix-${String(Date.now())}-${String(process.pid)}`,
+      );
+    } finally {
+      await factory.close();
+    }
+  });
+
   it("drains an admitted Agent commit when close starts in the ID callback", async () => {
     if (url === undefined) throw new Error("Task MySQL URL is required.");
     const registry = new StringifierRegistry();
@@ -120,11 +142,13 @@ describe.skipIf(url === undefined)("MySQL live Agent conditional persistence", (
     await commits.commitAgent({
       entityId,
       expectedVersion: 0,
-      expectedPreferences: undefined,
-      preferences: [],
+      expectedAttributes: undefined,
+      attributes: agentAttributes(entityId),
     });
     await closing;
-    await expect(commits.readAgentPreferences(entityId)).rejects.toThrow(/closed/i);
+    await expect(
+      commits.readAgentCurrent(entityId).then((data) => data.attributes?.modelPreferences),
+    ).rejects.toThrow(/closed/i);
   });
 
   it("reopens complete preferences, current state, and final audit without an execution head", async () => {
@@ -170,13 +194,15 @@ describe.skipIf(url === undefined)("MySQL live Agent conditional persistence", (
       version: create(VersionSchema, { number: 1 }),
     });
     try {
-      await expect(commits.readAgentPreferences(id)).resolves.toBeUndefined();
+      await expect(
+        commits.readAgentCurrent(id).then((data) => data.attributes?.modelPreferences),
+      ).resolves.toBeUndefined();
       const requestedPreferences = [preference];
       const pendingCommit = commits.commitAgent({
         entityId: id,
         expectedVersion: 0,
-        expectedPreferences: undefined,
-        preferences: requestedPreferences,
+        expectedAttributes: undefined,
+        attributes: agentAttributes(id, requestedPreferences),
         entityCommit: {
           context: layout.context,
           entity: layout,
@@ -188,16 +214,20 @@ describe.skipIf(url === undefined)("MySQL live Agent conditional persistence", (
       });
       requestedPreferences.splice(0);
       await pendingCommit;
-      await expect(commits.readAgentPreferences(id)).resolves.toEqual([preference]);
+      await expect(
+        commits.readAgentCurrent(id).then((data) => data.attributes?.modelPreferences),
+      ).resolves.toEqual([preference]);
       const history = AgentHistoryStorageFactories.create(factory, {
         context: layout.context,
-        stateType: layout.stateSchema.typeName,
-        id: { key: (value: typeof id) => value.ticketNumber },
+        agent: (value: typeof id) => AgentAttributes.id(layout, value),
       });
       try {
         const page = await history.read({ entityId: id, view: { kind: "full" }, count: 10 });
         expect(page.entries.map((value) => toBinary(AgentHistoryEntrySchema, value))).toEqual([
-          toBinary(AgentHistoryEntrySchema, entry),
+          toBinary(
+            AgentHistoryEntrySchema,
+            AgentHistoryRecords.capture(AgentAttributes.id(layout, id), entry),
+          ),
         ]);
       } finally {
         history.close();
@@ -206,26 +236,30 @@ describe.skipIf(url === undefined)("MySQL live Agent conditional persistence", (
         commits.commitAgent({
           entityId: id,
           expectedVersion: 0,
-          expectedPreferences: [preference],
-          preferences: [],
+          expectedAttributes: agentAttributes(id, [preference]),
+          attributes: agentAttributes(id, []),
         }),
       ).rejects.toThrow(/Version/i);
-      await expect(commits.readAgentPreferences(id)).resolves.toEqual([preference]);
+      await expect(
+        commits.readAgentCurrent(id).then((data) => data.attributes?.modelPreferences),
+      ).resolves.toEqual([preference]);
       await commits.commitAgent({
         entityId: id,
         expectedVersion: 1,
-        expectedPreferences: [preference],
-        preferences: [],
+        expectedAttributes: agentAttributes(id, [preference]),
+        attributes: agentAttributes(id, []),
       });
-      await expect(commits.readAgentPreferences(id)).resolves.toEqual([]);
+      await expect(
+        commits.readAgentCurrent(id).then((data) => data.attributes?.modelPreferences),
+      ).resolves.toEqual([]);
       await expect(
         commits.commitAgent({
           entityId: id,
           expectedVersion: 1,
-          expectedPreferences: [preference],
-          preferences: [preference],
+          expectedAttributes: agentAttributes(id, [preference]),
+          attributes: agentAttributes(id, [preference]),
         }),
-      ).rejects.toThrow(/preference/i);
+      ).rejects.toThrow(/attributes/i);
       const conflictedNext = create(EntityRecordSchema, {
         ...next,
         version: create(VersionSchema, { number: 2 }),
@@ -234,8 +268,8 @@ describe.skipIf(url === undefined)("MySQL live Agent conditional persistence", (
         commits.commitAgent({
           entityId: id,
           expectedVersion: 1,
-          expectedPreferences: [],
-          preferences: [preference],
+          expectedAttributes: agentAttributes(id, []),
+          attributes: agentAttributes(id, [preference]),
           entityCommit: {
             context: layout.context,
             entity: layout,
@@ -252,7 +286,9 @@ describe.skipIf(url === undefined)("MySQL live Agent conditional persistence", (
           ],
         }),
       ).rejects.toThrow();
-      await expect(commits.readAgentPreferences(id)).resolves.toEqual([]);
+      await expect(
+        commits.readAgentCurrent(id).then((data) => data.attributes?.modelPreferences),
+      ).resolves.toEqual([]);
       const current = factory.createRecordStorage(layout.context, layout.recordSpec);
       try {
         const found = await current.read(id);
@@ -270,20 +306,26 @@ describe.skipIf(url === undefined)("MySQL live Agent conditional persistence", (
           contenderA.commitAgent({
             entityId: raceId,
             expectedVersion: 0,
-            expectedPreferences: undefined,
-            preferences: [preference],
+            expectedAttributes: undefined,
+            attributes: agentAttributes(raceId, [preference]),
           }),
           contenderB.commitAgent({
             entityId: raceId,
             expectedVersion: 0,
-            expectedPreferences: undefined,
-            preferences: [],
+            expectedAttributes: undefined,
+            attributes: agentAttributes(raceId, []),
           }),
         ]);
         expect(outcomes.filter((result) => result.status === "fulfilled")).toHaveLength(1);
         expect(outcomes.filter((result) => result.status === "rejected")).toHaveLength(1);
-        expect(await contenderA.readAgentPreferences(raceId)).toEqual(
-          await contenderB.readAgentPreferences(raceId),
+        expect(
+          await contenderA
+            .readAgentCurrent(raceId)
+            .then((data) => data.attributes?.modelPreferences),
+        ).toEqual(
+          await contenderB
+            .readAgentCurrent(raceId)
+            .then((data) => data.attributes?.modelPreferences),
         );
       } finally {
         await Promise.all([contenderA.close(), contenderB.close()]);
@@ -291,7 +333,9 @@ describe.skipIf(url === undefined)("MySQL live Agent conditional persistence", (
       await commits.close();
       const reopened = EntityCommitStorageFactories.create(factory, layout);
       try {
-        await expect(reopened.readAgentPreferences(id)).resolves.toEqual([]);
+        await expect(
+          reopened.readAgentCurrent(id).then((data) => data.attributes?.modelPreferences),
+        ).resolves.toEqual([]);
       } finally {
         await reopened.close();
       }

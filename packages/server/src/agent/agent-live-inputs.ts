@@ -70,7 +70,7 @@ export interface AgentLiveInvocation {
 }
 
 /**
- * Selected deployment and validated connection for one live model kind.
+ * Selected deployment for one live model kind.
  */
 export interface AgentLiveModel {
   /**
@@ -84,9 +84,9 @@ export interface AgentLiveModel {
   readonly model: ModelRef;
 
   /**
-   * Authenticated connection selected for this model.
+   * Authenticated connection, once this model is actually invoked.
    */
-  readonly connection: AiConnectionIdentity;
+  readonly connection?: AiConnectionIdentity;
 }
 
 /**

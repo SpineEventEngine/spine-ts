@@ -20,6 +20,12 @@ export abstract class AbstractAssignee {
 }
 
 /**
+ * Runs assigned Commands independently of the bus dispatch that admitted them.
+ * A Bounded Context waits for these handlers and their produced signals during shutdown.
+ */
+export abstract class AsyncCommandHandler extends AbstractAssignee {}
+
+/**
  * Nominal base class for a decorated standalone Command commander.
  */
 export abstract class AbstractCommander {

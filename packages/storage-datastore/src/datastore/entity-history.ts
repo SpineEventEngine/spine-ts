@@ -13,19 +13,15 @@
  */
 
 import { clone, toBinary, type Message } from "@bufbuild/protobuf";
-import {
-  AgentHistoryEntrySchema,
-  type AgentHistoryEntry,
-  type ModelPreference,
-} from "@spine-event-engine/proto/agent";
+import { type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import {
   AgentHistoryKeys,
   AgentHistoryRecords,
-  AgentModelPreferences,
-  type PreferencesRecord,
+  AgentAttributes,
+  type ActiveAgentRecord,
   type AgentCommitInput,
+  type AgentCurrentData,
 } from "@spine-event-engine/storage/provider";
-import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import { AnyPacker } from "@spine-event-engine/core";
 import { type Timestamp } from "@bufbuild/protobuf/wkt";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
@@ -97,8 +93,8 @@ interface AgentCommitRows<I> {
   states?: DatastoreRecordStorage<unknown, EntityRecord>;
   diagnostics?: DatastoreRecordStorage<unknown, Event>;
   events?: DatastoreRecordStorage<unknown, Event>;
-  history: DatastoreRecordStorage<string, AgentHistoryRecord>;
-  preferences: DatastoreRecordStorage<string, PreferencesRecord>;
+  history: DatastoreRecordStorage<string, AgentHistoryEntry>;
+  attributes: DatastoreRecordStorage<string, ActiveAgentRecord>;
 }
 
 /**
@@ -203,9 +199,9 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
 
   #events: CommitEventRecords | undefined;
 
-  #history: DatastoreRecordStorage<string, AgentHistoryRecord> | undefined;
+  #history: DatastoreRecordStorage<string, AgentHistoryEntry> | undefined;
 
-  #preferences: DatastoreRecordStorage<string, PreferencesRecord> | undefined;
+  #attributes: DatastoreRecordStorage<string, ActiveAgentRecord> | undefined;
 
   /**
    * Synchronous idle-close result, including any cleanup failure.
@@ -281,21 +277,76 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
    * @param entityId Typed Agent identifier.
    * @returns Complete selections or absent record.
    */
-  readAgentPreferences(entityId: unknown): Promise<readonly ModelPreference[] | undefined> {
+  readAgentCurrent(entityId: unknown): Promise<AgentCurrentData> {
     if (!this.#open) return Promise.reject(new Error("Entity commit storage is closed."));
     return this.track(async () => {
-      const key = AgentModelPreferences.key(this.input, entityId);
+      const id = this.input.id.clone(entityId);
+      const key = AgentAttributes.id(this.input, id);
       const rows = this.agentRows();
-      const slot = `v1:${AgentHistoryHash.value(AgentModelPreferences.text(key))}`;
-      const found = await rows.preferences.read(slot);
-      if (found === undefined) return undefined;
-      AgentModelPreferences.requireIdentity(found, key);
-      return AgentModelPreferences.copy(found.preferences);
+      const slot = `v1:${AgentHistoryHash.value(AgentAttributes.text(key))}`;
+      const currentKey = rows.current.transactionKey(id);
+      const attributesKey = rows.attributes.transactionKey(slot);
+      const tx = rows.attributes.transaction();
+      try {
+        await tx.run();
+        const returned: unknown = (
+          await tx.get([currentKey, attributesKey], { wrapNumbers: true })
+        )[0];
+        if (!Array.isArray(returned))
+          throw new Error("Datastore Agent batch did not return an array.");
+        const entities = returned as Record<string | symbol, unknown>[];
+        const image = this.decodeCurrentBatch(entities, currentKey, attributesKey, key);
+        await tx.commit();
+        return image;
+      } catch (error) {
+        await tx.rollback().catch(() => undefined);
+        throw error;
+      }
     });
   }
 
   /**
-   * Commits Agent state, final audit, and preferences in one native transaction.
+   * Decodes both native batch members by their returned Datastore identities.
+   *
+   * @param entities Native rows, which may omit either family.
+   * @param currentKey Expected current-state key.
+   * @param attributesKey Expected attributes key.
+   * @param agent Complete expected Agent identity.
+   * @returns Detached paired provider image.
+   */
+  private decodeCurrentBatch(
+    entities: Record<string | symbol, unknown>[],
+    currentKey: ReturnType<Datastore["key"]>,
+    attributesKey: ReturnType<Datastore["key"]>,
+    agent: ReturnType<typeof AgentAttributes.id>,
+  ): AgentCurrentData {
+    const rows = this.agentRows();
+    const currentEntity = entities.find((entity) =>
+      rows.current.matchesTransactionKey(entity, currentKey),
+    );
+    const attributesEntity = entities.find((entity) =>
+      rows.attributes.matchesTransactionKey(entity, attributesKey),
+    );
+    if (
+      entities.length !==
+      Number(currentEntity !== undefined) + Number(attributesEntity !== undefined)
+    )
+      throw new Error("Datastore Agent batch returned an unexpected record identity.");
+    const current =
+      currentEntity === undefined ? undefined : rows.current.decodeTransactionEntity(currentEntity);
+    const attributes =
+      attributesEntity === undefined
+        ? undefined
+        : rows.attributes.decodeTransactionEntity(attributesEntity);
+    if (attributes !== undefined) AgentAttributes.requireIdentity(attributes, agent);
+    return {
+      current,
+      attributes: attributes === undefined ? undefined : AgentAttributes.copy(attributes),
+    };
+  }
+
+  /**
+   * Commits Agent state, final audit, and attributes in one native transaction.
    * @param input Captured live Agent transition.
    * @returns Completion after a conditional group commits.
    * @typeParam I Typed Agent identifier.
@@ -305,15 +356,16 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     if (!this.#open) return Promise.reject(new Error("Entity commit storage is closed."));
     return this.track(async () => {
       const id = this.input.id.clone(input.entityId);
-      const key = AgentModelPreferences.key(this.input, id);
+      const key = AgentAttributes.id(this.input, id);
       const expected =
-        input.expectedPreferences === undefined
+        input.expectedAttributes === undefined
           ? undefined
-          : AgentModelPreferences.copy(input.expectedPreferences);
-      const next = AgentModelPreferences.record(key, input.preferences);
+          : AgentAttributes.copy(input.expectedAttributes);
+      const next = AgentAttributes.copy(input.attributes);
+      AgentAttributes.requireIdentity(next, key);
       const mutation = input.entityCommit && EntityCommitSnapshots.capture(input.entityCommit);
       const history =
-        input.historyEntries?.map((entry) => clone(AgentHistoryEntrySchema, entry)) ?? [];
+        input.historyEntries?.map((entry) => AgentHistoryRecords.capture(key, entry)) ?? [];
       this.validateAgent(id, input.expectedVersion, mutation);
       const rows = this.agentRows(mutation as never);
       await this.agentTransaction(
@@ -371,11 +423,11 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
         AgentHistoryRecords.group,
         acquired,
       );
-    const preferences =
-      this.#preferences ??
+    const attributes =
+      this.#attributes ??
       this.openAgentRecord(
-        AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
-        AgentModelPreferences.group,
+        AgentAttributes.spec((value) => AgentHistoryHash.value(value)),
+        AgentAttributes.group,
         acquired,
       );
     return {
@@ -384,7 +436,7 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
       diagnostics,
       events,
       history,
-      preferences,
+      attributes,
     } as AgentCommitRows<unknown>;
   }
 
@@ -455,7 +507,7 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     this.#diagnostics ??= rows.diagnostics as CommitEventRecords | undefined;
     this.#events ??= rows.events as CommitEventRecords | undefined;
     this.#history ??= rows.history;
-    this.#preferences ??= rows.preferences;
+    this.#attributes ??= rows.attributes;
   }
 
   /**
@@ -501,7 +553,7 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
    * @param id Captured Agent ID.
    * @param version Initial Entity version.
    * @param expected Initial preference image.
-   * @param next Complete replacement preferences.
+   * @param next Complete replacement attributes.
    * @param mutation Optional Entity mutation.
    * @param history Final audit entries.
    * @typeParam I Typed Entity identifier.
@@ -512,12 +564,12 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     rows: AgentCommitRows<unknown>,
     id: unknown,
     version: number,
-    expected: readonly ModelPreference[] | undefined,
-    next: PreferencesRecord,
+    expected: ActiveAgentRecord | undefined,
+    next: ActiveAgentRecord,
     mutation: EntityCommitInput<I, S> | undefined,
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
-    const tx = rows.preferences.transaction();
+    const tx = rows.attributes.transaction();
     try {
       await tx.run();
       const staged: NativeRow[] = [];
@@ -552,17 +604,17 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     rows: AgentCommitRows<unknown>,
     id: unknown,
     version: number,
-    expected: readonly ModelPreference[] | undefined,
-    next: PreferencesRecord,
+    expected: ActiveAgentRecord | undefined,
+    next: ActiveAgentRecord,
     mutation: EntityCommitInput<I, S> | undefined,
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
-    if (next.key === undefined) throw new Error("Agent preference identity is missing.");
-    const slot = `v1:${AgentHistoryHash.value(AgentModelPreferences.text(next.key))}`;
-    const prior = await this.agentRead(tx, rows.preferences, slot);
-    if (prior !== undefined) AgentModelPreferences.requireIdentity(prior, next.key);
-    if (!AgentModelPreferences.same(prior?.preferences, expected))
-      throw new Error("Agent model preferences changed during the live turn.");
+    if (next.agent === undefined) throw new Error("Agent attributes identity is missing.");
+    const slot = `v1:${AgentHistoryHash.value(AgentAttributes.text(next.agent))}`;
+    const prior = await this.agentRead(tx, rows.attributes, slot);
+    if (prior !== undefined) AgentAttributes.requireIdentity(prior, next.agent);
+    if (!AgentAttributes.same(prior, expected))
+      throw new Error("Agent attributes changed during the live turn.");
     const current = await this.agentRead(tx, rows.current, id);
     if ((current?.version?.number ?? 0) !== version)
       throw new Error("Agent initial Entity Version is no longer current.");
@@ -573,14 +625,13 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     for (const event of mutation?.events ?? [])
       await this.agentImmutable(tx, staged, this.requiredNative(rows.events), event);
     if (mutation !== undefined) staged.push(rows.current.transactionEntity(mutation.next));
-    await this.appendAgentAudit(tx, staged, rows.history, id, history);
-    staged.push(rows.preferences.transactionEntity(next));
+    await this.appendAgentAudit(tx, staged, rows.history, history);
+    staged.push(rows.attributes.transactionEntity(next));
   }
 
   /**
    * Records final Agent audit rows in the admitted native transaction.
    * @param history Final Agent audit entries.
-   * @param id Captured typed Agent identifier.
    * @param staged Rows staged for atomic commit.
    * @param storage Retained provider record family.
    * @param tx Active native transaction.
@@ -589,19 +640,13 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
   private async appendAgentAudit(
     tx: ReturnType<Datastore["transaction"]>,
     staged: NativeRow[],
-    storage: DatastoreRecordStorage<string, AgentHistoryRecord>,
-    id: unknown,
+    storage: DatastoreRecordStorage<string, AgentHistoryEntry>,
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
     for (const entry of history) {
       if (AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry)).length > 1500)
         throw new RangeError("Agent history order exceeds Datastore indexed-value capacity.");
-      const record = AgentHistoryRecords.record(
-        this.input.stateSchema.typeName,
-        this.input.id.key(id),
-        entry,
-      );
-      await this.agentImmutable(tx, staged, storage, record);
+      await this.agentImmutable(tx, staged, storage, entry);
     }
   }
 
@@ -842,14 +887,14 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
       this.#diagnostics,
       this.#states,
       this.#history,
-      this.#preferences,
+      this.#attributes,
       this.#current,
     ].filter((port) => port !== undefined);
     this.#events = undefined;
     this.#diagnostics = undefined;
     this.#states = undefined;
     this.#history = undefined;
-    this.#preferences = undefined;
+    this.#attributes = undefined;
     this.#current = undefined;
     const failures = this.closeGroup(ports);
     if (failures.length === 1) return failures[0] as Error;

@@ -195,8 +195,8 @@ require transactional InnoDB tables for atomic Agent commits. The handle
 rejects a nontransactional engine before accepting Agent work; other Entity
 families retain their configured engine behavior. `appendAll()` commits an
 immutable Agent history group in one transaction. `commitAgent()` compares
-the exact Entity image and model preferences, then writes accepted state,
-preference, and history changes atomically. A no-op or preference-only turn
-can leave the Entity Version unchanged. The separate typed receipt records
-admission, not executable work for replay. Connection binding is scoped to an
+the exact Entity image and Agent attributes, then writes accepted state,
+attributes, and history changes atomically. An attributes-only turn
+can leave the Entity Version unchanged. Saved pending calls do not replay
+execution after restart. Connection binding is scoped to an
 asynchronous operation; no transaction stays open during a model request.

@@ -43,7 +43,7 @@ describe("Datastore public compile-consumer contract", () => {
       events: {} as never,
       commits: {
         commit: () => Promise.resolve(),
-        readAgentPreferences: () => Promise.resolve(undefined),
+        readAgentCurrent: () => Promise.resolve({ current: undefined, attributes: undefined }),
         commitAgent: () => Promise.resolve(),
         close: () => Promise.resolve(),
         closeIdle: () => undefined,

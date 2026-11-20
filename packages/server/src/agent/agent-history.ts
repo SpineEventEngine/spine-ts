@@ -12,15 +12,24 @@
  * the License.
  */
 
-import { clone, create } from "@bufbuild/protobuf";
+import { clone, create, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { AnyPacker, Validate } from "@spine-event-engine/core";
 import type { ConversationHistoryRead, HistoryPage, HistoryRead } from "@spine-event-engine/ai";
-import type { ActorContext, Event } from "@spine-event-engine/proto";
+import {
+  CommandSchema,
+  EventSchema,
+  type ActorContext,
+  type Event,
+} from "@spine-event-engine/proto";
 import {
   AgentHistoryCursorSchema,
   AgentHistoryEntrySchema,
+  AiOperationIdSchema,
+  CallModelSchema,
   ConversationIdSchema,
   type AgentHistoryEntry,
+  type AiOperationId,
   type ConversationRecord,
 } from "@spine-event-engine/proto/agent";
 import {
@@ -30,6 +39,7 @@ import {
   type AgentHistoryStorage,
   type AgentHistoryView,
 } from "@spine-event-engine/storage/provider";
+import type { ModelCallHistory } from "./model-commands.js";
 
 /**
  * Identifies the exact repository and Agent instance for a continuation.
@@ -200,6 +210,15 @@ export interface AgentHistoryReadAccess {
   domain(entity: object, request: HistoryRead): Promise<HistoryPage<Event>>;
 
   /**
+   * Reads one prepared model request by its exact logical call ID.
+   *
+   * @param entity Restored Agent instance.
+   * @param callId Logical model call identifier.
+   * @returns Original request and triggering envelope, when present.
+   */
+  modelRequest(entity: object, callId: AiOperationId): Promise<ModelCallHistory | undefined>;
+
+  /**
    * Validates a cursor and reads one provider page.
    *
    * @param entity Agent instance.
@@ -245,6 +264,46 @@ export interface AgentHistoryReadAccess {
  */
 export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
   /**
+   * Reads one immutable request without scanning an Agent history page.
+   *
+   * @param entity Restored Agent instance.
+   * @param callId Logical model call identifier.
+   * @returns Prepared Command and complete original source when present.
+   */
+  async modelRequest(entity: object, callId: AiOperationId): Promise<ModelCallHistory | undefined> {
+    Validate.check(AiOperationIdSchema, callId);
+    const binding = bindings.get(entity);
+    if (binding === undefined)
+      throw new Error("Agent model history is available only from repository execution.");
+    const actor = binding.captureActor?.();
+    const onRead = () => AgentHistoryPages.readExact(binding, callId.value, actor);
+    const page = binding.onAdmit === undefined ? await onRead() : await binding.onAdmit(onRead);
+    const entry = page.items[0];
+    if (entry === undefined) return undefined;
+    if (entry.item.case !== "modelRequest")
+      throw new Error("Agent request identity returned a different history category.");
+    const record = entry.item.value;
+    const command = record.request;
+    const request = command?.message && AnyPacker.tryUnpack(command.message, CallModelSchema);
+    if (command === undefined || request === undefined)
+      throw new Error("Stored Agent model request is incomplete.");
+    const source = record.source;
+    if (source.case === "command")
+      return {
+        command: clone(CommandSchema, command),
+        request,
+        source: { case: "command", value: clone(CommandSchema, source.value) },
+      };
+    if (source.case === "event")
+      return {
+        command: clone(CommandSchema, command),
+        request,
+        source: { case: "event", value: clone(EventSchema, source.value) },
+      };
+    throw new Error("Stored Agent model request has no triggering signal.");
+  },
+
+  /**
    * Attaches one mandatory storage handle to a restored Agent.
    *
    * @typeParam Id Typed Agent identifier.
@@ -284,7 +343,7 @@ export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
     return binding.storage.append(
       binding.entityId,
       create(AgentHistoryEntrySchema, {
-        occurredAt: event.context.timestamp,
+        whenOccurred: event.context.timestamp,
         item: { case: "systemEvent", value: event },
       }),
     );
@@ -436,6 +495,44 @@ export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
  * Loads and presents complete provider pages at the protected read boundary.
  */
 const AgentHistoryPages = Object.freeze({
+  /**
+   * Reads one indexed model request through the protected history boundary.
+   *
+   * @typeParam Id Typed Agent identifier.
+   * @param binding Current Agent history binding.
+   * @param callId Exact logical model call ID.
+   * @param actorContext Actor captured before admission and provider work.
+   * @returns Visible exact entry, or an empty page when denied by policy.
+   */
+  async readExact<Id>(
+    binding: AgentHistoryBinding<Id>,
+    callId: string,
+    actorContext?: ActorContext,
+  ): Promise<HistoryPage<AgentHistoryEntry>> {
+    const request = { pageSize: 1 };
+    const view = { kind: "full" } as const;
+    const maxBytes = this.limit(binding.maxBytes);
+    const live = async (): Promise<AgentHistoryPage> => {
+      const entry = await binding.storage.readModelRequest(binding.entityId, callId);
+      return { entries: entry === undefined ? [] : [entry], hasMore: false };
+    };
+    const present = (page: AgentHistoryPage): Promise<HistoryPage<AgentHistoryEntry>> => {
+      const bytes = page.entries.reduce(
+        (sum, entry) => sum + toBinary(AgentHistoryEntrySchema, entry).length,
+        0,
+      );
+      if (maxBytes !== undefined && bytes > maxBytes)
+        throw new RangeError("Agent history exact request exceeds maxBytes.");
+      const result = this.present(binding.scope, view, page);
+      return binding.filterPage === undefined
+        ? Promise.resolve(result)
+        : binding.filterPage(result, view, request, actorContext);
+    };
+    return binding.interceptRead === undefined
+      ? present(await live())
+      : binding.interceptRead(binding.scope, request, live, maxBytes, present);
+  },
+
   /**
    * Reads and presents one complete protected Agent history page.
    * @typeParam Id Typed Agent identifier.
@@ -661,7 +758,11 @@ const AgentHistoryCursorValues = Object.freeze({
       typeof cursor.recordId !== "string" ||
       (cursor.category !== "conversation" &&
         cursor.category !== "system" &&
-        cursor.category !== "domain")
+        cursor.category !== "domain" &&
+        cursor.category !== "request" &&
+        cursor.category !== "attempt" &&
+        cursor.category !== "handled" &&
+        cursor.category !== "abandoned")
     )
       throw new Error();
     const key: AgentHistoryOrderKey = {

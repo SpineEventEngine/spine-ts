@@ -14,7 +14,10 @@
 
 import { create } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
-import { AiRegistry, Mcp } from "@spine-event-engine/ai";
+import { AiRegistry, Mcp, ModelRef, type AiScope } from "@spine-event-engine/ai";
+import type { AiBackendDefinition } from "@spine-event-engine/ai/spi/adapter";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
+import { ActorContextSchema, CommandIdSchema, MessageIdSchema } from "@spine-event-engine/proto";
 import {
   McpServerIdSchema,
   McpToolNameSchema,
@@ -28,8 +31,119 @@ import { AgentLiveBudget } from "../../src/agent/agent-live-budget.js";
 import { AgentLiveMcpControls } from "../../src/agent/agent-live-mcp-controls.js";
 import { AgentLiveMcpRuntime } from "../../src/agent/agent-live-mcp-runtime.js";
 import type { AgentLiveAiAudit } from "../../src/agent/agent-live-ai-audit.js";
+import { DraftSupportReplySchema } from "../../test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
+import {
+  SupportReplyAgentIdSchema,
+  SupportReplyAgentStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
+
+const protocolAgentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-mcp-controls" });
+const protocolScope: AiScope = {
+  actor: create(ActorContextSchema),
+  tenant: { kind: "single-tenant" },
+  agent: create(MessageIdSchema, {
+    id: AnyPacker.pack(SupportReplyAgentIdSchema, protocolAgentId),
+    typeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+  }),
+  source: create(MessageIdSchema, {
+    id: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "mcp-source" })),
+    typeUrl: TypeUrls.derive(DraftSupportReplySchema),
+  }),
+};
+const protocolBackend: AiBackendDefinition = {
+  ref: ModelRef.of("support-mcp-control", "v1"),
+  kind: "generation",
+  supports: () => true,
+  resolveIdentity: () => ({
+    provider: "fixture",
+    account: "support",
+    endpoint: "memory",
+    model: "support-mcp-control",
+  }),
+  authorizeUse: () => true,
+  connect: (_scope, identity) => ({ model: {}, identity }),
+  execute: () => Promise.reject(new Error("Protocol admission test must not execute a model.")),
+};
 
 describe("live MCP controls", () => {
+  it("rejects incomplete protocol identity, undispatched calls, and stale physical tickets", async () => {
+    const controller = new AbortController();
+    const controls = new AgentLiveMcpControls({
+      scope: protocolScope,
+      registry: AiRegistry.create({ defaultModels: {} }),
+      backend: protocolBackend,
+      operation: {
+        operation: create(AiOperationIdSchema, { value: "operation-protocol" }),
+        conversation: create(ConversationIdSchema, { value: "conversation-protocol" }),
+      },
+      signal: controller.signal,
+      budget: new AgentLiveBudget({}),
+      audit: { toolStarted: vi.fn(), toolFinished: vi.fn() } as unknown as AgentLiveAiAudit,
+      onProposal: vi.fn(),
+    });
+    const request = { phase: "setup" as const, method: "initialize", inputBytes: 1 };
+    await expect(controls.reserveMessage("", request)).rejects.toThrow("identity is empty");
+    await expect(controls.reserveMessage("knowledge", { ...request, method: "" })).rejects.toThrow(
+      "identity is empty",
+    );
+    await expect(
+      controls.reserveMessage("knowledge", {
+        phase: "call",
+        method: "tools/call",
+        toolCallId: "not-dispatched",
+        inputBytes: 1,
+      }),
+    ).rejects.toThrow("not been dispatched");
+    await expect(
+      controls.reserveMessage("knowledge", {
+        phase: "call",
+        method: "tools/call",
+        inputBytes: 1,
+      }),
+    ).rejects.toThrow("not been dispatched");
+    const ticket = await controls.reserveMessage("knowledge", request);
+    await controls.finishMessage(ticket.id, 0);
+    expect(() => {
+      controls.onReceived(ticket.id, 1);
+    }).toThrow("no longer active");
+    await expect(controls.finishMessage(ticket.id, 0)).rejects.toThrow("no longer active");
+    controller.abort();
+    await expect(controls.reserveMessage("knowledge", request)).rejects.toThrow("closed");
+  });
+
+  it("admits a provider tool proposal only once before asynchronous audit", async () => {
+    const toolStarted = vi.fn(() => Promise.resolve());
+    const controls = new AgentLiveMcpControls({
+      scope: protocolScope,
+      registry: AiRegistry.create({ defaultModels: {} }),
+      backend: protocolBackend,
+      operation: {
+        operation: create(AiOperationIdSchema, { value: "operation-duplicate" }),
+        conversation: create(ConversationIdSchema, { value: "conversation-duplicate" }),
+      },
+      signal: new AbortController().signal,
+      budget: new AgentLiveBudget({ toolCalls: 2 }),
+      audit: { toolStarted, toolFinished: vi.fn() } as unknown as AgentLiveAiAudit,
+      onProposal: vi.fn(),
+    });
+    const proposal = {
+      ticketId: "physical-1",
+      server: "knowledge",
+      tool: "lookup",
+      argumentsJson: "{}",
+      providerCallId: "provider-call-1",
+    };
+    const facts = {
+      server: create(McpServerIdSchema, { value: "knowledge" }),
+      tool: create(McpToolNameSchema, { value: "lookup" }),
+      argumentsJson: "{}",
+      effect: ToolEffect.READ,
+    };
+    await expect(controls.admitTool(proposal, facts)).resolves.toBeTruthy();
+    await expect(controls.admitTool(proposal, facts)).rejects.toThrow("already admitted");
+    expect(toolStarted).toHaveBeenCalledOnce();
+  });
+
   it("keeps input credit available after a rejected setup reservation", async () => {
     const budget = new AgentLiveBudget({ totalInputBytes: 10, totalOutputBytes: 12 });
     const controls = new AgentLiveMcpControls({

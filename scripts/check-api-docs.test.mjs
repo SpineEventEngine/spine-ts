@@ -21,6 +21,7 @@ const checkerPath = new URL("./check-api-docs.mjs", import.meta.url).pathname;
 
 const expectedStorageProviderExports = [
   "AgentCommitInput",
+  "AgentCurrentData",
   "AgentHistoryCapacity",
   "AgentHistoryConformance",
   "AgentHistoryConformanceAdapter",
@@ -35,7 +36,7 @@ const expectedStorageProviderExports = [
   "AgentHistoryStorageFactory",
   "AgentHistoryStorageInput",
   "AgentHistoryView",
-  "AgentModelPreferences",
+  "AgentAttributes",
   "EntityCommitInput",
   "EntityCommitSnapshots",
   "EntityCommitStorage",
@@ -51,7 +52,7 @@ const expectedStorageProviderExports = [
   "EntityStorageConformance",
   "EntityStorageInput",
   "EntityStoragePreparationInput",
-  "PreferencesRecord",
+  "ActiveAgentRecord",
   "StoragePreparation",
   "StoragePreparationMode",
   "StoragePreparations",

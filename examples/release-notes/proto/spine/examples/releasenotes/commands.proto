@@ -15,23 +15,32 @@ syntax = "proto3";
 
 package spine.examples.releasenotes;
 
-import "spine/examples/releasenotes/types.proto";
+import "spine/agent/model.proto";
 import "spine/core/version.proto";
+import "spine/examples/releasenotes/types.proto";
 import "spine/options.proto";
-import "spine/ts/agent/model.proto";
 
 option (type_url_prefix) = "type.spine.examples.releasenotes";
 
 // Opens one draft for a fixed repository selection and resolved comparison.
 message OpenReleaseDraft {
   // Identifies the release draft targeted by this Command.
-  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+  ReleaseDraftId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // Names the release represented by this editable draft.
-  ReleaseTitle title = 2 [(required) = true, (validate) = true];
+  ReleaseTitle title = 2 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // Pins the selected repository and its base and target commits.
-  ReleaseComparison comparison = 3 [(required) = true, (validate) = true];
+  ReleaseComparison comparison = 3 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // Names the readers whose needs shape these release notes.
   string audience = 4 [(required) = true];
@@ -40,13 +49,22 @@ message OpenReleaseDraft {
 // Changes the comparison or audience of an existing draft.
 message ChangeReleaseInputs {
   // Identifies the release draft targeted by this Command.
-  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+  ReleaseDraftId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // Current Entity Version read with the draft state.
-  spine.core.Version expected_version = 2 [(required) = true, (validate) = true];
+  spine.core.Version expected_version = 2 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // Pins the selected repository and its base and target commits.
-  ReleaseComparison comparison = 3 [(required) = true, (validate) = true];
+  ReleaseComparison comparison = 3 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // Names the readers whose needs shape these release notes.
   string audience = 4 [(required) = true];
@@ -55,34 +73,58 @@ message ChangeReleaseInputs {
 // Requests one model operation for the complete accepted draft snapshot.
 message RequestReleaseGeneration {
   // Identifies the release draft targeted by this Command.
-  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+  ReleaseDraftId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // Correlates this outcome with one accepted model generation.
-  ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
+  ReleaseGenerationId generation = 2 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // Current Entity Version read with the draft state.
-  spine.core.Version expected_version = 3 [(required) = true, (validate) = true];
+  spine.core.Version expected_version = 3 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // Contains verified committed changes the model may cite.
   ReleaseEvidenceCatalog catalog = 4 [(validate) = true];
 
   // Conveys the editor’s requested emphasis for this generation.
-  ReleaseInstruction instruction = 5 [(required) = true, (validate) = true];
+  ReleaseInstruction instruction = 5 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // Conversation reused for later generations on this draft.
-  spine.ts.agent.ConversationId conversation = 6 [(required) = true, (validate) = true];
+  spine.agent.ConversationId conversation = 6 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // Nonsecret account and concrete model binding.
-  ReleaseModelSelection selection = 7 [(required) = true, (validate) = true];
+  ReleaseModelSelection selection = 7 [
+    (required) = true,
+    (validate) = true
+  ];
 }
 
 // Replaces the exact Markdown bytes at the displayed Entity Version.
 message EditReleaseNotes {
   // Identifies the release draft targeted by this Command.
-  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+  ReleaseDraftId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // Current Entity Version read with the draft state.
-  spine.core.Version expected_version = 2 [(required) = true, (validate) = true];
+  spine.core.Version expected_version = 2 [
+    (required) = true,
+    (validate) = true
+  ];
 
   reserved 3;
   reserved "document";
@@ -94,17 +136,29 @@ message EditReleaseNotes {
 // Stops a matching pending generation without changing current Markdown.
 message CancelReleaseGeneration {
   // Draft whose generation is being stopped.
-  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+  ReleaseDraftId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // Exact generation to stop; an older ID cannot stop a newer one.
-  ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
+  ReleaseGenerationId generation = 2 [
+    (required) = true,
+    (validate) = true
+  ];
 }
 
 // Requests an immutable current snapshot for a trusted file export.
 message PrepareReleaseNotesExport {
   // Identifies the release draft targeted by this Command.
-  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+  ReleaseDraftId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // Current Entity Version read with the draft state.
-  spine.core.Version expected_version = 2 [(required) = true, (validate) = true];
+  spine.core.Version expected_version = 2 [
+    (required) = true,
+    (validate) = true
+  ];
 }

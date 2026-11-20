@@ -15,7 +15,7 @@
 import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { and, Datastore, or, PropertyFilter } from "@google-cloud/datastore";
 import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
-import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
 import {
   ColumnMappings,
   defaultQueryCandidateLimit,
@@ -235,7 +235,10 @@ class FlatEntityCodec<I, R extends Message> {
   encode(record: R, columns: ReadonlyMap<string, unknown>): Record<string, unknown> {
     const data: Record<string, unknown> = {
       [payloadProperty]: Buffer.from(
-        toBinary(this.recordSpec.recordType, record, { writeUnknownFields: false }),
+        toBinary(this.recordSpec.recordType, record, {
+          writeUnknownFields:
+            this.recordSpec.recordType.typeName === AgentHistoryEntrySchema.typeName,
+        }),
       ),
     };
 
@@ -282,8 +285,8 @@ class FlatEntityCodec<I, R extends Message> {
    */
   unindexedProperties(data: Readonly<Record<string, unknown>>): readonly string[] {
     void data;
-    if (this.recordSpec.recordType.typeName === AgentHistoryRecordSchema.typeName)
-      return [payloadProperty, "state_type", "agent_key", "conversation_key"];
+    if (this.recordSpec.recordType.typeName === AgentHistoryEntrySchema.typeName)
+      return [payloadProperty, "agent_key", "conversation_key"];
     return [payloadProperty];
   }
 
@@ -383,7 +386,7 @@ class FlatEntityCodec<I, R extends Message> {
    * Decodes a generated record from an entity's binary payload.
    *
    * @param entity Raw Datastore entity containing the payload.
-   * @returns Generated record without unknown fields.
+   * @returns Generated record, retaining unknown fields for Agent history.
    */
   decode(entity: Record<string | symbol, unknown>): R {
     const payload = entity[payloadProperty];
@@ -394,7 +397,9 @@ class FlatEntityCodec<I, R extends Message> {
 
     try {
       const bytes = Buffer.isBuffer(payload) ? Uint8Array.from(payload) : payload;
-      return fromBinary(this.recordSpec.recordType, bytes, { readUnknownFields: false });
+      return fromBinary(this.recordSpec.recordType, bytes, {
+        readUnknownFields: this.recordSpec.recordType.typeName === AgentHistoryEntrySchema.typeName,
+      });
     } catch {
       throw new Error("Datastore entity cannot be decoded.");
     }
@@ -548,6 +553,25 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
    */
   decodeTransactionEntity(entity: Record<string | symbol, unknown>): R {
     return this.#codec.decode(entity);
+  }
+
+  /**
+   * Compares a native batched result with one requested Datastore identity.
+   *
+   * @param entity Raw entity from a batched transaction get.
+   * @param key Requested complete native key.
+   * @returns Whether the entity has that exact namespace, kind, and path.
+   */
+  matchesTransactionKey(
+    entity: Record<string | symbol, unknown>,
+    key: ReturnType<Datastore["key"]>,
+  ): boolean {
+    const actual = entity[this.client.KEY] as ReturnType<Datastore["key"]> | undefined;
+    return (
+      actual !== undefined &&
+      (actual.namespace ?? "") === (key.namespace ?? "") &&
+      JSON.stringify(actual.path) === JSON.stringify(key.path)
+    );
   }
 
   /**

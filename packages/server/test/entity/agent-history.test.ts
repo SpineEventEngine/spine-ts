@@ -12,9 +12,9 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyPacker, SignalEnvelopes } from "@spine-event-engine/core";
+import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -24,6 +24,7 @@ import {
   ActorContextSchema,
   UserIdSchema,
   VersionSchema,
+  type ActorContext,
 } from "@spine-event-engine/proto";
 // prettier-ignore
 import {
@@ -33,6 +34,7 @@ import { EntityTypeNameSchema } from "@spine-event-engine/proto/generated/spine/
 import {
   AgentHistoryCursorSchema,
   AgentHistoryEntrySchema,
+  AgentIdSchema,
   AiContentDigestSchema,
   AiOperationIdSchema,
   ConversationIdSchema,
@@ -40,15 +42,20 @@ import {
   ConversationRecordSchema,
   GenerationRequestSchema,
 } from "@spine-event-engine/proto/agent";
-import type { ConversationId } from "@spine-event-engine/proto/agent";
-import type { HistoryRead } from "@spine-event-engine/ai";
+import type { AgentHistoryEntry, ConversationId } from "@spine-event-engine/proto/agent";
+import type { HistoryPage, HistoryRead } from "@spine-event-engine/ai";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { AgentHistoryStorageFactories } from "@spine-event-engine/storage/provider";
-import type { AgentHistoryStorage } from "@spine-event-engine/storage/provider";
+import type { AgentHistoryStorage, AgentHistoryView } from "@spine-event-engine/storage/provider";
 import { describe, expect, it, vi } from "vitest";
 
 import { Agent } from "../../src/entity/entity.js";
-import { AgentHistoryReads } from "../../src/agent/agent-history.js";
+import {
+  AgentHistoryReads,
+  type AgentHistoryReadInterceptor,
+} from "../../src/agent/agent-history.js";
+import { AgentLiveBudget } from "../../src/agent/agent-live-budget.js";
+import { AgentLiveReadRuntime } from "../../src/agent/agent-live-read-runtime.js";
 import {
   SupportReplyAgentIdSchema,
   type SupportReplyAgentId,
@@ -56,8 +63,13 @@ import {
 } from "../../test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 import { SupportReplyDraftedSchema } from "../../test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
 import { DraftSupportReplySchema } from "../../test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
+import { modelRequest } from "../../../storage/test/entity/agent-history-fixtures.js";
 
 class ReadingAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
+  readRequest(callId: string) {
+    return this.modelCallHistory(create(AiOperationIdSchema, { value: callId }));
+  }
+
   readFull(request: HistoryRead) {
     return this.fullHistory(request);
   }
@@ -76,6 +88,146 @@ class ReadingAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentSt
 }
 
 describe("Agent history binding", () => {
+  it("applies protected admission, visibility, actor, and read accounting to exact lookup", async () => {
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-exact-policy" });
+    const agent = new ReadingAgent({
+      id,
+      schema: SupportReplyAgentStateSchema,
+      state: create(SupportReplyAgentStateSchema, { id }),
+      version: create(VersionSchema),
+    });
+    const entry = modelRequest("exact-policy", create(TimestampSchema, { seconds: 3n }));
+    const providerRead = vi.fn(() => Promise.resolve(entry));
+    const storage: AgentHistoryStorage<SupportReplyAgentId> = {
+      capacity: {},
+      append: () => Promise.resolve(),
+      appendAll: () => Promise.resolve(),
+      read: () => Promise.resolve({ entries: [entry], hasMore: false }),
+      readModelRequest: providerRead,
+      close: () => undefined,
+    };
+    const scope = {
+      context: "Support",
+      tenant: "null",
+      repository: SupportReplyAgentStateSchema.typeName,
+      entity: id.ticketNumber,
+    };
+    AgentHistoryReads.bind(agent, {
+      storage,
+      entityId: id,
+      scope,
+      onAdmit: () => Promise.reject(new Error("history admission denied")),
+    });
+    await expect(agent.readRequest("exact-policy")).rejects.toThrow("history admission denied");
+    expect(providerRead).not.toHaveBeenCalled();
+    const actor = create(ActorContextSchema, {
+      actor: create(UserIdSchema, { value: "history-reader" }),
+    });
+    const filter = vi.fn(
+      (
+        _page: HistoryPage<AgentHistoryEntry>,
+        _view: AgentHistoryView,
+        _request: HistoryRead,
+        capturedActor?: ActorContext,
+      ) => {
+        expect(capturedActor).toEqual(actor);
+        return Promise.resolve({ items: [] });
+      },
+    );
+    AgentHistoryReads.bind(agent, {
+      storage,
+      entityId: id,
+      scope,
+      captureActor: () => actor,
+      filterPage: filter,
+    });
+    expect(await agent.readRequest("exact-policy")).toBeUndefined();
+    expect(providerRead).toHaveBeenCalledWith(id, "exact-policy");
+    const redact = vi.fn((page: HistoryPage<AgentHistoryEntry>) => {
+      const item = page.items[0];
+      if (item === undefined) throw new Error("Missing exact history item.");
+      const hidden = clone(AgentHistoryEntrySchema, item);
+      if (
+        hidden.item.case !== "modelRequest" ||
+        hidden.item.value.request?.context?.actorContext === undefined
+      )
+        throw new Error("Missing request actor metadata.");
+      hidden.item.value.request.context.actorContext.actor = create(UserIdSchema, {
+        value: "redacted",
+      });
+      return Promise.resolve({ items: [hidden] });
+    });
+    AgentHistoryReads.bind(agent, {
+      storage,
+      entityId: id,
+      scope,
+      captureActor: () => actor,
+      filterPage: redact,
+    });
+    const reads = new AgentLiveReadRuntime(scope, new AgentLiveBudget({ recordedReads: 1 }));
+    const observed = vi.fn<AgentHistoryReadInterceptor>((scope, request, live, maxBytes, present) =>
+      reads.history(scope, request, live, maxBytes, present),
+    );
+    const release = AgentHistoryReads.withReadInterceptor(agent, observed);
+    const result = await agent.readRequest("exact-policy");
+    await expect(agent.readRequest("exact-policy")).rejects.toThrow("read budget");
+    release();
+    reads.finish();
+    expect(result?.command.context?.actorContext?.actor?.value).toBe("redacted");
+    expect(observed).toHaveBeenCalledTimes(2);
+    expect(redact).toHaveBeenCalledOnce();
+  });
+
+  it("keeps exact model history reads bounded and rejects incomplete stored requests", async () => {
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-exact-boundary" });
+    const agent = new ReadingAgent({
+      id,
+      schema: SupportReplyAgentStateSchema,
+      state: create(SupportReplyAgentStateSchema, { id }),
+      version: create(VersionSchema),
+    });
+    await expect(agent.readRequest("exact-boundary")).rejects.toThrow(
+      "only from repository execution",
+    );
+    const original = modelRequest("exact-boundary", create(TimestampSchema, { seconds: 4n }));
+    let returned: AgentHistoryEntry | undefined;
+    const providerRead = vi.fn(() => Promise.resolve(returned));
+    const storage: AgentHistoryStorage<SupportReplyAgentId> = {
+      capacity: {},
+      append: () => Promise.resolve(),
+      appendAll: () => Promise.resolve(),
+      read: () => Promise.resolve({ entries: [], hasMore: false }),
+      readModelRequest: providerRead,
+      close: () => undefined,
+    };
+    const scope = {
+      context: "Support",
+      tenant: "null",
+      repository: SupportReplyAgentStateSchema.typeName,
+      entity: id.ticketNumber,
+    };
+    AgentHistoryReads.bind(agent, { storage, entityId: id, scope });
+    expect(await agent.readRequest("exact-boundary")).toBeUndefined();
+    returned = original;
+    AgentHistoryReads.bind(agent, { storage, entityId: id, scope, maxBytes: 1 });
+    await expect(agent.readRequest("exact-boundary")).rejects.toThrow("exceeds maxBytes");
+    AgentHistoryReads.bind(agent, { storage, entityId: id, scope });
+    returned = clone(AgentHistoryEntrySchema, original);
+    if (returned.item.case !== "modelRequest") throw new Error("Expected request history.");
+    returned.item.value.request = undefined;
+    await expect(agent.readRequest("exact-boundary")).rejects.toThrow("incomplete");
+    returned = clone(AgentHistoryEntrySchema, original);
+    if (returned.item.case !== "modelRequest") throw new Error("Expected request history.");
+    returned.item.value.source = { case: undefined };
+    await expect(agent.readRequest("exact-boundary")).rejects.toThrow("no triggering signal");
+    returned = create(AgentHistoryEntrySchema, {
+      whenOccurred: create(TimestampSchema, { seconds: 4n }),
+      item: { case: "domainEvent", value: create(EventSchema) },
+    });
+    await expect(agent.readRequest("exact-boundary")).rejects.toThrow("different history category");
+    expect(providerRead).toHaveBeenCalledTimes(5);
+  });
+
   it("requires repository history and returns an empty provider-backed page", async () => {
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-46" });
     const agent = new ReadingAgent({
@@ -98,6 +250,7 @@ describe("Agent history binding", () => {
       capacity: {},
       append: () => Promise.resolve(),
       appendAll: () => Promise.resolve(),
+      readModelRequest: () => Promise.resolve(undefined),
       read: (request) => {
         expect(request.entityId).toEqual(id);
         expect(["full", "conversation"]).toContain(request.view.kind);
@@ -127,8 +280,11 @@ describe("Agent history binding", () => {
     const factory = new InMemoryStorageFactory();
     const storage = AgentHistoryStorageFactories.create(factory, {
       context: { name: "Support", multitenant: false },
-      stateType: SupportReplyAgentStateSchema.typeName,
-      id: { key: (id: SupportReplyAgentId) => id.ticketNumber },
+      agent: (id: SupportReplyAgentId) =>
+        create(AgentIdSchema, {
+          stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          entityId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
+        }),
     });
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
     const agent = new ReadingAgent({
@@ -164,7 +320,7 @@ describe("Agent history binding", () => {
       await storage.append(
         id,
         create(AgentHistoryEntrySchema, {
-          occurredAt: timestamp,
+          whenOccurred: timestamp,
           item: { case: "domainEvent", value: event },
         }),
       );
@@ -264,7 +420,7 @@ describe("Agent history binding", () => {
     const saved = {
       entries: [
         create(AgentHistoryEntrySchema, {
-          occurredAt: create(TimestampSchema, { seconds: 1n }),
+          whenOccurred: create(TimestampSchema, { seconds: 1n }),
           item: {
             case: "domainEvent" as const,
             value: create(EventSchema, {
@@ -285,6 +441,7 @@ describe("Agent history binding", () => {
         capacity: {},
         append: () => Promise.resolve(),
         appendAll: () => Promise.resolve(),
+        readModelRequest: () => Promise.resolve(undefined),
         read: () => Promise.resolve(saved),
         close: () => undefined,
       },
@@ -299,6 +456,7 @@ describe("Agent history binding", () => {
         capacity: {},
         append: () => Promise.resolve(),
         appendAll: () => Promise.resolve(),
+        readModelRequest: () => Promise.resolve(undefined),
         read: () => {
           liveReads += 1;
           return Promise.resolve(saved);
@@ -324,7 +482,7 @@ describe("Agent history binding", () => {
       version: create(VersionSchema),
     });
     const entry = create(AgentHistoryEntrySchema, {
-      occurredAt: create(TimestampSchema, { seconds: 1n }),
+      whenOccurred: create(TimestampSchema, { seconds: 1n }),
       item: {
         case: "domainEvent",
         value: create(EventSchema, {
@@ -348,6 +506,7 @@ describe("Agent history binding", () => {
         capacity: {},
         append: () => Promise.resolve(),
         appendAll: () => Promise.resolve(),
+        readModelRequest: () => Promise.resolve(undefined),
         read: (request) =>
           Promise.resolve(
             request.after === undefined
@@ -368,8 +527,11 @@ describe("Agent history binding", () => {
     const factory = new InMemoryStorageFactory();
     const storage = AgentHistoryStorageFactories.create(factory, {
       context: { name: "Support", multitenant: false },
-      stateType: SupportReplyAgentStateSchema.typeName,
-      id: { key: (id: SupportReplyAgentId) => id.ticketNumber },
+      agent: (id: SupportReplyAgentId) =>
+        create(AgentIdSchema, {
+          stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          entityId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
+        }),
     });
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-ties" });
     const agent = new ReadingAgent({
@@ -399,7 +561,7 @@ describe("Agent history binding", () => {
         id: create(ConversationRecordIdSchema, { value: recordId }),
         conversation,
         operation: create(AiOperationIdSchema, { value: "draft-reply" }),
-        occurredAt: time,
+        whenOccurred: time,
         content: AnyPacker.pack(
           GenerationRequestSchema,
           create(GenerationRequestSchema, {
@@ -420,7 +582,7 @@ describe("Agent history binding", () => {
       await storage.append(
         id,
         create(AgentHistoryEntrySchema, {
-          occurredAt: time,
+          whenOccurred: time,
           item: { case: "conversationRecord", value: record },
         }),
       );
@@ -439,7 +601,7 @@ describe("Agent history binding", () => {
     await storage.append(
       id,
       create(AgentHistoryEntrySchema, {
-        occurredAt: time,
+        whenOccurred: time,
         item: { case: "domainEvent", value: event },
       }),
     );
@@ -473,8 +635,11 @@ describe("Agent history binding", () => {
     const factory = new InMemoryStorageFactory();
     const storage = AgentHistoryStorageFactories.create(factory, {
       context: { name: "Support", multitenant: false },
-      stateType: SupportReplyAgentStateSchema.typeName,
-      id: { key: (value: SupportReplyAgentId) => value.ticketNumber },
+      agent: (value: SupportReplyAgentId) =>
+        create(AgentIdSchema, {
+          stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          entityId: AnyPacker.pack(SupportReplyAgentIdSchema, value),
+        }),
     });
     expect(() => AgentHistoryReads.appendSystem(agent, create(EventSchema))).toThrow(
       "Agent history is available only from repository execution.",
@@ -541,6 +706,7 @@ describe("Agent history binding", () => {
       capacity: {},
       append: () => Promise.resolve(),
       appendAll: () => Promise.resolve(),
+      readModelRequest: () => Promise.resolve(undefined),
       read: () => Promise.resolve({ entries: [], hasMore: true }),
       close: () => undefined,
     };
@@ -579,6 +745,7 @@ describe("Agent history binding", () => {
         capacity: {},
         append: () => Promise.resolve(),
         appendAll: () => Promise.resolve(),
+        readModelRequest: () => Promise.resolve(undefined),
         read,
         close: () => undefined,
       },
@@ -614,6 +781,7 @@ describe("Agent history binding", () => {
         capacity: {},
         append: () => Promise.resolve(),
         appendAll: () => Promise.resolve(),
+        readModelRequest: () => Promise.resolve(undefined),
         read: () => Promise.resolve({ entries: [wrong], hasMore: false }),
         close: () => undefined,
       },
@@ -634,6 +802,7 @@ describe("Agent history binding", () => {
         capacity: {},
         append: () => Promise.resolve(),
         appendAll: () => Promise.resolve(),
+        readModelRequest: () => Promise.resolve(undefined),
         read: () =>
           Promise.resolve({
             entries: [

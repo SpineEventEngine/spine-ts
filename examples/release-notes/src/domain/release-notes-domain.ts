@@ -15,12 +15,18 @@
 import { create, equals, toBinary } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
 import type { AiFailure, AiRegistry } from "@spine-event-engine/ai";
+import { AnyPacker } from "@spine-event-engine/core";
 import { VersionSchema } from "@spine-event-engine/proto";
+import type { AiOperationId } from "@spine-event-engine/proto/agent";
+import type { CallModel } from "@spine-event-engine/proto/generated/spine/agent/commands_pb.js";
+import type { ModelReplied } from "@spine-event-engine/proto/generated/spine/agent/events_pb.js";
+import type { ModelCallFailed } from "@spine-event-engine/proto/generated/spine/agent/rejections_pb.js";
 import {
   Agent,
   Aggregate,
   Assign,
   BoundedContext,
+  Command,
   type BoundedContextBuilder,
   Projection,
   React,
@@ -84,6 +90,7 @@ import {
   ReleaseExportSnapshotSchema,
   ReleaseGenerationReceiptSchema,
   ReleaseMarkdownContentSchema,
+  ReleaseNotesDocumentSchema,
   type ReleaseDraftId,
 } from "../../generated/spine/examples/releasenotes/types_pb.js";
 import { ReleaseMarkdown } from "./markdown.js";
@@ -373,38 +380,84 @@ export class ReleaseNotesAgent extends Agent<ReleaseDraftId, typeof AgentStateSc
   // prettier-ignore
 
   /**
-   * Invokes the selected model for a complete accepted draft snapshot.
+   * Prepares a model Command from the accepted draft snapshot.
    *
    * @param event Original accepted Event and verified evidence catalog.
-   * @returns Audited proposal or safe failure for Aggregate admission.
+   * @returns Model Command submitted after this Agent turn commits.
    */
-  @React async onRequested(event: ReleaseGenerationRequested): Promise<ReleaseNotesProposed | ReleaseGenerationFailed> {
+  @Command onRequested(event: ReleaseGenerationRequested): CallModel {
     if (!event.conversation || !event.generation || !event.inputVersion)
       throw new TypeError("Generation requires its conversation, identity, and input Version.");
-    const result = await this.ai.invoke(draftReleaseNotes, {
-      call: "draft-release-notes",
-      conversation: event.conversation,
-      input: event,
-    });
     this.update((state) => {
       state.id = this.id;
       state.conversation = event.conversation;
       state.generation = event.generation;
     });
-    if (!result.ok) {
-      const code = safeGenerationFailureCodes.has(result.failure.code) ? result.failure.code : "other";
-      console.error(`[Release Notes Studio generation] stage=invoke code=${code}`);
-      return create(ReleaseGenerationFailedSchema, {
-        id: this.id, generation: event.generation,
-        inputVersion: event.inputVersion, reason: result.failure.code,
-        operation: result.operationId,
-      });
-    }
-    return create(ReleaseNotesProposedSchema, {
-      id: this.id, generation: event.generation,
-      inputVersion: event.inputVersion, document: result.value,
-      operation: result.operationId,
+    return this.modelCommands.create(draftReleaseNotes, {
+      conversation: event.conversation,
+      input: event,
     });
+  }
+
+  // prettier-ignore
+
+  /**
+   * Returns a validated proposal for the latest accepted generation.
+   *
+   * @param event Typed reply to the prepared model Command.
+   * @returns Proposal for Aggregate admission when the generation is current.
+   */
+  @React async onReplied(event: ModelReplied): Promise<ReleaseNotesProposed | undefined> {
+    const request = await this.originalRequest(event.call?.id);
+    if (request.generation?.value !== this.state.generation?.value) return undefined;
+    const document = event.output && AnyPacker.tryUnpack(event.output, ReleaseNotesDocumentSchema);
+    if (document === undefined) throw new TypeError("Model reply has no validated release document.");
+    return create(ReleaseNotesProposedSchema, {
+      id: this.id, generation: request.generation,
+      inputVersion: request.inputVersion, document,
+      operation: event.call?.id,
+    });
+  }
+
+  // prettier-ignore
+
+  /**
+   * Records a safe failure for the latest accepted generation.
+   *
+   * @param rejection Declared model Command failure.
+   * @returns Failure for Aggregate admission when the generation is current.
+   */
+  @React async onFailed(rejection: ModelCallFailed): Promise<ReleaseGenerationFailed | undefined> {
+    const request = await this.originalRequest(rejection.call?.id);
+    if (request.generation?.value !== this.state.generation?.value) return undefined;
+    const code = safeGenerationFailureCodes.has(rejection.reason as AiFailure["code"]) ? rejection.reason : "other";
+    console.error(`[Release Notes Studio generation] stage=invoke code=${code}`);
+    return create(ReleaseGenerationFailedSchema, {
+      id: this.id, generation: request.generation,
+      inputVersion: request.inputVersion, reason: rejection.reason,
+      operation: rejection.call?.id,
+    });
+  }
+
+  /**
+   * Reads the exact accepted generation Event that prepared a model call.
+   *
+   * @param callId Typed identity carried by the model outcome.
+   * @returns Original generation request Event.
+   */
+  private async originalRequest(
+    callId: AiOperationId | undefined,
+  ): Promise<ReleaseGenerationRequested> {
+    if (callId === undefined) throw new TypeError("Model outcome has no call identity.");
+    const history = await this.modelCallHistory(callId);
+    if (history?.source.case !== "event")
+      throw new TypeError("Model request history has no original generation Event.");
+    const event =
+      history.source.value.message &&
+      AnyPacker.tryUnpack(history.source.value.message, ReleaseGenerationRequestedSchema);
+    if (event === undefined)
+      throw new TypeError("Model request history has no generation request.");
+    return event;
   }
 }
 

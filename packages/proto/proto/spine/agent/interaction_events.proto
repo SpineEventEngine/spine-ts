@@ -14,13 +14,13 @@
 
 syntax = "proto3";
 
-package spine.ts.agent;
+package spine.agent;
 
 import "google/protobuf/timestamp.proto";
+import "spine/agent/content.proto";
+import "spine/agent/model.proto";
 import "spine/core/diagnostics.proto";
 import "spine/options.proto";
-import "spine/ts/agent/content.proto";
-import "spine/ts/agent/model.proto";
 
 option (type_url_prefix) = "type.spine.io";
 
@@ -93,7 +93,7 @@ message AgentAiOperationStarted {
   AiConnectionIdentity connection = 6 [(validate) = true];
 
   // Occurrence time from Spine Time.
-  google.protobuf.Timestamp started_at = 7 [
+  google.protobuf.Timestamp when_started = 7 [
     (required) = true,
     (validate) = true
   ];
@@ -117,7 +117,7 @@ message AgentModelAttemptStarted {
   ];
 
   // Time the attempt was recorded using Spine Time.
-  google.protobuf.Timestamp started_at = 3 [
+  google.protobuf.Timestamp when_started = 3 [
     (required) = true,
     (validate) = true
   ];
@@ -156,7 +156,7 @@ message AgentModelAttemptFinished {
   AiUsage usage = 5 [(validate) = true];
 
   // Occurrence time from Spine Time.
-  google.protobuf.Timestamp finished_at = 6 [
+  google.protobuf.Timestamp when_finished = 6 [
     (required) = true,
     (validate) = true
   ];
@@ -192,7 +192,7 @@ message AgentAiResultAdmitted {
   AiMappingRevision mapping_revision = 4 [(validate) = true];
 
   // Occurrence time from Spine Time.
-  google.protobuf.Timestamp admitted_at = 5 [
+  google.protobuf.Timestamp when_admitted = 5 [
     (required) = true,
     (validate) = true
   ];
@@ -219,7 +219,7 @@ message AgentAiOperationFailed {
   AiAttemptId attempt = 4 [(validate) = true];
 
   // Occurrence time from Spine Time.
-  google.protobuf.Timestamp failed_at = 5 [
+  google.protobuf.Timestamp when_failed = 5 [
     (required) = true,
     (validate) = true
   ];
@@ -270,7 +270,7 @@ message AgentToolCallStarted {
   ToolEffect effect = 7 [(required) = true];
 
   // Occurrence time from Spine Time.
-  google.protobuf.Timestamp started_at = 8 [
+  google.protobuf.Timestamp when_started = 8 [
     (required) = true,
     (validate) = true
   ];
@@ -297,7 +297,7 @@ message AgentToolCallFinished {
   AiContentDigest result = 4 [(validate) = true];
 
   // Occurrence time from Spine Time.
-  google.protobuf.Timestamp finished_at = 5 [
+  google.protobuf.Timestamp when_finished = 5 [
     (required) = true,
     (validate) = true
   ];
@@ -330,7 +330,7 @@ message AgentModelSelectionChanged {
   ModelRef selected_model = 5 [(validate) = true];
 
   // Occurrence time from Spine Time.
-  google.protobuf.Timestamp changed_at = 6 [
+  google.protobuf.Timestamp when_changed = 6 [
     (required) = true,
     (validate) = true
   ];
@@ -360,7 +360,7 @@ message AgentInvocationTerminated {
   repeated AiToolCallId unresolved_tool_calls = 5 [(validate) = true];
 
   // Occurrence time from Spine Time.
-  google.protobuf.Timestamp terminated_at = 6 [
+  google.protobuf.Timestamp when_terminated = 6 [
     (required) = true,
     (validate) = true
   ];

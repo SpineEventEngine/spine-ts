@@ -23,7 +23,6 @@ import { Inbox } from "../../src/delivery/inbox.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
 import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
-import { AgentDeliveryScope } from "../../src/delivery/agent-delivery-scope.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
 import { ShardIndex } from "../../src/index.js";
 import { createMessage } from "./inbox-message-fixture.js";
@@ -344,49 +343,6 @@ describe("Delivery fencing", () => {
     await readiness.close();
   });
 
-  it("keeps direct close pending after acknowledgement until entered Agent work settles", async () => {
-    const message = createMessage("close-agent", "signal", 1n);
-    const acknowledged = new Set<string>();
-    const release = Promise.withResolvers<undefined>();
-    const entered = Promise.withResolvers<undefined>();
-    let released = 0;
-    const delivery = agentDelivery(
-      [message],
-      (next) => {
-        acknowledged.add(next.id.value);
-      },
-      () => {
-        released++;
-      },
-      acknowledged,
-    );
-    const readiness = new DeliveryReadiness();
-    readiness.route(delivery);
-    await delivery.drainMessage(message, {
-      onMessage: () => {
-        AgentDeliveryScope.record({
-          kind: "accepted",
-          discard: () => undefined,
-          run: async () => {
-            entered.resolve(undefined);
-            await release.promise;
-          },
-        });
-      },
-    });
-    await entered.promise;
-    let closed = false;
-    const closing = readiness.close().then(() => {
-      closed = true;
-    });
-    await Promise.resolve();
-    expect(closed).toBe(false);
-    expect(released).toBe(0);
-    release.resolve(undefined);
-    await closing;
-    expect(released).toBe(1);
-  });
-
   it("reports an admitted direct shard release failure during close", async () => {
     const message = createMessage("release-agent", "signal", 1n);
     const acknowledged = new Set<string>();
@@ -405,21 +361,16 @@ describe("Delivery fencing", () => {
     );
     const readiness = new DeliveryReadiness();
     readiness.route(delivery);
-    await delivery.drainMessage(message, {
-      onMessage: () => {
-        AgentDeliveryScope.record({
-          kind: "accepted",
-          discard: () => undefined,
-          run: async () => {
-            entered.resolve(undefined);
-            await releaseWork.promise;
-          },
-        });
+    const run = delivery.drainMessage(message, {
+      onMessage: async () => {
+        entered.resolve(undefined);
+        await releaseWork.promise;
       },
     });
     await entered.promise;
     const closing = readiness.close();
     releaseWork.resolve(undefined);
+    await Promise.allSettled([run]);
     await expect(closing).rejects.toMatchObject({ errors: [releaseFailure] });
   });
 
@@ -445,16 +396,10 @@ describe("Delivery fencing", () => {
     vi.spyOn(ShardedWorkRegistry.prototype, "release").mockRejectedValue(releaseFailure);
     await (delivery.inbox as Inbox).storage.write(message);
     try {
-      await delivery.drainMessage(message, {
-        onMessage: () => {
-          AgentDeliveryScope.record({
-            kind: "accepted",
-            discard: () => undefined,
-            run: async () => {
-              accepted.resolve(undefined);
-              await releaseWork.promise;
-            },
-          });
+      const run = delivery.drainMessage(message, {
+        onMessage: async () => {
+          accepted.resolve(undefined);
+          await releaseWork.promise;
         },
       });
       await accepted.promise;
@@ -471,6 +416,7 @@ describe("Delivery fencing", () => {
       expect(inboxClose).not.toHaveBeenCalled();
       releaseWork.resolve(undefined);
       await storeCloseEntered.promise;
+      await Promise.allSettled([run]);
       expect(settled).toBe(false);
       expect(shardClose).toHaveBeenCalledOnce();
       releaseStoreClose.resolve(undefined);
@@ -484,318 +430,6 @@ describe("Delivery fencing", () => {
       releaseStoreClose.resolve(undefined);
       vi.restoreAllMocks();
     }
-  });
-
-  it("renews the leased shard session while an acknowledged Agent call remains held", async () => {
-    vi.useFakeTimers();
-    const message = createMessage("renew-agent", "signal", 1n);
-    const acknowledged = new Set<string>();
-    const gate = Promise.withResolvers<undefined>();
-    const entered = Promise.withResolvers<undefined>();
-    const delivery = agentDelivery(
-      [message],
-      (next) => {
-        acknowledged.add(next.id.value);
-      },
-      undefined,
-      acknowledged,
-    );
-    let renewals = 0;
-    delivery.shards.renew = (current) => {
-      renewals++;
-      return Promise.resolve({
-        kind: "LEASED" as const,
-        shard: current.shard,
-        worker: current.worker,
-        pickedUpAt: new Date(),
-        expiresAt: new Date(Date.now() + 60_000),
-      });
-    };
-    try {
-      await delivery.drainMessage(message, {
-        onMessage: () => {
-          AgentDeliveryScope.record({
-            kind: "accepted",
-            discard: () => undefined,
-            run: async () => {
-              entered.resolve(undefined);
-              await gate.promise;
-            },
-          });
-        },
-      });
-      await entered.promise;
-      await vi.advanceTimersByTimeAsync(30_000);
-      expect(renewals).toBeGreaterThanOrEqual(1);
-    } finally {
-      gate.resolve(undefined);
-      await delivery.whenIdle();
-      vi.useRealTimers();
-    }
-  });
-
-  it("fences a held live Agent effect after shard authority is lost", async () => {
-    const message = createMessage("lost-agent", "signal", 1n);
-    const acknowledged = new Set<string>();
-    const gate = Promise.withResolvers<undefined>();
-    const entered = Promise.withResolvers<undefined>();
-    const delivery = agentDelivery(
-      [message],
-      (next) => {
-        acknowledged.add(next.id.value);
-      },
-      undefined,
-      acknowledged,
-    );
-    let valid = true;
-    let effects = 0;
-    delivery.shards.validateOwnership = (current) => Promise.resolve(valid ? current : undefined);
-    await delivery.drainMessage(message, {
-      onMessage: () => {
-        AgentDeliveryScope.record({
-          kind: "accepted",
-          discard: () => undefined,
-          run: async (_signal, checkSession) => {
-            entered.resolve(undefined);
-            await gate.promise;
-            await checkSession();
-            effects++;
-          },
-        });
-      },
-    });
-    await entered.promise;
-    valid = false;
-    gate.resolve(undefined);
-    await delivery.whenIdle();
-    expect(effects).toBe(0);
-  });
-  it("leaves deferred Agent input pending without invoking reception failure policy", async () => {
-    const message = createMessage("agent-pending", "signal", 1n);
-    let marks = 0;
-    let receptions = 0;
-    const delivery = new Delivery({
-      context: { name: "AgentDefer", multitenant: false },
-      storageFactory: new InMemoryStorageFactory(),
-      monitor: new (class extends DeliveryMonitor {
-        override onReceptionFailure(): never {
-          receptions++;
-          throw new Error("Agent deferral entered reception policy.");
-        }
-      })(),
-      inbox: {
-        sessionKind: "LEASED",
-        receive: () => Promise.reject(new Error("unused")),
-        read: () => Promise.resolve([message]),
-        readMessage: () => Promise.resolve(message),
-        markDelivered: () => {
-          marks++;
-          return Promise.resolve(message);
-        },
-        removeDuplicate: () => Promise.resolve(true),
-      },
-      workRegistry: {
-        sessionKind: "LEASED",
-        pickUp: () => Promise.resolve(session()),
-        release: () => Promise.resolve(true),
-        validateOwnership: (current) => Promise.resolve(current),
-      },
-    });
-    const result = await delivery.drainMessage(message, {
-      onMessage: () => {
-        AgentDeliveryScope.record({ kind: "deferred" });
-      },
-    });
-    expect(result.acknowledged).toBe(false);
-    expect(result.outcome).toMatchObject({ kind: "deferred" });
-    expect(marks).toBe(0);
-    expect(receptions).toBe(0);
-  });
-
-  it("surfaces receipt failure without acknowledging or applying reception policy", async () => {
-    const message = createMessage("agent-error", "signal", 1n);
-    const failure = new Error("receipt CAS failed");
-    let marks = 0;
-    const delivery = agentDelivery([message], () => {
-      marks++;
-    });
-    const direct = await delivery.drainMessage(message, {
-      onMessage: () => {
-        AgentDeliveryScope.record({ kind: "error", error: failure });
-      },
-    });
-    expect(direct.acknowledged).toBe(false);
-    expect(direct.outcome).toEqual({ kind: "failed", error: failure });
-    expect(marks).toBe(0);
-  });
-
-  it("acknowledges Agent input before live work and retains the shard for two targets", async () => {
-    const first = createMessage("agent-a", "signal-a", 1n);
-    const second = createMessage("agent-b", "signal-b", 2n);
-    const acknowledged = new Set<string>();
-    let released = 0;
-    const delivery = agentDelivery(
-      [first, second],
-      (message) => {
-        acknowledged.add(message.id.value);
-      },
-      () => {
-        released++;
-      },
-      acknowledged,
-    );
-    const entered = Promise.withResolvers<undefined>();
-    const secondStarted = Promise.withResolvers<undefined>();
-    const continueFirst = Promise.withResolvers<undefined>();
-    const started: string[] = [];
-    const run = delivery.drain(ShardIndex.single(), {
-      onMessage: (message) => {
-        AgentDeliveryScope.record({
-          kind: "accepted",
-          discard: () => undefined,
-          run: async () => {
-            expect(acknowledged.has(message.id.value)).toBe(true);
-            started.push(message.id.value);
-            if (message.id.value === first.id.value) {
-              entered.resolve(undefined);
-              await continueFirst.promise;
-            } else secondStarted.resolve(undefined);
-          },
-        });
-      },
-    });
-    await entered.promise;
-    await secondStarted.promise;
-    expect(started).toEqual([first.id.value, second.id.value]);
-    expect(released).toBe(0);
-    continueFirst.resolve(undefined);
-    await expect(run).resolves.toMatchObject({ delivered: 2, failed: 0 });
-    expect(released).toBe(1);
-  });
-
-  it("settles the selected Agent message while its complete shard drain remains live", async () => {
-    const message = createMessage("agent-direct", "signal", 1n);
-    const releaseWork = Promise.withResolvers<undefined>();
-    const entered = Promise.withResolvers<undefined>();
-    const acknowledged = new Set<string>();
-    let released = 0;
-    const delivery = agentDelivery(
-      [message],
-      (next) => {
-        acknowledged.add(next.id.value);
-      },
-      () => {
-        released++;
-      },
-      acknowledged,
-    );
-    const settled = delivery.drainMessage(message, {
-      onMessage: () => {
-        AgentDeliveryScope.record({
-          kind: "accepted",
-          discard: () => undefined,
-          run: async () => {
-            entered.resolve(undefined);
-            await releaseWork.promise;
-          },
-        });
-      },
-    });
-    await entered.promise;
-    await expect(settled).resolves.toMatchObject({ acknowledged: true });
-    expect(released).toBe(0);
-    releaseWork.resolve(undefined);
-  });
-
-  it("wakes one active shard drain for a second Agent without a second acquisition", async () => {
-    const first = createMessage("agent-a", "signal-a", 1n);
-    const second = createMessage("agent-b", "signal-b", 2n);
-    const rows = [first];
-    const acknowledged = new Set<string>();
-    const releaseFirst = Promise.withResolvers<undefined>();
-    let pickups = 0;
-    const delivery = agentDelivery(
-      rows,
-      (next) => {
-        acknowledged.add(next.id.value);
-      },
-      undefined,
-      acknowledged,
-    );
-    const pickup = delivery.shards.pickUp.bind(delivery.shards);
-    delivery.shards.pickUp = (...args) => {
-      pickups++;
-      return pickup(...args);
-    };
-    const onMessage = (message: typeof first) => {
-      AgentDeliveryScope.record({
-        kind: "accepted",
-        discard: () => undefined,
-        run: async () => {
-          if (message.id.value === first.id.value) await releaseFirst.promise;
-        },
-      });
-    };
-    await expect(delivery.drainMessage(first, { onMessage })).resolves.toMatchObject({
-      acknowledged: true,
-    });
-    rows.push(second);
-    await expect(delivery.drainMessage(second, { onMessage })).resolves.toMatchObject({
-      acknowledged: true,
-    });
-    expect(pickups).toBe(1);
-    releaseFirst.resolve(undefined);
-  });
-
-  it("revisits a deferred partial page after the active Agent turn finishes", async () => {
-    const first = createMessage("agent-a", "signal-a", 1n);
-    const waiting = createMessage("agent-b", "signal-b", 2n);
-    const acknowledged = new Set<string>();
-    const releaseFirst = Promise.withResolvers<undefined>();
-    const firstStarted = Promise.withResolvers<undefined>();
-    const secondStarted = Promise.withResolvers<undefined>();
-    const deferredOnce = Promise.withResolvers<undefined>();
-    let released = 0;
-    let firstActive = false;
-    let deferred = 0;
-    const delivery = agentDelivery(
-      [first, waiting],
-      (message) => {
-        acknowledged.add(message.id.value);
-      },
-      () => {
-        released++;
-      },
-      acknowledged,
-    );
-    const run = delivery.drain(ShardIndex.single(), {
-      onMessage: (message) => {
-        if (message.id.value === waiting.id.value && firstActive) {
-          deferred++;
-          deferredOnce.resolve(undefined);
-          AgentDeliveryScope.record({ kind: "deferred" });
-        } else
-          AgentDeliveryScope.record({
-            kind: "accepted",
-            discard: () => undefined,
-            run: async () => {
-              if (message.id.value === first.id.value) {
-                firstActive = true;
-                firstStarted.resolve(undefined);
-                await releaseFirst.promise;
-                firstActive = false;
-              } else secondStarted.resolve(undefined);
-            },
-          });
-      },
-    });
-    await firstStarted.promise;
-    await deferredOnce.promise;
-    releaseFirst.resolve(undefined);
-    await secondStarted.promise;
-    await expect(run).resolves.toMatchObject({ delivered: 2, failed: 0 });
-    expect(deferred).toBeGreaterThan(0);
-    expect(released).toBe(1);
   });
 
   it("starts a successor when input arrives during shard release", async () => {

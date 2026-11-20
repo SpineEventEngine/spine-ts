@@ -12,20 +12,33 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
+import type { ModelCall, ModelPreference } from "@spine-event-engine/proto/agent";
+import { VersionSchema } from "@spine-event-engine/proto";
+import { expect } from "vitest";
+import { RecordSpec, type StorageFactory } from "@spine-event-engine/storage";
+import {
+  AgentAttributes,
+  EntityCommitStorageFactories,
+  type ActiveAgentRecord,
+  type EntityStorageInput,
+} from "@spine-event-engine/storage/provider";
 import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+// prettier-ignore
+import {
+  ActiveAgentRecordSchema,
+} from "@spine-event-engine/proto/generated/spine/server/agent/active_agent_record_pb.js";
 import {
   SupportReplyAgentIdSchema,
   SupportReplyAgentStateSchema,
+  SupportReplyReviewAgentStateSchema,
   type SupportReplyAgentId,
   type SupportReplyAgentState,
 } from "../../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
-import type { EntityStorageInput } from "../../src/internal/entity-history.js";
-import { RecordSpec } from "../../src/record/record-spec.js";
 
 const idTypeUrl = TypeUrls.derive(SupportReplyAgentIdSchema);
 
@@ -56,4 +69,123 @@ export function entityInput(): EntityStorageInput<SupportReplyAgentId, SupportRe
     sourceType: SupportReplyAgentStateSchema,
     stateSchema: SupportReplyAgentStateSchema,
   };
+}
+
+/**
+ * Builds complete framework attributes for a genuine support Agent identifier.
+ *
+ * @param entityId Typed Agent identifier.
+ * @param preferences Complete selected models.
+ * @param pending Complete pending model calls.
+ * @returns Validated detached attributes record.
+ */
+export function agentAttributes(
+  entityId: SupportReplyAgentId,
+  preferences: readonly ModelPreference[] = [],
+  pending: readonly ModelCall[] = [],
+): ActiveAgentRecord {
+  return AgentAttributes.record(AgentAttributes.id(entityInput(), entityId), preferences, pending);
+}
+
+/**
+ * Checks every independent current-state and attributes presence combination.
+ *
+ * @param factory Live provider factory.
+ * @param prefix Unique physical identifier prefix for this test run.
+ * @returns Completion after scoped handles close.
+ */
+export async function checkAgentCurrentMatrix(
+  factory: StorageFactory,
+  prefix: string,
+): Promise<void> {
+  const layout = entityInput();
+  const commits = EntityCommitStorageFactories.create(factory, layout);
+  const current = factory.createRecordStorage(layout.context, layout.recordSpec);
+  const id = (suffix: string) =>
+    create(SupportReplyAgentIdSchema, { ticketNumber: `${prefix}-${suffix}` });
+  const onlyCurrent = id("current");
+  const onlyAttributes = id("attributes");
+  const both = id("both");
+  const absent = id("absent");
+  const record = (entityId: SupportReplyAgentId) =>
+    create(EntityRecordSchema, {
+      entityId: layout.id.pack(entityId),
+      state: AnyPacker.pack(
+        SupportReplyAgentStateSchema,
+        create(SupportReplyAgentStateSchema, { id: entityId }),
+      ),
+      version: create(VersionSchema, { number: 1 }),
+    });
+  try {
+    expect(await commits.readAgentCurrent(absent)).toEqual({
+      current: undefined,
+      attributes: undefined,
+    });
+    const savedCurrent = record(onlyCurrent);
+    await current.write(savedCurrent);
+    const loadedCurrent = await commits.readAgentCurrent(onlyCurrent);
+    expect(loadedCurrent.attributes).toBeUndefined();
+    if (loadedCurrent.current === undefined) throw new Error("Current-only Agent state is absent.");
+    expect(toBinary(EntityRecordSchema, loadedCurrent.current)).toEqual(
+      toBinary(EntityRecordSchema, savedCurrent),
+    );
+    const savedAttributes = agentAttributes(onlyAttributes);
+    await commits.commitAgent({
+      entityId: onlyAttributes,
+      expectedVersion: 0,
+      expectedAttributes: undefined,
+      attributes: savedAttributes,
+    });
+    const loadedAttributes = await commits.readAgentCurrent(onlyAttributes);
+    expect(loadedAttributes.current).toBeUndefined();
+    if (loadedAttributes.attributes === undefined)
+      throw new Error("Attributes-only Agent record is absent.");
+    expect(toBinary(ActiveAgentRecordSchema, loadedAttributes.attributes)).toEqual(
+      toBinary(ActiveAgentRecordSchema, savedAttributes),
+    );
+    const next = record(both);
+    const nextAttributes = agentAttributes(both);
+    await commits.commitAgent({
+      entityId: both,
+      expectedVersion: 0,
+      expectedAttributes: undefined,
+      attributes: nextAttributes,
+      entityCommit: { context: layout.context, entity: layout, entityId: both, next },
+    });
+    const loadedBoth = await commits.readAgentCurrent(both);
+    if (loadedBoth.current === undefined || loadedBoth.attributes === undefined)
+      throw new Error("Complete Agent current data is absent.");
+    expect(toBinary(EntityRecordSchema, loadedBoth.current)).toEqual(
+      toBinary(EntityRecordSchema, next),
+    );
+    expect(toBinary(ActiveAgentRecordSchema, loadedBoth.attributes)).toEqual(
+      toBinary(ActiveAgentRecordSchema, nextAttributes),
+    );
+    const reviewLayout = {
+      ...layout,
+      sourceType: SupportReplyReviewAgentStateSchema,
+      stateSchema: SupportReplyReviewAgentStateSchema,
+      recordSpec: new RecordSpec<SupportReplyAgentId, EntityRecord>({
+        sourceType: SupportReplyReviewAgentStateSchema,
+        recordType: EntityRecordSchema,
+        idSchema: SupportReplyAgentIdSchema,
+        extractId: (value) => {
+          if (value.entityId === undefined) throw new TypeError("Review Agent ID is required.");
+          return AnyPacker.unpack(value.entityId, SupportReplyAgentIdSchema);
+        },
+      }),
+    };
+    const review = EntityCommitStorageFactories.create(factory, reviewLayout);
+    try {
+      expect(await review.readAgentCurrent(onlyAttributes)).toEqual({
+        current: undefined,
+        attributes: undefined,
+      });
+    } finally {
+      await review.close();
+    }
+  } finally {
+    current.close();
+    await commits.close();
+  }
 }

@@ -1173,6 +1173,33 @@ describe("build-time handler analyzer", () => {
     ]);
   });
 
+  it("analyzes AsyncCommandHandler through the ordinary assignee role", () => {
+    const result = analyzeBuildHandlers(
+      standaloneContractProgram(
+        "src/async-command-handler.ts",
+        `
+          import { AsyncCommandHandler, Assign } from "@spine-event-engine/server";
+          import { type CreateTask } from "../generated/commands_pb.js";
+          import { type TaskCreated } from "../generated/events_pb.js";
+          export class TaskModelHandler extends AsyncCommandHandler {
+            @Assign
+            async assign(command: CreateTask): Promise<TaskCreated> {
+              throw new Error(String(command));
+            }
+          }
+        `,
+      ),
+    );
+    expect(result.diagnostics).toEqual([]);
+    expect(result.receivers).toMatchObject([
+      {
+        receiverKind: "standalone",
+        className: "TaskModelHandler",
+        handlers: [{ kind: "command-assignment" }],
+      },
+    ]);
+  });
+
   it("analyzes a named default-export standalone receiver", () => {
     const result = analyzeBuildHandlers(
       programWithSource(

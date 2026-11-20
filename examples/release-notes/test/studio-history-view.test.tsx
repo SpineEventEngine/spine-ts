@@ -37,7 +37,7 @@ const record = (id: string, text: string) => ({
   conversationRecord: {
     id: { value: id },
     content: {
-      "@type": "type.spine.io/spine.ts.agent.GenerationResponse",
+      "@type": "type.spine.io/spine.agent.GenerationResponse",
       ...jsonObject(
         toJson(
           GenerationResponseSchema,
@@ -88,7 +88,7 @@ test("shows recorded assistant text without treating Anthropic thinking as a rep
     conversationRecord: {
       id: { value: "response" },
       content: {
-        "@type": "type.spine.io/spine.ts.agent.GenerationResponse",
+        "@type": "type.spine.io/spine.agent.GenerationResponse",
         ...jsonObject(toJson(GenerationResponseSchema, response)),
       },
     },
@@ -127,7 +127,7 @@ test("shows serialized OpenAI message parts and tool result text", () => {
     conversationRecord: {
       id: { value: "response" },
       content: {
-        "@type": "type.spine.io/spine.ts.agent.GenerationResponse",
+        "@type": "type.spine.io/spine.agent.GenerationResponse",
         ...jsonObject(toJson(GenerationResponseSchema, response)),
       },
     },
@@ -143,7 +143,7 @@ test("shows serialized OpenAI message parts and tool result text", () => {
     conversationRecord: {
       id: { value: "tool" },
       content: {
-        "@type": "type.spine.io/spine.ts.agent.ToolResponse",
+        "@type": "type.spine.io/spine.agent.ToolResponse",
         ...jsonObject(toJson(ToolResponseSchema, tool)),
       },
     },

@@ -64,6 +64,7 @@ import {
   type StandUpdate,
   Aggregate,
   AbstractAssignee,
+  AsyncCommandHandler,
   AbstractCommander,
   AbstractEventReactor,
   AbstractEventSubscriber,
@@ -125,10 +126,12 @@ import {
 
 it("exports nominal standalone handler base classes", () => {
   class Assignee extends AbstractAssignee {}
+  class AsyncAssignee extends AsyncCommandHandler {}
   class Commander extends AbstractCommander {}
   class Reactor extends AbstractEventReactor {}
   class Subscriber extends AbstractEventSubscriber {}
   expect(new Assignee()).toBeInstanceOf(AbstractAssignee);
+  expect(new AsyncAssignee()).toBeInstanceOf(AbstractAssignee);
   expect(new Commander()).toBeInstanceOf(AbstractCommander);
   expect(new Reactor()).toBeInstanceOf(AbstractEventReactor);
   expect(new Subscriber()).toBeInstanceOf(AbstractEventSubscriber);
@@ -168,6 +171,7 @@ describe("@spine-event-engine/server", () => {
     expect(Object.keys(serverRoot).sort()).toEqual(
       [
         "AbstractAssignee",
+        "AsyncCommandHandler",
         "AbstractCommander",
         "AbstractEventReactor",
         "AbstractEventSubscriber",

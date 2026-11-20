@@ -16,9 +16,8 @@ import { create } from "@bufbuild/protobuf";
 import { Datastore } from "@google-cloud/datastore";
 import { AiRegistry, ModelRef } from "@spine-event-engine/ai";
 import { Client } from "@spine-event-engine/client-node";
-import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
-import { GenerationResponseSchema } from "@spine-event-engine/proto/agent";
-import * as Receipt from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
+import { AnyPacker, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import { CallModelSchema, GenerationResponseSchema } from "@spine-event-engine/proto/agent";
 import {
   Application,
   BoundedContext,
@@ -108,6 +107,19 @@ function hasResponse(entries) {
   );
 }
 
+function hasSubmissionAttempt(entries) {
+  return entries.some((entry) => entry.item.case === "submissionAttempt");
+}
+
+function savedCallIds(entries) {
+  return entries.flatMap((entry) => {
+    if (entry.item.case !== "modelRequest") return [];
+    const message = entry.item.value.request?.message;
+    const call = message && AnyPacker.tryUnpack(message, CallModelSchema)?.call;
+    return call?.id?.value === undefined ? [] : [call.id.value];
+  });
+}
+
 class CutStorageFactory extends StorageFactory {
   constructor(native) {
     super();
@@ -131,28 +143,16 @@ class CutStorageFactory extends StorageFactory {
         this.cut = true;
         await barrier("response-saved");
       }
+      if (mode === "crash" && cutName === "attempt" && !this.cut && hasSubmissionAttempt(entries)) {
+        this.cut = true;
+        await barrier("attempt-saved");
+      }
     };
     return storage;
   }
 
   onCreateRecordStorage(context, spec, group) {
-    const storage = this.native.createRecordStorage(context, spec, group);
-    if (spec.recordType.typeName !== Receipt.AgentAcceptanceReceiptSchema.typeName) return storage;
-    return new Proxy(storage, {
-      get: (target, property) => {
-        if (property === "compareAndSet")
-          return async (...args) => {
-            const admitted = await target.compareAndSet(...args);
-            if (mode === "crash" && cutName === "accepted" && admitted && !this.cut) {
-              this.cut = true;
-              await barrier("receipt-saved");
-            }
-            return admitted;
-          };
-        const value = Reflect.get(target, property, target);
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    });
+    return this.native.createRecordStorage(context, spec, group);
   }
 
   createEntityStorage(input) {
@@ -195,8 +195,6 @@ async function run() {
       totalInputBytes: 32_768,
       totalOutputBytes: 262_144,
     },
-    concurrentOperations: 1,
-    queuedOperations: 0,
   }).register(backend.registration);
   const builder = BoundedContext.singleTenant(contextName)
     .withAi(registry)
@@ -259,6 +257,7 @@ async function run() {
       kind: "reopened",
       state: stateBefore?.proposedReply,
       historyCount: before.items.length,
+      savedCalls: savedCallIds(before.items),
       requests: backend.requests().length,
       events: box.assertEvents().length,
     });
@@ -295,6 +294,7 @@ async function run() {
       requests: backend.requests().length,
       events: box.assertEvents().length,
       calls: SupportRecoveryAgent.draftCalls,
+      executedCalls: backend.requests().map((request) => request.call),
     });
   } finally {
     await box.close();

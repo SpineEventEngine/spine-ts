@@ -15,9 +15,9 @@ syntax = "proto3";
 
 package spine.examples.support;
 
+import "spine/agent/model.proto";
 import "spine/examples/support/types.proto";
 import "spine/options.proto";
-import "spine/ts/agent/model.proto";
 
 option (type_url_prefix) = "type.spine.examples.support";
 
@@ -25,28 +25,28 @@ option (type_url_prefix) = "type.spine.examples.support";
 message SupportTicketState {
   option (entity).kind = AGGREGATE;
 
-  // Ticket to which these incident facts belong.
+  // Ticket identified by these incident facts.
   SupportTicketId id = 1;
 
   // Most recently submitted warehouse facts.
   SupportRequest request = 2 [(validate) = true];
 }
 
-// Latest accepted reply draft for one warehouse support ticket.
+// Current reply request and its validated result for one support ticket.
 message SupportDraftState {
   option (entity).kind = ENTITY;
 
   // Ticket for which this reply was drafted.
   SupportTicketId id = 1;
 
-  // Request that produced the current draft.
+  // Most recently submitted request facts.
   SupportRequest request = 2 [(validate) = true];
 
-  // Current validated reply awaiting review.
+  // Validated reply for these facts and conversation, when available.
   SupportReply reply = 3 [(validate) = true];
 
-  // Conversation used for the current draft.
-  spine.ts.agent.ConversationId conversation = 4 [(validate) = true];
+  // Conversation used for the most recent request.
+  spine.agent.ConversationId conversation = 4 [(validate) = true];
 }
 
 // Queryable result visible to a support person.
@@ -60,15 +60,15 @@ message SupportReviewState {
   // Request facts associated with the latest proposal or failure.
   SupportRequest request = 2 [(validate) = true];
 
-  // Latest usable draft, absent after a failed request.
+  // Latest usable draft for these facts and conversation, when available.
   SupportReply reply = 3 [(validate) = true];
 
   // Conversation associated with this result.
-  spine.ts.agent.ConversationId conversation = 4 [(validate) = true];
+  spine.agent.ConversationId conversation = 4 [(validate) = true];
 
   // Whether the latest request produced a reviewable draft.
   bool has_draft = 5;
 
-  // Whether the latest request failed while any previous accepted reply remains available.
+  // Whether the latest request failed, including when a matching earlier reply remains.
   bool latest_request_failed = 6;
 }

@@ -1117,6 +1117,7 @@ it("retains uncertain accepted admission and locks account switching without a d
     expect(closeEvents).toContain("wait");
     expect(closeEvents).not.toContain("window-closed");
     expect(studio.session().generations[first.id]).toBe(generation);
+    releaseResponse?.();
     expect(await closeHandler()).toBe("close");
     closeEvents.push("window-closed");
     closedHandler?.();
@@ -1193,18 +1194,18 @@ it("releases account selection after a credential denial is saved for the accept
     const draft = await studio.openDraft(selected.selectionId, "Denied", "Users");
     const generation = await studio.requestGeneration(draft.id, "Explain the change");
     let phase = await studio.generationPhase(generation);
-    for (let attempt = 0; attempt < 100 && phase !== "terminated"; attempt++) {
+    for (let attempt = 0; attempt < 100 && phase !== "completed"; attempt++) {
       await new Promise((done) => setTimeout(done, 20));
       phase = await studio.generationPhase(generation);
     }
-    expect(phase).toBe("terminated");
+    expect(phase).toBe("completed");
     expect(requests).toBe(0);
     expect(useChecks).toBe(1);
-    const system = await studio.history(draft.id, "system", 20);
-    const terminal = system.items.filter((item) =>
+    const domain = await studio.history(draft.id, "domain", 20);
+    const failed = domain.items.filter((item) =>
       JSON.stringify(item).includes('"reason":"MODEL_USE_DENIED"'),
     );
-    expect(terminal).toHaveLength(1);
+    expect(failed).toHaveLength(1);
     expect(await studio.selectionLocked()).toBe(false);
     await expect(StudioAccountGate.requireUnlocked(studio, "sign-in")).resolves.toBeUndefined();
     await expect(
@@ -1237,7 +1238,7 @@ it("releases account selection after a credential denial is saved for the accept
       };
     });
     try {
-      expect(await studio.generationPhase(generation)).toBe("terminated");
+      expect(await studio.generationPhase(generation)).toBe("completed");
       expect(pages).toBeGreaterThan(1);
     } finally {
       paging.mockRestore();

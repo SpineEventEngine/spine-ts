@@ -46,8 +46,7 @@
     "**/*.test.ts",
     "packages/!(proto)/generated/**",
     "packages/proto/generated/!(spine)/**",
-    "packages/proto/generated/spine/!(ts)/**",
-    "packages/proto/generated/spine/ts/!(agent)/**",
+    "packages/proto/generated/spine/!(agent)/**",
     "examples/*/generated/**"
   ],
   "blockTags": [

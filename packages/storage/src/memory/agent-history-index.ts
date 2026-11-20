@@ -25,7 +25,7 @@ import {
 interface IndexedEntry {
   readonly indexKey: string;
   readonly identity: string;
-  readonly category: "conversation" | "system" | "domain";
+  readonly category: AgentHistoryOrderKey["category"];
   readonly conversation?: string;
   readonly bytes: Uint8Array;
 }
@@ -112,6 +112,17 @@ export class AgentHistoryIndex {
    */
   append(entry: AgentHistoryEntry): void {
     this.withEntries([entry]).apply();
+  }
+
+  /**
+   * Returns the prepared model request for its exact call ID.
+   *
+   * @param callId Logical model call ID.
+   * @returns Detached immutable request entry when present.
+   */
+  modelRequest(callId: string): AgentHistoryEntry | undefined {
+    const found = this.#byIdentity.get(`request:${callId}`);
+    return found === undefined ? undefined : fromBinary(AgentHistoryEntrySchema, found.bytes);
   }
 
   /**

@@ -14,26 +14,20 @@
 
 import { clone, toBinary, type Message } from "@bufbuild/protobuf";
 import { EventSchema, type Event, type EventId } from "@spine-event-engine/proto";
-import {
-  AgentHistoryEntrySchema,
-  ModelPreferenceSchema,
-  type AgentHistoryEntry,
-  type ModelPreference,
-} from "@spine-event-engine/proto/agent";
+import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import type { EntityStateKey } from "@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { eventStoreRecordSpec, EventStoreGroups } from "../event/event-store.js";
 import { eventHistorySpec, stateHistorySpec } from "../entity/entity-history-record-spec.js";
+import { AgentHistoryRecords } from "../entity/agent-history-record-spec.js";
 import {
   EntityCommitSnapshots,
   type AgentCommitInput,
+  type AgentCurrentData,
   type EntityCommitInput,
   type EntityCommitStorage,
 } from "../internal/entity-commit.js";
-import {
-  AgentModelPreferences,
-  type PreferencesRecord,
-} from "../internal/agent-model-preferences.js";
+import { AgentAttributes, type ActiveAgentRecord } from "../internal/agent-attributes.js";
 import { TenantBoundary } from "../internal/tenancy.js";
 import type { EntityRecord } from "../entity/entity-record.js";
 import type { RecordSpec } from "../record/record-spec.js";
@@ -78,7 +72,7 @@ type CommitHandles = readonly [
 ];
 
 interface AgentFamilies {
-  preferences: Map<string, PreferencesRecord>;
+  attributes: Map<string, ActiveAgentRecord>;
   history: Map<string, AgentHistoryIndex>;
   queue: KeyedSerialQueue;
 }
@@ -130,7 +124,7 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
    * @param entities Opens current Entity storage.
    * @param openRecords Opens generated history and Event record slices.
    * @param input Captures the Entity source and tenant boundary.
-   * @param backend Shared tenant memory families for preferences and audit.
+   * @param backend Shared tenant memory families for attributes and audit.
    * @param onClose Releases factory tracking after terminal cleanup.
    */
   constructor(
@@ -152,18 +146,18 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
     if (this.#agent !== undefined) return this.#agent;
     const tenant = TenantBoundary.of(this.input.context);
     this.#agent = {
-      preferences: InMemoryStorageBackend.bind(
+      attributes: InMemoryStorageBackend.bind(
         this.backend,
         "entity",
         tenant,
-        `agent-preferences:${this.input.stateSchema.typeName}`,
-        () => new Map<string, PreferencesRecord>(),
+        `agent-attributes:${this.input.stateSchema.typeName}`,
+        () => new Map<string, ActiveAgentRecord>(),
       ),
       history: InMemoryStorageBackend.bind(
         this.backend,
         "entity",
         tenant,
-        `agent-history:${this.input.stateSchema.typeName}`,
+        "agent-history",
         () => new Map<string, AgentHistoryIndex>(),
       ),
       queue: AgentHistoryMutationQueue.bind(this.backend, tenant),
@@ -193,19 +187,30 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
    * @param entityId Typed Agent identifier.
    * @returns Complete selections or absent record.
    */
-  readAgentPreferences(entityId: unknown): Promise<readonly ModelPreference[] | undefined> {
+  readAgentCurrent(entityId: unknown): Promise<AgentCurrentData> {
     this.requireOpen();
     return this.track(async () => {
-      const key = AgentModelPreferences.key(this.input, entityId);
-      const record = this.agentFamilies().preferences.get(await this.preferenceSlot(key));
-      if (record === undefined) return undefined;
-      AgentModelPreferences.requireIdentity(record, key);
-      return AgentModelPreferences.copy(record.preferences);
+      const id = this.input.id.clone(entityId);
+      const key = AgentAttributes.id(this.input, id);
+      const slot = await this.attributesSlot(key);
+      const agentKey = this.input.id.key(id);
+      return this.agentFamilies().queue.run(agentKey, () =>
+        this.entities.backend(this.input).mutationQueue.run(ENTITY_SCOPE_MUTATION_KEY, () => {
+          const current = this.entities.backend(this.input).current.get(agentKey) as
+            EntityRecord | undefined;
+          const attributes = this.agentFamilies().attributes.get(slot);
+          if (attributes !== undefined) AgentAttributes.requireIdentity(attributes, key);
+          return {
+            current: current === undefined ? undefined : clone(EntityRecordSchema, current),
+            attributes: attributes === undefined ? undefined : AgentAttributes.copy(attributes),
+          };
+        }),
+      );
     });
   }
 
   /**
-   * Commits Agent state, final audit, and preferences under shared memory queues.
+   * Commits Agent state, final audit, and attributes under shared memory queues.
    * @param input Captured initial images and prepared transition.
    * @returns Completion after one conditional group.
    * @typeParam I Typed Agent identifier.
@@ -215,17 +220,21 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
     this.requireOpen();
     return this.track(async () => {
       const entityId = this.input.id.clone(input.entityId);
-      const key = AgentModelPreferences.key(this.input, entityId);
-      const expected = input.expectedPreferences?.map((item) => clone(ModelPreferenceSchema, item));
-      const next = AgentModelPreferences.record(key, input.preferences);
+      const key = AgentAttributes.id(this.input, entityId);
+      const expected =
+        input.expectedAttributes === undefined
+          ? undefined
+          : AgentAttributes.copy(input.expectedAttributes);
+      const next = AgentAttributes.copy(input.attributes);
+      AgentAttributes.requireIdentity(next, key);
       const entityCommit =
         input.entityCommit &&
         (EntityCommitSnapshots.capture(input.entityCommit) as EntityCommitInput<unknown, Message>);
       const history =
-        input.historyEntries?.map((entry) => clone(AgentHistoryEntrySchema, entry)) ?? [];
+        input.historyEntries?.map((entry) => AgentHistoryRecords.capture(key, entry)) ?? [];
       this.validateAgentCommit(entityId, input.expectedVersion, entityCommit);
-      const agentKey = this.input.id.key(entityId);
-      const slot = await this.preferenceSlot(key);
+      const agentKey = AgentAttributes.text(key);
+      const slot = await this.attributesSlot(key);
       return this.agentFamilies().queue.run(agentKey, () =>
         this.commitAgentLocked(
           entityId,
@@ -277,16 +286,16 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
     entityId: unknown,
     slot: string,
     expectedVersion: number,
-    expected: readonly ModelPreference[] | undefined,
-    next: PreferencesRecord,
+    expected: ActiveAgentRecord | undefined,
+    next: ActiveAgentRecord,
     entityCommit: EntityCommitInput<unknown, Message> | undefined,
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
-    const agentKey = this.input.id.key(entityId);
+    const agentKey = AgentAttributes.text(AgentAttributes.id(this.input, entityId));
     const priorIndex = this.agentFamilies().history.get(agentKey);
     const index = priorIndex ?? new AgentHistoryIndex();
     const staged = index.withEntries(history);
-    const prior = this.agentFamilies().preferences.get(slot);
+    const prior = this.agentFamilies().attributes.get(slot);
     const extra = this.agentPublication(
       slot,
       next,
@@ -314,9 +323,9 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
    */
   private agentPublication(
     slot: string,
-    next: PreferencesRecord,
-    expected: readonly ModelPreference[] | undefined,
-    prior: PreferencesRecord | undefined,
+    next: ActiveAgentRecord,
+    expected: ActiveAgentRecord | undefined,
+    prior: ActiveAgentRecord | undefined,
     agentKey: string,
     index: AgentHistoryIndex,
     priorIndex: AgentHistoryIndex | undefined,
@@ -324,20 +333,20 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   ): { apply(): void; restore(): void } {
     return {
       apply: () => {
-        if (next.key === undefined)
-          throw new TypeError("Agent preference record requires identity.");
-        if (prior !== undefined) AgentModelPreferences.requireIdentity(prior, next.key);
-        if (!AgentModelPreferences.same(prior?.preferences, expected))
-          throw new Error("Agent model preference image conflict.");
+        if (next.agent === undefined)
+          throw new TypeError("Agent attributes record requires identity.");
+        if (prior !== undefined) AgentAttributes.requireIdentity(prior, next.agent);
+        if (!AgentAttributes.same(prior, expected))
+          throw new Error("Agent attributes image conflict.");
         staged.apply();
         this.agentFamilies().history.set(agentKey, index);
-        this.agentFamilies().preferences.set(slot, next);
+        this.agentFamilies().attributes.set(slot, next);
       },
       restore: () => {
         staged.restore();
         if (priorIndex === undefined) this.agentFamilies().history.delete(agentKey);
-        if (prior === undefined) this.agentFamilies().preferences.delete(slot);
-        else this.agentFamilies().preferences.set(slot, prior);
+        if (prior === undefined) this.agentFamilies().attributes.delete(slot);
+        else this.agentFamilies().attributes.set(slot, prior);
       },
     };
   }
@@ -347,12 +356,12 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
    * @param key Complete generated Agent identity.
    * @returns Fixed 67-character provider slot.
    */
-  private async preferenceSlot(key: NonNullable<PreferencesRecord["key"]>): Promise<string> {
+  private async attributesSlot(key: NonNullable<ActiveAgentRecord["agent"]>): Promise<string> {
     const runtime = globalThis as unknown as {
       TextEncoder: new () => { encode(value: string): Uint8Array };
       crypto: { subtle: { digest(algorithm: string, value: Uint8Array): Promise<ArrayBuffer> } };
     };
-    const bytes = new runtime.TextEncoder().encode(AgentModelPreferences.text(key));
+    const bytes = new runtime.TextEncoder().encode(AgentAttributes.text(key));
     const hash = new Uint8Array(await runtime.crypto.subtle.digest("SHA-256", bytes));
     return `v1:${Array.from(hash, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
   }
@@ -403,7 +412,7 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
    * @param key Canonical Entity ID key.
    * @param expectedVersion Version read before handler execution.
    * @param snapshot Optional captured Entity state transition.
-   * @param extra Applies or restores Agent audit records and model preferences.
+   * @param extra Applies or restores Agent audit records and model attributes.
    * @returns Completion after the transition is stored.
    */
   private applyAgentConditional<I, S extends Message>(

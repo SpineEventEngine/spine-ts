@@ -231,8 +231,6 @@ describe("AiTestBackend", () => {
         totalInputBytes: 5000,
         totalOutputBytes: 5000,
       },
-      concurrentOperations: 1,
-      queuedOperations: 0,
     }).register(backend.registration);
     expect(registry).toBeDefined();
     expect(selectDeployment(registry, { kind: "generation", models: [generation] })).toBe(

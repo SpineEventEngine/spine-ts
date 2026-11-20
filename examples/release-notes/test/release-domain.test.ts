@@ -97,8 +97,6 @@ function registry(): AiRegistry {
       totalInputBytes: 64_000,
       totalOutputBytes: 64_000,
     },
-    concurrentOperations: 1,
-    queuedOperations: 0,
   }).register(backend.registration);
 }
 

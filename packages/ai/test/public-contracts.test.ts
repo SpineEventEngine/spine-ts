@@ -91,7 +91,7 @@ describe("public SDK-free facade inventory", () => {
       AgentModelSelectionChangedSchema,
       AgentInvocationTerminatedSchema,
     ];
-    expect(schemas.every((schema) => schema.typeName.startsWith("spine.ts.agent."))).toBe(true);
+    expect(schemas.every((schema) => schema.typeName.startsWith("spine.agent."))).toBe(true);
   });
 
   it("round-trips ordered model proposals without treating them as authorized calls", () => {

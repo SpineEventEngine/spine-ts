@@ -21,17 +21,19 @@ import {
   TypeRegistry,
 } from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
+import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
 import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 // prettier-ignore
 import {
-  AgentModelPreferencesRecordSchema,
-} from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
+  ActiveAgentRecordSchema,
+} from "@spine-event-engine/proto/generated/spine/server/agent/active_agent_record_pb.js";
 import { RecordSpec } from "@spine-event-engine/storage";
 import {
+  AgentAttributes,
+  AgentHistoryRecords,
   EntityCommitStorageFactories,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
@@ -46,10 +48,9 @@ import {
 } from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import { TaskListSchema } from "../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
 import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
+// prettier-ignore
 import {
   SupportReplyAgentIdSchema,
-  type SupportReplyAgentId,
-  type SupportReplyAgentState,
 } from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 import { entityInput as supportAgentInput } from "../../storage/test/entity/agent-live-fixtures.js";
 import { conversation } from "../../storage/test/entity/agent-history-fixtures.js";
@@ -99,6 +100,8 @@ const driver = vi.hoisted(() => {
       pending = [];
       return Promise.resolve({ rows: [] });
     }
+    if (sql.includes("FROM (SELECT 1) seed"))
+      return Promise.resolve({ rows: [{ first_bytes: null, second_bytes: null }] });
     if (sql.startsWith('SELECT "bytes"')) {
       const bytes =
         sql.includes('"spine_examples_todo_task"') ||
@@ -157,8 +160,8 @@ const driver = vi.hoisted(() => {
   });
   return {
     Pool,
-    connect,
     query,
+    connect,
     release,
     failCommit: (error: Error | undefined) => (commitFailure = error),
     setCurrent: (record: EntityRecord | undefined) =>
@@ -213,6 +216,31 @@ vi.mock("pg", () => ({ Pool: driver.Pool }));
 import { PostgresStorageFactory } from "../src/index.js";
 
 describe("PostgreSQL Entity commit", () => {
+  it("reads current state and attributes with one PostgreSQL data statement after preparation", async () => {
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(new TypeRegistry([SupportReplyAgentIdSchema]));
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const commits = EntityCommitStorageFactories.create(factory, supportAgentInput());
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-pair" });
+    try {
+      await commits.readAgentCurrent(id);
+      driver.query.mockClear();
+      await expect(commits.readAgentCurrent(id)).resolves.toEqual({
+        current: undefined,
+        attributes: undefined,
+      });
+      const data = driver.query.mock.calls.filter(([sql]) => sql.startsWith("SELECT "));
+      expect(data).toHaveLength(1);
+      expect(data[0]?.[0]).toContain("LEFT JOIN");
+    } finally {
+      await commits.close();
+      await factory.close();
+    }
+  });
+
   it("rolls back a final Agent audit and preference group when transaction commit fails", async () => {
     const stringifiers = new StringifierRegistry();
     stringifiers.setTypeRegistry(new TypeRegistry([SupportReplyAgentIdSchema]));
@@ -220,18 +248,15 @@ describe("PostgreSQL Entity commit", () => {
       .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
       .setStringifierRegistry(stringifiers)
       .build();
-    const layout = supportAgentInput() as unknown as EntityStorageInput<
-      SupportReplyAgentId,
-      SupportReplyAgentState
-    >;
+    const layout = supportAgentInput();
     const commits = EntityCommitStorageFactories.create(factory, layout);
     const prepare = vi.spyOn(PostgresTableInitializer.prototype, "prepare").mockResolvedValue();
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-rollback" });
     const input = {
       entityId: id,
       expectedVersion: 0,
-      expectedPreferences: undefined,
-      preferences: [],
+      expectedAttributes: undefined,
+      attributes: AgentAttributes.record(AgentAttributes.id(layout, id), [], []),
       historyEntries: [
         conversation("rollback-audit", "support", create(TimestampSchema, { seconds: 1n })),
       ],
@@ -249,13 +274,16 @@ describe("PostgreSQL Entity commit", () => {
       const preferenceBytes = writes[1]?.[1]?.[1];
       if (!(auditBytes instanceof Uint8Array) || !(preferenceBytes instanceof Uint8Array))
         throw new Error("Final Agent transaction must persist audit and preference rows.");
-      const audit = fromBinary(AgentHistoryRecordSchema, auditBytes);
-      const preferences = fromBinary(AgentModelPreferencesRecordSchema, preferenceBytes);
-      expect(audit.scope?.stateType).toBe(layout.stateSchema.typeName);
-      expect(audit.scope?.agentKey).toBe(id.ticketNumber);
-      expect(audit.entry).toEqual(input.historyEntries[0]);
-      expect(preferences.key?.stateType).toBe(layout.stateSchema.typeName);
-      expect(preferences.key?.recipientId).toEqual(AnyPacker.pack(SupportReplyAgentIdSchema, id));
+      const audit = fromBinary(AgentHistoryEntrySchema, auditBytes);
+      const preferences = fromBinary(ActiveAgentRecordSchema, preferenceBytes);
+      expect(audit.agent).toEqual(AgentAttributes.id(layout, id));
+      const historyEntry = input.historyEntries[0];
+      if (historyEntry === undefined) throw new Error("Expected the Agent history fixture.");
+      expect(audit).toEqual(
+        AgentHistoryRecords.capture(AgentAttributes.id(layout, id), historyEntry),
+      );
+      expect(preferences.agent?.stateTypeUrl).toBe(AgentAttributes.id(layout, id).stateTypeUrl);
+      expect(preferences.agent?.entityId).toEqual(AnyPacker.pack(SupportReplyAgentIdSchema, id));
       const current = create(EntityRecordSchema, {
         entityId: layout.id.pack(id),
         version: { number: 1 },
@@ -268,12 +296,12 @@ describe("PostgreSQL Entity commit", () => {
       const mutation = { context: layout.context, entity: layout, entityId: id, next };
       await expect(
         commits.commitAgent({ ...input, expectedVersion: 1, entityCommit: mutation }),
-      ).rejects.toThrow("preferences changed");
+      ).rejects.toThrow("attributes changed");
       await expect(
         commits.commitAgent({
           ...input,
           expectedVersion: 0,
-          expectedPreferences: [],
+          expectedAttributes: AgentAttributes.record(AgentAttributes.id(layout, id), [], []),
           entityCommit: { ...mutation, next: current },
         }),
       ).rejects.toThrow("Version");
@@ -282,8 +310,8 @@ describe("PostgreSQL Entity commit", () => {
         commits.commitAgent({
           ...input,
           expectedVersion: 1,
-          expectedPreferences: [],
-          preferences: [],
+          expectedAttributes: AgentAttributes.record(AgentAttributes.id(layout, id), [], []),
+          attributes: AgentAttributes.record(AgentAttributes.id(layout, id), [], []),
           entityCommit: mutation,
         }),
       ).resolves.toBeUndefined();

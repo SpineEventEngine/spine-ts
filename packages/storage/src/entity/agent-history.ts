@@ -13,24 +13,15 @@
  */
 
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import type { AgentHistoryEntry, ConversationId } from "@spine-event-engine/proto/agent";
+import {
+  CallModelSchema,
+  type AgentHistoryEntry,
+  type AgentId,
+  type ConversationId,
+} from "@spine-event-engine/proto/agent";
+import { AnyPacker } from "@spine-event-engine/core";
 
 import type { StorageContext } from "../storage/storage.js";
-
-/**
- * Converts a typed Agent identifier to its canonical storage key.
- *
- * @typeParam Id Typed Agent identifier.
- */
-interface AgentHistoryIdCodec<Id> {
-  /**
-   * Maps one typed Agent identifier to its canonical key.
-   *
-   * @param id Typed Agent identifier.
-   * @returns Canonical key within the repository scope.
-   */
-  readonly key: (id: Id) => string;
-}
 
 /**
  * Identifies one existing record in the Agent history order.
@@ -44,7 +35,8 @@ export interface AgentHistoryOrderKey {
   /**
    * Selects the category tie-break after equal timestamps.
    */
-  readonly category: "conversation" | "system" | "domain";
+  readonly category:
+    "conversation" | "system" | "domain" | "request" | "attempt" | "handled" | "abandoned";
 
   /**
    * Immutable record or Event ID.
@@ -118,14 +110,11 @@ export interface AgentHistoryStorageInput<Id> {
   readonly context: StorageContext;
 
   /**
-   * Generated Agent state type name.
+   * Creates the complete typed Agent identity from a repository identifier.
+   * @param id Repository identifier.
+   * @returns Complete typed Agent identity.
    */
-  readonly stateType: string;
-
-  /**
-   * Canonical typed Entity ID conversion supplied by the repository.
-   */
-  readonly id: AgentHistoryIdCodec<Id>;
+  readonly agent: (id: Id) => AgentId;
 }
 
 /**
@@ -180,7 +169,7 @@ export interface AgentHistoryPage {
  */
 export interface AgentHistoryCapacity {
   /**
-   * Maximum encoded AgentHistoryRecord bytes, when the provider imposes one.
+   * Maximum encoded AgentHistoryEntry bytes, when the provider imposes one.
    */
   readonly historyRecordBytes?: number;
 
@@ -228,6 +217,15 @@ export interface AgentHistoryStorage<Id> {
   read(request: AgentHistoryRead<Id>): Promise<AgentHistoryPage>;
 
   /**
+   * Reads one prepared model request by its exact immutable history identity.
+   *
+   * @param entityId Typed Agent identifier.
+   * @param callId Logical model call identifier.
+   * @returns The complete request entry when present.
+   */
+  readModelRequest(entityId: Id, callId: string): Promise<AgentHistoryEntry | undefined>;
+
+  /**
    * Closes this handle without deleting any recorded history.
    */
   close(): void;
@@ -239,6 +237,10 @@ const categoryRank: Readonly<Record<string, string | undefined>> = {
   conversation: "0",
   system: "1",
   domain: "2",
+  request: "3",
+  attempt: "4",
+  handled: "5",
+  abandoned: "6",
 };
 
 /**
@@ -282,7 +284,7 @@ export const AgentHistoryKeys: AgentHistoryKeyOperations = Object.freeze({
    * @returns Complete key after validating the enclosed occurrence time.
    */
   fromEntry(entry: AgentHistoryEntry): AgentHistoryOrderKey {
-    const occurredAt = entry.occurredAt;
+    const occurredAt = entry.whenOccurred;
     const item = entry.item;
     if (occurredAt === undefined || item.case === undefined)
       throw new TypeError("Agent history requires an occurrence time and one item.");
@@ -290,9 +292,13 @@ export const AgentHistoryKeys: AgentHistoryKeyOperations = Object.freeze({
       const record = item.value;
       if (record.conversation?.value === undefined || record.conversation.value.length === 0)
         throw new TypeError("Conversation history requires a ConversationId.");
-      HistoryValidation.sameTime(occurredAt, record.occurredAt);
+      HistoryValidation.sameTime(occurredAt, record.whenOccurred);
       return { occurredAt, category: "conversation", recordId: record.id?.value ?? "" };
     }
+    if (item.case === "modelRequest" || item.case === "submissionAttempt")
+      return HistoryValidation.modelCommandKey(entry, occurredAt);
+    if (item.case === "handledOutcome" || item.case === "abandonment")
+      return HistoryValidation.modelOutcomeKey(entry, occurredAt);
     const event = item.value;
     HistoryValidation.sameTime(occurredAt, event.context?.timestamp);
     return {
@@ -362,6 +368,61 @@ const Utf8Ids = Object.freeze({
  * Validates original occurrence times before indexing.
  */
 const HistoryValidation = Object.freeze({
+  /**
+   * Checks handled and abandoned model history identity and occurrence time.
+   *
+   * @param entry Handled or abandonment history entry.
+   * @param occurredAt Wrapper occurrence time.
+   * @returns Complete outcome order key.
+   */
+  modelOutcomeKey(entry: AgentHistoryEntry, occurredAt: Timestamp): AgentHistoryOrderKey {
+    const item = entry.item;
+    if (item.case !== "handledOutcome" && item.case !== "abandonment")
+      throw new TypeError("Expected a model outcome history entry.");
+    const time = item.case === "handledOutcome" ? item.value.whenHandled : item.value.whenAbandoned;
+    this.sameTime(occurredAt, time);
+    if (!item.value.call?.value || !item.value.conversation?.value)
+      throw new TypeError("Model outcome history requires call and conversation IDs.");
+    if (item.case === "handledOutcome" && item.value.outcome === undefined)
+      throw new TypeError("Handled model outcome history requires its complete Event.");
+    if (item.case === "abandonment" && item.value.source.case === undefined)
+      throw new TypeError("Model abandonment history requires its triggering signal.");
+    return {
+      occurredAt,
+      category: item.case === "handledOutcome" ? "handled" : "abandoned",
+      recordId: item.value.id,
+    };
+  },
+
+  /**
+   * Validates the prepared Command envelope and indexes its logical call.
+   *
+   * @param entry Prepared model request or submission attempt.
+   * @param occurredAt Wrapper occurrence time.
+   * @returns Complete order key for a model Command entry.
+   */
+  modelCommandKey(entry: AgentHistoryEntry, occurredAt: Timestamp): AgentHistoryOrderKey {
+    const item = entry.item;
+    if (item.case !== "modelRequest" && item.case !== "submissionAttempt")
+      throw new TypeError("Expected a model Command history entry.");
+    const command = item.case === "modelRequest" ? item.value.request : item.value.command;
+    const payload = command?.message && AnyPacker.tryUnpack(command.message, CallModelSchema);
+    const callId = payload?.call?.id?.value;
+    if (!callId) throw new TypeError("Model request history requires a CallModel Command.");
+    if (item.case === "modelRequest" && item.value.source.case === undefined)
+      throw new TypeError("Model request history requires its triggering signal.");
+    const time =
+      item.case === "modelRequest" ? payload.call?.whenRequested : item.value.whenAttempted;
+    HistoryValidation.sameTime(occurredAt, time);
+    if (item.case === "submissionAttempt")
+      HistoryValidation.sameTime(occurredAt, payload.whenSubmissionAttempted);
+    return {
+      occurredAt,
+      category: item.case === "modelRequest" ? "request" : "attempt",
+      recordId: item.case === "modelRequest" ? callId : item.value.id,
+    };
+  },
+
   /**
    * Verifies an enclosed occurrence time.
    *

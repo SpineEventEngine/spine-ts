@@ -17,7 +17,7 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { ScalarType } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
 import type { RecordColumn, RecordColumnType, RecordIndex } from "@spine-event-engine/storage";
-import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
 
 import { MysqlIdColumn } from "./id-column.js";
 
@@ -225,7 +225,7 @@ function mysqlColumnSpec<R extends Message>(
 ): MysqlColumnSpec {
   const entityDefault = entityAttributeDefault(recordType, groupName, column);
   const historyType =
-    recordType.typeName === AgentHistoryRecordSchema.typeName
+    recordType.typeName === AgentHistoryEntrySchema.typeName
       ? AgentHistoryColumnTypes.for(column.name)
       : undefined;
   return {

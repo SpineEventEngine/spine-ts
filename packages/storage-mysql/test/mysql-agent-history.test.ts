@@ -17,7 +17,6 @@ import { createPool } from "mysql2/promise";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
-import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import { describe, expect, it } from "vitest";
 import {
   AgentHistoryConformance,
@@ -29,6 +28,8 @@ import { AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 
 import {
   conversation,
+  modelRequest,
+  submissionAttempt,
   response,
   event,
   occurredAt,
@@ -48,6 +49,44 @@ function required(value: string | undefined): string {
 }
 
 describe.runIf(url !== undefined)("MySQL Agent history", () => {
+  it("reopens exact prepared requests and preserves their complete envelopes", async () => {
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: required(url) })
+      .build();
+    const agent = `request-${randomUUID()}`;
+    const callId = `call-${randomUUID()}`;
+    const time = occurredAt(21n, 5);
+    const request = modelRequest(callId, time);
+    const attempt = submissionAttempt(`attempt-${callId}`, request, time);
+    const first = AgentHistoryStorageFactories.create(factory, scope);
+    try {
+      await first.appendAll(agent, [request, attempt]);
+      first.close();
+      const reopened = AgentHistoryStorageFactories.create(factory, scope);
+      try {
+        const exact = await reopened.readModelRequest(agent, callId);
+        expect(exact && toBinary(AgentHistoryEntrySchema, exact)).toEqual(
+          toBinary(
+            AgentHistoryEntrySchema,
+            create(AgentHistoryEntrySchema, { ...request, agent: scope.agent(agent) }),
+          ),
+        );
+        await expect(reopened.readModelRequest("other-agent", callId)).resolves.toBeUndefined();
+        await expect(reopened.readModelRequest(agent, "missing")).resolves.toBeUndefined();
+        const page = await reopened.read({ entityId: agent, view: { kind: "full" }, count: 10 });
+        expect(page.entries).toHaveLength(2);
+        await expect(reopened.append(agent, modelRequest(callId, occurredAt(22n)))).rejects.toThrow(
+          /immutable|conflict/i,
+        );
+      } finally {
+        reopened.close();
+      }
+    } finally {
+      first.close();
+      await factory.close();
+    }
+  });
+
   it("rejects creation of an Agent history handle after factory closure", async () => {
     const factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: required(url) })
@@ -80,7 +119,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
       try {
         const run = randomUUID();
         await AgentHistoryConformance.check({
-          scope: { ...scope, id: { key: (id) => (id.length === 0 ? "" : `${run}:${id}`) } },
+          scope: { ...scope, agent: (id) => scope.agent(id.length === 0 ? "" : `${run}:${id}`) },
           open: (input) =>
             AgentHistoryStorageFactories.create(
               input.context.multitenant ? tenants : factory,
@@ -104,10 +143,10 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
     const table = `agent_history_${randomUUID().replaceAll("-", "")}`;
     const factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: required(url) })
-      .setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, table)
+      .setTableName(AgentHistoryEntrySchema, AgentHistoryEntrySchema, table)
       .build();
     const run = randomUUID();
-    const input = { ...scope, id: { key: (id: string) => `${run}:${id}` } };
+    const input = { ...scope, agent: (id: string) => scope.agent(`${run}:${id}`) };
     const entry = event("reopen-mysql", occurredAt(1_789_000_001n, 123_456_789), false);
     const first = AgentHistoryStorageFactories.create(factory, input);
     await first.append("ticket-mysql", entry);
@@ -115,7 +154,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
     await factory.close();
     const reopened = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: required(url) })
-      .setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, table)
+      .setTableName(AgentHistoryEntrySchema, AgentHistoryEntrySchema, table)
       .build();
     const pool = createPool(required(url));
     try {
@@ -127,7 +166,10 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
         maxBytes: 10000,
       });
       expect(page.entries.map((value) => toBinary(AgentHistoryEntrySchema, value))).toEqual([
-        toBinary(AgentHistoryEntrySchema, entry),
+        toBinary(
+          AgentHistoryEntrySchema,
+          create(AgentHistoryEntrySchema, { ...entry, agent: input.agent("ticket-mysql") }),
+        ),
       ]);
       const [indexes] = await pool.query(
         "SELECT index_name AS indexname, column_name AS columnname, " +
@@ -167,7 +209,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
       .setOptions({ url: required(url) })
       .build();
     const run = randomUUID();
-    const input = { ...scope, id: { key: (id: string) => `${run}:${id}` } };
+    const input = { ...scope, agent: (id: string) => scope.agent(`${run}:${id}`) };
     const history = AgentHistoryStorageFactories.create(factory, input);
     const first = event("batch-first", occurredAt(1_789_100_001n), false);
     const original = conversation("batch-conflict", "dialog", occurredAt(1_789_100_002n));
@@ -196,7 +238,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
     const builder = () =>
       MysqlStorageFactory.newBuilder()
         .setOptions({ url: required(url) })
-        .setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, table);
+        .setTableName(AgentHistoryEntrySchema, AgentHistoryEntrySchema, table);
     const seed = await builder().build();
     try {
       const records = seed.createRecordStorage(
@@ -244,7 +286,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
     const table = `agent_history_bad_${randomUUID().replaceAll("-", "")}`;
     const factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: required(url) })
-      .setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, table)
+      .setTableName(AgentHistoryEntrySchema, AgentHistoryEntrySchema, table)
       .build();
     const pool = createPool(required(url));
     try {
@@ -275,7 +317,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
       .setOptions({ url: required(url) })
       .build();
     const run = randomUUID();
-    const input = { ...scope, id: { key: (id: string) => `${run}:${id}` } };
+    const input = { ...scope, agent: (id: string) => scope.agent(`${run}:${id}`) };
     const history = AgentHistoryStorageFactories.create(factory, input);
     const entry = event("a".repeat(1460), occurredAt(6n, 987_654_321), false);
     const tooLong = event("a".repeat(1461), occurredAt(6n, 987_654_321), false);
@@ -295,7 +337,10 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
         maxBytes: 10000,
       });
       expect(page.entries.map((value) => toBinary(AgentHistoryEntrySchema, value))).toEqual([
-        toBinary(AgentHistoryEntrySchema, entry),
+        toBinary(
+          AgentHistoryEntrySchema,
+          create(AgentHistoryEntrySchema, { ...entry, agent: input.agent("long-id") }),
+        ),
       ]);
     } finally {
       history.close();
