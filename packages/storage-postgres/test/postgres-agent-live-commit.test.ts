@@ -19,7 +19,9 @@ import { AiModelKind, ModelPreferenceSchema } from "@spine-event-engine/proto/ag
 import { VersionSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
+  AgentAttributes,
   AgentHistoryStorageFactories,
+  AgentHistoryRecords,
   EntityCommitStorageFactories,
   StoragePreparations,
   type EntityStorageInput,
@@ -161,12 +163,13 @@ describe.skipIf(url === undefined)("PostgreSQL live Agent conditional persistenc
       ).resolves.toEqual([preference]);
       const history = AgentHistoryStorageFactories.create(factory, {
         context: layout.context,
-        stateType: layout.stateSchema.typeName,
-        id: { key: (value: typeof id) => value.ticketNumber },
+        agent: (value: typeof id) => AgentAttributes.id(layout, value),
       });
       try {
         const page = await history.read({ entityId: id, view: { kind: "full" }, count: 10 });
-        expect(page.entries).toEqual([entry]);
+        expect(page.entries).toEqual([
+          AgentHistoryRecords.capture(AgentAttributes.id(layout, id), entry),
+        ]);
       } finally {
         history.close();
       }

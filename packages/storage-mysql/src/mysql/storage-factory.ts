@@ -13,9 +13,8 @@
  */
 
 import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
-import { clone, toBinary, type Message } from "@bufbuild/protobuf";
-import { AgentHistoryEntrySchema, type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
-import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+import { toBinary, type Message } from "@bufbuild/protobuf";
+import { type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import {
@@ -42,7 +41,7 @@ import {
 import {
   AgentHistoryRecords,
   AgentAttributes,
-  type AgentAttributesRecord,
+  type ActiveAgentRecord,
   type AgentCommitInput,
   type AgentCurrentData,
   type EntityCommitInput,
@@ -873,7 +872,6 @@ export class MysqlStorageFactory extends StorageFactory {
   ): Promise<void> {
     return this.admitPublic(async () => {
       TenantBoundary.of(input.context);
-      if (input.stateType.trim().length === 0) throw new TypeError("Agent state type is required.");
       const spec = AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value));
       await this.prepareRecordAdmitted(input.context, spec, AgentHistoryRecords.group, mode);
       const boundary = this.database(input.context);
@@ -1869,9 +1867,9 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
 
   #events: MysqlDeliveryStorage | undefined;
 
-  #history: MysqlRecordStorage<string, AgentHistoryRecord> | undefined;
+  #history: MysqlRecordStorage<string, AgentHistoryEntry> | undefined;
 
-  #attributes: MysqlRecordStorage<string, AgentAttributesRecord> | undefined;
+  #attributes: MysqlRecordStorage<string, ActiveAgentRecord> | undefined;
 
   #idleOutcome: { error?: Error } | undefined;
 
@@ -1900,8 +1898,8 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
       import("@spine-event-engine/proto").EventId,
       import("@spine-event-engine/proto").Event
     >,
-    private readonly openHistory: () => MysqlRecordStorage<string, AgentHistoryRecord>,
-    private readonly openAttributes: () => MysqlRecordStorage<string, AgentAttributesRecord>,
+    private readonly openHistory: () => MysqlRecordStorage<string, AgentHistoryEntry>,
+    private readonly openAttributes: () => MysqlRecordStorage<string, ActiveAgentRecord>,
     private readonly coordinator: MysqlAgentTransaction,
     private readonly onClose: () => void,
   ) {}
@@ -1991,7 +1989,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
       const next = AgentAttributes.copy(input.attributes);
       AgentAttributes.requireIdentity(next, key);
       const mutation = input.entityCommit && EntityCommitSnapshots.capture(input.entityCommit);
-      const history = this.captureAgentHistory(input.historyEntries);
+      const history = this.captureAgentHistory(key, input.historyEntries);
       this.validateAgent(id, input.expectedVersion, mutation);
       const [storage, audit, attributes, events] = this.agentRecords(mutation as never);
       await this.settleAgentPreparations([
@@ -2035,13 +2033,15 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
 
   /**
    * Captures final Agent audit entries before provider callbacks.
+   * @param agent Complete typed Agent identity.
    * @param entries Final Agent audit entries.
    * @returns Detached final audit entries.
    */
   private captureAgentHistory(
+    agent: NonNullable<ActiveAgentRecord["agent"]>,
     entries: readonly AgentHistoryEntry[] | undefined,
   ): AgentHistoryEntry[] {
-    return entries?.map((entry) => clone(AgentHistoryEntrySchema, entry)) ?? [];
+    return entries?.map((entry) => AgentHistoryRecords.capture(agent, entry)) ?? [];
   }
 
   /**
@@ -2054,13 +2054,13 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
     mutation?: EntityCommitInput<unknown, Message>,
   ): [
     MysqlEntityStorage<I, S>,
-    MysqlRecordStorage<string, AgentHistoryRecord>,
-    MysqlRecordStorage<string, AgentAttributesRecord>,
+    MysqlRecordStorage<string, AgentHistoryEntry>,
+    MysqlRecordStorage<string, ActiveAgentRecord>,
     MysqlDeliveryStorage | undefined,
   ] {
     const storage = this.#storage ?? this.openStorage();
-    let audit: MysqlRecordStorage<string, AgentHistoryRecord> | undefined;
-    let attributes: MysqlRecordStorage<string, AgentAttributesRecord> | undefined;
+    let audit: MysqlRecordStorage<string, AgentHistoryEntry> | undefined;
+    let attributes: MysqlRecordStorage<string, ActiveAgentRecord> | undefined;
     let events: MysqlDeliveryStorage | undefined;
     try {
       storage.ensure(Boolean(mutation?.states?.length), Boolean(mutation?.diagnostics?.length));
@@ -2146,13 +2146,13 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    */
   private async commitAgentPrepared<Id, State extends Message>(
     storage: MysqlEntityStorage<I, S>,
-    audit: MysqlRecordStorage<string, AgentHistoryRecord>,
-    attributes: MysqlRecordStorage<string, AgentAttributesRecord>,
+    audit: MysqlRecordStorage<string, AgentHistoryEntry>,
+    attributes: MysqlRecordStorage<string, ActiveAgentRecord>,
     events: MysqlDeliveryStorage | undefined,
     id: I,
     version: number,
-    expected: AgentAttributesRecord | undefined,
-    next: AgentAttributesRecord,
+    expected: ActiveAgentRecord | undefined,
+    next: ActiveAgentRecord,
     mutation: EntityCommitInput<Id, State> | undefined,
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
@@ -2189,8 +2189,8 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    */
   private agentTableNames(
     storage: MysqlEntityStorage<I, S>,
-    audit: MysqlRecordStorage<string, AgentHistoryRecord>,
-    attributes: MysqlRecordStorage<string, AgentAttributesRecord>,
+    audit: MysqlRecordStorage<string, AgentHistoryEntry>,
+    attributes: MysqlRecordStorage<string, ActiveAgentRecord>,
     events: MysqlDeliveryStorage | undefined,
   ): string[] {
     return [
@@ -2214,8 +2214,8 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
   private withAgentConnection(
     connection: PoolConnection,
     storage: MysqlEntityStorage<I, S>,
-    audit: MysqlRecordStorage<string, AgentHistoryRecord>,
-    attributes: MysqlRecordStorage<string, AgentAttributesRecord>,
+    audit: MysqlRecordStorage<string, AgentHistoryEntry>,
+    attributes: MysqlRecordStorage<string, ActiveAgentRecord>,
     events: MysqlDeliveryStorage | undefined,
     work: () => Promise<void>,
   ): Promise<void> {
@@ -2247,13 +2247,13 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    */
   private async applyAgentLocked<Id, State extends Message>(
     storage: MysqlEntityStorage<I, S>,
-    audit: MysqlRecordStorage<string, AgentHistoryRecord>,
-    attributes: MysqlRecordStorage<string, AgentAttributesRecord>,
+    audit: MysqlRecordStorage<string, AgentHistoryEntry>,
+    attributes: MysqlRecordStorage<string, ActiveAgentRecord>,
     id: I,
     slot: string,
     version: number,
-    expected: AgentAttributesRecord | undefined,
-    next: AgentAttributesRecord,
+    expected: ActiveAgentRecord | undefined,
+    next: ActiveAgentRecord,
     mutation: EntityCommitInput<Id, State> | undefined,
     history: readonly AgentHistoryEntry[],
     events?: MysqlDeliveryStorage,
@@ -2262,7 +2262,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
     const current = await storage.readCurrentLocked(id);
     if ((current?.version?.number ?? 0) !== version)
       throw new Error("Agent initial Entity Version is no longer current.");
-    await this.writeAgentRows(storage, audit, events, id, mutation, history);
+    await this.writeAgentRows(storage, audit, events, mutation, history);
     await attributes.write(next);
   }
 
@@ -2275,10 +2275,10 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    * @returns Completion after the complete preference image is checked.
    */
   private async guardAttributes(
-    storage: MysqlRecordStorage<string, AgentAttributesRecord>,
+    storage: MysqlRecordStorage<string, ActiveAgentRecord>,
     slot: string,
-    expected: AgentAttributesRecord | undefined,
-    next: AgentAttributesRecord,
+    expected: ActiveAgentRecord | undefined,
+    next: ActiveAgentRecord,
   ): Promise<void> {
     if (next.agent === undefined) throw new Error("Agent attributes identity is missing.");
     const prior = await storage.readLocked(slot);
@@ -2297,7 +2297,6 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    * @param storage Entity families.
    * @param audit Final Agent history family.
    * @param events Optional delivery family.
-   * @param id Captured Agent identifier.
    * @param mutation Optional Entity mutation.
    * @param history Final audit entries.
    * @typeParam Id Typed Agent identifier.
@@ -2306,9 +2305,8 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    */
   private async writeAgentRows<Id, State extends Message>(
     storage: MysqlEntityStorage<I, S>,
-    audit: MysqlRecordStorage<string, AgentHistoryRecord>,
+    audit: MysqlRecordStorage<string, AgentHistoryEntry>,
     events: MysqlDeliveryStorage | undefined,
-    id: I,
     mutation: EntityCommitInput<Id, State> | undefined,
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
@@ -2318,10 +2316,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
       await storage.commitCapability().appendDiagnosticImmutable(row);
     for (const row of mutation?.events ?? []) await events?.writeImmutable(row);
     if (mutation !== undefined) await storage.writeCurrentAdmitted(mutation.next);
-    for (const entry of history)
-      await audit.writeImmutable(
-        AgentHistoryRecords.record(this.entity.stateSchema.typeName, this.entity.id.key(id), entry),
-      );
+    for (const entry of history) await audit.writeImmutable(entry);
   }
 
   /**

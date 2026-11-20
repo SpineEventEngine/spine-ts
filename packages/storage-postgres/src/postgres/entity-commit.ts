@@ -12,10 +12,9 @@
  * the License.
  */
 
-import { clone, toBinary, type Message } from "@bufbuild/protobuf";
+import { toBinary, type Message } from "@bufbuild/protobuf";
 import type { Event, EventId } from "@spine-event-engine/proto";
-import { AgentHistoryEntrySchema, type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
-import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+import { type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -26,7 +25,7 @@ import {
   TenantBoundary,
   AgentHistoryRecords,
   AgentAttributes,
-  type AgentAttributesRecord,
+  type ActiveAgentRecord,
   EntityCommitSnapshots,
   eventHistorySpec,
   eventStoreRecordSpec,
@@ -69,9 +68,9 @@ class PostgresCommitRecords<I, S extends Message> {
 
   events: PostgresRecordStorage<EventId, Event> | undefined;
 
-  history: PostgresRecordStorage<string, AgentHistoryRecord> | undefined;
+  history: PostgresRecordStorage<string, AgentHistoryEntry> | undefined;
 
-  attributes: PostgresRecordStorage<string, AgentAttributesRecord> | undefined;
+  attributes: PostgresRecordStorage<string, ActiveAgentRecord> | undefined;
 
   readonly #handles: PostgresRecordStorage<unknown, Message>[];
 
@@ -402,7 +401,7 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
       AgentAttributes.requireIdentity(next, key);
       const mutation = input.entityCommit && EntityCommitSnapshots.capture(input.entityCommit);
       const history =
-        input.historyEntries?.map((entry) => clone(AgentHistoryEntrySchema, entry)) ?? [];
+        input.historyEntries?.map((entry) => AgentHistoryRecords.capture(key, entry)) ?? [];
       this.validateAgent(id, input.expectedVersion, mutation);
       const records = this.agentRecords();
       if (mutation !== undefined) records.ensure(mutation as never, this.open);
@@ -483,8 +482,8 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
     records: PostgresCommitRecords<I, S>,
     id: I,
     version: number,
-    expected: AgentAttributesRecord | undefined,
-    next: AgentAttributesRecord,
+    expected: ActiveAgentRecord | undefined,
+    next: ActiveAgentRecord,
     mutation: EntityCommitInput<Id, State> | undefined,
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
@@ -508,7 +507,7 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
         if ((current?.version?.number ?? 0) !== version)
           throw new Error("Agent initial Entity Version is no longer current.");
       } else await records.applyConditional(client, mutation as never, version);
-      await this.appendAgentHistory(client, historyStorage, id, history);
+      await this.appendAgentHistory(client, historyStorage, history);
       await attributes.write(client, next);
     });
   }
@@ -517,22 +516,16 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
    * Adds final Agent audit through the admitted transaction client.
    * @param client Active native transaction.
    * @param storage Retained Agent history family.
-   * @param id Captured Agent identifier.
    * @param history Final audit entries.
    * @returns Completion after final audit rows are appended.
    */
   private async appendAgentHistory(
     client: PoolClient,
-    storage: PostgresRecordStorage<string, AgentHistoryRecord>,
-    id: I,
+    storage: PostgresRecordStorage<string, AgentHistoryEntry>,
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
     const executor = storage.historyExecutor();
-    for (const entry of history)
-      await executor.appendImmutable(
-        client,
-        AgentHistoryRecords.record(this.entity.stateSchema.typeName, this.entity.id.key(id), entry),
-      );
+    for (const entry of history) await executor.appendImmutable(client, entry);
   }
 
   /**

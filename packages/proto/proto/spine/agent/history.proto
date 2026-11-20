@@ -18,6 +18,7 @@ package spine.agent;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
+import "spine/agent/agent_id.proto";
 import "spine/agent/model.proto";
 import "spine/core/command.proto";
 import "spine/core/event.proto";
@@ -212,4 +213,10 @@ message AgentHistoryEntry {
     // Explicit abandonment of a pending model request.
     ModelCallAbandonedRecord abandonment = 8 [(validate) = true];
   }
+
+  // Complete typed identity of the Agent whose history contains this occurrence.
+  AgentId agent = 9 [
+    (required) = true,
+    (validate) = true
+  ];
 }

@@ -73,8 +73,16 @@ import type { AgentHistoryStorageInput } from "../../src/provider.js";
 
 export const scope: AgentHistoryStorageInput<string> = {
   context: { name: "Support", multitenant: false },
-  stateType: "spine.server.testing.SupportReplyAgentState",
-  id: { key: (ticketNumber) => ticketNumber },
+  agent: (ticketNumber) => {
+    if (!ticketNumber) throw new TypeError("Agent history Entity ID is required.");
+    return create(AgentIdSchema, {
+      stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+      entityId: packed(
+        SupportReplyAgentIdSchema,
+        create(SupportReplyAgentIdSchema, { ticketNumber }),
+      ),
+    });
+  },
 };
 
 function packed<T extends Message>(schema: GenMessage<T>, message: T) {

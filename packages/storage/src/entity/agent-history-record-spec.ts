@@ -12,14 +12,15 @@
  * the License.
  */
 
-import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
-import { AgentHistoryEntrySchema, type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
+import { clone, ScalarType, toBinary } from "@bufbuild/protobuf";
 import {
-  AgentHistoryRecordSchema,
-  AgentHistoryStorageKeySchema as AgentStorageKeySchema,
-  type AgentHistoryRecord,
-} from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+  AgentHistoryEntrySchema,
+  AgentIdSchema,
+  type AgentHistoryEntry,
+  type AgentId,
+} from "@spine-event-engine/proto/agent";
 
+import { AgentIdentity } from "../internal/agent-identity.js";
 import { RecordColumn } from "../record/record-column.js";
 import { ColumnTypes } from "../record/column-type.js";
 import { RecordSpec } from "../record/record-spec.js";
@@ -29,320 +30,218 @@ import { AgentHistoryKeys } from "./agent-history.js";
 /**
  * Physical family shared by Agent state types within one tenant.
  */
-const agentHistoryGroup: StorageGroup = new StorageGroup("agent_history");
+const agentHistoryGroup = new StorageGroup("agent_history");
 
 /**
- * Describes materialization of original Agent history records and indexed columns.
+ * Provides the direct entry layout and complete identity checks for providers.
  */
-interface AgentHistoryRecordLayout {
+interface AgentHistoryLayout {
   /**
-   * Identifies the physical family shared within one tenant.
+   * Physical history family shared within one tenant.
    */
   readonly group: StorageGroup;
 
   /**
-   * Builds the complete internal envelope.
-   *
-   * @param stateType Generated Agent state type name.
-   * @param agentKey Canonical typed identifier key.
-   * @param entry Complete original history entry.
-   * @returns Internal storage envelope.
+   * Captures and validates one entry for a typed Agent.
+   * @param agent Expected Agent identity.
+   * @param entry Prepared entry.
+   * @returns Complete detached entry.
    */
-  record(stateType: string, agentKey: string, entry: AgentHistoryEntry): AgentHistoryRecord;
+  capture(agent: AgentId, entry: AgentHistoryEntry): AgentHistoryEntry;
 
   /**
-   * Calculates one complete persisted Agent audit envelope.
-   * @param stateType Generated Agent state type.
-   * @param agentKey Canonical Agent identifier.
-   * @param entry Original typed audit entry.
-   * @returns Full encoded AgentHistoryRecord bytes.
+   * Checks stored identity without repairing a decoded entry.
+   * @param entry Decoded entry.
+   * @param agent Requested Agent identity.
+   * @returns Validated entry.
    */
-  bytes(stateType: string, agentKey: string, entry: AgentHistoryEntry): number;
+  requireIdentity(entry: AgentHistoryEntry, agent: AgentId): AgentHistoryEntry;
 
   /**
-   * Encodes the immutable logical record identity.
-   *
-   * @param record Internal history envelope.
-   * @returns Complete logical identity.
+   * Calculates the exact stored bytes after identity capture.
+   * @param agent Expected Agent identity.
+   * @param entry Prepared entry.
+   * @returns Encoded byte count.
    */
-  slot(record: AgentHistoryRecord): string;
+  bytes(agent: AgentId, entry: AgentHistoryEntry): number;
 
   /**
-   * Encodes the exact immutable identity of one prepared model request.
-   *
-   * @param stateType Agent state type name.
-   * @param agentKey Canonical typed Agent identifier.
+   * Encodes the immutable entry identity before hashing.
+   * @param entry Complete entry.
+   * @returns Exact logical slot.
+   */
+  slot(entry: AgentHistoryEntry): string;
+
+  /**
+   * Encodes a prepared request identity for direct lookup.
+   * @param agent Complete Agent identity.
    * @param callId Logical model call identifier.
-   * @returns Complete primary-record identity before provider hashing.
+   * @returns Exact logical slot.
    */
-  requestSlot(stateType: string, agentKey: string, callId: string): string;
+  requestSlot(agent: AgentId, callId: string): string;
 
   /**
-   * Validates a directly read prepared request against its complete identity.
-   *
-   * @param record Provider history record.
-   * @param stateType Agent state type name.
-   * @param agentKey Canonical typed Agent identifier.
+   * Validates one directly read prepared request.
+   * @param entry Decoded entry.
+   * @param agent Requested Agent identity.
    * @param callId Logical model call identifier.
-   * @returns Original prepared request entry.
+   * @returns Validated request entry.
    */
-  requestEntry(
-    record: AgentHistoryRecord,
-    stateType: string,
-    agentKey: string,
-    callId: string,
-  ): AgentHistoryEntry;
+  requestEntry(entry: AgentHistoryEntry, agent: AgentId, callId: string): AgentHistoryEntry;
 
   /**
-   * Encodes the complete Agent repository scope.
-   *
-   * @param stateType Generated Agent state type name.
-   * @param agentKey Canonical typed identifier key.
-   * @returns Complete logical scope.
+   * Encodes the complete typed Agent scope.
+   * @param agent Complete Agent identity.
+   * @returns Exact scope text.
    */
-  scope(stateType: string, agentKey: string): string;
+  scope(agent: AgentId): string;
 
   /**
-   * Builds provider columns with a fixed-width physical digest.
-   *
-   * @param digest Provider digest of a complete logical identity.
-   * @returns Shared native record specification.
+   * Builds physical columns for direct stored entries.
+   * @param digest Provider identity digest.
+   * @returns Native record specification.
    */
-  spec(digest: (value: string) => string): RecordSpec<string, AgentHistoryRecord>;
+  spec(digest: (value: string) => string): RecordSpec<string, AgentHistoryEntry>;
 
   /**
-   * Reads the validated repository scope from an envelope.
-   *
-   * @param record Internal history envelope.
-   * @returns Complete original scope.
+   * Reads the validated Agent identity from a complete entry.
+   * @param entry Complete entry.
+   * @returns Typed Agent identity.
    */
-  requiredScope(record: AgentHistoryRecord): NonNullable<AgentHistoryRecord["scope"]>;
-
-  /**
-   * Reads the original history entry from an envelope.
-   *
-   * @param record Internal history envelope.
-   * @returns Complete original history entry.
-   */
-  requiredEntry(record: AgentHistoryRecord): AgentHistoryEntry;
-
-  /**
-   * Builds the materialized repository scope columns.
-   *
-   * @param digest Provider digest of a complete logical identity.
-   * @returns Complete scope columns.
-   */
-  scopeColumns(digest: (value: string) => string): RecordColumn<AgentHistoryRecord>[];
-
-  /**
-   * Builds the materialized order and conversation columns.
-   *
-   * @param digest Provider digest of a complete logical identity.
-   * @returns Complete order and conversation columns.
-   */
-  orderColumns(digest: (value: string) => string): RecordColumn<AgentHistoryRecord>[];
+  requiredAgent(entry: AgentHistoryEntry): AgentId;
 }
 
 /**
- * Internal record layout for one tenant's shared Agent history family.
+ * Materializes direct Agent history entries and their indexed columns.
  */
-export const AgentHistoryRecords: AgentHistoryRecordLayout = {
+export const AgentHistoryRecords: AgentHistoryLayout = Object.freeze({
   /**
    * Physical family shared by Agent state types within one tenant.
    */
   group: agentHistoryGroup,
 
   /**
-   * Stores one original entry with its canonical repository scope.
-   *
-   * @param stateType Generated Agent state type name.
-   * @param agentKey Canonical typed identifier key.
-   * @param entry Complete original history entry.
-   * @returns Internal storage envelope.
+   * Detaches an entry, stamps an absent Agent identity, and rejects a different identity.
+   * @param agent Expected complete typed Agent identity.
+   * @param entry Prepared history entry.
+   * @returns Independent complete entry for storage.
    */
-  record(stateType: string, agentKey: string, entry: AgentHistoryEntry): AgentHistoryRecord {
-    if (stateType.length === 0 || agentKey.length === 0)
-      throw new TypeError("Agent history requires state type and Agent key.");
+  capture(agent: AgentId, entry: AgentHistoryEntry): AgentHistoryEntry {
+    const expected = AgentIdentity.text(agent);
+    const captured = clone(AgentHistoryEntrySchema, entry);
+    if (captured.agent !== undefined && AgentIdentity.text(captured.agent) !== expected)
+      throw new TypeError("Agent history identity conflict.");
+    captured.agent ??= clone(AgentIdSchema, agent);
+    AgentHistoryKeys.fromEntry(captured);
+    return captured;
+  },
+
+  /**
+   * Rejects a decoded entry without the requested complete Agent identity.
+   * @param entry Decoded stored entry.
+   * @param agent Requested Agent identity.
+   * @returns The validated stored entry.
+   */
+  requireIdentity(entry: AgentHistoryEntry, agent: AgentId): AgentHistoryEntry {
+    if (entry.agent === undefined || AgentIdentity.text(entry.agent) !== AgentIdentity.text(agent))
+      throw new Error("Agent history identity conflict.");
     AgentHistoryKeys.fromEntry(entry);
-    return create(AgentHistoryRecordSchema, {
-      scope: create(AgentStorageKeySchema, { stateType, agentKey }),
-      entry,
-    });
-  },
-
-  /**
-   * Calculates the byte size of a complete stored row including its scope and original entry.
-   *
-   * @param stateType Declared Agent state type.
-   * @param agentKey Canonical typed Agent identifier key.
-   * @param entry Complete original audit entry.
-   * @returns Serialized byte count of the full stored history row.
-   */
-  bytes(stateType: string, agentKey: string, entry: AgentHistoryEntry): number {
-    return toBinary(AgentHistoryRecordSchema, this.record(stateType, agentKey, entry)).length;
-  },
-
-  /**
-   * Builds the full logical identity hashed into a provider physical ID.
-   *
-   * @param record Internal history envelope.
-   * @returns Unambiguous identity without an ordering position.
-   */
-  slot(record: AgentHistoryRecord): string {
-    const scope = AgentHistoryRecords.requiredScope(record);
-    const key = AgentHistoryKeys.fromEntry(AgentHistoryRecords.requiredEntry(record));
-    return JSON.stringify([scope.stateType, scope.agentKey, key.category, key.recordId]);
-  },
-
-  /**
-   * Builds one request identity without scanning chronological history.
-   *
-   * @param stateType Agent state type name.
-   * @param agentKey Canonical typed Agent identifier.
-   * @param callId Logical model call identifier.
-   * @returns Complete primary-record identity.
-   */
-  requestSlot(stateType: string, agentKey: string, callId: string): string {
-    if (!stateType || !agentKey || !callId)
-      throw new TypeError("Agent model request lookup requires complete identity.");
-    return JSON.stringify([stateType, agentKey, "request", callId]);
-  },
-
-  /**
-   * Rejects a physical collision or mismatched request body.
-   *
-   * @param record Provider history record.
-   * @param stateType Agent state type name.
-   * @param agentKey Canonical typed Agent identifier.
-   * @param callId Logical model call identifier.
-   * @returns Original prepared request entry.
-   */
-  requestEntry(
-    record: AgentHistoryRecord,
-    stateType: string,
-    agentKey: string,
-    callId: string,
-  ): AgentHistoryEntry {
-    if (this.slot(record) !== this.requestSlot(stateType, agentKey, callId))
-      throw new Error("Agent model request identity conflict.");
-    const entry = this.requiredEntry(record);
-    if (entry.item.case !== "modelRequest")
-      throw new Error("Agent model request category conflict.");
     return entry;
   },
 
   /**
-   * Encodes the complete repository scope before provider hashing.
-   *
-   * @param stateType Generated Agent state type.
-   * @param agentKey Canonical typed Agent key.
-   * @returns Unambiguous complete scope identity.
+   * Counts the exact bytes stored for a complete direct entry.
+   * @param agent Expected Agent identity.
+   * @param entry Prepared history entry.
+   * @returns Serialized byte count after identity capture.
    */
-  scope(stateType: string, agentKey: string): string {
-    return JSON.stringify([stateType, agentKey]);
+  bytes(agent: AgentId, entry: AgentHistoryEntry): number {
+    return toBinary(AgentHistoryEntrySchema, this.capture(agent, entry)).length;
   },
 
   /**
-   * Builds materialized columns with one provider's bounded physical digest.
-   *
-   * @param digest Maps a complete identity to a fixed-width digest.
-   * @returns Shared record specification for native providers.
+   * Encodes one immutable logical record identity.
+   * @param entry Complete history entry.
+   * @returns Identity before provider hashing.
    */
-  spec(digest: (value: string) => string): RecordSpec<string, AgentHistoryRecord> {
+  slot(entry: AgentHistoryEntry): string {
+    const agent = entry.agent;
+    if (agent === undefined) throw new TypeError("Agent history requires identity.");
+    const key = AgentHistoryKeys.fromEntry(entry);
+    return JSON.stringify([AgentIdentity.text(agent), key.category, key.recordId]);
+  },
+
+  /**
+   * Encodes a prepared model request identity for direct lookup.
+   * @param agent Complete Agent identity.
+   * @param callId Logical model call identifier.
+   * @returns Identity before provider hashing.
+   */
+  requestSlot(agent: AgentId, callId: string): string {
+    if (!callId) throw new TypeError("Agent model request lookup requires call identity.");
+    return JSON.stringify([AgentIdentity.text(agent), "request", callId]);
+  },
+
+  /**
+   * Validates a directly read prepared model request.
+   * @param entry Decoded stored entry.
+   * @param agent Requested Agent identity.
+   * @param callId Logical model call identifier.
+   * @returns Complete validated entry.
+   */
+  requestEntry(entry: AgentHistoryEntry, agent: AgentId, callId: string): AgentHistoryEntry {
+    this.requireIdentity(entry, agent);
+    if (this.slot(entry) !== this.requestSlot(agent, callId) || entry.item.case !== "modelRequest")
+      throw new Error("Agent model request identity conflict.");
+    return entry;
+  },
+
+  /**
+   * Encodes the complete Agent scope before provider hashing.
+   * @param agent Complete typed Agent identity.
+   * @returns Exact logical scope.
+   */
+  scope(agent: AgentId): string {
+    return AgentIdentity.text(agent);
+  },
+
+  /**
+   * Builds indexed provider columns for direct history entries.
+   * @param digest Provider digest of a complete logical identity.
+   * @returns Native record specification.
+   */
+  spec(digest: (value: string) => string): RecordSpec<string, AgentHistoryEntry> {
+    const string = ColumnTypes.scalar(ScalarType.STRING);
+    const conversation = (entry: AgentHistoryEntry): string =>
+      entry.item.case === "conversationRecord" ? (entry.item.value.conversation?.value ?? "") : "";
     return new RecordSpec({
       sourceType: AgentHistoryEntrySchema,
-      recordType: AgentHistoryRecordSchema,
+      recordType: AgentHistoryEntrySchema,
       idKind: "string",
-      extractId: (record) => digest(AgentHistoryRecords.slot(record)),
+      extractId: (entry) => digest(this.slot(entry)),
       columns: [
-        ...AgentHistoryRecords.scopeColumns(digest),
-        ...AgentHistoryRecords.orderColumns(digest),
+        new RecordColumn("agent_key", string, (entry) => this.scope(this.requiredAgent(entry))),
+        new RecordColumn("scope_digest", string, (entry) =>
+          digest(this.scope(this.requiredAgent(entry))),
+        ),
+        new RecordColumn("category", string, (entry) => AgentHistoryKeys.fromEntry(entry).category),
+        new RecordColumn("conversation_key", string, conversation),
+        new RecordColumn("conversation_digest", string, (entry) => digest(conversation(entry))),
+        new RecordColumn("order_key", string, (entry) =>
+          AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry)),
+        ),
       ],
     });
   },
 
   /**
-   * Reads the repository scope required by every stored history entry.
-   *
-   * @param record Stored history envelope.
-   * @returns Complete original scope.
+   * Reads the complete Agent identity required by a stored entry.
+   * @param entry Complete history entry.
+   * @returns Validated typed Agent identity.
    */
-  requiredScope(record: AgentHistoryRecord): NonNullable<AgentHistoryRecord["scope"]> {
-    if (
-      record.scope === undefined ||
-      record.scope.stateType.length === 0 ||
-      record.scope.agentKey.length === 0
-    )
-      throw new TypeError("Agent history record requires a complete repository scope.");
-    return record.scope;
+  requiredAgent(entry: AgentHistoryEntry): AgentId {
+    if (entry.agent === undefined) throw new TypeError("Agent history requires identity.");
+    AgentIdentity.text(entry.agent);
+    return entry.agent;
   },
-
-  /**
-   * Reads the original history entry required by the storage envelope.
-   *
-   * @param record Stored history envelope.
-   * @returns Complete original history entry.
-   */
-  requiredEntry(record: AgentHistoryRecord): AgentHistoryEntry {
-    if (record.entry === undefined) throw new TypeError("Agent history record requires an entry.");
-    return record.entry;
-  },
-
-  /**
-   * Builds complete scope columns and their bounded indexed digest.
-   *
-   * @param digest Provider physical-identity digest.
-   * @returns Native scope columns.
-   */
-  scopeColumns(digest: (value: string) => string): RecordColumn<AgentHistoryRecord>[] {
-    const string = ColumnTypes.scalar(ScalarType.STRING);
-    return [
-      new RecordColumn(
-        "state_type",
-        string,
-        (record) => AgentHistoryRecords.requiredScope(record).stateType,
-      ),
-      new RecordColumn(
-        "agent_key",
-        string,
-        (record) => AgentHistoryRecords.requiredScope(record).agentKey,
-      ),
-      new RecordColumn("scope_digest", string, (record) =>
-        digest(
-          AgentHistoryRecords.scope(
-            AgentHistoryRecords.requiredScope(record).stateType,
-            AgentHistoryRecords.requiredScope(record).agentKey,
-          ),
-        ),
-      ),
-    ];
-  },
-
-  /**
-   * Builds complete order and conversation selector columns.
-   *
-   * @param digest Provider physical-identity digest.
-   * @returns Native order and conversation columns.
-   */
-  orderColumns(digest: (value: string) => string): RecordColumn<AgentHistoryRecord>[] {
-    const string = ColumnTypes.scalar(ScalarType.STRING);
-    const conversation = (record: AgentHistoryRecord): string =>
-      record.entry?.item.case === "conversationRecord"
-        ? (record.entry.item.value.conversation?.value ?? "")
-        : "";
-    return [
-      new RecordColumn(
-        "category",
-        string,
-        (record) => AgentHistoryKeys.fromEntry(AgentHistoryRecords.requiredEntry(record)).category,
-      ),
-      new RecordColumn("conversation_key", string, conversation),
-      new RecordColumn("conversation_digest", string, (record) => digest(conversation(record))),
-      new RecordColumn("order_key", string, (record) =>
-        AgentHistoryKeys.indexValue(
-          AgentHistoryKeys.fromEntry(AgentHistoryRecords.requiredEntry(record)),
-        ),
-      ),
-    ];
-  },
-};
+});

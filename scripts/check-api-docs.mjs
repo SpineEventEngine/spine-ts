@@ -551,7 +551,7 @@ const expectedStorageProviderDocumentedExports = [
   "EntityStorageInput",
   "EntityStoragePreparationInput",
   "EventStoreGroups",
-  "AgentAttributesRecord",
+  "ActiveAgentRecord",
   "StoragePreparation",
   "StoragePreparationMode",
   "StoragePreparations",

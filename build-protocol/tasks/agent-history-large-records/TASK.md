@@ -8,8 +8,8 @@ storage strategy is authorized by this record.
 
 ## Problem
 
-One `AgentHistoryRecord` contains one `AgentHistoryEntry`; growing history
-creates more records. An individual entry can nevertheless exceed a storage
+Each `AgentHistoryEntry` is stored directly; growing history creates more
+records. An individual entry can nevertheless exceed a storage
 provider's per-entity or per-property size limit.
 
 For example, prepared-request history retains the complete AI Command and its

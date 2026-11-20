@@ -24,7 +24,9 @@ import {
 import { VersionSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
+  AgentAttributes,
   AgentHistoryStorageFactories,
+  AgentHistoryRecords,
   EntityCommitStorageFactories,
   StoragePreparations,
   type EntityStorageInput,
@@ -217,13 +219,15 @@ describe.skipIf(url === undefined)("MySQL live Agent conditional persistence", (
       ).resolves.toEqual([preference]);
       const history = AgentHistoryStorageFactories.create(factory, {
         context: layout.context,
-        stateType: layout.stateSchema.typeName,
-        id: { key: (value: typeof id) => value.ticketNumber },
+        agent: (value: typeof id) => AgentAttributes.id(layout, value),
       });
       try {
         const page = await history.read({ entityId: id, view: { kind: "full" }, count: 10 });
         expect(page.entries.map((value) => toBinary(AgentHistoryEntrySchema, value))).toEqual([
-          toBinary(AgentHistoryEntrySchema, entry),
+          toBinary(
+            AgentHistoryEntrySchema,
+            AgentHistoryRecords.capture(AgentAttributes.id(layout, id), entry),
+          ),
         ]);
       } finally {
         history.close();

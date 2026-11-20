@@ -28,6 +28,7 @@ import {
   type AgentHistoryStorageInput,
   type AgentHistoryView,
 } from "./agent-history.js";
+import { AgentHistoryRecords } from "./agent-history-record-spec.js";
 
 /**
  * Supplies domain-correct Proto entries and real provider handles to shared checks.
@@ -371,7 +372,7 @@ const Checks = Object.freeze({
     const time = adapter.occurredAt(7n);
     const first = adapter.conversation("a", "bytes", time);
     const second = adapter.response("b", "bytes", time);
-    const size = toBinary(AgentHistoryEntrySchema, first).length;
+    const size = AgentHistoryRecords.bytes(adapter.scope.agent("ticket-bytes"), first);
     try {
       await storage.append("ticket-bytes", first);
       await storage.append("ticket-bytes", second);
@@ -457,7 +458,10 @@ const Checks = Object.freeze({
     const first = adapter.open(adapter.scope);
     const otherType = adapter.open({
       ...adapter.scope,
-      stateType: `${adapter.scope.stateType}.Other`,
+      agent: (id) => {
+        const agent = adapter.scope.agent(id);
+        return { ...agent, stateTypeUrl: `${agent.stateTypeUrl}.Other` };
+      },
     });
     const tenantA = adapter.open(this.tenantScope(adapter.scope, "tenant-a"));
     const tenantB = adapter.open(this.tenantScope(adapter.scope, "tenant-b"));
@@ -716,7 +720,9 @@ const Checks = Object.freeze({
       const returnedKey = AgentHistoryKeys.fromEntry(returned);
       this.assert(AgentHistoryKeys.compare(returnedKey, wantedKey) === 0, message);
       const left = toBinary(AgentHistoryEntrySchema, returned);
-      const right = toBinary(AgentHistoryEntrySchema, wanted);
+      const agent = returned.agent;
+      if (agent === undefined) throw new Error(message);
+      const right = toBinary(AgentHistoryEntrySchema, AgentHistoryRecords.capture(agent, wanted));
       this.assert(
         left.length === right.length && left.every((byte, offset) => byte === right[offset]),
         message,

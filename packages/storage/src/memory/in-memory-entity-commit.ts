@@ -14,11 +14,12 @@
 
 import { clone, toBinary, type Message } from "@bufbuild/protobuf";
 import { EventSchema, type Event, type EventId } from "@spine-event-engine/proto";
-import { AgentHistoryEntrySchema, type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
+import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import type { EntityStateKey } from "@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { eventStoreRecordSpec, EventStoreGroups } from "../event/event-store.js";
 import { eventHistorySpec, stateHistorySpec } from "../entity/entity-history-record-spec.js";
+import { AgentHistoryRecords } from "../entity/agent-history-record-spec.js";
 import {
   EntityCommitSnapshots,
   type AgentCommitInput,
@@ -26,7 +27,7 @@ import {
   type EntityCommitInput,
   type EntityCommitStorage,
 } from "../internal/entity-commit.js";
-import { AgentAttributes, type AgentAttributesRecord } from "../internal/agent-attributes.js";
+import { AgentAttributes, type ActiveAgentRecord } from "../internal/agent-attributes.js";
 import { TenantBoundary } from "../internal/tenancy.js";
 import type { EntityRecord } from "../entity/entity-record.js";
 import type { RecordSpec } from "../record/record-spec.js";
@@ -71,7 +72,7 @@ type CommitHandles = readonly [
 ];
 
 interface AgentFamilies {
-  attributes: Map<string, AgentAttributesRecord>;
+  attributes: Map<string, ActiveAgentRecord>;
   history: Map<string, AgentHistoryIndex>;
   queue: KeyedSerialQueue;
 }
@@ -150,13 +151,13 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
         "entity",
         tenant,
         `agent-attributes:${this.input.stateSchema.typeName}`,
-        () => new Map<string, AgentAttributesRecord>(),
+        () => new Map<string, ActiveAgentRecord>(),
       ),
       history: InMemoryStorageBackend.bind(
         this.backend,
         "entity",
         tenant,
-        `agent-history:${this.input.stateSchema.typeName}`,
+        "agent-history",
         () => new Map<string, AgentHistoryIndex>(),
       ),
       queue: AgentHistoryMutationQueue.bind(this.backend, tenant),
@@ -230,9 +231,9 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
         input.entityCommit &&
         (EntityCommitSnapshots.capture(input.entityCommit) as EntityCommitInput<unknown, Message>);
       const history =
-        input.historyEntries?.map((entry) => clone(AgentHistoryEntrySchema, entry)) ?? [];
+        input.historyEntries?.map((entry) => AgentHistoryRecords.capture(key, entry)) ?? [];
       this.validateAgentCommit(entityId, input.expectedVersion, entityCommit);
-      const agentKey = this.input.id.key(entityId);
+      const agentKey = AgentAttributes.text(key);
       const slot = await this.attributesSlot(key);
       return this.agentFamilies().queue.run(agentKey, () =>
         this.commitAgentLocked(
@@ -285,12 +286,12 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
     entityId: unknown,
     slot: string,
     expectedVersion: number,
-    expected: AgentAttributesRecord | undefined,
-    next: AgentAttributesRecord,
+    expected: ActiveAgentRecord | undefined,
+    next: ActiveAgentRecord,
     entityCommit: EntityCommitInput<unknown, Message> | undefined,
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
-    const agentKey = this.input.id.key(entityId);
+    const agentKey = AgentAttributes.text(AgentAttributes.id(this.input, entityId));
     const priorIndex = this.agentFamilies().history.get(agentKey);
     const index = priorIndex ?? new AgentHistoryIndex();
     const staged = index.withEntries(history);
@@ -322,9 +323,9 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
    */
   private agentPublication(
     slot: string,
-    next: AgentAttributesRecord,
-    expected: AgentAttributesRecord | undefined,
-    prior: AgentAttributesRecord | undefined,
+    next: ActiveAgentRecord,
+    expected: ActiveAgentRecord | undefined,
+    prior: ActiveAgentRecord | undefined,
     agentKey: string,
     index: AgentHistoryIndex,
     priorIndex: AgentHistoryIndex | undefined,
@@ -355,7 +356,7 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
    * @param key Complete generated Agent identity.
    * @returns Fixed 67-character provider slot.
    */
-  private async attributesSlot(key: NonNullable<AgentAttributesRecord["agent"]>): Promise<string> {
+  private async attributesSlot(key: NonNullable<ActiveAgentRecord["agent"]>): Promise<string> {
     const runtime = globalThis as unknown as {
       TextEncoder: new () => { encode(value: string): Uint8Array };
       crypto: { subtle: { digest(algorithm: string, value: Uint8Array): Promise<ArrayBuffer> } };

@@ -79,7 +79,6 @@ describe("live Agent audit", () => {
       invocation,
       SupportReplyAgentStateSchema,
       "T-audit",
-      "T-audit",
       history,
       metadata,
       () => {
@@ -121,7 +120,6 @@ describe("live Agent audit", () => {
       invocation,
       SupportReplyAgentStateSchema,
       "T-audit",
-      "T-audit",
       history,
       metadata,
       () => undefined,
@@ -147,7 +145,6 @@ describe("live Agent audit", () => {
       invocation,
       SupportReplyAgentStateSchema,
       "T-audit",
-      "T-audit",
       history,
       metadata,
       () => undefined,
@@ -168,7 +165,6 @@ describe("live Agent audit", () => {
     const audit = new AgentLiveAudit(
       invocation,
       SupportReplyAgentStateSchema,
-      "T-audit",
       "T-audit",
       history,
       metadata,

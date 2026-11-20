@@ -12,9 +12,9 @@
  * the License.
  */
 
-import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, create, type Message } from "@bufbuild/protobuf";
 import { Code } from "@connectrpc/connect";
-import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AiModel, AiRegistry, ModelRef, type HistoryPage } from "@spine-event-engine/ai";
 import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import { Time } from "@spine-event-engine/core/time";
@@ -25,6 +25,7 @@ import {
 import { EntityTypeNameSchema } from "@spine-event-engine/proto/generated/spine/system/server/entity_type_pb.js";
 import {
   AgentHistoryEntrySchema,
+  AgentIdSchema,
   AgentHistoryCursorSchema,
   type AgentHistoryCursor,
   AiContentDigestSchema,
@@ -697,13 +698,11 @@ describe("Agent registration readiness", () => {
     scope.reader.authorityFacts.roles.push("admin");
     const storage = AgentHistoryStorageFactories.create(factory, {
       context: { name: "TenantAgentReads", multitenant: true, tenantId: tenantA },
-      stateType: SupportReplyAgentStateSchema.typeName,
-      id: {
-        key: (value: SupportReplyAgentId) =>
-          Buffer.from(
-            toBinary(AnySchema, AnyPacker.pack(SupportReplyAgentIdSchema, value)),
-          ).toString("base64"),
-      },
+      agent: (value: SupportReplyAgentId) =>
+        create(AgentIdSchema, {
+          stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          entityId: AnyPacker.pack(SupportReplyAgentIdSchema, value),
+        }),
     });
     try {
       const occurredAt = create(TimestampSchema, { seconds: 1n });
@@ -871,13 +870,11 @@ describe("Agent registration readiness", () => {
     const conversation = create(ConversationIdSchema, { value: "paged-draft" });
     const storage = AgentHistoryStorageFactories.create(factory, {
       context: { name: "PagedAgentReads", multitenant: false },
-      stateType: SupportReplyAgentStateSchema.typeName,
-      id: {
-        key: (value: SupportReplyAgentId) =>
-          Buffer.from(
-            toBinary(AnySchema, AnyPacker.pack(SupportReplyAgentIdSchema, value)),
-          ).toString("base64"),
-      },
+      agent: (value: SupportReplyAgentId) =>
+        create(AgentIdSchema, {
+          stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          entityId: AnyPacker.pack(SupportReplyAgentIdSchema, value),
+        }),
     });
     let nanos = 0;
     const previousTime = Time.setProvider({

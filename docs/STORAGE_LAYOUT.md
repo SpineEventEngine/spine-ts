@@ -26,8 +26,8 @@ the startup calls that prepare the application.
       - [Ticket diagnostic Event history: `spine.example_support_ticket_event`](#ticket-diagnostic-event-history-spineexample_support_ticket_event)
       - [Support domain Events: `spine.support_event`](#support-domain-events-spinesupport_event)
       - [Support System Events: `spine.support_system_event`](#support-system-events-spinesupport_system_event)
-      - [Agent audit: `spine.agent_history_agenthistoryrecord`](#agent-audit-spineagent_history_agenthistoryrecord)
-      - [Agent attributes: `spine.spine_agent_attributes_agentattributesrecord`](#agent-attributes-spinespine_agent_attributes_agentattributesrecord)
+      - [Agent audit: `spine.agent_history_agenthistoryentry`](#agent-audit-spineagent_history_agenthistoryentry)
+      - [Agent attributes: `spine.spine_agent_attributes_activeagentrecord`](#agent-attributes-spinespine_agent_attributes_activeagentrecord)
       - [Subscription registry: `spine.spine_client_subscriptionrecord`](#subscription-registry-spinespine_client_subscriptionrecord)
       - [Entity Inbox messages: `spine.spine_server_delivery_inboxmessage`](#entity-inbox-messages-spinespine_server_delivery_inboxmessage)
       - [Delivery shard sessions: `spine.spine_server_delivery_shardsessionrecord`](#delivery-shard-sessions-spinespine_server_delivery_shardsessionrecord)
@@ -45,8 +45,8 @@ the startup calls that prepare the application.
       - [Ticket diagnostic Event history: `example_support_Ticket_Event`](#ticket-diagnostic-event-history-example_support_ticket_event)
       - [Support domain Events: `Support_Event`](#support-domain-events-support_event)
       - [Support System Events: `Support_System_Event`](#support-system-events-support_system_event)
-      - [Agent audit: `agent_history_AgentHistoryRecord`](#agent-audit-agent_history_agenthistoryrecord)
-      - [Agent attributes: `spine_agent_attributes_AgentAttributesRecord`](#agent-attributes-spine_agent_attributes_agentattributesrecord)
+      - [Agent audit: `agent_history_AgentHistoryEntry`](#agent-audit-agent_history_agenthistoryentry)
+      - [Agent attributes: `spine_agent_attributes_ActiveAgentRecord`](#agent-attributes-spine_agent_attributes_activeagentrecord)
       - [Subscription registry: `spine_client_SubscriptionRecord`](#subscription-registry-spine_client_subscriptionrecord)
       - [Entity Inbox messages: `spine_server_delivery_InboxMessage`](#entity-inbox-messages-spine_server_delivery_inboxmessage)
       - [Delivery shard sessions: `spine_server_delivery_ShardSessionRecord`](#delivery-shard-sessions-spine_server_delivery_shardsessionrecord)
@@ -87,8 +87,8 @@ the startup calls that prepare the application.
       - [Ticket diagnostic Event history: `spine.example_support_ticket_event`](#ticket-diagnostic-event-history-spineexample_support_ticket_event-1)
       - [Support domain Events: `spine.support_event`](#support-domain-events-spinesupport_event-1)
       - [Support System Events: `spine.support_system_event`](#support-system-events-spinesupport_system_event-1)
-      - [Agent audit: `spine.agent_history_agenthistoryrecord`](#agent-audit-spineagent_history_agenthistoryrecord-1)
-      - [Agent attributes: `spine.spine_agent_attributes_agentattributesrecord`](#agent-attributes-spinespine_agent_attributes_agentattributesrecord-1)
+      - [Agent audit: `spine.agent_history_agenthistoryentry`](#agent-audit-spineagent_history_agenthistoryentry-1)
+      - [Agent attributes: `spine.spine_agent_attributes_activeagentrecord`](#agent-attributes-spinespine_agent_attributes_activeagentrecord-1)
       - [Subscription registry: `spine.spine_client_subscriptionrecord`](#subscription-registry-spinespine_client_subscriptionrecord-1)
       - [Entity Inbox messages: `spine.spine_server_delivery_inboxmessage`](#entity-inbox-messages-spinespine_server_delivery_inboxmessage-1)
       - [Delivery shard sessions: `spine.spine_server_delivery_shardsessionrecord`](#delivery-shard-sessions-spinespine_server_delivery_shardsessionrecord-1)
@@ -106,8 +106,8 @@ the startup calls that prepare the application.
       - [Ticket diagnostic Event history: `example_support_Ticket_Event`](#ticket-diagnostic-event-history-example_support_ticket_event-1)
       - [Support domain Events: `Support_Event`](#support-domain-events-support_event-1)
       - [Support System Events: `Support_System_Event`](#support-system-events-support_system_event-1)
-      - [Agent audit: `agent_history_AgentHistoryRecord`](#agent-audit-agent_history_agenthistoryrecord-1)
-      - [Agent attributes: `spine_agent_attributes_AgentAttributesRecord`](#agent-attributes-spine_agent_attributes_agentattributesrecord-1)
+      - [Agent audit: `agent_history_AgentHistoryEntry`](#agent-audit-agent_history_agenthistoryentry-1)
+      - [Agent attributes: `spine_agent_attributes_ActiveAgentRecord`](#agent-attributes-spine_agent_attributes_activeagentrecord-1)
       - [Subscription registry: `spine_client_SubscriptionRecord`](#subscription-registry-spine_client_subscriptionrecord-1)
       - [Entity Inbox messages: `spine_server_delivery_InboxMessage`](#entity-inbox-messages-spine_server_delivery_inboxmessage-1)
       - [Delivery shard sessions: `spine_server_delivery_ShardSessionRecord`](#delivery-shard-sessions-spine_server_delivery_shardsessionrecord-1)
@@ -445,13 +445,13 @@ postgresBuilder.setTableName(TicketListSchema, "support_ticket_list");
 
 **Created by:** The PostgreSQL adapter creates and checks this table when the Support Bounded Context prepares the ReplyAssistant Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                                    | Example value                                 |
-| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | --------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                     |
-| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                       |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                       |
-| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                                   | `2`                                           |
+| Physical field     | Database type                  | Exact source                                                                    | Example value                                           |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `versioned tuple of state type URL and packed typed ID` |
+| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array           |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                                 |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                                 |
+| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                                   | `2`                                                     |
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
@@ -568,25 +568,24 @@ const postgresBuilder = PostgresStorageFactory.newBuilder();
 postgresBuilder.setEventStoreTable("Support_System", "support_system_events", "system");
 ```
 
-##### Agent audit: `spine.agent_history_agenthistoryrecord`
+##### Agent audit: `spine.agent_history_agenthistoryentry`
 
 **Table location:** `support` database, `spine` schema.
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field        | Database type           | Exact source                                                                                       | Example value                                                      |
-| --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb` |
-| `bytes`               | BYTEA NOT NULL          | Entire serialized `AgentHistoryRecord`                                                             | Protobuf message serialized into binary array                      |
-| `state_type`          | TEXT                    | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                   |
-| `agent_key`           | TEXT                    | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                          |
-| `scope_digest`        | TEXT                    | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8` |
-| `category`            | TEXT                    | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                     |
-| `conversation_key`    | TEXT                    | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                   |
-| `conversation_digest` | TEXT                    | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
-| `order_key`           | TEXT                    | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
+| Physical field        | Database type           | Exact source                                                                                        | Example value                                                      |
+| --------------------- | ----------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [complete typed AgentId, category, record ID], encoded with the configured key conversion | `<SHA-256 of the complete history slot>`                           |
+| `bytes`               | BYTEA NOT NULL          | Entire serialized `AgentHistoryEntry`                                                               | Protobuf message serialized into binary array                      |
+| `agent_key`           | TEXT                    | `AgentHistoryEntry.agent`                                                                           | `versioned tuple of state type URL and packed typed ID`            |
+| `scope_digest`        | TEXT                    | `SHA-256 of the complete typed AgentId`                                                             | `<SHA-256 of the complete typed AgentId>`                          |
+| `category`            | TEXT                    | `derived from AgentHistoryEntry`                                                                    | `conversation`                                                     |
+| `conversation_key`    | TEXT                    | `AgentHistoryEntry.conversation_record.conversation.value`; empty for Events                        | `conversation-5`                                                   |
+| `conversation_digest` | TEXT                    | `digest of conversation_key`                                                                        | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
+| `order_key`           | TEXT                    | `derived AgentHistoryKeys ordering key`                                                             | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
 
-The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot. PostgreSQL indexes `order_key` with binary `C` collation.
+The complete typed AgentId and history item remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot. PostgreSQL indexes `order_key` with binary `C` collation.
 
 **Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
 
@@ -595,17 +594,16 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 ```ts
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
-import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 
 const postgresBuilder = PostgresStorageFactory.newBuilder();
 postgresBuilder.setTableName(
   AgentHistoryEntrySchema,
-  AgentHistoryRecordSchema,
+  AgentHistoryEntrySchema,
   "support_agent_history",
 );
 ```
 
-##### Agent attributes: `spine.spine_agent_attributes_agentattributesrecord`
+##### Agent attributes: `spine.spine_agent_attributes_activeagentrecord`
 
 **Table location:** `support` database, `spine` schema.
 
@@ -614,7 +612,7 @@ postgresBuilder.setTableName(
 | Physical field     | Database type           | Exact source                                                                                   | Example value                                 |
 | ------------------ | ----------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentId(state_type_url, typed entity_id), encoded with the configured key conversion | `v1:<digest of typed AgentId>`                |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentAttributesRecord`                                                      | Protobuf message serialized into binary array |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `ActiveAgentRecord`                                                          | Protobuf message serialized into binary array |
 
 The complete AgentId, model preferences, and pending model calls stay in bytes. The pending list grows with outstanding calls; it stores no model weights, credentials, or runnable task.
 
@@ -624,12 +622,12 @@ The complete AgentId, model preferences, and pending model calls stay in bytes. 
 
 ```ts
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-import { AgentAttributesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/attributes_record_pb.js";
+import { ActiveAgentRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/active_agent_record_pb.js";
 
 const postgresBuilder = PostgresStorageFactory.newBuilder();
 postgresBuilder.setTableName(
-  AgentAttributesRecordSchema,
-  AgentAttributesRecordSchema,
+  ActiveAgentRecordSchema,
+  ActiveAgentRecordSchema,
   "support_agent_attributes",
 );
 ```
@@ -975,13 +973,13 @@ mysqlBuilder.setTableName(TicketListSchema, "support_ticket_list");
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when the Support Bounded Context prepares the ReplyAssistant Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                                    | Example value                                 |
-| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | --------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                     |
-| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                       |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                       |
-| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                                   | `2`                                           |
+| Physical field     | Database type                  | Exact source                                                                    | Example value                                           |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `versioned tuple of state type URL and packed typed ID` |
+| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array           |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                                 |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                                 |
+| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                                   | `2`                                                     |
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
@@ -1098,25 +1096,24 @@ const mysqlBuilder = MysqlStorageFactory.newBuilder();
 mysqlBuilder.setEventStoreTable("Support_System", "support_system_events", "system");
 ```
 
-##### Agent audit: `agent_history_AgentHistoryRecord`
+##### Agent audit: `agent_history_AgentHistoryEntry`
 
 **Table location:** `support` database.
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field        | Database type           | Exact source                                                                                       | Example value                                                      |
-| --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb` |
-| `bytes`               | BLOB NOT NULL           | Entire serialized `AgentHistoryRecord`                                                             | Protobuf message serialized into binary array                      |
-| `state_type`          | TEXT                    | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                   |
-| `agent_key`           | TEXT                    | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                          |
-| `scope_digest`        | VARBINARY(64)           | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8` |
-| `category`            | VARBINARY(12)           | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                     |
-| `conversation_key`    | TEXT                    | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                   |
-| `conversation_digest` | VARBINARY(64)           | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
-| `order_key`           | VARBINARY(2944)         | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
+| Physical field        | Database type           | Exact source                                                                                        | Example value                                                      |
+| --------------------- | ----------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [complete typed AgentId, category, record ID], encoded with the configured key conversion | `<SHA-256 of the complete history slot>`                           |
+| `bytes`               | BLOB NOT NULL           | Entire serialized `AgentHistoryEntry`                                                               | Protobuf message serialized into binary array                      |
+| `agent_key`           | TEXT                    | `AgentHistoryEntry.agent`                                                                           | `versioned tuple of state type URL and packed typed ID`            |
+| `scope_digest`        | VARBINARY(64)           | `SHA-256 of the complete typed AgentId`                                                             | `<SHA-256 of the complete typed AgentId>`                          |
+| `category`            | VARBINARY(12)           | `derived from AgentHistoryEntry`                                                                    | `conversation`                                                     |
+| `conversation_key`    | TEXT                    | `AgentHistoryEntry.conversation_record.conversation.value`; empty for Events                        | `conversation-5`                                                   |
+| `conversation_digest` | VARBINARY(64)           | `digest of conversation_key`                                                                        | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
+| `order_key`           | VARBINARY(2944)         | `derived AgentHistoryKeys ordering key`                                                             | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
 
-The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot.
+The complete typed AgentId and history item remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot.
 
 **Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
 
@@ -1125,17 +1122,16 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 ```ts
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
-import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 
 const mysqlBuilder = MysqlStorageFactory.newBuilder();
 mysqlBuilder.setTableName(
   AgentHistoryEntrySchema,
-  AgentHistoryRecordSchema,
+  AgentHistoryEntrySchema,
   "support_agent_history",
 );
 ```
 
-##### Agent attributes: `spine_agent_attributes_AgentAttributesRecord`
+##### Agent attributes: `spine_agent_attributes_ActiveAgentRecord`
 
 **Table location:** `support` database.
 
@@ -1144,7 +1140,7 @@ mysqlBuilder.setTableName(
 | Physical field     | Database type           | Exact source                                                                                   | Example value                                 |
 | ------------------ | ----------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentId(state_type_url, typed entity_id), encoded with the configured key conversion | `v1:<digest of typed AgentId>`                |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentAttributesRecord`                                                      | Protobuf message serialized into binary array |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `ActiveAgentRecord`                                                          | Protobuf message serialized into binary array |
 
 The complete AgentId, model preferences, and pending model calls stay in bytes. The pending list grows with outstanding calls; it stores no model weights, credentials, or runnable task.
 
@@ -1154,12 +1150,12 @@ The complete AgentId, model preferences, and pending model calls stay in bytes. 
 
 ```ts
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
-import { AgentAttributesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/attributes_record_pb.js";
+import { ActiveAgentRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/active_agent_record_pb.js";
 
 const mysqlBuilder = MysqlStorageFactory.newBuilder();
 mysqlBuilder.setTableName(
-  AgentAttributesRecordSchema,
-  AgentAttributesRecordSchema,
+  ActiveAgentRecordSchema,
+  ActiveAgentRecordSchema,
   "support_agent_attributes",
 );
 ```
@@ -1438,13 +1434,13 @@ datastoreBuilder.organizeRecords(TicketListSchema, { kind: "support_ticket_list"
 
 **Created by:** The Datastore adapter makes this kind visible on the first ReplyAssistant state write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                                    | Example value                                 |
-| ---------------------------------- | ------------------ | ------------------------------------------------------------------------------- | --------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                     |
-| `bytes`                            | Unindexed Blob     | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array |
-| `archived`                         | Boolean            | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                       |
-| `deleted`                          | Boolean            | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                       |
-| `version`                          | Integer            | `EntityRecord.version.number`                                                   | `2`                                           |
+| Physical field                     | Database type      | Exact source                                                                    | Example value                                           |
+| ---------------------------------- | ------------------ | ------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `versioned tuple of state type URL and packed typed ID` |
+| `bytes`                            | Unindexed Blob     | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array           |
+| `archived`                         | Boolean            | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                                 |
+| `deleted`                          | Boolean            | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                                 |
+| `version`                          | Integer            | `EntityRecord.version.number`                                                   | `2`                                                     |
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
@@ -1552,19 +1548,18 @@ This System Event kind also stores the Agent interaction Events. Each entity con
 
 **Created by:** The Datastore adapter makes this kind visible on the first Agent audit write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                                                       | Example value                                                      |
-| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Native key name (no `ID` property) | Datastore key name | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb` |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentHistoryRecord`                                                             | Protobuf message serialized into binary array                      |
-| `state_type`                       | String             | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                   |
-| `agent_key`                        | String             | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                          |
-| `scope_digest`                     | String             | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8` |
-| `category`                         | String             | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                     |
-| `conversation_key`                 | String             | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                   |
-| `conversation_digest`              | String             | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
-| `order_key`                        | String             | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
+| Physical field                     | Database type      | Exact source                                                                                        | Example value                                                      |
+| ---------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Native key name (no `ID` property) | Datastore key name | digest of [complete typed AgentId, category, record ID], encoded with the configured key conversion | `<SHA-256 of the complete history slot>`                           |
+| `bytes`                            | Unindexed Blob     | Entire serialized `AgentHistoryEntry`                                                               | Protobuf message serialized into binary array                      |
+| `agent_key`                        | String             | `AgentHistoryEntry.agent`                                                                           | `versioned tuple of state type URL and packed typed ID`            |
+| `scope_digest`                     | String             | `SHA-256 of the complete typed AgentId`                                                             | `<SHA-256 of the complete typed AgentId>`                          |
+| `category`                         | String             | `derived from AgentHistoryEntry`                                                                    | `conversation`                                                     |
+| `conversation_key`                 | String             | `AgentHistoryEntry.conversation_record.conversation.value`; empty for Events                        | `conversation-5`                                                   |
+| `conversation_digest`              | String             | `digest of conversation_key`                                                                        | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
+| `order_key`                        | String             | `derived AgentHistoryKeys ordering key`                                                             | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
 
-The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot.
+The complete typed AgentId and history item remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot.
 
 **Change this layout:** This family uses an explicit internal layout. There is no supported narrow builder setting to rename it.
 
@@ -1577,7 +1572,7 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 | Physical field                     | Database type      | Exact source                                                                                   | Example value                                 |
 | ---------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | Native key name (no `ID` property) | Datastore key name | digest of AgentId(state_type_url, typed entity_id), encoded with the configured key conversion | `v1:<digest of typed AgentId>`                |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentAttributesRecord`                                                      | Protobuf message serialized into binary array |
+| `bytes`                            | Unindexed Blob     | Entire serialized `ActiveAgentRecord`                                                          | Protobuf message serialized into binary array |
 
 The complete AgentId, model preferences, and pending model calls stay in bytes. The pending list grows with outstanding calls; it stores no model weights, credentials, or runnable task.
 
@@ -2220,13 +2215,13 @@ postgresBuilder.setTableName(TicketListSchema, "support_ticket_list");
 
 **Created by:** The PostgreSQL adapter creates and checks this table when the Support Bounded Context prepares the ReplyAssistant Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                                    | Example value                                 |
-| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | --------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                     |
-| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                       |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                       |
-| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                                   | `2`                                           |
+| Physical field     | Database type                  | Exact source                                                                    | Example value                                           |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `versioned tuple of state type URL and packed typed ID` |
+| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array           |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                                 |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                                 |
+| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                                   | `2`                                                     |
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
@@ -2343,25 +2338,24 @@ const postgresBuilder = PostgresStorageFactory.newBuilder();
 postgresBuilder.setEventStoreTable("Support_System", "support_system_events", "system");
 ```
 
-##### Agent audit: `spine.agent_history_agenthistoryrecord`
+##### Agent audit: `spine.agent_history_agenthistoryentry`
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field        | Database type           | Exact source                                                                                       | Example value                                                      |
-| --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb` |
-| `bytes`               | BYTEA NOT NULL          | Entire serialized `AgentHistoryRecord`                                                             | Protobuf message serialized into binary array                      |
-| `state_type`          | TEXT                    | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                   |
-| `agent_key`           | TEXT                    | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                          |
-| `scope_digest`        | TEXT                    | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8` |
-| `category`            | TEXT                    | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                     |
-| `conversation_key`    | TEXT                    | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                   |
-| `conversation_digest` | TEXT                    | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
-| `order_key`           | TEXT                    | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
+| Physical field        | Database type           | Exact source                                                                                        | Example value                                                      |
+| --------------------- | ----------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [complete typed AgentId, category, record ID], encoded with the configured key conversion | `<SHA-256 of the complete history slot>`                           |
+| `bytes`               | BYTEA NOT NULL          | Entire serialized `AgentHistoryEntry`                                                               | Protobuf message serialized into binary array                      |
+| `agent_key`           | TEXT                    | `AgentHistoryEntry.agent`                                                                           | `versioned tuple of state type URL and packed typed ID`            |
+| `scope_digest`        | TEXT                    | `SHA-256 of the complete typed AgentId`                                                             | `<SHA-256 of the complete typed AgentId>`                          |
+| `category`            | TEXT                    | `derived from AgentHistoryEntry`                                                                    | `conversation`                                                     |
+| `conversation_key`    | TEXT                    | `AgentHistoryEntry.conversation_record.conversation.value`; empty for Events                        | `conversation-5`                                                   |
+| `conversation_digest` | TEXT                    | `digest of conversation_key`                                                                        | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
+| `order_key`           | TEXT                    | `derived AgentHistoryKeys ordering key`                                                             | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
 
-The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot. PostgreSQL indexes `order_key` with binary `C` collation.
+The complete typed AgentId and history item remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot. PostgreSQL indexes `order_key` with binary `C` collation.
 
 **Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
 
@@ -2370,17 +2364,16 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 ```ts
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
-import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 
 const postgresBuilder = PostgresStorageFactory.newBuilder();
 postgresBuilder.setTableName(
   AgentHistoryEntrySchema,
-  AgentHistoryRecordSchema,
+  AgentHistoryEntrySchema,
   "support_agent_history",
 );
 ```
 
-##### Agent attributes: `spine.spine_agent_attributes_agentattributesrecord`
+##### Agent attributes: `spine.spine_agent_attributes_activeagentrecord`
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
 
@@ -2389,7 +2382,7 @@ postgresBuilder.setTableName(
 | Physical field     | Database type           | Exact source                                                                                   | Example value                                 |
 | ------------------ | ----------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentId(state_type_url, typed entity_id), encoded with the configured key conversion | `v1:<digest of typed AgentId>`                |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentAttributesRecord`                                                      | Protobuf message serialized into binary array |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `ActiveAgentRecord`                                                          | Protobuf message serialized into binary array |
 
 The complete AgentId, model preferences, and pending model calls stay in bytes. The pending list grows with outstanding calls; it stores no model weights, credentials, or runnable task.
 
@@ -2399,12 +2392,12 @@ The complete AgentId, model preferences, and pending model calls stay in bytes. 
 
 ```ts
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-import { AgentAttributesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/attributes_record_pb.js";
+import { ActiveAgentRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/active_agent_record_pb.js";
 
 const postgresBuilder = PostgresStorageFactory.newBuilder();
 postgresBuilder.setTableName(
-  AgentAttributesRecordSchema,
-  AgentAttributesRecordSchema,
+  ActiveAgentRecordSchema,
+  ActiveAgentRecordSchema,
   "support_agent_attributes",
 );
 ```
@@ -2768,13 +2761,13 @@ mysqlBuilder.setTableName(TicketListSchema, "support_ticket_list");
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when the Support Bounded Context prepares the ReplyAssistant Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                                    | Example value                                 |
-| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | --------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                     |
-| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                       |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                       |
-| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                                   | `2`                                           |
+| Physical field     | Database type                  | Exact source                                                                    | Example value                                           |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `versioned tuple of state type URL and packed typed ID` |
+| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array           |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                                 |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                                 |
+| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                                   | `2`                                                     |
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
@@ -2891,25 +2884,24 @@ const mysqlBuilder = MysqlStorageFactory.newBuilder();
 mysqlBuilder.setEventStoreTable("Support_System", "support_system_events", "system");
 ```
 
-##### Agent audit: `agent_history_AgentHistoryRecord`
+##### Agent audit: `agent_history_AgentHistoryEntry`
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field        | Database type           | Exact source                                                                                       | Example value                                                      |
-| --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb` |
-| `bytes`               | BLOB NOT NULL           | Entire serialized `AgentHistoryRecord`                                                             | Protobuf message serialized into binary array                      |
-| `state_type`          | TEXT                    | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                   |
-| `agent_key`           | TEXT                    | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                          |
-| `scope_digest`        | VARBINARY(64)           | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8` |
-| `category`            | VARBINARY(12)           | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                     |
-| `conversation_key`    | TEXT                    | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                   |
-| `conversation_digest` | VARBINARY(64)           | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
-| `order_key`           | VARBINARY(2944)         | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
+| Physical field        | Database type           | Exact source                                                                                        | Example value                                                      |
+| --------------------- | ----------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [complete typed AgentId, category, record ID], encoded with the configured key conversion | `<SHA-256 of the complete history slot>`                           |
+| `bytes`               | BLOB NOT NULL           | Entire serialized `AgentHistoryEntry`                                                               | Protobuf message serialized into binary array                      |
+| `agent_key`           | TEXT                    | `AgentHistoryEntry.agent`                                                                           | `versioned tuple of state type URL and packed typed ID`            |
+| `scope_digest`        | VARBINARY(64)           | `SHA-256 of the complete typed AgentId`                                                             | `<SHA-256 of the complete typed AgentId>`                          |
+| `category`            | VARBINARY(12)           | `derived from AgentHistoryEntry`                                                                    | `conversation`                                                     |
+| `conversation_key`    | TEXT                    | `AgentHistoryEntry.conversation_record.conversation.value`; empty for Events                        | `conversation-5`                                                   |
+| `conversation_digest` | VARBINARY(64)           | `digest of conversation_key`                                                                        | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
+| `order_key`           | VARBINARY(2944)         | `derived AgentHistoryKeys ordering key`                                                             | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
 
-The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot.
+The complete typed AgentId and history item remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot.
 
 **Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
 
@@ -2918,17 +2910,16 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 ```ts
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
-import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 
 const mysqlBuilder = MysqlStorageFactory.newBuilder();
 mysqlBuilder.setTableName(
   AgentHistoryEntrySchema,
-  AgentHistoryRecordSchema,
+  AgentHistoryEntrySchema,
   "support_agent_history",
 );
 ```
 
-##### Agent attributes: `spine_agent_attributes_AgentAttributesRecord`
+##### Agent attributes: `spine_agent_attributes_ActiveAgentRecord`
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
 
@@ -2937,7 +2928,7 @@ mysqlBuilder.setTableName(
 | Physical field     | Database type           | Exact source                                                                                   | Example value                                 |
 | ------------------ | ----------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentId(state_type_url, typed entity_id), encoded with the configured key conversion | `v1:<digest of typed AgentId>`                |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentAttributesRecord`                                                      | Protobuf message serialized into binary array |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `ActiveAgentRecord`                                                          | Protobuf message serialized into binary array |
 
 The complete AgentId, model preferences, and pending model calls stay in bytes. The pending list grows with outstanding calls; it stores no model weights, credentials, or runnable task.
 
@@ -2947,12 +2938,12 @@ The complete AgentId, model preferences, and pending model calls stay in bytes. 
 
 ```ts
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
-import { AgentAttributesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/attributes_record_pb.js";
+import { ActiveAgentRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/active_agent_record_pb.js";
 
 const mysqlBuilder = MysqlStorageFactory.newBuilder();
 mysqlBuilder.setTableName(
-  AgentAttributesRecordSchema,
-  AgentAttributesRecordSchema,
+  ActiveAgentRecordSchema,
+  ActiveAgentRecordSchema,
   "support_agent_attributes",
 );
 ```
@@ -3194,7 +3185,7 @@ retain the required privileges for those components.
       occur in the full serialized message. Check signed numeric ranges, 512-character
       SQL keys and configured collation; register packed application types and any
       custom stringifiers consistently. The default `bytes BLOB` holds at most
-      65,535 bytes, including the complete record envelope. Agent prompts/results
+      65,535 bytes, including the complete AgentHistoryEntry. Agent prompts/results
       can exceed that. For larger records, administrators can precreate `bytes` as
       `MEDIUMBLOB`/`LONGBLOB`, or use `useOperationFactory()` to emit that DDL;
       the adapter accepts these wider payload types during compatibility checks.
@@ -3307,13 +3298,13 @@ datastoreBuilder.organizeRecords(TicketListSchema, { kind: "support_ticket_list"
 
 **Created by:** The Datastore adapter makes this kind visible on the first ReplyAssistant state write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                                    | Example value                                 |
-| ---------------------------------- | ------------------ | ------------------------------------------------------------------------------- | --------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                     |
-| `bytes`                            | Unindexed Blob     | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array |
-| `archived`                         | Boolean            | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                       |
-| `deleted`                          | Boolean            | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                       |
-| `version`                          | Integer            | `EntityRecord.version.number`                                                   | `2`                                           |
+| Physical field                     | Database type      | Exact source                                                                    | Example value                                           |
+| ---------------------------------- | ------------------ | ------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `versioned tuple of state type URL and packed typed ID` |
+| `bytes`                            | Unindexed Blob     | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array           |
+| `archived`                         | Boolean            | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                                 |
+| `deleted`                          | Boolean            | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                                 |
+| `version`                          | Integer            | `EntityRecord.version.number`                                                   | `2`                                                     |
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
@@ -3421,19 +3412,18 @@ This System Event kind also stores the Agent interaction Events. Each entity con
 
 **Created by:** The Datastore adapter makes this kind visible on the first Agent audit write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                                                       | Example value                                                      |
-| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Native key name (no `ID` property) | Datastore key name | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb` |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentHistoryRecord`                                                             | Protobuf message serialized into binary array                      |
-| `state_type`                       | String             | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                   |
-| `agent_key`                        | String             | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                          |
-| `scope_digest`                     | String             | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8` |
-| `category`                         | String             | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                     |
-| `conversation_key`                 | String             | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                   |
-| `conversation_digest`              | String             | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
-| `order_key`                        | String             | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
+| Physical field                     | Database type      | Exact source                                                                                        | Example value                                                      |
+| ---------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Native key name (no `ID` property) | Datastore key name | digest of [complete typed AgentId, category, record ID], encoded with the configured key conversion | `<SHA-256 of the complete history slot>`                           |
+| `bytes`                            | Unindexed Blob     | Entire serialized `AgentHistoryEntry`                                                               | Protobuf message serialized into binary array                      |
+| `agent_key`                        | String             | `AgentHistoryEntry.agent`                                                                           | `versioned tuple of state type URL and packed typed ID`            |
+| `scope_digest`                     | String             | `SHA-256 of the complete typed AgentId`                                                             | `<SHA-256 of the complete typed AgentId>`                          |
+| `category`                         | String             | `derived from AgentHistoryEntry`                                                                    | `conversation`                                                     |
+| `conversation_key`                 | String             | `AgentHistoryEntry.conversation_record.conversation.value`; empty for Events                        | `conversation-5`                                                   |
+| `conversation_digest`              | String             | `digest of conversation_key`                                                                        | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
+| `order_key`                        | String             | `derived AgentHistoryKeys ordering key`                                                             | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
 
-The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot.
+The complete typed AgentId and history item remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot.
 
 **Change this layout:** This family uses an explicit internal layout. There is no supported narrow builder setting to rename it.
 
@@ -3446,7 +3436,7 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 | Physical field                     | Database type      | Exact source                                                                                   | Example value                                 |
 | ---------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | Native key name (no `ID` property) | Datastore key name | digest of AgentId(state_type_url, typed entity_id), encoded with the configured key conversion | `v1:<digest of typed AgentId>`                |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentAttributesRecord`                                                      | Protobuf message serialized into binary array |
+| `bytes`                            | Unindexed Blob     | Entire serialized `ActiveAgentRecord`                                                          | Protobuf message serialized into binary array |
 
 The complete AgentId, model preferences, and pending model calls stay in bytes. The pending list grows with outstanding calls; it stores no model weights, credentials, or runnable task.
 
@@ -4814,13 +4804,13 @@ rejection, and application code may explicitly save an abandonment entry.
 
 These entries go into the Agent audit records:
 
-| Provider      | Table or kind                            |
-| ------------- | ---------------------------------------- |
-| PostgreSQL    | `spine.agent_history_agenthistoryrecord` |
-| MySQL/MariaDB | `agent_history_AgentHistoryRecord`       |
-| Datastore     | `spine_agent_history`                    |
+| Provider      | Table or kind                           |
+| ------------- | --------------------------------------- |
+| PostgreSQL    | `spine.agent_history_agenthistoryentry` |
+| MySQL/MariaDB | `agent_history_AgentHistoryEntry`       |
+| Datastore     | `spine_agent_history`                   |
 
-Each row's `bytes` contains a complete AgentHistoryRecord. Prepared and attempted
+Each row's `bytes` contains one complete AgentHistoryEntry. The framework fills its `agent` field from the typed repository ID before storage. Prepared and attempted
 Command envelopes retain their IDs, actor metadata, causation, and typed payloads.
 Provider request entries can include typed input, instructions, prompt JSON,
 available tools, and the expected output schema. Provider responses can include
@@ -4859,11 +4849,11 @@ For example, Agent `assistant-7` may select the generation model named
 
 That choice is stored separately from the generated reply and its audit:
 
-| Provider      | Table or kind                                        |
-| ------------- | ---------------------------------------------------- |
-| PostgreSQL    | `spine.spine_agent_attributes_agentattributesrecord` |
-| MySQL/MariaDB | `spine_agent_attributes_AgentAttributesRecord`       |
-| Datastore     | `spine_agent_attributes`                             |
+| Provider      | Table or kind                                    |
+| ------------- | ------------------------------------------------ |
+| PostgreSQL    | `spine.spine_agent_attributes_activeagentrecord` |
+| MySQL/MariaDB | `spine_agent_attributes_ActiveAgentRecord`       |
+| Datastore     | `spine_agent_attributes`                         |
 
 The record contains the AgentId, explicit model selections, and pending model
 calls. It has a physical identity key and `bytes`, with no extra query columns.
@@ -4895,22 +4885,13 @@ tenant destination.
 
 ### How Agent record keys are calculated
 
-For this example's conversation audit entry, the key calculation starts with:
-
-```text
-["example.support.ReplyAssistant","{\"value\":\"assistant-7\"}","conversation","conversation-5"]
-```
-
-SHA-256 of that exact text produces:
-
-```text
-ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb
-```
-
-The `scope_digest` query field hashes the first two values of the tuple, which
-together identify the Agent. The `conversation_digest` field hashes the raw
-conversation ID, `conversation-5`. The complete original values remain in the
-record so they are available when it is read.
+Each history entry stores its complete typed AgentId. The provider encodes the
+AgentId as a versioned tuple of state type URL, packed identifier type URL, and
+packed identifier bytes. It combines that tuple with the history category and
+record ID for the immutable slot, then hashes the slot for the physical ID.
+`scope_digest` hashes only the complete typed AgentId tuple, so all entries for
+one Agent share an indexed scope. `conversation_digest` hashes the raw
+conversation ID. Reads verify the complete decoded AgentId after selecting rows.
 
 Agent attributes identify the Agent with its state type URL and complete
 packed typed Entity ID. The physical slot hashes a versioned tuple of that type

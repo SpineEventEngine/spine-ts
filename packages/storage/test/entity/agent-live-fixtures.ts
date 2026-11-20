@@ -21,7 +21,7 @@ import { RecordSpec, type StorageFactory } from "@spine-event-engine/storage";
 import {
   AgentAttributes,
   EntityCommitStorageFactories,
-  type AgentAttributesRecord,
+  type ActiveAgentRecord,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
 import {
@@ -30,8 +30,8 @@ import {
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 // prettier-ignore
 import {
-  AgentAttributesRecordSchema,
-} from "@spine-event-engine/proto/generated/spine/server/agent/attributes_record_pb.js";
+  ActiveAgentRecordSchema,
+} from "@spine-event-engine/proto/generated/spine/server/agent/active_agent_record_pb.js";
 import {
   SupportReplyAgentIdSchema,
   SupportReplyAgentStateSchema,
@@ -83,7 +83,7 @@ export function agentAttributes(
   entityId: SupportReplyAgentId,
   preferences: readonly ModelPreference[] = [],
   pending: readonly ModelCall[] = [],
-): AgentAttributesRecord {
+): ActiveAgentRecord {
   return AgentAttributes.record(AgentAttributes.id(entityInput(), entityId), preferences, pending);
 }
 
@@ -140,8 +140,8 @@ export async function checkAgentCurrentMatrix(
     expect(loadedAttributes.current).toBeUndefined();
     if (loadedAttributes.attributes === undefined)
       throw new Error("Attributes-only Agent record is absent.");
-    expect(toBinary(AgentAttributesRecordSchema, loadedAttributes.attributes)).toEqual(
-      toBinary(AgentAttributesRecordSchema, savedAttributes),
+    expect(toBinary(ActiveAgentRecordSchema, loadedAttributes.attributes)).toEqual(
+      toBinary(ActiveAgentRecordSchema, savedAttributes),
     );
     const next = record(both);
     const nextAttributes = agentAttributes(both);
@@ -158,8 +158,8 @@ export async function checkAgentCurrentMatrix(
     expect(toBinary(EntityRecordSchema, loadedBoth.current)).toEqual(
       toBinary(EntityRecordSchema, next),
     );
-    expect(toBinary(AgentAttributesRecordSchema, loadedBoth.attributes)).toEqual(
-      toBinary(AgentAttributesRecordSchema, nextAttributes),
+    expect(toBinary(ActiveAgentRecordSchema, loadedBoth.attributes)).toEqual(
+      toBinary(ActiveAgentRecordSchema, nextAttributes),
     );
     const reviewLayout = {
       ...layout,

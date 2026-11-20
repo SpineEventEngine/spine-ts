@@ -23,8 +23,8 @@ import {
 } from "@spine-event-engine/proto/agent";
 // prettier-ignore
 import {
-  AgentAttributesRecordSchema,
-} from "@spine-event-engine/proto/generated/spine/server/agent/attributes_record_pb.js";
+  ActiveAgentRecordSchema,
+} from "@spine-event-engine/proto/generated/spine/server/agent/active_agent_record_pb.js";
 import { describe, expect, it } from "vitest";
 
 // prettier-ignore
@@ -36,6 +36,13 @@ import { agentAttributes } from "./agent-live-fixtures.js";
 import { modelRequest, occurredAt } from "./agent-history-fixtures.js";
 
 describe("Agent attributes identity and pending calls", () => {
+  it("uses the active Agent record name for the physical record type", () => {
+    expect(AgentAttributes.spec((value) => value).recordType.typeName).toBe(
+      "spine.server.agent.ActiveAgentRecord",
+    );
+    expect(AgentAttributes.group.name).toBe("spine_agent_attributes");
+  });
+
   const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-history" });
   const agent = agentAttributes(id).agent;
   if (agent === undefined) throw new Error("Missing Agent identity fixture.");
@@ -70,10 +77,10 @@ describe("Agent attributes identity and pending calls", () => {
 
   it("rejects duplicate pending IDs and calls targeting another typed Agent", () => {
     const valid = agentAttributes(id, [], [call]);
-    const duplicate = clone(AgentAttributesRecordSchema, valid);
+    const duplicate = clone(ActiveAgentRecordSchema, valid);
     duplicate.pendingModelCalls.push(clone(ModelCallSchema, call));
     expect(() => AgentAttributes.copy(duplicate)).toThrow("must be unique");
-    const foreign = clone(AgentAttributesRecordSchema, valid);
+    const foreign = clone(ActiveAgentRecordSchema, valid);
     const another = create(SupportReplyAgentIdSchema, { ticketNumber: "T-another" });
     const foreignCall = foreign.pendingModelCalls[0];
     if (foreignCall === undefined) throw new Error("Missing pending call.");
@@ -94,12 +101,12 @@ describe("Agent attributes identity and pending calls", () => {
       kind: AiModelKind.GENERATION,
       selection: { case: "inheritRepositoryDefault", value: create(EmptySchema) },
     });
-    const duplicate = create(AgentAttributesRecordSchema, {
+    const duplicate = create(ActiveAgentRecordSchema, {
       agent,
       modelPreferences: [preference, clone(ModelPreferenceSchema, preference)],
     });
     expect(() => AgentAttributes.copy(duplicate)).toThrow("unique supported kinds");
-    const unsupported = clone(AgentAttributesRecordSchema, duplicate);
+    const unsupported = clone(ActiveAgentRecordSchema, duplicate);
     unsupported.modelPreferences = [
       create(ModelPreferenceSchema, {
         kind: AiModelKind.AI_MODEL_KIND_UNSPECIFIED,
@@ -113,14 +120,18 @@ describe("Agent attributes identity and pending calls", () => {
     });
     expect(
       AgentAttributes.copy(
-        create(AgentAttributesRecordSchema, {
+        create(ActiveAgentRecordSchema, {
           agent,
           modelPreferences: [preference, decision],
         }),
       ).modelPreferences,
     ).toHaveLength(2);
-    expect(() => AgentAttributes.text({ ...agent, stateTypeUrl: "" })).toThrow("typed identity");
-    expect(() => AgentAttributes.text({ ...agent, entityId: undefined })).toThrow("typed identity");
+    expect(() => AgentAttributes.text({ ...agent, stateTypeUrl: "" })).toThrow(
+      "Message validation failed",
+    );
+    expect(() => AgentAttributes.text({ ...agent, entityId: undefined })).toThrow(
+      "Message validation failed",
+    );
     expect(() =>
       AgentAttributes.spec((value) => value).idValueIn({ ...duplicate, agent: undefined }),
     ).toThrow("require identity");

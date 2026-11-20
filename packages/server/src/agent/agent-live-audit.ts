@@ -17,6 +17,7 @@ import { type MessageSchema } from "@spine-event-engine/core";
 import type { Event } from "@spine-event-engine/proto";
 import {
   AgentHistoryEntrySchema,
+  AgentIdSchema,
   AgentInvocationTerminatedSchema,
   type AgentHistoryEntry,
   type AgentInvocationTerminated,
@@ -44,7 +45,6 @@ export class AgentLiveAudit<Id> {
    * @param invocation Original typed source and recipient.
    * @param stateSchema Generated Agent state descriptor.
    * @param entityId Typed Agent identifier for history writes.
-   * @param agentKey Canonical Agent storage key.
    * @param history Retained immutable audit storage.
    * @param metadata Signal ID, Time, and causal context service.
    * @param onRegisterSchema Registers the System payload type before publication.
@@ -54,7 +54,6 @@ export class AgentLiveAudit<Id> {
     private readonly invocation: AgentLiveInvocation,
     private readonly stateSchema: MessageSchema,
     private readonly entityId: Id,
-    private readonly agentKey: string,
     private readonly history: AgentHistoryStorage<Id>,
     private readonly metadata: SignalMetadata,
     private readonly onRegisterSchema: (schema: MessageSchema) => void,
@@ -97,9 +96,11 @@ export class AgentLiveAudit<Id> {
       payload,
     );
     const entries = [...history, this.entry(event)];
-    const sizes = entries.map((entry) =>
-      AgentHistoryRecords.bytes(this.invocation.stateType, this.agentKey, entry),
-    );
+    const agent = create(AgentIdSchema, {
+      stateTypeUrl: this.invocation.stateType,
+      entityId: this.invocation.recipientId,
+    });
+    const sizes = entries.map((entry) => AgentHistoryRecords.bytes(agent, entry));
     const capacity = this.history.capacity;
     const maxRecord = capacity.historyRecordBytes;
     if (maxRecord !== undefined && sizes.some((size) => size > maxRecord))

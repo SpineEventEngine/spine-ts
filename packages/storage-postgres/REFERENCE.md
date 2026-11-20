@@ -113,11 +113,11 @@ cross-provider limits.
 
 ## Agent history
 
-The provider-only Agent history handle stores `AgentHistoryRecord` in one
+The provider-only Agent history handle stores `AgentHistoryEntry` in one
 `agent_history` record family per selected tenant database. Its payload retains
-the original complete `AgentHistoryEntry` and full state type and Agent key.
+the complete `AgentHistoryEntry` and its encoded typed `AgentId`.
 SHA-256 digests provide bounded physical record IDs and indexed scope keys;
-reads also compare the complete state type and Agent key. Three validated B-tree
+reads also compare the complete encoded typed `AgentId`. Three validated B-tree
 indexes cover scope plus full order, scope plus category plus full order, and
 scope plus conversation digest plus full order. Conversation reads also compare
 the complete conversation key. `order_key` encodes original seconds,

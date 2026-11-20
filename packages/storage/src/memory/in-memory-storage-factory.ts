@@ -158,7 +158,6 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     try {
       if (!this.isOpen()) throw new Error("StorageFactory is closed.");
       TenantBoundary.of(input.context);
-      if (input.stateType.trim().length === 0) throw new TypeError("Agent state type is required.");
       return Promise.resolve();
     } catch (error) {
       return Promise.reject(
@@ -375,7 +374,6 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     input: AgentHistoryStorageInput<Id>,
   ): AgentHistoryStorage<Id> {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
-    if (input.stateType.trim().length === 0) throw new TypeError("Agent state type is required.");
     return MemoryAgentHistory.open(this.#backend, input);
   }
 

@@ -12,8 +12,7 @@
  * the License.
  */
 
-import { clone, create, isMessage, toBinary, type Message } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { clone, create, isMessage, type Message } from "@bufbuild/protobuf";
 import { AiModel, AiRegistry, ModelRef } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
 import {
@@ -375,13 +374,11 @@ async function seedPreparedRequest(
   });
   const history = AgentHistoryStorageFactories.create(factory, {
     context: { name: contextName, multitenant: false },
-    stateType: SupportReplyAgentStateSchema.typeName,
-    id: {
-      key: (entityId: SupportReplyAgentId) =>
-        Buffer.from(
-          toBinary(AnySchema, AnyPacker.pack(SupportReplyAgentIdSchema, entityId)),
-        ).toString("base64"),
-    },
+    agent: (entityId: SupportReplyAgentId) =>
+      create(AgentIdSchema, {
+        stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+        entityId: AnyPacker.pack(SupportReplyAgentIdSchema, entityId),
+      }),
   });
   try {
     await history.append(

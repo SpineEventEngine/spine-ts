@@ -13,9 +13,13 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { create, toBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { Datastore } from "@google-cloud/datastore";
-import { AgentHistoryEntrySchema, ConversationIdSchema } from "@spine-event-engine/proto/agent";
+import {
+  AgentHistoryEntrySchema,
+  AgentIdSchema,
+  ConversationIdSchema,
+} from "@spine-event-engine/proto/agent";
 import {
   AgentHistoryConformance,
   AgentHistoryKeys,
@@ -35,11 +39,62 @@ import {
 } from "../../storage/test/entity/agent-history-fixtures.js";
 import { DatastoreStorageFactory } from "../src/index.js";
 import { AgentHistoryHash } from "../src/datastore/agent-history.js";
-import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 
 const emulatorHost = process.env.DATASTORE_EMULATOR_HOST;
 
 describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
+  it("preserves unknown entry and Agent fields and rejects changed immutable retries", async () => {
+    const client = new Datastore({ projectId: `spine-agent-unknown-${randomUUID()}` });
+    const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
+    const history = AgentHistoryStorageFactories.create(factory, scope);
+    try {
+      for (const mode of ["single", "group"] as const) {
+        const agentId = `${mode}-${randomUUID()}`;
+        const id = scope.agent(agentId);
+        const nested = fromBinary(
+          AgentIdSchema,
+          Uint8Array.of(...toBinary(AgentIdSchema, id), 0xa0, 0x06, 0x01),
+        );
+        const base = AgentHistoryRecords.capture(
+          nested,
+          event(`unknown-${mode}`, occurredAt(31n), false),
+        );
+        const entry = fromBinary(
+          AgentHistoryEntrySchema,
+          Uint8Array.of(...toBinary(AgentHistoryEntrySchema, base), 0xa0, 0x06, 0x01),
+        );
+        const append = (value: typeof entry) =>
+          mode === "single" ? history.append(agentId, value) : history.appendAll(agentId, [value]);
+        await append(entry);
+        await append(entry);
+        const page = await history.read({ entityId: agentId, view: { kind: "full" }, count: 1 });
+        const persisted = page.entries[0];
+        if (persisted === undefined) throw new Error("Expected the persisted Agent history entry.");
+        expect(toBinary(AgentHistoryEntrySchema, persisted)).toEqual(
+          toBinary(AgentHistoryEntrySchema, entry),
+        );
+        const changed = fromBinary(
+          AgentHistoryEntrySchema,
+          Uint8Array.of(...toBinary(AgentHistoryEntrySchema, base), 0xa0, 0x06, 0x02),
+        );
+        await expect(append(changed)).rejects.toThrow(/immutable|conflict/i);
+        const changedAgent = fromBinary(
+          AgentIdSchema,
+          Uint8Array.of(...toBinary(AgentIdSchema, id), 0xa0, 0x06, 0x02),
+        );
+        const nestedChange = fromBinary(
+          AgentHistoryEntrySchema,
+          toBinary(AgentHistoryEntrySchema, entry),
+        );
+        nestedChange.agent = changedAgent;
+        await expect(append(nestedChange)).rejects.toThrow(/immutable|conflict/i);
+      }
+    } finally {
+      history.close();
+      await factory.close();
+    }
+  }, 120_000);
+
   it("reopens exact prepared requests and preserves their complete envelopes", async () => {
     const client = new Datastore({ projectId: `spine-agent-request-${randomUUID()}` });
     const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
@@ -56,7 +111,10 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
       try {
         const exact = await reopened.readModelRequest(agent, callId);
         expect(exact && toBinary(AgentHistoryEntrySchema, exact)).toEqual(
-          toBinary(AgentHistoryEntrySchema, request),
+          toBinary(
+            AgentHistoryEntrySchema,
+            create(AgentHistoryEntrySchema, { ...request, agent: scope.agent(agent) }),
+          ),
         );
         await expect(reopened.readModelRequest("other-agent", callId)).resolves.toBeUndefined();
         await expect(reopened.readModelRequest(agent, "missing")).resolves.toBeUndefined();
@@ -103,7 +161,13 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
 
   it("reopens persisted entries in the fixed indexed kind", async () => {
     const client = new Datastore({ projectId: `spine-agent-reopen-${randomUUID()}` });
-    const input = { ...scope, stateType: `${scope.stateType}.datastore.reopen` };
+    const input = {
+      ...scope,
+      agent: (id: string) => {
+        const agent = scope.agent(id);
+        return { ...agent, stateTypeUrl: `${agent.stateTypeUrl}.datastore.reopen` };
+      },
+    };
     const entry = event("reopen-datastore", occurredAt(1_789_000_001n, 123_456_789), false);
     const firstFactory = DatastoreStorageFactory.newBuilder().setClient(client).build();
     const first = AgentHistoryStorageFactories.create(firstFactory, input);
@@ -120,10 +184,13 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
         maxBytes: 10000,
       });
       expect(page.entries.map((value) => toBinary(AgentHistoryEntrySchema, value))).toEqual([
-        toBinary(AgentHistoryEntrySchema, entry),
+        toBinary(
+          AgentHistoryEntrySchema,
+          AgentHistoryRecords.capture(input.agent("ticket-datastore"), entry),
+        ),
       ]);
       const digest = AgentHistoryHash.value(
-        AgentHistoryRecords.scope(input.stateType, input.id.key("ticket-datastore")),
+        AgentHistoryRecords.scope(input.agent("ticket-datastore")),
       );
       const [stored] = await client.runQuery(
         client.createQuery("spine_agent_history").filter("scope_digest", "=", digest),
@@ -138,7 +205,14 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
   it("rolls back a captured audit group when its later row conflicts", async () => {
     const client = new Datastore({ projectId: `spine-agent-batch-${randomUUID()}` });
     const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
-    const input = { ...scope, stateType: `${scope.stateType}.batch.${randomUUID()}` };
+    const variant = randomUUID();
+    const input = {
+      ...scope,
+      agent: (id: string) => {
+        const agent = scope.agent(id);
+        return { ...agent, stateTypeUrl: `${agent.stateTypeUrl}.batch.${variant}` };
+      },
+    };
     const history = AgentHistoryStorageFactories.create(factory, input);
     const first = event("batch-first", occurredAt(1_789_200_001n), false);
     const original = conversation("batch-conflict", "dialog", occurredAt(1_789_200_002n));
@@ -234,14 +308,14 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
     const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
     const history = AgentHistoryStorageFactories.create(factory, scope);
     const entry = event("collision", occurredAt(8n), false);
-    const wrong = AgentHistoryRecords.record(scope.stateType, "different-ticket", entry);
-    const requested = AgentHistoryHash.value(AgentHistoryRecords.scope(scope.stateType, "ticket"));
+    const wrong = AgentHistoryRecords.capture(scope.agent("different-ticket"), entry);
+    const requested = AgentHistoryHash.value(AgentHistoryRecords.scope(scope.agent("ticket")));
     const order = AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry));
     try {
       await client.save({
         key: client.key(["spine_agent_history", randomUUID()]),
         data: {
-          bytes: Buffer.from(toBinary(AgentHistoryRecordSchema, wrong)),
+          bytes: Buffer.from(toBinary(AgentHistoryEntrySchema, wrong)),
           scope_digest: requested,
           order_key: order,
           category: "domain",
@@ -250,7 +324,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
       });
       await expect(
         history.read({ entityId: "ticket", view: { kind: "full" }, count: 1, maxBytes: 10000 }),
-      ).rejects.toThrow("scope digest collides");
+      ).rejects.toThrow("identity conflict");
     } finally {
       history.close();
       await factory.close();
@@ -262,14 +336,14 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
     const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
     const history = AgentHistoryStorageFactories.create(factory, scope);
     const entry = conversation("collision", "other-conversation", occurredAt(8n));
-    const record = AgentHistoryRecords.record(scope.stateType, "ticket", entry);
-    const requested = AgentHistoryHash.value(AgentHistoryRecords.scope(scope.stateType, "ticket"));
+    const record = AgentHistoryRecords.capture(scope.agent("ticket"), entry);
+    const requested = AgentHistoryHash.value(AgentHistoryRecords.scope(scope.agent("ticket")));
     const order = AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry));
     try {
       await client.save({
         key: client.key(["spine_agent_history", randomUUID()]),
         data: {
-          bytes: Buffer.from(toBinary(AgentHistoryRecordSchema, record)),
+          bytes: Buffer.from(toBinary(AgentHistoryEntrySchema, record)),
           scope_digest: requested,
           conversation_digest: AgentHistoryHash.value("requested-conversation"),
           order_key: order,

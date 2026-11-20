@@ -29,6 +29,8 @@ import {
 } from "../../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 import { EntityCommitStorageFactories } from "../../src/internal/entity-commit.js";
 import { AgentHistoryStorageFactories } from "../../src/internal/agent-history.js";
+import { AgentHistoryRecords } from "../../src/entity/agent-history-record-spec.js";
+import { AgentAttributes } from "../../src/internal/agent-attributes.js";
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
 import { InMemoryStorageBackend } from "../../src/memory/in-memory-storage-backend.js";
 import {
@@ -170,8 +172,7 @@ describe("live Agent conditional persistence", () => {
     const commits = EntityCommitStorageFactories.create(factory, layout);
     const history = AgentHistoryStorageFactories.create(factory, {
       context: layout.context,
-      stateType: layout.stateSchema.typeName,
-      id: { key: (id: ReturnType<typeof createAgentId>) => id.ticketNumber },
+      agent: (id: ReturnType<typeof createAgentId>) => AgentAttributes.id(layout, id),
     });
     const entityId = createAgentId();
     const first = conversation(
@@ -202,7 +203,9 @@ describe("live Agent conditional persistence", () => {
         historyEntries: [first],
       });
       const page = await history.read({ entityId, view: { kind: "full" }, count: 10 });
-      expect(page.entries).toEqual([first]);
+      expect(page.entries).toEqual([
+        AgentHistoryRecords.capture(AgentAttributes.id(layout, entityId), first),
+      ]);
       await expect(
         commits.commitAgent({
           entityId,
@@ -213,7 +216,7 @@ describe("live Agent conditional persistence", () => {
         }),
       ).rejects.toThrow(/Version/i);
       expect((await history.read({ entityId, view: { kind: "full" }, count: 10 })).entries).toEqual(
-        [first],
+        [AgentHistoryRecords.capture(AgentAttributes.id(layout, entityId), first)],
       );
     } finally {
       history.close();
@@ -235,8 +238,7 @@ describe("live Agent conditional persistence", () => {
     >;
     const history = AgentHistoryStorageFactories.create(firstFactory, {
       context: layout.context,
-      stateType: layout.stateSchema.typeName,
-      id: { key: (id: ReturnType<typeof createAgentId>) => id.ticketNumber },
+      agent: (id: ReturnType<typeof createAgentId>) => AgentAttributes.id(layout, id),
     });
     const entityId = createAgentId();
     const selection = [
@@ -295,7 +297,7 @@ describe("live Agent conditional persistence", () => {
       expect(await states.current.read(entityId)).toEqual(v1);
       expect(await states.states.backward(entityId, 10)).toEqual([v1]);
       expect((await history.read({ entityId, view: { kind: "full" }, count: 10 })).entries).toEqual(
-        [firstAudit],
+        [AgentHistoryRecords.capture(AgentAttributes.id(layout, entityId), firstAudit)],
       );
       expect(
         await first.readAgentCurrent(entityId).then((data) => data.attributes?.modelPreferences),
@@ -311,7 +313,9 @@ describe("live Agent conditional persistence", () => {
       expect(await states.current.read(entityId)).toEqual(v2);
       expect(await states.states.backward(entityId, 10)).toEqual([v2, v1]);
       expect((await history.read({ entityId, view: { kind: "full" }, count: 10 })).entries).toEqual(
-        [secondAudit, firstAudit],
+        [secondAudit, firstAudit].map((entry) =>
+          AgentHistoryRecords.capture(AgentAttributes.id(layout, entityId), entry),
+        ),
       );
       expect(
         await first.readAgentCurrent(entityId).then((data) => data.attributes?.modelPreferences),

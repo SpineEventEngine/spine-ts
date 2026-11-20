@@ -583,7 +583,6 @@ export class PostgresStorageFactory extends StorageFactory {
   ): Promise<void> {
     return this.admitPublic(async () => {
       TenantBoundary.of(input.context);
-      if (input.stateType.trim().length === 0) throw new TypeError("Agent state type is required.");
       const spec = AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value));
       await this.prepareRecordAdmitted(input.context, spec, AgentHistoryRecords.group, mode);
       await this.prepareAudit(input.context, spec, mode);

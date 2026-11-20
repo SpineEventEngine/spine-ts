@@ -54,6 +54,7 @@ import { TenantRecords } from "../../src/memory/tenant-records.js";
 import { RecordStorage } from "../../src/record/record-storage.js";
 import { RecordSpec } from "../../src/record/record-spec.js";
 import { StorageFactory } from "../../src/storage/storage-factory.js";
+import { scope as historyScope } from "./agent-history-fixtures.js";
 
 describe("MemoryEntityCommitStorage", () => {
   it("does not bind Agent-only families for an ordinary Entity commit", async () => {
@@ -83,8 +84,7 @@ describe("MemoryEntityCommitStorage", () => {
     const input = entityInput(true);
     const agent = {
       context: input.context,
-      stateType: TaskSchema.typeName,
-      id: { key: (id: string) => id },
+      agent: historyScope.agent,
     };
     const admitted = [
       preparation.prepareRecord(input.context, input.recordSpec, undefined, "check"),
@@ -118,7 +118,7 @@ describe("MemoryEntityCommitStorage", () => {
   it("validates Agent audit tenancy before registering a preparation", async () => {
     const factory = new InMemoryStorageFactory();
     const preparation = StoragePreparations.for(factory);
-    const audit = { stateType: TaskSchema.typeName, id: { key: (id: string) => id } };
+    const audit = { agent: historyScope.agent };
     await expect(
       preparation.prepareAgentHistory(
         { ...audit, context: { name: "Tasks", multitenant: true } as never },
@@ -159,21 +159,10 @@ describe("MemoryEntityCommitStorage", () => {
       const preparation = StoragePreparations.for(factory);
       await preparation.prepareEntity(input, "check");
       await preparation.prepareEntity(input, "create");
-      await expect(
-        preparation.prepareAgentHistory(
-          {
-            context: input.context,
-            stateType: " ",
-            id: { key: (id: string) => id },
-          },
-          "check",
-        ),
-      ).rejects.toThrow(/state type/);
       await preparation.prepareAgentHistory(
         {
           context: input.context,
-          stateType: TaskSchema.typeName,
-          id: { key: (id: string) => id },
+          agent: historyScope.agent,
         },
         "check",
       );

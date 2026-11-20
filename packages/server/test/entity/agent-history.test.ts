@@ -14,7 +14,7 @@
 
 import { clone, create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyPacker, SignalEnvelopes } from "@spine-event-engine/core";
+import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -34,6 +34,7 @@ import { EntityTypeNameSchema } from "@spine-event-engine/proto/generated/spine/
 import {
   AgentHistoryCursorSchema,
   AgentHistoryEntrySchema,
+  AgentIdSchema,
   AiContentDigestSchema,
   AiOperationIdSchema,
   ConversationIdSchema,
@@ -279,8 +280,11 @@ describe("Agent history binding", () => {
     const factory = new InMemoryStorageFactory();
     const storage = AgentHistoryStorageFactories.create(factory, {
       context: { name: "Support", multitenant: false },
-      stateType: SupportReplyAgentStateSchema.typeName,
-      id: { key: (id: SupportReplyAgentId) => id.ticketNumber },
+      agent: (id: SupportReplyAgentId) =>
+        create(AgentIdSchema, {
+          stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          entityId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
+        }),
     });
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
     const agent = new ReadingAgent({
@@ -523,8 +527,11 @@ describe("Agent history binding", () => {
     const factory = new InMemoryStorageFactory();
     const storage = AgentHistoryStorageFactories.create(factory, {
       context: { name: "Support", multitenant: false },
-      stateType: SupportReplyAgentStateSchema.typeName,
-      id: { key: (id: SupportReplyAgentId) => id.ticketNumber },
+      agent: (id: SupportReplyAgentId) =>
+        create(AgentIdSchema, {
+          stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          entityId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
+        }),
     });
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-ties" });
     const agent = new ReadingAgent({
@@ -628,8 +635,11 @@ describe("Agent history binding", () => {
     const factory = new InMemoryStorageFactory();
     const storage = AgentHistoryStorageFactories.create(factory, {
       context: { name: "Support", multitenant: false },
-      stateType: SupportReplyAgentStateSchema.typeName,
-      id: { key: (value: SupportReplyAgentId) => value.ticketNumber },
+      agent: (value: SupportReplyAgentId) =>
+        create(AgentIdSchema, {
+          stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          entityId: AnyPacker.pack(SupportReplyAgentIdSchema, value),
+        }),
     });
     expect(() => AgentHistoryReads.appendSystem(agent, create(EventSchema))).toThrow(
       "Agent history is available only from repository execution.",

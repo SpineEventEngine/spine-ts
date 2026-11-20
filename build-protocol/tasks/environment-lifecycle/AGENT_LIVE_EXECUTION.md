@@ -296,8 +296,8 @@ within the batch and against storage. Commit the entire group and its indexes or
 none, using native SQL/Datastore transactions or the shared memory history queue.
 Preserve native size limits, complete typed identity, ordering, pagination and
 handle close/drain behavior. Move only surviving history capacity fields from the
-removed execution capability. Preflight uses the full encoded AgentHistoryRecord,
-including scope, key and envelope, without replacement execution-sizing schemas.
+removed execution capability. Preflight uses the full encoded AgentHistoryEntry,
+including its typed Agent identity, without replacement execution-sizing schemas.
 
 Create one original System Event, save it with the related conversation rows,
 then publish that same Event. Publication is outside the history transaction;

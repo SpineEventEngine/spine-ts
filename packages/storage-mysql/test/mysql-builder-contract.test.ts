@@ -32,11 +32,11 @@ import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
 // prettier-ignore
 import {
-  AgentAttributesRecordSchema,
-} from "@spine-event-engine/proto/generated/spine/server/agent/attributes_record_pb.js";
+  ActiveAgentRecordSchema,
+} from "@spine-event-engine/proto/generated/spine/server/agent/active_agent_record_pb.js";
 import {
   AgentHistoryStorageFactories,
   AgentHistoryRecords,
@@ -171,7 +171,7 @@ describe("MysqlStorageFactory builder contract", () => {
     const preparation = StoragePreparations.for(factory);
     try {
       await expect(preparation.prepareAgentCommit(layout, "check")).rejects.toMatchObject({
-        cause: { message: "MySQL table agent_history_AgentHistoryRecord lacks state_type." },
+        cause: { message: "MySQL table agent_history_AgentHistoryEntry lacks agent_key." },
       });
       const auditColumns = () =>
         query.mock.calls.filter(
@@ -568,10 +568,12 @@ describe("MysqlStorageFactory builder contract", () => {
       expect(preferenceBytes).toBeInstanceOf(Uint8Array);
       if (!(auditBytes instanceof Uint8Array) || !(preferenceBytes instanceof Uint8Array))
         throw new Error("The retry did not persist both Agent records.");
-      expect(fromBinary(AgentHistoryRecordSchema, auditBytes).entry).toEqual(
-        input.historyEntries[0],
+      const historyEntry = input.historyEntries[0];
+      if (historyEntry === undefined) throw new Error("Expected the Agent history fixture.");
+      expect(fromBinary(AgentHistoryEntrySchema, auditBytes)).toEqual(
+        AgentHistoryRecords.capture(AgentAttributes.id(layout, id), historyEntry),
       );
-      expect(fromBinary(AgentAttributesRecordSchema, preferenceBytes).agent?.stateTypeUrl).toBe(
+      expect(fromBinary(ActiveAgentRecordSchema, preferenceBytes).agent?.stateTypeUrl).toBe(
         AgentAttributes.id(layout, id).stateTypeUrl,
       );
       const before = new Map(rows);

@@ -686,7 +686,6 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   ): Promise<void> {
     return this.admit(() => {
       TenantBoundary.of(input.context);
-      if (!input.stateType.trim()) throw new TypeError("Agent state type is required.");
       const spec = AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value));
       return this.prepareNative(
         input.context,

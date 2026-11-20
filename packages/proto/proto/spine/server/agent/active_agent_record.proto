@@ -24,8 +24,8 @@ import "spine/options.proto";
 option (SPI_all) = true;
 option (type_url_prefix) = "type.spine.io";
 
-// Framework-maintained attributes for one Agent instance.
-message AgentAttributesRecord {
+// Framework-maintained attributes for one active Agent instance.
+message ActiveAgentRecord {
   // Complete typed identity of this Agent.
   spine.agent.AgentId agent = 1 [
     (required) = true,

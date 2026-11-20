@@ -16,6 +16,7 @@ import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   AgentHistoryEntrySchema,
+  AgentIdSchema,
   AiModelKind,
   GenerationResponseSchema,
   ModelPreferenceSchema,
@@ -26,10 +27,12 @@ import {
   Identifiers,
   StringifierRegistry,
   TypeRegistry,
+  TypeUrls,
 } from "@spine-event-engine/core";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import {
+  AgentAttributes,
   AgentHistoryRecords,
   AgentHistoryStorageFactories,
   EntityCommitStorageFactories,
@@ -222,7 +225,7 @@ describe("Datastore generated Entity records", () => {
       GenerationResponseSchema,
       create(GenerationResponseSchema, { ...original, rawOutput: "x".repeat(1_000_000) }),
     );
-    expect(AgentHistoryRecords.bytes(agentScope.stateType, "ticket", oversized)).toBeGreaterThan(
+    expect(AgentHistoryRecords.bytes(agentScope.agent("ticket"), oversized)).toBeGreaterThan(
       1_000_000,
     );
     const before = client.transactionCalls;
@@ -240,9 +243,18 @@ describe("Datastore generated Entity records", () => {
         count: 3,
         maxBytes: 100_000,
       });
+      const expectedAgent = agentScope.agent("ticket");
+      expect(page.entries.map((entry) => entry.agent)).toEqual([expectedAgent, expectedAgent]);
       expect(page.entries.map((entry) => toBinary(AgentHistoryEntrySchema, entry))).toEqual(
-        [normal, small].map((entry) => toBinary(AgentHistoryEntrySchema, entry)),
+        [normal, small].map((entry) =>
+          toBinary(
+            AgentHistoryEntrySchema,
+            create(AgentHistoryEntrySchema, { ...entry, agent: expectedAgent }),
+          ),
+        ),
       );
+      expect(normal.agent).toBeUndefined();
+      expect(small.agent).toBeUndefined();
     } finally {
       history.close();
       await store.close();
@@ -259,7 +271,11 @@ describe("Datastore generated Entity records", () => {
     ];
     const bytes = (entry: (typeof entries)[number]) =>
       Buffer.from(toBinary(AgentHistoryEntrySchema, entry)).toString("hex");
-    const expected = entries.map(bytes).sort();
+    const expectedAgent = agentScope.agent("ticket");
+    const expected = entries
+      .map((entry) => bytes(create(AgentHistoryEntrySchema, { ...entry, agent: expectedAgent })))
+      .sort();
+    const original = entries.map(bytes).sort();
     try {
       backend.failCommitAppliedOnce = true;
       await expect(history.appendAll("ticket", entries)).rejects.toThrow(
@@ -273,8 +289,9 @@ describe("Datastore generated Entity records", () => {
         maxBytes: 100_000,
       });
       expect(page.hasMore).toBe(false);
+      expect(page.entries.map((entry) => entry.agent)).toEqual([expectedAgent, expectedAgent]);
       expect(page.entries.map(bytes).sort()).toEqual(expected);
-      expect(entries.map(bytes).sort()).toEqual(expected);
+      expect(entries.map(bytes).sort()).toEqual(original);
       expect(backend.entities.size).toBe(2);
     } finally {
       history.close();
@@ -468,15 +485,23 @@ describe("Datastore generated Entity records", () => {
       const current = provider.createRecordStorage(layout.context, layout.recordSpec);
       const history = AgentHistoryStorageFactories.create(provider, {
         context: layout.context,
-        stateType: layout.stateSchema.typeName,
-        id: { key: (value: typeof id) => value.ticketNumber },
+        agent: (value: typeof id) => AgentAttributes.id(layout, value),
       });
       try {
         await expect(current.read(id)).resolves.toEqual(next);
         const page = await history.read({ entityId: id, view: { kind: "full" }, count: 10 });
+        const expectedAgent = create(AgentIdSchema, {
+          stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          entityId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
+        });
+        expect(page.entries.map((entry) => entry.agent)).toEqual([expectedAgent]);
         expect(page.entries.map((entry) => toBinary(AgentHistoryEntrySchema, entry))).toEqual([
-          toBinary(AgentHistoryEntrySchema, historyEntry),
+          toBinary(
+            AgentHistoryEntrySchema,
+            create(AgentHistoryEntrySchema, { ...historyEntry, agent: expectedAgent }),
+          ),
         ]);
+        expect(historyEntry.agent).toBeUndefined();
         const nextHistory = conversation(
           "atomic-audit-next",
           "support",
@@ -524,9 +549,16 @@ describe("Datastore generated Entity records", () => {
         });
         await expect(current.read(id)).resolves.toEqual(nextState);
         const updated = await history.read({ entityId: id, view: { kind: "full" }, count: 10 });
+        expect(updated.entries.map((entry) => entry.agent)).toEqual([expectedAgent, expectedAgent]);
         expect(updated.entries.map((entry) => toBinary(AgentHistoryEntrySchema, entry))).toEqual(
-          [nextHistory, historyEntry].map((entry) => toBinary(AgentHistoryEntrySchema, entry)),
+          [nextHistory, historyEntry].map((entry) =>
+            toBinary(
+              AgentHistoryEntrySchema,
+              create(AgentHistoryEntrySchema, { ...entry, agent: expectedAgent }),
+            ),
+          ),
         );
+        expect(nextHistory.agent).toBeUndefined();
       } finally {
         current.close();
         history.close();
@@ -551,8 +583,7 @@ describe("Datastore generated Entity records", () => {
     const current = provider.createRecordStorage(layout.context, layout.recordSpec);
     const history = AgentHistoryStorageFactories.create(provider, {
       context: layout.context,
-      stateType: layout.stateSchema.typeName,
-      id: { key: (value: SupportReplyAgentId) => value.ticketNumber },
+      agent: (value: SupportReplyAgentId) => AgentAttributes.id(layout, value),
     });
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-no-state" });
     const preference = create(ModelPreferenceSchema, {
@@ -567,6 +598,11 @@ describe("Datastore generated Entity records", () => {
     const entry = conversation("audit-no-state", "support", time);
     const conflicting = conversation("audit-no-state", "other-conversation", time);
     const bytes = (value: typeof entry) => toBinary(AgentHistoryEntrySchema, value);
+    const expectedAgent = create(AgentIdSchema, {
+      stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+      entityId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
+    });
+    const expectedEntry = create(AgentHistoryEntrySchema, { ...entry, agent: expectedAgent });
     const first = {
       entityId: id,
       expectedVersion: 0,
@@ -581,13 +617,16 @@ describe("Datastore generated Entity records", () => {
       await expect(
         commits.readAgentCurrent(id).then((data) => data.attributes?.modelPreferences),
       ).resolves.toEqual([preference]);
-      expect((await readHistory()).entries.map(bytes)).toEqual([bytes(entry)]);
+      const firstHistory = await readHistory();
+      expect(firstHistory.entries.map((value) => value.agent)).toEqual([expectedAgent]);
+      expect(firstHistory.entries.map(bytes)).toEqual([bytes(expectedEntry)]);
+      expect(entry.agent).toBeUndefined();
 
       await commits.commitAgent({
         ...first,
         expectedAttributes: agentAttributes(id, [preference]),
       });
-      expect((await readHistory()).entries.map(bytes)).toEqual([bytes(entry)]);
+      expect((await readHistory()).entries.map(bytes)).toEqual([bytes(expectedEntry)]);
       expect(backend.entities.size).toBe(2);
 
       const rollbacks = backend.rollbacks;
@@ -603,7 +642,7 @@ describe("Datastore generated Entity records", () => {
       await expect(
         commits.readAgentCurrent(id).then((data) => data.attributes?.modelPreferences),
       ).resolves.toEqual([preference]);
-      expect((await readHistory()).entries.map(bytes)).toEqual([bytes(entry)]);
+      expect((await readHistory()).entries.map(bytes)).toEqual([bytes(expectedEntry)]);
       await expect(current.read(id)).resolves.toBeUndefined();
       expect(backend.entities.size).toBe(2);
     } finally {

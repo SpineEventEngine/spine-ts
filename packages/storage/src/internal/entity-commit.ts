@@ -18,8 +18,8 @@ import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 // prettier-ignore
 import type {
-  AgentAttributesRecord,
-} from "@spine-event-engine/proto/generated/spine/server/agent/attributes_record_pb.js";
+  ActiveAgentRecord,
+} from "@spine-event-engine/proto/generated/spine/server/agent/active_agent_record_pb.js";
 
 import type { EntityRecord } from "../entity/entity-record.js";
 import type { StorageContext } from "../storage/storage.js";
@@ -98,12 +98,12 @@ export interface AgentCommitInput<I, S extends Message> {
   /**
    * Absent record or complete attributes observed when the live turn began.
    */
-  readonly expectedAttributes: AgentAttributesRecord | undefined;
+  readonly expectedAttributes: ActiveAgentRecord | undefined;
 
   /**
    * Complete attributes replacing the observed image.
    */
-  readonly attributes: AgentAttributesRecord;
+  readonly attributes: ActiveAgentRecord;
 
   /**
    * Optional changed current Entity and state-history mutation.
@@ -128,7 +128,7 @@ export interface AgentCurrentData {
   /**
    * Saved framework attributes, when one exists.
    */
-  readonly attributes: AgentAttributesRecord | undefined;
+  readonly attributes: ActiveAgentRecord | undefined;
 }
 
 /**

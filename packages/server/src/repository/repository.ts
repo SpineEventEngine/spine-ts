@@ -99,8 +99,8 @@ import {
 } from "@spine-event-engine/storage/provider";
 // prettier-ignore
 import type {
-  AgentAttributesRecord,
-} from "@spine-event-engine/proto/generated/spine/server/agent/attributes_record_pb.js";
+  ActiveAgentRecord,
+} from "@spine-event-engine/proto/generated/spine/server/agent/active_agent_record_pb.js";
 import {
   AgentHistoryStorageFactories,
   type AgentHistoryOrderKey,
@@ -2089,7 +2089,7 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     }
     await preparation.prepareAgentCommit(input, mode);
     await preparation.prepareAgentHistory(
-      { context, stateType: input.sourceType.typeName, id: { key: input.id.key } },
+      { context, agent: (id) => AgentAttributes.id(input, id) },
       mode,
     );
   },
@@ -5109,7 +5109,7 @@ class AgentLiveRunner {
    */
   private async runSelected(
     loaded: LoadedRepositoryEntity,
-    expected: AgentAttributesRecord | undefined,
+    expected: ActiveAgentRecord | undefined,
     preferences: ModelPreference[],
     audit: AgentLiveAudit<unknown>,
     selected: ReadonlyMap<AiModelKind, AgentLiveModel>,
@@ -5146,7 +5146,7 @@ class AgentLiveRunner {
    */
   private createCommands(
     loaded: LoadedRepositoryEntity,
-    expected: AgentAttributesRecord | undefined,
+    expected: ActiveAgentRecord | undefined,
     selected: ReadonlyMap<AiModelKind, AgentLiveModel>,
   ): ModelCommandSession {
     return new ModelCommandSession({
@@ -5167,7 +5167,7 @@ class AgentLiveRunner {
    */
   private async load(): Promise<{
     readonly loaded: LoadedRepositoryEntity;
-    readonly attributes: AgentAttributesRecord | undefined;
+    readonly attributes: ActiveAgentRecord | undefined;
   }> {
     const { storageInput, storage, current, attributes } = await this.openCurrent();
     const stored = current && EntityRecords.unpack(this.repository.stateSchema, current);
@@ -5352,7 +5352,6 @@ class AgentLiveRunner {
       this.invocation,
       this.repository.stateSchema,
       this.entityId,
-      loaded.storageInput.id.key(this.entityId),
       history,
       this.runtime.signalMetadata,
       this.runtime.registerSystemEventSchema,
@@ -5642,7 +5641,7 @@ class AgentLiveRunner {
    */
   private async complete(
     loaded: LoadedRepositoryEntity,
-    expected: AgentAttributesRecord | undefined,
+    expected: ActiveAgentRecord | undefined,
     preferences: readonly ModelPreference[],
     produced: AgentLiveResult,
     commands: ModelCommandSession,
@@ -5714,10 +5713,7 @@ class AgentLiveRunner {
    * @param commands Handler-bound model Command operations.
    * @returns Abandoned call IDs and corresponding immutable history.
    */
-  private abandonedCalls(
-    expected: AgentAttributesRecord | undefined,
-    commands: ModelCommandSession,
-  ) {
+  private abandonedCalls(expected: ActiveAgentRecord | undefined, commands: ModelCommandSession) {
     const ids = commands.abandoned();
     const history = ids.map((id) => {
       const call = expected?.pendingModelCalls.find((candidate) => candidate.id?.value === id);
@@ -5810,7 +5806,7 @@ class AgentLiveRunner {
    */
   private async commit(
     loaded: LoadedRepositoryEntity,
-    expected: AgentAttributesRecord | undefined,
+    expected: ActiveAgentRecord | undefined,
     preferences: readonly ModelPreference[],
     pending: readonly ModelCall[],
     history: readonly AgentHistoryEntry[],
@@ -6496,7 +6492,6 @@ export class AgentModelCommandHandler extends AsyncCommandHandler {
       source,
       admitted.repository.stateSchema,
       admitted.entityId,
-      input.id.key(admitted.entityId),
       RepositoryStorage.openRepositoryAgentHistory(
         admitted.repository,
         runtime.storageFactory,
@@ -11467,8 +11462,7 @@ const RepositoryStorage = {
     if (existing !== undefined) return existing;
     const history = AgentHistoryStorageFactories.create(factory, {
       context: input.context,
-      stateType: input.sourceType.typeName,
-      id: { key: input.id.key },
+      agent: (id: I) => AgentAttributes.id(input, id),
     });
     bucket.set(key, history);
     lifetime.ports.add(history);

@@ -51,8 +51,7 @@
     "spine/net/email_address.proto",
     "spine/net/internet_domain.proto",
     "spine/options.proto",
-    "spine/server/agent/attributes_record.proto",
-    "spine/server/agent/history_record.proto",
+    "spine/server/agent/active_agent_record.proto",
     "spine/server/catchup/catch_up.proto",
     "spine/server/delivery/delivery.proto",
     "spine/server/delivery/delivery_events.proto",
@@ -120,8 +119,7 @@
     "spine/net/email_address.proto": "generated/spine/net/email_address_pb.js",
     "spine/net/internet_domain.proto": "generated/spine/net/internet_domain_pb.js",
     "spine/options.proto": "generated/spine/options_pb.js",
-    "spine/server/agent/attributes_record.proto": "generated/spine/server/agent/attributes_record_pb.js",
-    "spine/server/agent/history_record.proto": "generated/spine/server/agent/history_record_pb.js",
+    "spine/server/agent/active_agent_record.proto": "generated/spine/server/agent/active_agent_record_pb.js",
     "spine/server/catchup/catch_up.proto": "generated/spine/server/catchup/catch_up_pb.js",
     "spine/server/delivery/delivery.proto": "generated/spine/server/delivery/delivery_pb.js",
     "spine/server/delivery/delivery_events.proto": "generated/spine/server/delivery/delivery_events_pb.js",
@@ -142,5 +140,5 @@
   },
   "dependencies": [],
   "moduleExport": "spineProtoModule",
-  "generationId": "5ed483fe-5f80-40c0-99a7-bbaa661a1ca4"
+  "generationId": "0a0a0f9d-131d-496f-a15c-61508fcfb5cc"
 }

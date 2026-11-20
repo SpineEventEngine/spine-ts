@@ -444,7 +444,7 @@
     },
     {
       "localPath": "packages/proto/proto/spine/agent/history.proto",
-      "sha256": "3f7317196aadcac48b084b31ea6989d6ab6c01b9438a2030fa3fa4e502f029ad"
+      "sha256": "8ed35c8e90bb8dafd25a8510ccb9e530b44009fb95cdfddfc68b9571f699cd5c"
     },
     {
       "localPath": "packages/proto/proto/spine/agent/interaction_events.proto",
@@ -499,12 +499,8 @@
       "sha256": "7c300d215a1757c17b7bd1a89cebb4825df28a58fcc119f2aa6d5535d7520073"
     },
     {
-      "localPath": "packages/proto/proto/spine/server/agent/attributes_record.proto",
-      "sha256": "b66a60c472e9e02eec00422f32e08ebb3221c3523bbc36b9e40900f66ad0f7a4"
-    },
-    {
-      "localPath": "packages/proto/proto/spine/server/agent/history_record.proto",
-      "sha256": "98c927c08234e2f0510ce59ba80d3f3646700ffedf31fd140b437aae1e49cbff"
+      "localPath": "packages/proto/proto/spine/server/agent/active_agent_record.proto",
+      "sha256": "d53b80992a8ca966e2984f468721d1bf999bdf34d55339ca2a91ba2d5484e8fc"
     },
     {
       "localPath": "packages/proto/proto/spine/server/tenant/tenant.proto",

@@ -14,10 +14,7 @@
 
 import { clone, create } from "@bufbuild/protobuf";
 import { ConversationIdSchema } from "@spine-event-engine/proto/agent";
-import {
-  AgentHistoryRecordSchema,
-  type AgentHistoryRecord,
-} from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+import { AgentHistoryEntrySchema, type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import { AgentHistoryKeys, AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 import { describe, expect, it, vi } from "vitest";
 
@@ -29,17 +26,19 @@ import {
 } from "../../storage/test/entity/agent-history-fixtures.js";
 import { AgentHistoryHash, DatastoreAgentHistory } from "../src/datastore/agent-history.js";
 
-function entry(record: AgentHistoryRecord) {
-  if (record.entry === undefined) throw new Error("Stored history entry is required.");
-  return record.entry;
+/**
+ * Expected stored entry includes the identity supplied by the repository.
+ */
+function saved(entry: AgentHistoryEntry): AgentHistoryEntry {
+  return create(AgentHistoryEntrySchema, { ...entry, agent: scope.agent("ticket-a") });
 }
 
 describe("Datastore Agent history provider boundary", () => {
   it("returns scoped original entries through ordered native views and immutable append", async () => {
-    const stored = new Map<string, AgentHistoryRecord>();
-    const compareAndSet = vi.fn((id: string, _expected: undefined, record: AgentHistoryRecord) => {
+    const stored = new Map<string, AgentHistoryEntry>();
+    const compareAndSet = vi.fn((id: string, _expected: undefined, record: AgentHistoryEntry) => {
       if (stored.has(id)) return Promise.resolve(false);
-      stored.set(id, clone(AgentHistoryRecordSchema, record));
+      stored.set(id, clone(AgentHistoryEntrySchema, record));
       return Promise.resolve(true);
     });
     const queryProviderPage = vi.fn(
@@ -50,16 +49,12 @@ describe("Datastore Agent history provider boundary", () => {
       }) => {
         const match = (name: string) => request.filters.find((filter) => filter.property === name);
         const selected = [...stored.values()].filter((record) => {
-          const entry = record.entry;
-          if (entry === undefined) return false;
+          const entry = record;
           const key = AgentHistoryKeys.fromEntry(entry);
           if (
             match("scope_digest")?.value !==
             AgentHistoryHash.value(
-              AgentHistoryRecords.scope(
-                record.scope?.stateType ?? "",
-                record.scope?.agentKey ?? "",
-              ),
+              AgentHistoryRecords.scope(AgentHistoryRecords.requiredAgent(record)),
             )
           )
             return false;
@@ -76,13 +71,13 @@ describe("Datastore Agent history provider boundary", () => {
           return true;
         });
         selected.sort((a, b) =>
-          AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry(a))).localeCompare(
-            AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry(b))),
+          AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(a)).localeCompare(
+            AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(b)),
           ),
         );
         return Promise.resolve({
           entries: selected.slice(0, request.limit).map((record) => ({
-            record: clone(AgentHistoryRecordSchema, record),
+            record: clone(AgentHistoryEntrySchema, record),
           })),
           hasMore: selected.length > request.limit,
         });
@@ -111,7 +106,7 @@ describe("Datastore Agent history provider boundary", () => {
         count: 1,
         maxBytes: 10_000,
       });
-      expect(page.entries).toEqual([first]);
+      expect(page.entries).toEqual([saved(first)]);
       expect(page.hasMore).toBe(true);
       const later = await history.read({
         entityId: "ticket-a",
@@ -120,7 +115,7 @@ describe("Datastore Agent history provider boundary", () => {
         count: 2,
         maxBytes: 10_000,
       });
-      expect(later.entries).toEqual([system, domain]);
+      expect(later.entries).toEqual([saved(system), saved(domain)]);
       expect(later.hasMore).toBe(false);
       expect(
         (
@@ -131,7 +126,7 @@ describe("Datastore Agent history provider boundary", () => {
             maxBytes: 10_000,
           })
         ).entries,
-      ).toEqual([system]);
+      ).toEqual([saved(system)]);
       expect(
         (
           await history.read({
@@ -144,7 +139,7 @@ describe("Datastore Agent history provider boundary", () => {
             maxBytes: 10_000,
           })
         ).entries,
-      ).toEqual([first]);
+      ).toEqual([saved(first)]);
       expect(
         (
           await history.read({
@@ -192,10 +187,9 @@ describe("Datastore Agent history provider boundary", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
-  it("rejects a native result with a different original repository scope", async () => {
-    const wrong = AgentHistoryRecords.record(
-      scope.stateType,
-      "other-ticket",
+  it("rejects a native result with a different Agent identity", async () => {
+    const wrong = AgentHistoryRecords.capture(
+      scope.agent("other-ticket"),
       event("mis-scoped", occurredAt(9n), false),
     );
     const queryProviderPage = vi.fn(() =>
@@ -207,14 +201,13 @@ describe("Datastore Agent history provider boundary", () => {
     } as never);
     await expect(
       history.read({ entityId: "ticket-a", view: { kind: "full" }, count: 1, maxBytes: 10_000 }),
-    ).rejects.toThrow(/scope digest collides/i);
+    ).rejects.toThrow(/identity conflict/i);
     history.close();
   });
 
   it("rejects a native conversation result from a different original conversation", async () => {
-    const wrong = AgentHistoryRecords.record(
-      scope.stateType,
-      "ticket-a",
+    const wrong = AgentHistoryRecords.capture(
+      scope.agent("ticket-a"),
       conversation("conversation-b", "thread-b", occurredAt(9n)),
     );
     const queryProviderPage = vi.fn(() =>

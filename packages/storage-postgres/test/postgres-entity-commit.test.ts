@@ -21,18 +21,19 @@ import {
   TypeRegistry,
 } from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
+import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
 import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 // prettier-ignore
 import {
-  AgentAttributesRecordSchema,
-} from "@spine-event-engine/proto/generated/spine/server/agent/attributes_record_pb.js";
+  ActiveAgentRecordSchema,
+} from "@spine-event-engine/proto/generated/spine/server/agent/active_agent_record_pb.js";
 import { RecordSpec } from "@spine-event-engine/storage";
 import {
   AgentAttributes,
+  AgentHistoryRecords,
   EntityCommitStorageFactories,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
@@ -273,11 +274,14 @@ describe("PostgreSQL Entity commit", () => {
       const preferenceBytes = writes[1]?.[1]?.[1];
       if (!(auditBytes instanceof Uint8Array) || !(preferenceBytes instanceof Uint8Array))
         throw new Error("Final Agent transaction must persist audit and preference rows.");
-      const audit = fromBinary(AgentHistoryRecordSchema, auditBytes);
-      const preferences = fromBinary(AgentAttributesRecordSchema, preferenceBytes);
-      expect(audit.scope?.stateType).toBe(layout.stateSchema.typeName);
-      expect(audit.scope?.agentKey).toBe(id.ticketNumber);
-      expect(audit.entry).toEqual(input.historyEntries[0]);
+      const audit = fromBinary(AgentHistoryEntrySchema, auditBytes);
+      const preferences = fromBinary(ActiveAgentRecordSchema, preferenceBytes);
+      expect(audit.agent).toEqual(AgentAttributes.id(layout, id));
+      const historyEntry = input.historyEntries[0];
+      if (historyEntry === undefined) throw new Error("Expected the Agent history fixture.");
+      expect(audit).toEqual(
+        AgentHistoryRecords.capture(AgentAttributes.id(layout, id), historyEntry),
+      );
       expect(preferences.agent?.stateTypeUrl).toBe(AgentAttributes.id(layout, id).stateTypeUrl);
       expect(preferences.agent?.entityId).toEqual(AnyPacker.pack(SupportReplyAgentIdSchema, id));
       const current = create(EntityRecordSchema, {

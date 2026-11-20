@@ -16,26 +16,12 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   CallModelSchema,
   type AgentHistoryEntry,
+  type AgentId,
   type ConversationId,
 } from "@spine-event-engine/proto/agent";
 import { AnyPacker } from "@spine-event-engine/core";
 
 import type { StorageContext } from "../storage/storage.js";
-
-/**
- * Converts a typed Agent identifier to its canonical storage key.
- *
- * @typeParam Id Typed Agent identifier.
- */
-interface AgentHistoryIdCodec<Id> {
-  /**
-   * Maps one typed Agent identifier to its canonical key.
-   *
-   * @param id Typed Agent identifier.
-   * @returns Canonical key within the repository scope.
-   */
-  readonly key: (id: Id) => string;
-}
 
 /**
  * Identifies one existing record in the Agent history order.
@@ -124,14 +110,11 @@ export interface AgentHistoryStorageInput<Id> {
   readonly context: StorageContext;
 
   /**
-   * Generated Agent state type name.
+   * Creates the complete typed Agent identity from a repository identifier.
+   * @param id Repository identifier.
+   * @returns Complete typed Agent identity.
    */
-  readonly stateType: string;
-
-  /**
-   * Canonical typed Entity ID conversion supplied by the repository.
-   */
-  readonly id: AgentHistoryIdCodec<Id>;
+  readonly agent: (id: Id) => AgentId;
 }
 
 /**
@@ -186,7 +169,7 @@ export interface AgentHistoryPage {
  */
 export interface AgentHistoryCapacity {
   /**
-   * Maximum encoded AgentHistoryRecord bytes, when the provider imposes one.
+   * Maximum encoded AgentHistoryEntry bytes, when the provider imposes one.
    */
   readonly historyRecordBytes?: number;
 

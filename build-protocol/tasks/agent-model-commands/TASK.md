@@ -93,9 +93,9 @@ The no-durable-publication decision is recorded in DECISION_LOG.md under
 - Keep the domain state in the unchanged common EntityRecord. Do not add
   Agent fields to common Entity Protos or require application state fields.
 - Replace AgentModelPreferencesRecord with ActiveAgentRecord containing
-  AgentId, model_preferences, and pending_model_calls. The implementation currently
-  calls this AgentAttributesRecord; the human required the ActiveAgentRecord
-  name on 2026-11-20. The rename remains pending. This replaces existing
+  AgentId, model_preferences, and pending_model_calls. The human required the
+  ActiveAgentRecord name on 2026-11-20, and the bounded naming correction is
+  complete. This replaces existing
   preferences storage rather than adding another current-attributes store.
 - Replace successive current-state/preferences reads with a provider combined
   current-data load. SQL requires one statement/data-read round trip; Datastore
@@ -325,54 +325,70 @@ is not a model mismatch. Subagents may not spawn subagents.
 
 ## Follow-up requirements from PR description review
 
-- Rename `AgentAttributesRecord` to `ActiveAgentRecord`. This is an accepted
-  naming requirement; this recording change does not implement the rename.
+- `ActiveAgentRecord` names the physical current-attributes message and Proto
+  file. Its fields remain unchanged. SQL default table names follow the message
+  name; the provider group remains `spine_agent_attributes`.
+- Correction acceptance: the generated type URL and SQL defaults use
+  `ActiveAgentRecord`, the Proto source is `active_agent_record.proto`, authored
+  TypeScript imports use its generated module, and
+  the active-record fields remain unchanged. A focused
+  schema-name regression checks the physical record type and stable group.
+- Store each `AgentHistoryEntry` directly with required, validated `AgentId agent`
+  field 9. Framework writes supply an absent identity from the typed repository
+  ID and reject a supplied different identity. Reads reject missing or different
+  stored identity. Remove the server-only history wrapper and key messages.
+  Keep append and read signatures and the `AgentHistoryEntry` name. Provider
+  identity, indexes, immutable retry, transactional commits, and byte capacity
+  checks apply to the complete direct entry.
+- Verification profile: focused preflight and relevant tests for this naming
+  correction and direct history storage change, followed by one release profile
+  after review because serialized contracts and storage change across packages.
+- Dispatch profile: the existing implementer role was explicitly dispatched with
+  `gpt-6-sol` and `medium` reasoning. The one architecture pass for the approved
+  material history contract change was explicitly dispatched with `gpt-6-astra`
+  and `high` reasoning. Runtime model self-introspection is unavailable.
+- Review dispositions: fresh TypeScript/API/documentation, style, and provider
+  persistence/reliability reviews used explicit `gpt-6-sol`/`medium` dispatch.
+  Their findings are resolved, with affected concerns re-reviewed cleanly.
+  Final security review used explicit `gpt-6-sol`/`high` dispatch and found no
+  actionable issue in identity checks, tenant isolation, or serialization.
+  Runtime model self-introspection is unavailable. The serialized type
+  identities and derived SQL table names change intentionally.
+- Accepted correction batch: PostgreSQL reference wording now describes the
+  complete typed identity. Datastore preserves unknown fields when writing and
+  reading direct history entries, including immutable retry comparisons;
+  generic record encoding remains unchanged. Coordinated commits write the
+  entries captured at admission without a second per-entry copy. Focused
+  Datastore persistence/retry coverage checks root and nested identity unknown
+  fields. Reliability and maintainability re-review confirmed these corrections.
+- Focused evidence for the direct entry change: production and tooling typechecks,
+  focused memory/storage/server suites, Proto source/style checks, and native
+  Agent history and live commit suites on PostgreSQL, MySQL, MariaDB, and
+  Datastore pass. The four native providers passed 50 live tests in total.
+- Focused preflight passes, including changed-file ESLint, production and tooling
+  types, storage/server behavior, cleanup, formatting, and diff checks. Stored
+  byte comparisons include the typed Agent identity while proving that writes
+  leave the caller's entry unchanged. Combined `pnpm verify:release` passed,
+  including required coverage, package readiness, and Node/JVM compatibility.
 - Oversized individual history records are a separate future task, explicitly
   deferred by the human. See [Oversized Agent history records](../agent-history-large-records/TASK.md).
-- `AgentHistoryRecord` currently stores one `AgentHistoryEntry` in its singular
-  `entry` field. It has no repeated-entry collection. Each complete wrapper is
-  stored as a separate database record. Preserve this distinction in explanations.
+- The direct `AgentHistoryEntry` is the complete stored history record. No
+  internal history wrapper or scope message remains.
 
 ## Current status
 
-Implementation, documentation, and local acceptance are complete on
-`delivery-agent-analysis`. Common workspace version is `2.0.0-snapshot.32`.
-All three fresh no-memory Astra/high reviews are complete, with every relevant
-finding corrected. The third reviewer also confirmed the final output-failure
-fixes and the replacement-specific readiness fixture correction. No unresolved
-human design question remains.
+The Agent model Command implementation and its three fresh no-memory
+Astra/high reviews are complete on `delivery-agent-analysis`. Earlier CI
+coverage corrections are pushed. The approved `ActiveAgentRecord` rename and
+direct `AgentHistoryEntry` storage correction are implemented and independently
+reviewed. Combined release verification and live PostgreSQL, MySQL, MariaDB,
+and Datastore history/commit checks passed. The correction is ready to commit
+and push, followed by CI confirmation. Common workspace version is
+`2.0.0-snapshot.32`.
 
-`pnpm verify:release` passed at `4aa9fd5d3`, including production/example builds,
-tooling types, lint, formatting, documentation/API examples, generated-output
-consistency, package readiness, all applicable tests, required coverage, and
-Node/JVM compatibility. `pnpm audit:release` passed. Live PostgreSQL, MySQL,
-MariaDB and Datastore checks passed for Agent history, paired storage/commit,
-and interruption behavior. Changed Mermaid diagrams parsed successfully.
-
-Final verification added meaningful regression coverage for Agent attributes,
-exact model-request history, protected history reads and duplicate bindings.
-The readiness fixture now gates only the replacement replica's endpoint,
-sharing the same Delivery state with the survivor. Its regression failed with
-the previous global gate and passes with the targeted gate. Production behavior,
-existing timeout values, coverage thresholds and exclusions were unchanged by
-these verification corrections.
-
-All feature commits are pushed to official `origin`. The human created
-[PR #27](https://github.com/SpineEventEngine/spine-ts/pull/27) and requested CI
-monitoring and corrections on 2026-11-20. While CI ran, a local test/coverage run
-without live provider services reproduced the CI environment's branch-coverage
-gap. GitHub run `44711052832` then confirmed the same coverage-only failure;
-all applicable tests passed and the publication trial was skipped. The previous
-acceptance run used live databases. This is a test-only
-correction: portable tests now cover protected Agent reads, source and operation
-identity, physical byte accounting, MCP admission, and model selection failure
-paths. New fixtures use valid typed scope/backend values. The existing
-Sol/medium implementer completed the bounded correction; focused tests and
-coverage, tooling types, affected lint/formatting, cleanup and diff checks passed.
-The saved LCOV comparison closes the measured gap. Thresholds and live checks
-remain unchanged. Full no-provider release verification and GitHub verification/
-publication trial must confirm the corrective revision. PR merge remains a
-human action.
+The human created [PR #27](https://github.com/SpineEventEngine/spine-ts/pull/27)
+and authorized CI monitoring and corrections. The final pushed revision must
+pass GitHub verification and publication trial. PR merge remains a human action.
 
 ## Implementation seams
 
