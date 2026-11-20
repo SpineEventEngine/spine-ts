@@ -92,8 +92,10 @@ The no-durable-publication decision is recorded in DECISION_LOG.md under
 
 - Keep the domain state in the unchanged common EntityRecord. Do not add
   Agent fields to common Entity Protos or require application state fields.
-- Replace AgentModelPreferencesRecord with AgentAttributesRecord containing
-  AgentId, model_preferences, and pending_model_calls. This replaces existing
+- Replace AgentModelPreferencesRecord with ActiveAgentRecord containing
+  AgentId, model_preferences, and pending_model_calls. The implementation currently
+  calls this AgentAttributesRecord; the human required the ActiveAgentRecord
+  name on 2026-11-20. The rename remains pending. This replaces existing
   preferences storage rather than adding another current-attributes store.
 - Replace successive current-state/preferences reads with a provider combined
   current-data load. SQL requires one statement/data-read round trip; Datastore
@@ -320,6 +322,16 @@ is not a model mismatch. Subagents may not spawn subagents.
   were supplied. The bounded follow-up confirmed both fixes at `9500f32ad`, including
   domain-correct fixtures and storage errors remaining outside output-failure
   classification. No relevant issue remains.
+
+## Follow-up requirements from PR description review
+
+- Rename `AgentAttributesRecord` to `ActiveAgentRecord`. This is an accepted
+  naming requirement; this recording change does not implement the rename.
+- Oversized individual history records are a separate future task, explicitly
+  deferred by the human. See [Oversized Agent history records](../agent-history-large-records/TASK.md).
+- `AgentHistoryRecord` currently stores one `AgentHistoryEntry` in its singular
+  `entry` field. It has no repeated-entry collection. Each complete wrapper is
+  stored as a separate database record. Preserve this distinction in explanations.
 
 ## Current status
 
