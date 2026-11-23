@@ -32,14 +32,15 @@ import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
 // prettier-ignore
 import {
-  AgentModelPreferencesRecordSchema,
-} from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
+  ActiveAgentRecordSchema,
+} from "@spine-event-engine/proto/generated/spine/server/agent/active_agent_record_pb.js";
 import {
   AgentHistoryStorageFactories,
   AgentHistoryRecords,
+  AgentAttributes,
   eventStoreRecordSpec,
   EntityCommitStorageFactories,
   EventStoreGroups,
@@ -166,14 +167,11 @@ describe("MysqlStorageFactory builder contract", () => {
     const factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: "mysql://db.example/agent_check" })
       .build();
-    const layout = supportAgentInput() as unknown as EntityStorageInput<
-      SupportReplyAgentId,
-      SupportReplyAgentState
-    >;
+    const layout = supportAgentInput();
     const preparation = StoragePreparations.for(factory);
     try {
       await expect(preparation.prepareAgentCommit(layout, "check")).rejects.toMatchObject({
-        cause: { message: "MySQL table agent_history_AgentHistoryRecord lacks state_type." },
+        cause: { message: "MySQL table agent_history_AgentHistoryEntry lacks agent_key." },
       });
       const auditColumns = () =>
         query.mock.calls.filter(
@@ -448,6 +446,43 @@ describe("MysqlStorageFactory builder contract", () => {
     }
   });
 
+  it("reads current state and attributes with one MySQL data statement after preparation", async () => {
+    const query = vi.fn((sql: string, values: readonly unknown[] = []) =>
+      agentMetadataQuery(sql, values, true),
+    );
+    const execute = vi.fn((sql: string) => {
+      if (!sql.includes("FROM (SELECT 1) seed"))
+        throw new Error(`Unexpected MySQL data statement: ${sql}`);
+      return Promise.resolve([[{ first_bytes: null, second_bytes: null }], []]);
+    });
+    const connection = { query, execute, release: vi.fn() };
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(connection)),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(new TypeRegistry([SupportReplyAgentIdSchema]));
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/agent_pair" })
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const commits = EntityCommitStorageFactories.create(factory, supportAgentInput());
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-pair" });
+    try {
+      await commits.readAgentCurrent(id);
+      execute.mockClear();
+      await expect(commits.readAgentCurrent(id)).resolves.toEqual({
+        current: undefined,
+        attributes: undefined,
+      });
+      expect(execute).toHaveBeenCalledOnce();
+      expect(execute.mock.calls[0]?.[0]).toContain("LEFT JOIN");
+    } finally {
+      await commits.close();
+      await factory.close();
+    }
+  });
+
   it("rolls back stale Agent admission and optional writes after a late audit failure", async () => {
     const rows = new Map<string, Uint8Array>();
     let staged: Map<string, Uint8Array> | undefined;
@@ -514,8 +549,8 @@ describe("MysqlStorageFactory builder contract", () => {
     const input = {
       entityId: id,
       expectedVersion: 1,
-      expectedPreferences: undefined,
-      preferences: [],
+      expectedAttributes: undefined,
+      attributes: AgentAttributes.record(AgentAttributes.id(layout, id), [], []),
       historyEntries: [conversation("stale", "support", create(TimestampSchema, { seconds: 1n }))],
     };
     try {
@@ -526,18 +561,20 @@ describe("MysqlStorageFactory builder contract", () => {
       await commits.commitAgent({ ...input, expectedVersion: 0 });
       expect(rows.size).toBe(2);
       expect([...rows.keys()].some((key) => key.includes("agent_history"))).toBe(true);
-      expect([...rows.keys()].some((key) => key.includes("agent_model"))).toBe(true);
+      expect([...rows.keys()].some((key) => key.includes("agent_attributes"))).toBe(true);
       const auditBytes = [...rows].find(([key]) => key.includes("agent_history"))?.[1];
-      const preferenceBytes = [...rows].find(([key]) => key.includes("agent_model"))?.[1];
+      const preferenceBytes = [...rows].find(([key]) => key.includes("agent_attributes"))?.[1];
       expect(auditBytes).toBeInstanceOf(Uint8Array);
       expect(preferenceBytes).toBeInstanceOf(Uint8Array);
       if (!(auditBytes instanceof Uint8Array) || !(preferenceBytes instanceof Uint8Array))
         throw new Error("The retry did not persist both Agent records.");
-      expect(fromBinary(AgentHistoryRecordSchema, auditBytes).entry).toEqual(
-        input.historyEntries[0],
+      const historyEntry = input.historyEntries[0];
+      if (historyEntry === undefined) throw new Error("Expected the Agent history fixture.");
+      expect(fromBinary(AgentHistoryEntrySchema, auditBytes)).toEqual(
+        AgentHistoryRecords.capture(AgentAttributes.id(layout, id), historyEntry),
       );
-      expect(fromBinary(AgentModelPreferencesRecordSchema, preferenceBytes).key?.stateType).toBe(
-        layout.stateSchema.typeName,
+      expect(fromBinary(ActiveAgentRecordSchema, preferenceBytes).agent?.stateTypeUrl).toBe(
+        AgentAttributes.id(layout, id).stateTypeUrl,
       );
       const before = new Map(rows);
       const next = create(EntityRecordSchema, {
@@ -551,7 +588,7 @@ describe("MysqlStorageFactory builder contract", () => {
       const finalInput = {
         ...input,
         expectedVersion: 0,
-        expectedPreferences: [],
+        expectedAttributes: AgentAttributes.record(AgentAttributes.id(layout, id), [], []),
         entityCommit: {
           context: layout.context,
           entity: layout,

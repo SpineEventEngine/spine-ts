@@ -131,6 +131,14 @@ plans and progress reports should be removed rather than archived in Git.
 Follow the [commit scope and message preferences](build-protocol/BUILD_PROTOCOL.md#commit-scope-and-messages).
 Apply them with judgment: they are intentions, not hard rules.
 
+## Proposal Review Model
+
+When the human requests a review of a proposal, use the same model as the main
+chat. Match the main chat's reasoning setting unless the human specifies another
+setting. For an Astra/high main chat, dispatch the proposal reviewer with Astra
+and high reasoning explicitly. This rule takes precedence over the default
+documentation-review model allocation.
+
 ## Model Allocation
 
 Use Standard speed. Do not enable Fast/boost mode. Do not use Max or Ultra in

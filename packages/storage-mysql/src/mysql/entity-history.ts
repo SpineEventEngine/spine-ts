@@ -285,6 +285,24 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
   }
 
   /**
+   * Reads current state and one other record family in one data statement.
+   *
+   * @typeParam J Other family identifier.
+   * @typeParam T Other family record.
+   * @param id Typed Entity identifier.
+   * @param other Other prepared record family.
+   * @param otherId Other family identifier.
+   * @returns Both independently optional records.
+   */
+  readCurrentWith<J, T extends Message>(
+    id: I,
+    other: MysqlRecordStorage<J, T>,
+    otherId: J,
+  ): Promise<{ readonly first: EntityRecord | undefined; readonly second: T | undefined }> {
+    return this.#current.readWith(id, other, otherId);
+  }
+
+  /**
    * Writes current state inside an already admitted Agent transaction.
    *
    * @param record Committed current Entity state.
@@ -339,6 +357,24 @@ class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
    */
   tableName(): string {
     return this.records.tableName;
+  }
+
+  /**
+   * Reads current state with another prepared record family in one statement.
+   *
+   * @typeParam J Other family identifier.
+   * @typeParam T Other family record.
+   * @param id Typed Entity identifier.
+   * @param other Other record family.
+   * @param otherId Other family identifier.
+   * @returns Both independently optional records.
+   */
+  readWith<J, T extends Message>(
+    id: I,
+    other: MysqlRecordStorage<J, T>,
+    otherId: J,
+  ): Promise<{ readonly first: EntityRecord | undefined; readonly second: T | undefined }> {
+    return this.records.readPair(id, other, otherId);
   }
 
   /**

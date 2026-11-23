@@ -31,7 +31,7 @@ import {
   type TenantCatalogRead,
   type TenantCatalogPage,
 } from "@spine-event-engine/storage/provider";
-import { AgentHistoryRecords, AgentModelPreferences } from "@spine-event-engine/storage/provider";
+import { AgentHistoryRecords, AgentAttributes } from "@spine-event-engine/storage/provider";
 import {
   EntityCommitStorageFactories,
   AgentHistoryStorageFactories,
@@ -583,7 +583,6 @@ export class PostgresStorageFactory extends StorageFactory {
   ): Promise<void> {
     return this.admitPublic(async () => {
       TenantBoundary.of(input.context);
-      if (input.stateType.trim().length === 0) throw new TypeError("Agent state type is required.");
       const spec = AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value));
       await this.prepareRecordAdmitted(input.context, spec, AgentHistoryRecords.group, mode);
       await this.prepareAudit(input.context, spec, mode);
@@ -627,8 +626,8 @@ export class PostgresStorageFactory extends StorageFactory {
       await this.prepareAudit(input.context, audit, mode);
       await this.prepareRecordAdmitted(
         input.context,
-        AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
-        AgentModelPreferences.group,
+        AgentAttributes.spec((value) => AgentHistoryHash.value(value)),
+        AgentAttributes.group,
         mode,
       );
     });

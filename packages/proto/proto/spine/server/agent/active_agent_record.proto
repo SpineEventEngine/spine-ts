@@ -16,33 +16,25 @@ syntax = "proto3";
 
 package spine.server.agent;
 
-import "google/protobuf/any.proto";
+import "spine/agent/agent_id.proto";
+import "spine/agent/model.proto";
+import "spine/agent/model_call.proto";
 import "spine/options.proto";
-import "spine/ts/agent/model.proto";
 
 option (SPI_all) = true;
 option (type_url_prefix) = "type.spine.io";
 
-// Complete Agent instance identity for retained model selections.
-message AgentModelPreferencesKey {
-  // Generated Agent state type name.
-  string state_type = 1 [(required) = true];
-
-  // Exact typed Agent identifier including its original type URL and bytes.
-  google.protobuf.Any recipient_id = 2 [
-    (required) = true,
-    (validate) = true
-  ];
-}
-
-// Current model selections without an executable Agent invocation.
-message AgentModelPreferencesRecord {
-  // Complete identity evidence for the provider's bounded record slot.
-  AgentModelPreferencesKey key = 1 [
+// Framework-maintained attributes for one active Agent instance.
+message ActiveAgentRecord {
+  // Complete typed identity of this Agent.
+  spine.agent.AgentId agent = 1 [
     (required) = true,
     (validate) = true
   ];
 
-  // Complete per-instance model selections; an empty list is valid.
-  repeated spine.ts.agent.ModelPreference preferences = 2 [(validate) = true];
+  // Complete model selections for the Agent; an empty list is valid.
+  repeated spine.agent.ModelPreference model_preferences = 2 [(validate) = true];
+
+  // Model requests awaiting a matching application handler commit or explicit abandonment.
+  repeated spine.agent.ModelCall pending_model_calls = 3 [(validate) = true];
 }

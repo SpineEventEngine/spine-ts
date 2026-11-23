@@ -61,16 +61,9 @@ import { LocalProjectionInbox } from "./projection-handoff.js";
 import { TenantAdmissions } from "./tenant-unknown-error.js";
 import { SINGLE_TENANT, type TenantIndexSetting } from "./tenant-index.js";
 import {
-  AgentExecutionCapacity,
-  type AgentCapacityReservation,
-} from "../agent/agent-execution-capacity.js";
-import {
-  AgentAcceptanceReceipts,
-  agentAcceptanceReceiptGroup,
-  agentAcceptanceReceiptSpec,
-} from "../agent/agent-acceptance-receipts.js";
-import {
   Repository,
+  AgentModelCommandHandler,
+  agentModelCommandHandlers,
   repositoryAccess,
   type ConcreteRepositoryEntityType,
   type EntityInbox,
@@ -118,7 +111,6 @@ import {
 } from "../stand/subscription-registry.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 import type { DeliveryStrategy } from "../delivery/delivery-builder.js";
-import type { InboxMessage } from "../delivery/inbox.js";
 import { IntegrationBroker } from "../integration/integration-broker.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "../server/server-environment.js";
 import { SignalPublisher } from "../runtime/signal-publisher.js";
@@ -253,26 +245,6 @@ interface RepositoryRegistration {
    * Hands an Agent System Event to the paired context publisher with contained dispatch failures.
    */
   readonly publishAgentSystemEvent: (event: Event) => Promise<void>;
-
-  /**
-   * Retained atomic admission evidence for live Agent delivery.
-   */
-  readonly agentReceipts: AgentAcceptanceReceipts;
-
-  /**
-   * Reserves local serialized Agent capacity before a receipt is written.
-   */
-  readonly reserveAgent: (key: string, signal: AbortSignal) => AgentCapacityReservation | undefined;
-
-  /**
-   * Cancels only this context's admitted Agent work.
-   */
-  readonly agentSignal: AbortSignal;
-
-  /**
-   * Retains a capacity-deferred shard hint for the next available slot.
-   */
-  readonly deferAgent: (message: InboxMessage, tenantId: TenantId | undefined) => void;
 
   /**
    * Stand that stores read-side state for this context.
@@ -920,6 +892,16 @@ interface BoundedContextAssembly {
   readonly publisher: SignalPublisher;
 
   /**
+   * Registered standalone handlers whose asynchronous work joins context drain.
+   */
+  readonly standaloneRuntime: StandaloneHandlerRuntime | undefined;
+
+  /**
+   * Built-in model assignee used during ordinary Command admission.
+   */
+  readonly modelCommandHandler: AgentModelCommandHandler | undefined;
+
+  /**
    * Domain read-side Stand.
    */
   readonly stand: Stand;
@@ -1050,6 +1032,10 @@ export class BoundedContext {
 
   readonly #publisher: SignalPublisher;
 
+  #standaloneRuntime: StandaloneHandlerRuntime | undefined;
+
+  readonly #modelCommandHandler: AgentModelCommandHandler | undefined;
+
   readonly #commandEndpoint: CommandEndpoint;
 
   readonly #eventEndpoint: EventEndpoint;
@@ -1059,8 +1045,6 @@ export class BoundedContext {
   readonly #projectionInbox: PrjInbox;
 
   readonly #deliveryReadiness: DeliveryReadiness;
-
-  #stopAgentAvailability: (() => void) | undefined;
 
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
 
@@ -1082,12 +1066,6 @@ export class BoundedContext {
    * Explicit storage and subscription preparation for this built context.
    */
   readonly runtime: BoundedContextRuntime;
-
-  readonly #agentReceipts: AgentAcceptanceReceipts;
-
-  readonly #agentController = new AbortController();
-
-  readonly #agentReservations = new Set<Promise<void>>();
 
   readonly #activeDeliveries = new Set<Promise<void>>();
 
@@ -1129,12 +1107,12 @@ export class BoundedContext {
     this.#eventBus = input.eventBus;
     this.#systemEventBus = input.systemEventBus;
     this.#publisher = input.publisher;
+    this.#modelCommandHandler = input.modelCommandHandler;
     this.#stand = input.stand;
     this.#systemStand = input.systemStand;
     this.#subscriptionRuntime = input.subscriptionRuntime;
     this.runtime = this.#createRuntime();
     this.#storageFactory = input.storageFactory;
-    this.#agentReceipts = new AgentAcceptanceReceipts(input.storageFactory);
     this.#environment = input.environment;
     this.#ai = input.ai;
     this.#installTenantAdmission();
@@ -1177,9 +1155,10 @@ export class BoundedContext {
     commandBusAccess.bindEnvironment(this.#commandBus, this.#environment);
     eventBusAccess.bindEnvironment(this.#eventBus, this.#environment);
     eventBusAccess.bindEnvironment(this.#systemEventBus, this.#environment);
-    commandBusAccess.setAdmission(this.#commandBus, (command) =>
-      this.#admitTenant(command.context?.actorContext?.tenantId),
-    );
+    commandBusAccess.setAdmission(this.#commandBus, async (command) => {
+      await this.#admitTenant(command.context?.actorContext?.tenantId);
+      this.#modelCommandHandler?.admit(command);
+    });
     eventBusAccess.setAdmission(this.#eventBus, (event) =>
       this.#admitTenant(ContextParts.readCatchUpTenant(event)),
     );
@@ -1304,13 +1283,6 @@ export class BoundedContext {
     }
     for (const repository of this.#repositoryViews)
       await repositoryAccess.prepareStorage(repository, context, this.#storageFactory, mode);
-    if ([...this.#repositoryViews].some((repository) => repository.entityFamily === "agent"))
-      await preparation.prepareRecord(
-        context,
-        agentAcceptanceReceiptSpec,
-        agentAcceptanceReceiptGroup,
-        mode,
-      );
   }
 
   /**
@@ -1530,11 +1502,12 @@ export class BoundedContext {
   }
 
   /**
-   * Creates readiness for the shared Delivery and this context's Agent capacity.
-   * @returns Shared readiness with the Agent capacity wake installed.
+   * Creates readiness for Delivery notifications from this Bounded Context.
+   *
+   * @returns Shared delivery readiness.
    */
   #createReadiness(): DeliveryReadiness {
-    const readiness = new DeliveryReadiness(
+    return new DeliveryReadiness(
       undefined,
       serverEnvironmentAccess.coreDelivery(this.#environment),
       (shard) => {
@@ -1542,11 +1515,6 @@ export class BoundedContext {
       },
       serverEnvironmentAccess.remoteSupervised(this.#environment),
     );
-    if (this.#ai !== undefined)
-      this.#stopAgentAvailability = AgentExecutionCapacity.for(this.#ai).onAvailable(() => {
-        readiness.retryDeferred();
-      });
-    return readiness;
   }
 
   /**
@@ -1556,6 +1524,7 @@ export class BoundedContext {
    * @param delivery Tenant index and Inboxes prepared for this context.
    */
   #installReferences(input: BoundedContextAssembly, delivery: ContextDeliveryParts): void {
+    this.#standaloneRuntime = input.standaloneRuntime;
     contextEventBuses.set(this, [this.#eventBus, this.#systemEventBus]);
     contextRepositoryViews.set(this, this.#repositoryViews);
     eventSubscribers.set(this, (typeUrl, subscriber) =>
@@ -1651,24 +1620,6 @@ export class BoundedContext {
   }
 
   /**
-   * Reserves shared-registry capacity before Agent receipt admission.
-   */
-  #reserveAgent(key: string, signal: AbortSignal): AgentCapacityReservation | undefined {
-    const reservation =
-      this.#ai === undefined
-        ? undefined
-        : AgentExecutionCapacity.for(this.#ai).reserve(key, signal);
-    if (reservation !== undefined) {
-      this.#agentReservations.add(reservation.completed);
-      void reservation.completed.then(
-        () => this.#agentReservations.delete(reservation.completed),
-        () => this.#agentReservations.delete(reservation.completed),
-      );
-    }
-    return reservation;
-  }
-
-  /**
    * Builds callbacks shared by every repository prepared for this Bounded Context.
    */
   #repositoryRegistration(): RepositoryRegistration {
@@ -1691,12 +1642,6 @@ export class BoundedContext {
       },
       publishAgentEvent: (event) => this.#publishAgentEvent(event),
       publishAgentSystemEvent: (event) => this.#publisher.publishSystemEvent(event),
-      agentReceipts: this.#agentReceipts,
-      agentSignal: this.#agentController.signal,
-      reserveAgent: (key, signal) => this.#reserveAgent(key, signal),
-      deferAgent: (message, tenantId) => {
-        this.#deferAgent(message, tenantId);
-      },
     };
   }
 
@@ -1707,18 +1652,6 @@ export class BoundedContext {
     return event.context?.rejection === undefined
       ? this.#publisher.publishEvent(event)
       : this.#publisher.publishRejectionEvent(event);
-  }
-
-  /**
-   * Records a deferred Agent shard for the next available capacity slot.
-   */
-  #deferAgent(message: InboxMessage, tenantId: TenantId | undefined): void {
-    this.#deliveryReadiness.defer({
-      label: message.label,
-      targetTypeUrl: message.inboxId.targetTypeUrl,
-      shard: message.shard,
-      ...(tenantId === undefined ? {} : { tenantId }),
-    });
   }
 
   /**
@@ -1960,8 +1893,6 @@ export class BoundedContext {
   #beginClose(): void {
     closingContexts.add(this);
     this.#preparationController.abort(new Error("Bounded Context closed."));
-    serverEnvironmentAccess.stopRecipients(this.#environment, this);
-    this.#agentController.abort(new Error("Bounded Context closed."));
     this.#publisher.beginClose();
     commandBusAccess.beginClose(this.#commandBus);
     eventBusAccess.beginClose(this.#eventBus);
@@ -1969,24 +1900,15 @@ export class BoundedContext {
   }
 
   /**
-   * Closes integration intake and drains accepted context work before Stand close.
+   * Closes integration intake and drains this Bounded Context's accepted work.
    *
-   * @returns Completion after the context's accepted work settles.
+   * @returns Completion after accepted local follow-ups settle.
    */
   async #drainWork(): Promise<void> {
     this.#beginClose();
     const errors: unknown[] = [];
     await this.#closePart(() => ContextParts.closeIntegration(this), errors);
-    await this.#closePart(
-      () =>
-        ContextParts.drainContextWork(
-          this.#commandBus,
-          this.#eventBus,
-          this.#systemEventBus,
-          this.#publisher,
-        ),
-      errors,
-    );
+    await this.#closePart(() => this.#drainAcceptedWork(), errors);
     if (errors.length > 0) throw new AggregateError(errors, "BoundedContext drain failed.");
   }
 
@@ -1998,23 +1920,10 @@ export class BoundedContext {
   async #closeOnce(): Promise<void> {
     const errors: unknown[] = [];
 
-    this.#stopAgentAvailability?.();
-    this.#stopAgentAvailability = undefined;
-
     await this.#closePart(() => this.#drainWork(), errors);
-    await this.#drainAdmittedContextWork(errors);
     await this.#closePart(() => this.#deliveryReadiness.close(), errors);
-    await this.#closePart(
-      () =>
-        ContextParts.drainContextWork(
-          this.#commandBus,
-          this.#eventBus,
-          this.#systemEventBus,
-          this.#publisher,
-        ),
-      errors,
-    );
-    await this.#closePart(() => this.#agentReceipts.close(), errors);
+    await this.#closePart(() => this.#drainAcceptedWork(), errors);
+    serverEnvironmentAccess.stopRecipients(this.#environment, this);
     await this.#closeBuses(errors);
     await this.#closePart(() => this.#stand.close(), errors);
     await this.#closePart(() => this.#systemStand.close(), errors);
@@ -2029,21 +1938,30 @@ export class BoundedContext {
   }
 
   /**
-   * Settles entered deliveries, outgoing handoffs, and reserved Agent turns.
-   * @param errors Collects independent close failures.
+   * Repeats bus, publisher, task, and Delivery drains until accepted follow-ups settle.
+   *
+   * @returns Completion when no accepted delivery can create more context work.
    */
-  async #drainAdmittedContextWork(errors: unknown[]): Promise<void> {
-    await this.#closePart(
-      () => Promise.allSettled([...this.#activePreparations]).then(() => undefined),
-      errors,
-    );
-    await this.#closePart(
-      () => Promise.allSettled([...this.#activeDeliveries]).then(() => undefined),
-      errors,
-    );
-    await this.#closePart(
-      () => Promise.allSettled([...this.#agentReservations]).then(() => undefined),
-      errors,
+  async #drainAcceptedWork(): Promise<void> {
+    let active: readonly Promise<void>[];
+    let hadHandoff: boolean;
+    do {
+      await ContextParts.drainContextWork(
+        this.#commandBus,
+        this.#eventBus,
+        this.#systemEventBus,
+        this.#publisher,
+        this.#standaloneRuntime,
+      );
+      active = [...this.#activePreparations, ...this.#activeDeliveries];
+      await Promise.allSettled(active);
+      hadHandoff = await this.#deliveryReadiness.drain();
+    } while (
+      hadHandoff ||
+      active.length > 0 ||
+      this.#activePreparations.size > 0 ||
+      this.#activeDeliveries.size > 0 ||
+      (this.#standaloneRuntime?.activeAsyncTaskCount() ?? 0) > 0
     );
   }
 
@@ -2523,6 +2441,8 @@ interface ContextBuildBuses {
   readonly eventBus: EventBus;
   readonly systemEventBus: EventBus;
   readonly publisher: SignalPublisher;
+  standaloneRuntime?: StandaloneHandlerRuntime;
+  modelCommandHandler?: AgentModelCommandHandler;
   readonly systemStand: Stand;
   readonly systemSpec: ContextSpecSnapshot;
 }
@@ -2958,6 +2878,7 @@ export class BoundedContextBuilder {
       environment,
       storageFactory,
       standalone,
+      ai,
       resources,
     );
     return this.#finishAssembly(
@@ -3035,6 +2956,7 @@ export class BoundedContextBuilder {
     environment: ServerEnvironment,
     storageFactory: StorageFactory,
     standalone: readonly GeneratedStandaloneHandlerGroup[],
+    ai: AiRegistry | undefined,
     resources: ContextBuildResources,
   ): {
     buses: ContextBuildBuses;
@@ -3049,13 +2971,38 @@ export class BoundedContextBuilder {
       dispatchers,
       resources,
     );
-    const standaloneEvent = this.#installStandalone(standalone, buses);
+    const modelHandler = this.#createModelCommandHandler(repositories, ai);
+    const groups =
+      modelHandler === undefined ? standalone : [...standalone, agentModelCommandHandlers()];
+    if (modelHandler !== undefined) buses.modelCommandHandler = modelHandler;
+    const standaloneEvent = this.#installStandalone(groups, buses, modelHandler);
     for (const dispatcher of dispatchers.domain) buses.eventBus.register(dispatcher);
     eventBusAccess.registerSchemas(buses.eventBus, [
       ...ContextParts.repositoryProducedEventSchemas(repositories),
-      ...ContextParts.standaloneProducedEventSchemas(standalone),
+      ...ContextParts.standaloneProducedEventSchemas(groups),
     ]);
     return { buses, dispatchers, standaloneEvent };
+  }
+
+  /**
+   * Creates one built-in model assignee when this Bounded Context registers Agent models.
+   *
+   * @param repositories Registered Entity repositories.
+   * @param ai Effective AI registry, when configured.
+   * @returns A model assignee or absence when no Agent model is registered.
+   */
+  #createModelCommandHandler(
+    repositories: readonly RepositoryView[],
+    ai: AiRegistry | undefined,
+  ): AgentModelCommandHandler | undefined {
+    const agents = repositories.filter(
+      (repository) =>
+        repository.entityFamily === "agent" &&
+        (repositoryAccess.agentConfiguration(repository).ai?.models.length ?? 0) > 0,
+    );
+    return ai === undefined || agents.length === 0
+      ? undefined
+      : new AgentModelCommandHandler(agents, ai, this.#specSnapshot.name.value);
   }
 
   /**
@@ -3137,6 +3084,16 @@ export class BoundedContextBuilder {
         throw new TypeError("Agent registration requires repository capabilities.");
       if (config.ai.models.some((model) => !isAiModel(model)))
         throw new TypeError("Agent repository capabilities must be factory-created models.");
+      const definitions = new Set<string>();
+      for (const model of config.ai.models) {
+        const identity = JSON.stringify([model.definition.name, model.definition.version]);
+        if (definitions.has(identity))
+          throw new TypeError(
+            `Duplicate Agent model definition ${model.definition.name}@${model.definition.version}` +
+              ` for ${TypeUrls.derive(repository.stateSchema)}.`,
+          );
+        definitions.add(identity);
+      }
     }
   }
 
@@ -3262,6 +3219,7 @@ export class BoundedContextBuilder {
   #installStandalone(
     standalone: readonly GeneratedStandaloneHandlerGroup[],
     buses: ContextBuildBuses,
+    modelHandler?: AgentModelCommandHandler,
   ): EventDispatcher | undefined {
     ContextParts.assertUniqueCommandReceptors(standalone);
     const runtime =
@@ -3270,10 +3228,13 @@ export class BoundedContextBuilder {
         : new StandaloneHandlerRuntime(
             ContextParts.matchStandaloneHandlers(
               standalone,
-              this.#standaloneInstances(),
+              modelHandler === undefined
+                ? this.#standaloneInstances()
+                : [...this.#standaloneInstances(), modelHandler],
               buses.publisher,
             ),
           );
+    if (runtime !== undefined) buses.standaloneRuntime = runtime;
     const command = runtime?.commandDispatcher();
     const event = runtime?.eventDispatcher();
     const state = runtime?.stateDispatcher();
@@ -3809,6 +3770,8 @@ const ContextParts = Object.freeze({
       eventBus: buses.eventBus,
       systemEventBus: buses.systemEventBus,
       publisher: buses.publisher,
+      standaloneRuntime: buses.standaloneRuntime,
+      modelCommandHandler: buses.modelCommandHandler,
       stand: running.stand,
       systemStand: buses.systemStand,
       subscriptionRuntime: running.runtime,
@@ -4663,6 +4626,7 @@ const ContextParts = Object.freeze({
    * @param eventBus Domain event bus.
    * @param systemEventBus System event bus.
    * @param publisher Signal publisher.
+   * @param standaloneRuntime Registered asynchronous standalone work, when present.
    * @returns Promise fulfilled when accepted work stabilizes.
    */
   async drainContextWork(
@@ -4670,6 +4634,7 @@ const ContextParts = Object.freeze({
     eventBus: EventBus,
     systemEventBus: EventBus,
     publisher: SignalPublisher,
+    standaloneRuntime?: StandaloneHandlerRuntime,
   ): Promise<void> {
     let observedCommandWork = -1;
     let observedEventWork = -1;
@@ -4683,10 +4648,12 @@ const ContextParts = Object.freeze({
       await eventBusAccess.drain(eventBus);
       await eventBusAccess.drain(systemEventBus);
       await publisher.drain();
+      await standaloneRuntime?.drain();
     } while (
       commandBusAccess.acceptedWorkCount(commandBus) !== observedCommandWork ||
       eventBusAccess.acceptedWorkCount(eventBus) !== observedEventWork ||
-      eventBusAccess.acceptedWorkCount(systemEventBus) !== observedSystemEventWork
+      eventBusAccess.acceptedWorkCount(systemEventBus) !== observedSystemEventWork ||
+      (standaloneRuntime?.activeAsyncTaskCount() ?? 0) > 0
     );
   },
 
@@ -4762,10 +4729,6 @@ const ContextParts = Object.freeze({
       registerSystemEventSchema: registration.registerSystemEventSchema,
       publishAgentEvent: registration.publishAgentEvent,
       publishAgentSystemEvent: registration.publishAgentSystemEvent,
-      agentReceipts: registration.agentReceipts,
-      agentSignal: registration.agentSignal,
-      reserveAgent: registration.reserveAgent,
-      deferAgent: registration.deferAgent,
     });
   },
 

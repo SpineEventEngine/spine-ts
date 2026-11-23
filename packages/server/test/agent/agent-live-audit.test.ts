@@ -61,7 +61,7 @@ const payload = create(AgentModelSelectionChangedSchema, {
   }),
   kind: AiModelKind.GENERATION,
   selectedModel: create(ModelRefSchema, { name: { value: "support" }, revision: { value: "v1" } }),
-  changedAt: create(TimestampSchema, { seconds: 1_800_200_000n }),
+  whenChanged: create(TimestampSchema, { seconds: 1_800_200_000n }),
 });
 
 describe("live Agent audit", () => {
@@ -79,7 +79,6 @@ describe("live Agent audit", () => {
       invocation,
       SupportReplyAgentStateSchema,
       "T-audit",
-      "T-audit",
       history,
       metadata,
       () => {
@@ -92,7 +91,7 @@ describe("live Agent audit", () => {
       },
     );
     const earlier = create(AgentHistoryEntrySchema, {
-      occurredAt: payload.changedAt,
+      whenOccurred: payload.whenChanged,
       item: {
         case: "systemEvent",
         value: AgentLiveInteractionEvents.envelope(
@@ -121,7 +120,6 @@ describe("live Agent audit", () => {
       invocation,
       SupportReplyAgentStateSchema,
       "T-audit",
-      "T-audit",
       history,
       metadata,
       () => undefined,
@@ -130,27 +128,6 @@ describe("live Agent audit", () => {
     await expect(audit.save(AgentModelSelectionChangedSchema, payload)).rejects.toThrow(
       "history failed",
     );
-    expect(publish).not.toHaveBeenCalled();
-  });
-
-  it("does not append a termination fact after its live session is lost", async () => {
-    const appendAll = vi.fn(() => Promise.resolve());
-    const history = { capacity: {}, appendAll } as unknown as AgentHistoryStorage<string>;
-    const publish = vi.fn(() => Promise.resolve());
-    const lost = new Error("session lost");
-    const audit = new AgentLiveAudit(
-      invocation,
-      SupportReplyAgentStateSchema,
-      "T-audit",
-      "T-audit",
-      history,
-      metadata,
-      () => undefined,
-      publish,
-      () => Promise.reject(lost),
-    );
-    await expect(audit.save(AgentModelSelectionChangedSchema, payload)).rejects.toBe(lost);
-    expect(appendAll).not.toHaveBeenCalled();
     expect(publish).not.toHaveBeenCalled();
   });
 
@@ -167,7 +144,6 @@ describe("live Agent audit", () => {
     const audit = new AgentLiveAudit(
       invocation,
       SupportReplyAgentStateSchema,
-      "T-audit",
       "T-audit",
       history,
       metadata,
@@ -190,7 +166,6 @@ describe("live Agent audit", () => {
       invocation,
       SupportReplyAgentStateSchema,
       "T-audit",
-      "T-audit",
       history,
       metadata,
       () => undefined,
@@ -200,7 +175,7 @@ describe("live Agent audit", () => {
       agent: payload.agent,
       sourceSignal: payload.sourceSignal,
       reason: "MODEL_USE_DENIED",
-      terminatedAt: payload.changedAt,
+      whenTerminated: payload.whenChanged,
     });
     await expect(audit.saveDenial(fact, denial)).rejects.toMatchObject({
       errors: [denial, failure],

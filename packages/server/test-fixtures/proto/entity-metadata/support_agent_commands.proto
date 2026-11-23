@@ -34,3 +34,21 @@ message ReviewSupportReply {
   // Identifies the support ticket.
   SupportReplyAgentId agent = 1;
 }
+
+// Requests inspection of a support reply draft without submitting a model call.
+message InspectSupportReplyDraft {
+  // Identifies the support ticket.
+  SupportReplyAgentId agent = 1;
+}
+
+// Cancels a previously requested support reply draft.
+message CancelSupportReplyDraft {
+  // Identifies the support ticket.
+  SupportReplyAgentId agent = 1;
+}
+
+// Requests that future support drafts use the alternate registered model.
+message PreferSupportReplyModel {
+  // Identifies the support ticket.
+  SupportReplyAgentId agent = 1;
+}

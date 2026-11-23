@@ -326,6 +326,40 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   }
 
   /**
+   * Reads two independently keyed families in one MySQL or MariaDB data statement.
+   *
+   * @typeParam J Other family identifier.
+   * @typeParam T Other family record.
+   * @param id First-family identifier.
+   * @param other Second prepared record family.
+   * @param otherId Second-family identifier.
+   * @returns Both decoded images, including independent absence.
+   */
+  async readPair<J, T extends Message>(
+    id: I,
+    other: MysqlRecordStorage<J, T>,
+    otherId: J,
+  ): Promise<{ readonly first: R | undefined; readonly second: T | undefined }> {
+    await this.prepare();
+    await other.prepare();
+    return this.using(async (connection) => {
+      const [rows] = await connection.execute<PairRow[]>(
+        `SELECT first_row.bytes AS first_bytes, second_row.bytes AS second_bytes
+           FROM (SELECT 1) seed
+           LEFT JOIN \`${this.table.tableName}\` first_row ON first_row.ID=?
+           LEFT JOIN \`${other.table.tableName}\` second_row ON second_row.ID=?`,
+        [this.idKey(id), other.idKey(otherId)] as never,
+      );
+      const row = rows[0];
+      if (row === undefined) throw new MysqlStorageDataError("MySQL pair read returned no row.");
+      return {
+        first: row.first_bytes === null ? undefined : this.decode(row.first_bytes),
+        second: row.second_bytes === null ? undefined : other.decode(row.second_bytes),
+      };
+    });
+  }
+
+  /**
    * Writes one record.
    *
    * @param record Provides the record to write.
@@ -1665,6 +1699,17 @@ export class MysqlTableInitializer<I, R extends Message> {
   }
 }
 
+/**
+ * One combined current-state and attributes result row.
+ */
+interface PairRow extends RowDataPacket {
+  readonly first_bytes: Uint8Array | null;
+  readonly second_bytes: Uint8Array | null;
+}
+
+/**
+ * One exact record payload row.
+ */
 interface PayloadRow extends RowDataPacket {
   bytes: Uint8Array;
 }

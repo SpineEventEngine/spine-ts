@@ -21,7 +21,6 @@ import {
   AgentAiResultAdmittedSchema,
   AgentAiOperationFailedSchema,
   AgentModelSelectionChangedSchema,
-  AgentInvocationTerminatedSchema,
   AiContentDigestSchema,
   AiModelKind,
   AiOutcome,
@@ -31,7 +30,6 @@ import {
 } from "@spine-event-engine/proto/agent";
 import {
   ActorContextSchema,
-  CommandIdSchema,
   CommandContextSchema,
   UserIdSchema,
   EventSchema,
@@ -40,7 +38,6 @@ import {
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Agent } from "../../src/entity/entity.js";
-import { AgentAcceptanceReceipts } from "../../src/agent/agent-acceptance-receipts.js";
 import { BoundedContext, type BoundedContextBuilder } from "../../src/context/bounded-context.js";
 import { Application } from "../../src/server/application.js";
 import { EnvironmentType } from "../../src/server/environment.js";
@@ -375,7 +372,9 @@ describe("Agent repository source integration", () => {
       );
       await handlerReturned.promise;
       await posting;
-      await serverEnvironmentAccess.whenDeliveryIdle(environment);
+      await expect(serverEnvironmentAccess.whenDeliveryIdle(environment)).rejects.toThrow(
+        "Agent handler returned with a pending AI call.",
+      );
       expect(pendingCase.overlapError).toMatchObject({
         message: "Agent AI calls must be sequential within one handler.",
       });
@@ -401,7 +400,7 @@ describe("Agent repository source integration", () => {
     const response = create(ProposedSupportReplySchema, { replyText: "We can help." });
     const physical = vi.fn(() => response);
     const alternatePhysical = vi.fn(() => response);
-    let allowModelUse = true;
+    const allowModelUse = true;
     const registry = AiRegistry.create({
       defaultModels: { generation: ref },
       invocationLimits: {
@@ -413,8 +412,6 @@ describe("Agent repository source integration", () => {
         totalInputBytes: 4_000,
         totalOutputBytes: 4_000,
       },
-      concurrentOperations: 1,
-      queuedOperations: 1,
     });
     for (const selected of [ref, alternateRef])
       registry.register(
@@ -581,7 +578,7 @@ describe("Agent repository source integration", () => {
         },
         { timeout: 10_000 },
       );
-      const runNext = async (question: string) => {
+      const runNext = async (question: string, expectedFailure?: string) => {
         const next = SignalEnvelopes.command({
           schema: DraftSupportReplySchema,
           message: create(DraftSupportReplySchema, { agent: id, question }),
@@ -592,7 +589,9 @@ describe("Agent repository source integration", () => {
           }),
         });
         await context.commandBus().post(next);
-        await serverEnvironmentAccess.whenDeliveryIdle(environment);
+        const idle = serverEnvironmentAccess.whenDeliveryIdle(environment);
+        if (expectedFailure === undefined) await idle;
+        else await expect(idle).rejects.toThrow(expectedFailure);
         return next;
       };
       await runNext("Prefer alternate");
@@ -653,7 +652,7 @@ describe("Agent repository source integration", () => {
           entry.item.value.message?.typeUrl === TypeUrls.derive(AgentModelSelectionChangedSchema),
       ).length;
       allowSelection = false;
-      await runNext("Reset selection");
+      await runNext("Reset selection", "Agent model selection is unauthorized.");
       await vi.waitFor(() => {
         expect(authorizeSelection).toHaveBeenLastCalledWith(
           expect.anything(),
@@ -669,26 +668,6 @@ describe("Agent repository source integration", () => {
             entry.item.value.message?.typeUrl === TypeUrls.derive(AgentModelSelectionChangedSchema),
         ),
       ).toHaveLength(selectionChanges);
-      allowModelUse = false;
-      const deniedCommand = await runNext("Model use denied");
-      await vi.waitFor(async () => {
-        const denied = (await readAgentHistoryPage(context, repository, id, { pageSize: 50 })).items
-          .flatMap((entry) => (entry.item.case === "systemEvent" ? [entry.item.value] : []))
-          .filter(
-            (event) => event.message?.typeUrl === TypeUrls.derive(AgentInvocationTerminatedSchema),
-          );
-        expect(denied).toHaveLength(1);
-        const event = denied[0];
-        if (event?.message === undefined || event.id === undefined)
-          throw new Error("Expected one typed Agent denial event.");
-        const fact = AnyPacker.unpack(event.message, AgentInvocationTerminatedSchema);
-        expect(fact.reason).toBe("MODEL_USE_DENIED");
-        expect(fact.sourceSignal?.typeUrl).toBe(TypeUrls.derive(DraftSupportReplySchema));
-        const sourceId = fact.sourceSignal?.id;
-        if (sourceId === undefined) throw new Error("Expected the denied source Command ID.");
-        expect(AnyPacker.unpack(sourceId, CommandIdSchema).uuid).toBe(deniedCommand.id?.uuid);
-        expect(await readSystemEvents(context, [event.id])).toEqual(denied);
-      });
       expect(physical).toHaveBeenCalledTimes(4);
       expect(alternatePhysical).toHaveBeenCalledTimes(1);
       expect(
@@ -721,8 +700,6 @@ describe("Agent repository source integration", () => {
         totalInputBytes: 4000,
         totalOutputBytes: 4000,
       },
-      concurrentOperations: 1,
-      queuedOperations: 0,
     });
     const repository = draftingRepository({
       resolveModel: resolved,
@@ -807,8 +784,6 @@ describe("Agent repository source integration", () => {
   it("delivers a no-op Agent's outgoing Command to the same Agent", async () => {
     const ai = AiRegistry.create({
       defaultModels: {},
-      concurrentOperations: 1,
-      queuedOperations: 1,
     });
     const context = await buildContext(
       BoundedContext.singleTenant("SelfFollowupCommand")
@@ -854,8 +829,6 @@ describe("Agent repository source integration", () => {
     };
     const ai = AiRegistry.create({
       defaultModels: {},
-      concurrentOperations: 1,
-      queuedOperations: 1,
     });
     const context = await buildContext(
       BoundedContext.singleTenant("SelfFollowupClose")
@@ -905,7 +878,7 @@ describe("Agent repository source integration", () => {
       release.resolve(undefined);
       await closing;
       expect(closed).toBe(true);
-      expect(outputs).not.toContain(TypeUrls.derive(SupportReplyDraftedSchema));
+      expect(outputs).toContain(TypeUrls.derive(SupportReplyDraftedSchema));
     } finally {
       observer.close();
       siblingHandler.mockRestore();
@@ -915,64 +888,4 @@ describe("Agent repository source integration", () => {
       await context.close();
     }
   }, 15_000);
-
-  it("keeps accepted receipt evidence but starts no Agent effects after context close", async () => {
-    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-receipt-gap" });
-    const context = await buildContext(
-      BoundedContext.singleTenant("ReceiptCloseGap")
-        .withAi(AiRegistry.create({ defaultModels: {} }))
-        .persistSystemEvents()
-        .add(followupRepository()),
-    );
-    const entered = Promise.withResolvers<undefined>();
-    const release = Promise.withResolvers<undefined>();
-    const original = Object.getOwnPropertyDescriptor(AgentAcceptanceReceipts.prototype, "accept")
-      ?.value as AgentAcceptanceReceipts["accept"];
-    let accepted = false;
-    const spy = vi
-      .spyOn(AgentAcceptanceReceipts.prototype, "accept")
-      .mockImplementation(async function (this: AgentAcceptanceReceipts, ...args) {
-        entered.resolve(undefined);
-        await release.promise;
-        accepted = await original.apply(this, args);
-        return accepted;
-      });
-    const output: string[] = [];
-    const observer = observeProducedSignals(context, {
-      onEvent: (event) => {
-        output.push(event.message?.typeUrl ?? "");
-      },
-    });
-    try {
-      const posted = context.commandBus().post(
-        SignalEnvelopes.command({
-          schema: DraftSupportReplySchema,
-          message: create(DraftSupportReplySchema, { agent: id, question: "Close gap" }),
-          context: create(CommandContextSchema, { actorContext: create(ActorContextSchema) }),
-        }),
-      );
-      await entered.promise;
-      const closing = context.close();
-      release.resolve(undefined);
-      await Promise.allSettled([posted, closing]);
-      expect(accepted).toBe(true);
-      expect(output).toEqual([]);
-      const reopened = await buildContext(
-        BoundedContext.singleTenant("ReceiptCloseGap")
-          .withAi(AiRegistry.create({ defaultModels: {} }))
-          .persistSystemEvents()
-          .add(followupRepository()),
-      );
-      try {
-        expect(await reopened.stand().read(SupportReplyAgentStateSchema, id)).toBeUndefined();
-      } finally {
-        await reopened.close();
-      }
-    } finally {
-      release.resolve(undefined);
-      spy.mockRestore();
-      observer.close();
-      await context.close();
-    }
-  });
 });

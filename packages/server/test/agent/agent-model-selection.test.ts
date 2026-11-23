@@ -16,6 +16,7 @@ import { clone, create } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { AiModel, AiRegistry, ModelRef, type AiScope } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
+import { backendDefinition, selectDeployment } from "@spine-event-engine/ai/spi/runtime";
 import { AnyPacker, Time, TypeUrls } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -125,8 +126,6 @@ function selectionRegistry(
       totalInputBytes: 4_000,
       totalOutputBytes: 4_000,
     },
-    concurrentOperations: 1,
-    queuedOperations: 0,
     hookTimeoutMs,
   });
   for (const [ref, name] of [
@@ -154,7 +153,98 @@ function selectionRegistry(
   return { registry, primary, preferred };
 }
 
+function connectSelected(
+  registry: AiRegistry,
+  model: ModelRef,
+  scope: AiScope,
+  signal: AbortSignal,
+  deadline: number | undefined,
+) {
+  const deployment = selectDeployment(registry, {
+    kind: "generation",
+    models: [proposal],
+    instancePreference: model,
+  });
+  return AgentModelSelection.connection(backendDefinition(deployment), scope, signal, deadline);
+}
+
 describe("Agent model authorization scope", () => {
+  it("reports a missing required deployment without running connection hooks", async () => {
+    const authorized = vi.fn(() => true);
+    const resolveIdentity = vi.fn();
+    const { registry } = selectionRegistry(authorized, resolveIdentity, false);
+    await expect(
+      AgentModelSelection.selectLiveKind(
+        registry,
+        { models: [proposal] },
+        supportScope(),
+        [],
+        new AbortController().signal,
+        undefined,
+        "generation",
+        AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
+      ),
+    ).rejects.toThrow("generation has no deployment default");
+    expect(resolveIdentity).not.toHaveBeenCalled();
+    expect(authorized).not.toHaveBeenCalled();
+  });
+
+  it("does not start connection or hook work after cancellation or expiry", async () => {
+    const authorized = vi.fn(() => true);
+    const resolveIdentity = vi.fn();
+    const { registry, primary } = selectionRegistry(authorized, resolveIdentity);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      connectSelected(registry, primary, supportScope(), controller.signal, undefined),
+    ).rejects.toThrow("cancelled");
+    await expect(
+      AgentModelSelection.awaitHook(Promise.resolve("result"), controller.signal, undefined),
+    ).rejects.toThrow("cancelled");
+    await expect(
+      AgentModelSelection.awaitHook(
+        Promise.resolve("result"),
+        new AbortController().signal,
+        Time.currentTimeMillis() - 1,
+      ),
+    ).rejects.toThrow("expired");
+    expect(resolveIdentity).not.toHaveBeenCalled();
+    expect(authorized).not.toHaveBeenCalled();
+  });
+
+  it("keeps absent selection distinct from a resolver exception", async () => {
+    const { registry } = selectionRegistry(() => true, undefined, false);
+    const source = AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema));
+    const args = [
+      registry,
+      { models: [proposal] },
+      supportScope(),
+      [],
+      new AbortController().signal,
+      Time.currentTimeMillis() + 1000,
+      "generation",
+      source,
+    ] as const;
+    await expect(AgentModelSelection.selectOptionalLiveKind(...args)).resolves.toBeUndefined();
+    await expect(
+      AgentModelSelection.selectOptionalLiveKind(
+        registry,
+        {
+          models: [proposal],
+          resolveModel: () => {
+            throw new TypeError("generation has no deployment default");
+          },
+        },
+        supportScope(),
+        [],
+        new AbortController().signal,
+        Time.currentTimeMillis() + 1000,
+        "generation",
+        source,
+      ),
+    ).rejects.toThrow("generation has no deployment default");
+  });
+
   it("selects a live model from the original typed signal and committed preference", async () => {
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-live-selection" });
     const command = create(CommandSchema, {
@@ -193,7 +283,15 @@ describe("Agent model authorization scope", () => {
     expect(scope.source.typeUrl).toBe(TypeUrls.derive(DraftSupportReplySchema));
     expect(scope.agent.typeUrl).toBe(TypeUrls.derive(SupportReplyAgentStateSchema));
     expect(selected.model).toEqual(preferred);
-    expect(selected.connection.model?.value).toBe("preferred");
+    expect(selected.connection).toBeUndefined();
+    const connection = await connectSelected(
+      registry,
+      selected.model,
+      scope,
+      new AbortController().signal,
+      Time.currentTimeMillis() + 1_000,
+    );
+    expect(connection.model?.value).toBe("preferred");
   });
   it("awaits an unbounded hook until cancellation when no deadline is configured", async () => {
     const controller = new AbortController();
@@ -211,10 +309,11 @@ describe("Agent model authorization scope", () => {
   it("uses the accepted support Command and persisted preference before authorizing a deployment", async () => {
     const authorized = vi.fn(() => true);
     const { registry, preferred } = selectionRegistry(authorized);
+    const scope = supportScope();
     const selected = await AgentModelSelection.selectLiveKind(
       registry,
       { models: [proposal] },
-      supportScope(),
+      scope,
       [
         create(ModelPreferenceSchema, {
           kind: AiModelKind.GENERATION,
@@ -227,24 +326,37 @@ describe("Agent model authorization scope", () => {
       AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
     );
     expect(selected.model).toEqual(preferred);
-    expect(selected.connection.model?.value).toBe("preferred");
+    expect(selected.connection).toBeUndefined();
+    const connection = await connectSelected(
+      registry,
+      selected.model,
+      scope,
+      new AbortController().signal,
+      Time.currentTimeMillis() + 1_000,
+    );
+    expect(connection.model?.value).toBe("preferred");
     expect(authorized).toHaveBeenCalledExactlyOnceWith("preferred");
   });
 
   it("rejects denied model use before a connection or model request", async () => {
     const authorized = vi.fn(() => false);
     const { registry } = selectionRegistry(authorized);
+    const scope = supportScope();
+    const signal = new AbortController().signal;
+    const deadline = Time.currentTimeMillis() + 1_000;
+    const selected = await AgentModelSelection.selectLiveKind(
+      registry,
+      { models: [proposal] },
+      scope,
+      [],
+      signal,
+      deadline,
+      "generation",
+      AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
+    );
+    expect(authorized).not.toHaveBeenCalled();
     await expect(
-      AgentModelSelection.selectLiveKind(
-        registry,
-        { models: [proposal] },
-        supportScope(),
-        [],
-        new AbortController().signal,
-        Time.currentTimeMillis() + 1_000,
-        "generation",
-        AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
-      ),
+      connectSelected(registry, selected.model, scope, signal, deadline),
     ).rejects.toMatchObject({ name: "AgentLiveFault", reason: "MODEL_USE_DENIED" });
     expect(authorized).toHaveBeenCalledOnce();
   });
@@ -300,17 +412,20 @@ describe("Agent model authorization scope", () => {
   it("rejects an expired accepted selection without authorizing its deployment", async () => {
     const authorized = vi.fn(() => true);
     const { registry } = selectionRegistry(authorized);
+    const scope = supportScope();
+    const signal = new AbortController().signal;
+    const selected = await AgentModelSelection.selectLiveKind(
+      registry,
+      { models: [proposal] },
+      scope,
+      [],
+      signal,
+      undefined,
+      "generation",
+      AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
+    );
     await expect(
-      AgentModelSelection.selectLiveKind(
-        registry,
-        { models: [proposal] },
-        supportScope(),
-        [],
-        new AbortController().signal,
-        Time.currentTimeMillis() - 1,
-        "generation",
-        AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
-      ),
+      connectSelected(registry, selected.model, scope, signal, Time.currentTimeMillis() - 1),
     ).rejects.toThrow("expired");
     expect(authorized).not.toHaveBeenCalled();
   });
@@ -319,15 +434,23 @@ describe("Agent model authorization scope", () => {
     const authorized = vi.fn(() => true);
     const controller = new AbortController();
     const { registry } = selectionRegistry(authorized, () => new Promise<void>(() => undefined));
-    const pending = AgentModelSelection.selectLiveKind(
+    const scope = supportScope();
+    const selected = await AgentModelSelection.selectLiveKind(
       registry,
       { models: [proposal] },
-      supportScope(),
+      scope,
       [],
       controller.signal,
       Time.currentTimeMillis() + 1_000,
       "generation",
       AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
+    );
+    const pending = connectSelected(
+      registry,
+      selected.model,
+      scope,
+      controller.signal,
+      Time.currentTimeMillis() + 1_000,
     );
     controller.abort();
     await expect(pending).rejects.toThrow("cancelled");
@@ -436,6 +559,14 @@ describe("Agent model authorization scope", () => {
     );
     expect(selected.model).toEqual(preferred);
     expect(facts(scope)).toEqual(acceptedFacts);
+    expect(observed.map((item) => item.phase)).toEqual(["selection"]);
+    await connectSelected(
+      registry,
+      selected.model,
+      scope,
+      new AbortController().signal,
+      Time.currentTimeMillis() + 1_000,
+    );
     expect(observed.map((item) => item.phase)).toEqual(["selection", "identity", "use"]);
     expect(observed.map((item) => facts(item.scope))).toEqual([
       acceptedFacts,

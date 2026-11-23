@@ -14,33 +14,33 @@
 
 syntax = "proto3";
 
-package spine.server.agent;
+package spine.agent;
 
+import "google/protobuf/timestamp.proto";
+import "spine/agent/model_call.proto";
 import "spine/options.proto";
-import "spine/ts/agent/history.proto";
 
-option (SPI_all) = true;
 option (type_url_prefix) = "type.spine.io";
 
-// Canonical repository scope retained with one Agent history entry.
-message AgentHistoryStorageKey {
-  // Generated Agent state type name within the tenant boundary.
-  string state_type = 1 [(required) = true];
-
-  // Canonical storage key of the typed Agent identifier.
-  string agent_key = 2 [(required) = true];
-}
-
-// Internal stored record containing the original complete history entry.
-message AgentHistoryRecord {
-  // Repository scope used for indexed reads and immutable identity.
-  AgentHistoryStorageKey scope = 1 [
+// Reports an unsuccessful model operation through a rejected CallModel Command.
+message ModelCallFailed {
+  // Metadata identifying the request and exact Agent destination.
+  ModelCall call = 1 [
     (required) = true,
     (validate) = true
   ];
 
-  // Original conversation record or Event envelope and occurrence time.
-  spine.ts.agent.AgentHistoryEntry entry = 2 [
+  // Safe explanation of the failure without credentials or raw provider data.
+  string reason = 2 [(required) = true];
+
+  // Whether a remote effect may have occurred without a known outcome.
+  bool outcome_unknown = 3;
+
+  // Time at which execution began, if it began.
+  google.protobuf.Timestamp when_started = 4 [(validate) = true];
+
+  // Time at which the failure was established.
+  google.protobuf.Timestamp when_failed = 5 [
     (required) = true,
     (validate) = true
   ];

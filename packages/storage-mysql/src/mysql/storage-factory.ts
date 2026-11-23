@@ -13,13 +13,8 @@
  */
 
 import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
-import { clone, toBinary, type Message } from "@bufbuild/protobuf";
-import {
-  AgentHistoryEntrySchema,
-  type AgentHistoryEntry,
-  type ModelPreference,
-} from "@spine-event-engine/proto/agent";
-import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+import { toBinary, type Message } from "@bufbuild/protobuf";
+import { type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import {
@@ -45,9 +40,10 @@ import {
 } from "@spine-event-engine/storage/provider";
 import {
   AgentHistoryRecords,
-  AgentModelPreferences,
-  type PreferencesRecord,
+  AgentAttributes,
+  type ActiveAgentRecord,
   type AgentCommitInput,
+  type AgentCurrentData,
   type EntityCommitInput,
 } from "@spine-event-engine/storage/provider";
 import {
@@ -876,7 +872,6 @@ export class MysqlStorageFactory extends StorageFactory {
   ): Promise<void> {
     return this.admitPublic(async () => {
       TenantBoundary.of(input.context);
-      if (input.stateType.trim().length === 0) throw new TypeError("Agent state type is required.");
       const spec = AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value));
       await this.prepareRecordAdmitted(input.context, spec, AgentHistoryRecords.group, mode);
       const boundary = this.database(input.context);
@@ -887,7 +882,7 @@ export class MysqlStorageFactory extends StorageFactory {
   }
 
   /**
-   * Prepares live Agent current, history, audit, and preferences as InnoDB tables.
+   * Prepares live Agent current, history, audit, and attributes as InnoDB tables.
    * @param input Declarative Agent Entity layout.
    * @param mode Creation or read-only compatibility check.
    * @returns Completion after every transactional family is compatible.
@@ -941,8 +936,8 @@ export class MysqlStorageFactory extends StorageFactory {
       AgentHistoryRecords.group,
     ]);
     specs.push([
-      AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
-      AgentModelPreferences.group,
+      AgentAttributes.spec((value) => AgentHistoryHash.value(value)),
+      AgentAttributes.group,
     ]);
     specs.push([eventStoreRecordSpec as never, EventStoreGroups.forContext(input.context.name)]);
     return specs;
@@ -1024,8 +1019,8 @@ export class MysqlStorageFactory extends StorageFactory {
       () =>
         this.createMysqlRecordStorage(
           input.context,
-          AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
-          AgentModelPreferences.group,
+          AgentAttributes.spec((value) => AgentHistoryHash.value(value)),
+          AgentAttributes.group,
           boundary,
           false,
         ),
@@ -1872,9 +1867,9 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
 
   #events: MysqlDeliveryStorage | undefined;
 
-  #history: MysqlRecordStorage<string, AgentHistoryRecord> | undefined;
+  #history: MysqlRecordStorage<string, AgentHistoryEntry> | undefined;
 
-  #preferences: MysqlRecordStorage<string, PreferencesRecord> | undefined;
+  #attributes: MysqlRecordStorage<string, ActiveAgentRecord> | undefined;
 
   #idleOutcome: { error?: Error } | undefined;
 
@@ -1892,7 +1887,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    * @param openStorage Opens the current and history families.
    * @param openEvents Opens delivery Event storage.
    * @param openHistory Opens the retained Agent audit family.
-   * @param openPreferences Opens the inert model-preference family.
+   * @param openAttributes Opens the inert Agent attributes family.
    * @param coordinator Coordinates one native InnoDB transaction.
    * @param onClose Removes the handle from factory tracking.
    */
@@ -1903,8 +1898,8 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
       import("@spine-event-engine/proto").EventId,
       import("@spine-event-engine/proto").Event
     >,
-    private readonly openHistory: () => MysqlRecordStorage<string, AgentHistoryRecord>,
-    private readonly openPreferences: () => MysqlRecordStorage<string, PreferencesRecord>,
+    private readonly openHistory: () => MysqlRecordStorage<string, AgentHistoryEntry>,
+    private readonly openAttributes: () => MysqlRecordStorage<string, ActiveAgentRecord>,
     private readonly coordinator: MysqlAgentTransaction,
     private readonly onClose: () => void,
   ) {}
@@ -1959,25 +1954,26 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
   /**
    * Reads one detached current model-preference image.
    * @param entityId Typed Agent identifier.
-   * @returns Current preferences or absence.
+   * @returns Current attributes or absence.
    */
-  readAgentPreferences(entityId: unknown): Promise<readonly ModelPreference[] | undefined> {
+  readAgentCurrent(entityId: unknown): Promise<AgentCurrentData> {
     if (!this.#open)
       return Promise.reject(new MysqlStorageOperationError("Entity commit storage is closed."));
     return this.track(async () => {
-      const key = AgentModelPreferences.key(this.entity, entityId as I);
-      const [, , preferences] = this.agentRecords();
-      await preferences.prepare();
-      const slot = `v1:${AgentHistoryHash.value(AgentModelPreferences.text(key))}`;
-      const found = await preferences.read(slot);
-      if (found === undefined) return undefined;
-      AgentModelPreferences.requireIdentity(found, key);
-      return AgentModelPreferences.copy(found.preferences);
+      const key = AgentAttributes.id(this.entity, entityId as I);
+      const [storage, , attributes] = this.agentRecords();
+      const slot = `v1:${AgentHistoryHash.value(AgentAttributes.text(key))}`;
+      const found = await storage.readCurrentWith(entityId as I, attributes, slot);
+      if (found.second !== undefined) AgentAttributes.requireIdentity(found.second, key);
+      return {
+        current: found.first,
+        attributes: found.second === undefined ? undefined : AgentAttributes.copy(found.second),
+      };
     });
   }
 
   /**
-   * Commits Agent state, final audit, and preferences in one InnoDB transaction.
+   * Commits Agent state, final audit, and attributes in one InnoDB transaction.
    * @param input Captured live Agent transition.
    * @returns Completion after the conditional group commits.
    * @typeParam Id Typed Agent identifier.
@@ -1988,26 +1984,24 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
       return Promise.reject(new MysqlStorageOperationError("Entity commit storage is closed."));
     return this.track(async () => {
       const id = this.entity.id.clone(input.entityId as unknown as I);
-      const key = AgentModelPreferences.key(this.entity, id);
-      const expected =
-        input.expectedPreferences === undefined
-          ? undefined
-          : AgentModelPreferences.copy(input.expectedPreferences);
-      const next = AgentModelPreferences.record(key, input.preferences);
+      const key = AgentAttributes.id(this.entity, id);
+      const expected = input.expectedAttributes && AgentAttributes.copy(input.expectedAttributes);
+      const next = AgentAttributes.copy(input.attributes);
+      AgentAttributes.requireIdentity(next, key);
       const mutation = input.entityCommit && EntityCommitSnapshots.capture(input.entityCommit);
-      const history = this.captureAgentHistory(input.historyEntries);
+      const history = this.captureAgentHistory(key, input.historyEntries);
       this.validateAgent(id, input.expectedVersion, mutation);
-      const [storage, audit, preferences, events] = this.agentRecords(mutation as never);
+      const [storage, audit, attributes, events] = this.agentRecords(mutation as never);
       await this.settleAgentPreparations([
         storage.prepare(),
         audit.prepare(),
-        preferences.prepare(),
+        attributes.prepare(),
         events?.prepare(),
       ]);
       await this.commitAgentPrepared(
         storage,
         audit,
-        preferences,
+        attributes,
         events,
         id,
         input.expectedVersion,
@@ -2039,13 +2033,15 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
 
   /**
    * Captures final Agent audit entries before provider callbacks.
+   * @param agent Complete typed Agent identity.
    * @param entries Final Agent audit entries.
    * @returns Detached final audit entries.
    */
   private captureAgentHistory(
+    agent: NonNullable<ActiveAgentRecord["agent"]>,
     entries: readonly AgentHistoryEntry[] | undefined,
   ): AgentHistoryEntry[] {
-    return entries?.map((entry) => clone(AgentHistoryEntrySchema, entry)) ?? [];
+    return entries?.map((entry) => AgentHistoryRecords.capture(agent, entry)) ?? [];
   }
 
   /**
@@ -2058,28 +2054,28 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
     mutation?: EntityCommitInput<unknown, Message>,
   ): [
     MysqlEntityStorage<I, S>,
-    MysqlRecordStorage<string, AgentHistoryRecord>,
-    MysqlRecordStorage<string, PreferencesRecord>,
+    MysqlRecordStorage<string, AgentHistoryEntry>,
+    MysqlRecordStorage<string, ActiveAgentRecord>,
     MysqlDeliveryStorage | undefined,
   ] {
     const storage = this.#storage ?? this.openStorage();
-    let audit: MysqlRecordStorage<string, AgentHistoryRecord> | undefined;
-    let preferences: MysqlRecordStorage<string, PreferencesRecord> | undefined;
+    let audit: MysqlRecordStorage<string, AgentHistoryEntry> | undefined;
+    let attributes: MysqlRecordStorage<string, ActiveAgentRecord> | undefined;
     let events: MysqlDeliveryStorage | undefined;
     try {
       storage.ensure(Boolean(mutation?.states?.length), Boolean(mutation?.diagnostics?.length));
       audit = this.#history ?? this.openHistory();
-      preferences = this.#preferences ?? this.openPreferences();
+      attributes = this.#attributes ?? this.openAttributes();
       if (mutation?.events?.length && this.#events === undefined) events = this.openEvents();
       this.#storage ??= storage;
       this.#history ??= audit;
-      this.#preferences ??= preferences;
+      this.#attributes ??= attributes;
       this.#events ??= events;
-      return [storage, audit, preferences, this.#events];
+      return [storage, audit, attributes, this.#events];
     } catch (error) {
       this.rollbackAgentRecords(error, [
         this.#history === undefined ? audit : undefined,
-        this.#preferences === undefined ? preferences : undefined,
+        this.#attributes === undefined ? attributes : undefined,
         events,
         this.#storage === undefined ? storage : undefined,
       ]);
@@ -2136,7 +2132,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    * Executes all conditional writes on the same verified InnoDB connection.
    * @param storage Retained current and optional Entity histories.
    * @param audit Retained final Agent history.
-   * @param preferences Retained model selections.
+   * @param attributes Retained Agent attributes.
    * @param events Optional delivery rows.
    * @param id Captured Agent identifier.
    * @param version Initial Entity version.
@@ -2150,25 +2146,25 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    */
   private async commitAgentPrepared<Id, State extends Message>(
     storage: MysqlEntityStorage<I, S>,
-    audit: MysqlRecordStorage<string, AgentHistoryRecord>,
-    preferences: MysqlRecordStorage<string, PreferencesRecord>,
+    audit: MysqlRecordStorage<string, AgentHistoryEntry>,
+    attributes: MysqlRecordStorage<string, ActiveAgentRecord>,
     events: MysqlDeliveryStorage | undefined,
     id: I,
     version: number,
-    expected: readonly ModelPreference[] | undefined,
-    next: PreferencesRecord,
+    expected: ActiveAgentRecord | undefined,
+    next: ActiveAgentRecord,
     mutation: EntityCommitInput<Id, State> | undefined,
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
-    if (next.key === undefined) throw new Error("Agent preference identity is missing.");
-    const key = next.key;
-    const slot = `v1:${AgentHistoryHash.value(AgentModelPreferences.text(key))}`;
-    const tables = this.agentTableNames(storage, audit, preferences, events);
+    if (next.agent === undefined) throw new Error("Agent attributes identity is missing.");
+    const key = next.agent;
+    const slot = `v1:${AgentHistoryHash.value(AgentAttributes.text(key))}`;
+    const tables = this.agentTableNames(storage, audit, attributes, events);
     const work = () =>
       this.applyAgentLocked(
         storage,
         audit,
-        preferences,
+        attributes,
         id,
         slot,
         version,
@@ -2179,7 +2175,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
         events,
       );
     await this.coordinator.commit(tables, (connection) =>
-      this.withAgentConnection(connection, storage, audit, preferences, events, work),
+      this.withAgentConnection(connection, storage, audit, attributes, events, work),
     );
   }
 
@@ -2187,18 +2183,18 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    * Lists all tables required by the admitted Agent transaction.
    * @param audit Retained Agent audit family.
    * @param events Optional delivery Event family.
-   * @param preferences Retained model-preference family.
+   * @param attributes Retained Agent attributes family.
    * @param storage Retained provider record family.
    * @returns The complete list of tables in the Agent transaction.
    */
   private agentTableNames(
     storage: MysqlEntityStorage<I, S>,
-    audit: MysqlRecordStorage<string, AgentHistoryRecord>,
-    preferences: MysqlRecordStorage<string, PreferencesRecord>,
+    audit: MysqlRecordStorage<string, AgentHistoryEntry>,
+    attributes: MysqlRecordStorage<string, ActiveAgentRecord>,
     events: MysqlDeliveryStorage | undefined,
   ): string[] {
     return [
-      preferences.tableName,
+      attributes.tableName,
       audit.tableName,
       ...storage.tableNames(),
       ...(events === undefined ? [] : [events.tableName]),
@@ -2210,7 +2206,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    * @param audit Retained Agent audit family.
    * @param connection Admitted InnoDB transaction connection.
    * @param events Optional delivery Event family.
-   * @param preferences Retained model-preference family.
+   * @param attributes Retained Agent attributes family.
    * @param storage Retained provider record family.
    * @param work Conditional Agent write on that connection.
    * @returns Completion after the bound Agent write settles.
@@ -2218,12 +2214,12 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
   private withAgentConnection(
     connection: PoolConnection,
     storage: MysqlEntityStorage<I, S>,
-    audit: MysqlRecordStorage<string, AgentHistoryRecord>,
-    preferences: MysqlRecordStorage<string, PreferencesRecord>,
+    audit: MysqlRecordStorage<string, AgentHistoryEntry>,
+    attributes: MysqlRecordStorage<string, ActiveAgentRecord>,
     events: MysqlDeliveryStorage | undefined,
     work: () => Promise<void>,
   ): Promise<void> {
-    return preferences.withConnection(connection, () =>
+    return attributes.withConnection(connection, () =>
       audit.withConnection(connection, () =>
         storage.withConnection(connection, () =>
           events === undefined ? work() : events.withConnection(connection, work),
@@ -2236,12 +2232,12 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    * Checks both initial images before writing the final group.
    * @param storage Current Entity family.
    * @param audit Final Agent audit family.
-   * @param preferences Current model selections.
+   * @param attributes Current Agent attributes.
    * @param id Captured Agent identifier.
    * @param slot Bounded preference slot.
    * @param version Initial Entity version.
    * @param expected Initial preference image.
-   * @param next Complete replacement preferences.
+   * @param next Complete replacement attributes.
    * @param mutation Optional Entity mutation.
    * @param history Final Agent audit entries.
    * @param events Optional delivery Event family.
@@ -2251,23 +2247,23 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    */
   private async applyAgentLocked<Id, State extends Message>(
     storage: MysqlEntityStorage<I, S>,
-    audit: MysqlRecordStorage<string, AgentHistoryRecord>,
-    preferences: MysqlRecordStorage<string, PreferencesRecord>,
+    audit: MysqlRecordStorage<string, AgentHistoryEntry>,
+    attributes: MysqlRecordStorage<string, ActiveAgentRecord>,
     id: I,
     slot: string,
     version: number,
-    expected: readonly ModelPreference[] | undefined,
-    next: PreferencesRecord,
+    expected: ActiveAgentRecord | undefined,
+    next: ActiveAgentRecord,
     mutation: EntityCommitInput<Id, State> | undefined,
     history: readonly AgentHistoryEntry[],
     events?: MysqlDeliveryStorage,
   ): Promise<void> {
-    await this.guardPreference(preferences, slot, expected, next);
+    await this.guardAttributes(attributes, slot, expected, next);
     const current = await storage.readCurrentLocked(id);
     if ((current?.version?.number ?? 0) !== version)
       throw new Error("Agent initial Entity Version is no longer current.");
-    await this.writeAgentRows(storage, audit, events, id, mutation, history);
-    await preferences.write(next);
+    await this.writeAgentRows(storage, audit, events, mutation, history);
+    await attributes.write(next);
   }
 
   /**
@@ -2278,22 +2274,22 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    * @param next Complete replacement record.
    * @returns Completion after the complete preference image is checked.
    */
-  private async guardPreference(
-    storage: MysqlRecordStorage<string, PreferencesRecord>,
+  private async guardAttributes(
+    storage: MysqlRecordStorage<string, ActiveAgentRecord>,
     slot: string,
-    expected: readonly ModelPreference[] | undefined,
-    next: PreferencesRecord,
+    expected: ActiveAgentRecord | undefined,
+    next: ActiveAgentRecord,
   ): Promise<void> {
-    if (next.key === undefined) throw new Error("Agent preference identity is missing.");
+    if (next.agent === undefined) throw new Error("Agent attributes identity is missing.");
     const prior = await storage.readLocked(slot);
-    if (prior !== undefined) AgentModelPreferences.requireIdentity(prior, next.key);
-    if (!AgentModelPreferences.same(prior?.preferences, expected))
-      throw new Error("Agent model preferences changed during the live turn.");
+    if (prior !== undefined) AgentAttributes.requireIdentity(prior, next.agent);
+    if (!AgentAttributes.same(prior, expected))
+      throw new Error("Agent attributes changed during the live turn.");
     if (
       prior === undefined &&
-      !(await storage.compareAndSet(slot, undefined, AgentModelPreferences.record(next.key, [])))
+      !(await storage.compareAndSet(slot, undefined, AgentAttributes.record(next.agent, [], [])))
     )
-      throw new Error("Agent model preference admission conflicted.");
+      throw new Error("Agent attributes admission conflicted.");
   }
 
   /**
@@ -2301,7 +2297,6 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    * @param storage Entity families.
    * @param audit Final Agent history family.
    * @param events Optional delivery family.
-   * @param id Captured Agent identifier.
    * @param mutation Optional Entity mutation.
    * @param history Final audit entries.
    * @typeParam Id Typed Agent identifier.
@@ -2310,9 +2305,8 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    */
   private async writeAgentRows<Id, State extends Message>(
     storage: MysqlEntityStorage<I, S>,
-    audit: MysqlRecordStorage<string, AgentHistoryRecord>,
+    audit: MysqlRecordStorage<string, AgentHistoryEntry>,
     events: MysqlDeliveryStorage | undefined,
-    id: I,
     mutation: EntityCommitInput<Id, State> | undefined,
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
@@ -2322,10 +2316,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
       await storage.commitCapability().appendDiagnosticImmutable(row);
     for (const row of mutation?.events ?? []) await events?.writeImmutable(row);
     if (mutation !== undefined) await storage.writeCurrentAdmitted(mutation.next);
-    for (const entry of history)
-      await audit.writeImmutable(
-        AgentHistoryRecords.record(this.entity.stateSchema.typeName, this.entity.id.key(id), entry),
-      );
+    for (const entry of history) await audit.writeImmutable(entry);
   }
 
   /**
@@ -2547,7 +2538,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    */
   private closeRetained(): Error | undefined {
     const errors: unknown[] = [];
-    for (const port of [this.#events, this.#history, this.#preferences, this.#storage]) {
+    for (const port of [this.#events, this.#history, this.#attributes, this.#storage]) {
       try {
         port?.close();
       } catch (error) {
@@ -2556,7 +2547,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
     }
     this.#events = undefined;
     this.#history = undefined;
-    this.#preferences = undefined;
+    this.#attributes = undefined;
     this.#storage = undefined;
     try {
       this.onClose();

@@ -12,8 +12,7 @@
  * the License.
  */
 
-import { clone } from "@bufbuild/protobuf";
-import { AgentHistoryEntrySchema, type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
+import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 
 import type {
   AgentHistoryPage,
@@ -22,6 +21,8 @@ import type {
   AgentHistoryStorageInput,
 } from "../entity/agent-history.js";
 import { TenantBoundary } from "../internal/tenancy.js";
+import { AgentIdentity } from "../internal/agent-identity.js";
+import { AgentHistoryRecords } from "../entity/agent-history-record-spec.js";
 import { AgentHistoryIndex } from "./agent-history-index.js";
 import { AgentHistoryMutationQueue } from "./agent-history-mutation-queue.js";
 import { InMemoryStorageBackend } from "./in-memory-storage-backend.js";
@@ -61,16 +62,15 @@ export const MemoryAgentHistory: MemoryAgentHistoryAccess = Object.freeze({
     backend: InMemoryStorageBackend,
     input: AgentHistoryStorageInput<Id>,
   ): AgentHistoryStorage<Id> {
-    if (input.stateType.trim().length === 0) throw new TypeError("Agent state type is required.");
     const records = InMemoryStorageBackend.bind(
       backend,
       "entity",
       TenantBoundary.of(input.context),
-      `agent-history:${input.stateType}`,
+      "agent-history",
       () => new Map<string, AgentHistoryIndex>(),
     );
     return new MemoryAgentHistoryHandle(
-      input.id.key,
+      input.agent,
       records,
       AgentHistoryMutationQueue.bind(backend, TenantBoundary.of(input.context)),
     );
@@ -85,7 +85,7 @@ export const MemoryAgentHistory: MemoryAgentHistoryAccess = Object.freeze({
 class MemoryAgentHistoryHandle<Id> implements AgentHistoryStorage<Id> {
   readonly capacity = Object.freeze({});
 
-  readonly #idKey: (id: Id) => string;
+  readonly #agent: AgentHistoryStorageInput<Id>["agent"];
 
   readonly #records: Map<string, AgentHistoryIndex>;
 
@@ -96,16 +96,16 @@ class MemoryAgentHistoryHandle<Id> implements AgentHistoryStorage<Id> {
   /**
    * Binds one typed ID codec to the retained per-Agent indexes.
    *
-   * @param idKey Canonical Entity ID conversion.
+   * @param agent Constructs the complete typed Agent identity.
    * @param records Retained indexes in the provider backend.
    * @param queue Serializes standalone append with fenced execution writes.
    */
   constructor(
-    idKey: (id: Id) => string,
+    agent: AgentHistoryStorageInput<Id>["agent"],
     records: Map<string, AgentHistoryIndex>,
     queue: KeyedSerialQueue,
   ) {
-    this.#idKey = idKey;
+    this.#agent = agent;
     this.#records = records;
     this.#queue = queue;
   }
@@ -131,7 +131,8 @@ class MemoryAgentHistoryHandle<Id> implements AgentHistoryStorage<Id> {
   async appendAll(entityId: Id, entries: readonly AgentHistoryEntry[]): Promise<void> {
     this.#requireOpen();
     const key = this.#key(entityId);
-    const captured = entries.map((entry) => clone(AgentHistoryEntrySchema, entry));
+    const agent = this.#agent(entityId);
+    const captured = entries.map((entry) => AgentHistoryRecords.capture(agent, entry));
     if (captured.length === 0) return;
     await this.#queue.run(key, () => {
       const existing = this.#records.get(key);
@@ -153,6 +154,21 @@ class MemoryAgentHistoryHandle<Id> implements AgentHistoryStorage<Id> {
       this.#validateRead(request);
       const index = this.#records.get(this.#key(request.entityId)) ?? new AgentHistoryIndex();
       return index.read(request.view, request.after, request.count, request.maxBytes);
+    });
+  }
+
+  /**
+   * Reads one prepared model request by its immutable identity.
+   *
+   * @param entityId Typed Agent identifier.
+   * @param callId Logical model call ID.
+   * @returns Independent original request entry, when present.
+   */
+  readModelRequest(entityId: Id, callId: string): Promise<AgentHistoryEntry | undefined> {
+    return Promise.resolve().then(() => {
+      this.#requireOpen();
+      if (!callId) throw new TypeError("Model call ID is required.");
+      return this.#records.get(this.#key(entityId))?.modelRequest(callId);
     });
   }
 
@@ -188,9 +204,7 @@ class MemoryAgentHistoryHandle<Id> implements AgentHistoryStorage<Id> {
    * @returns Canonical storage key.
    */
   #key(entityId: Id): string {
-    const key = this.#idKey(entityId);
-    if (key.length === 0) throw new TypeError("Agent history Entity ID is required.");
-    return key;
+    return AgentIdentity.text(this.#agent(entityId));
   }
 
   /**

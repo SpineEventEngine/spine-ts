@@ -14,10 +14,9 @@
 
 import { Pool } from "pg";
 import { randomUUID } from "node:crypto";
-import { create } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
-import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import { describe, expect, it } from "vitest";
 import {
   AgentHistoryConformance,
@@ -27,6 +26,8 @@ import { AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 
 import {
   conversation,
+  modelRequest,
+  submissionAttempt,
   response,
   event,
   occurredAt,
@@ -45,6 +46,44 @@ function required(value: string | undefined): string {
 }
 
 describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
+  it("reopens exact prepared requests and preserves their complete envelopes", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: required(url) })
+      .build();
+    const agent = `request-${randomUUID()}`;
+    const callId = `call-${randomUUID()}`;
+    const time = occurredAt(21n, 5);
+    const request = modelRequest(callId, time);
+    const attempt = submissionAttempt(`attempt-${callId}`, request, time);
+    const first = AgentHistoryStorageFactories.create(factory, scope);
+    try {
+      await first.appendAll(agent, [request, attempt]);
+      first.close();
+      const reopened = AgentHistoryStorageFactories.create(factory, scope);
+      try {
+        const exact = await reopened.readModelRequest(agent, callId);
+        expect(exact && toBinary(AgentHistoryEntrySchema, exact)).toEqual(
+          toBinary(
+            AgentHistoryEntrySchema,
+            create(AgentHistoryEntrySchema, { ...request, agent: scope.agent(agent) }),
+          ),
+        );
+        await expect(reopened.readModelRequest("other-agent", callId)).resolves.toBeUndefined();
+        await expect(reopened.readModelRequest(agent, "missing")).resolves.toBeUndefined();
+        const page = await reopened.read({ entityId: agent, view: { kind: "full" }, count: 10 });
+        expect(page.entries).toHaveLength(2);
+        await expect(reopened.append(agent, modelRequest(callId, occurredAt(22n)))).rejects.toThrow(
+          /immutable|conflict/i,
+        );
+      } finally {
+        reopened.close();
+      }
+    } finally {
+      first.close();
+      await factory.close();
+    }
+  });
+
   it("rolls back an immutable audit group when its second row conflicts", async () => {
     const factory = await PostgresStorageFactory.newBuilder()
       .setOptions({ url: required(url) })
@@ -59,7 +98,9 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
         history.appendAll(agent, [request, conversation("conflict", "reply", occurredAt(3n))]),
       ).rejects.toThrow(/immutable|conflict/i);
       const page = await history.read({ entityId: agent, view: { kind: "full" }, count: 5 });
-      expect(page.entries).toEqual([existing]);
+      expect(page.entries).toEqual([
+        create(AgentHistoryEntrySchema, { ...existing, agent: scope.agent(agent) }),
+      ]);
       await history.appendAll(agent, [request, event("system", occurredAt(4n), true)]);
       await history.appendAll(agent, [request, event("system", occurredAt(4n), true)]);
       expect(
@@ -106,7 +147,7 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
       try {
         const run = randomUUID();
         await AgentHistoryConformance.check({
-          scope: { ...scope, id: { key: (id) => (id.length === 0 ? "" : `${run}:${id}`) } },
+          scope: { ...scope, agent: (id) => scope.agent(id.length === 0 ? "" : `${run}:${id}`) },
           open: (input) =>
             AgentHistoryStorageFactories.create(
               input.context.multitenant ? tenants : factory,
@@ -133,10 +174,10 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
     await pool.query(`CREATE SCHEMA "${schema}"`);
     const factory = await PostgresStorageFactory.newBuilder()
       .setOptions({ url: required(url), schema })
-      .setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, table)
+      .setTableName(AgentHistoryEntrySchema, AgentHistoryEntrySchema, table)
       .build();
     const run = randomUUID();
-    const input = { ...scope, id: { key: (id: string) => `${run}:${id}` } };
+    const input = { ...scope, agent: (id: string) => scope.agent(`${run}:${id}`) };
     const entry = event("reopen-pg", occurredAt(1_789_000_001n, 123_456_789), false);
     const first = AgentHistoryStorageFactories.create(factory, input);
     await first.append("ticket-pg", entry);
@@ -144,7 +185,7 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
     await factory.close();
     const reopened = await PostgresStorageFactory.newBuilder()
       .setOptions({ url: required(url), schema })
-      .setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, table)
+      .setTableName(AgentHistoryEntrySchema, AgentHistoryEntrySchema, table)
       .build();
     try {
       const history = AgentHistoryStorageFactories.create(reopened, input);
@@ -154,7 +195,9 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
         count: 1,
         maxBytes: 10000,
       });
-      expect(page.entries).toEqual([entry]);
+      expect(page.entries).toEqual([
+        create(AgentHistoryEntrySchema, { ...entry, agent: input.agent("ticket-pg") }),
+      ]);
       const indexes = await pool.query<{ indexname: string; indexdef: string }>(
         "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname=$1 AND tablename=$2 " +
           "AND indexname IN ('agent_history_full','agent_history_category'," +

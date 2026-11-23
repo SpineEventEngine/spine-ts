@@ -12,15 +12,22 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { create, equals } from "@bufbuild/protobuf";
 import type { AiRegistry } from "@spine-event-engine/ai";
+import { AnyPacker } from "@spine-event-engine/core";
+import type { AiOperationId } from "@spine-event-engine/proto/agent";
+import type { CallModel } from "@spine-event-engine/proto/generated/spine/agent/commands_pb.js";
+import type { ModelReplied } from "@spine-event-engine/proto/generated/spine/agent/events_pb.js";
+import type { ModelCallFailed } from "@spine-event-engine/proto/generated/spine/agent/rejections_pb.js";
 import {
   Agent,
   Aggregate,
   Assign,
   BoundedContext,
+  Command,
   type BoundedContextBuilder,
   Projection,
+  React,
   Subscribe,
 } from "@spine-event-engine/server";
 
@@ -42,7 +49,11 @@ import {
   SupportDraftStateSchema,
   SupportReviewStateSchema,
 } from "../generated/spine/examples/support/states_pb.js";
-import type { SupportTicketId } from "../generated/spine/examples/support/types_pb.js";
+import {
+  SupportRequestSchema,
+  SupportReplySchema,
+  type SupportTicketId,
+} from "../generated/spine/examples/support/types_pb.js";
 import { draftSupportReply } from "./model.js";
 
 export { draftSupportReply } from "./model.js";
@@ -75,33 +86,88 @@ export class SupportDraftAgent extends Agent<SupportTicketId, typeof SupportDraf
   // prettier-ignore
 
   /**
-   * Invokes the bounded model and emits a reviewable outcome for this ticket.
+   * Creates a typed model Command after saving current ticket facts.
    *
    * @param command Current facts and explicit conversation identity.
-   * @returns A proposed reply or a failure preserving the submitted facts.
+   * @returns Model Command submitted after this Agent turn commits.
    */
-  @Assign async draft(command: DraftSupportReply): Promise<SupportReplySuggested | SupportReplyFailed> {
+  @Command draft(command: DraftSupportReply): CallModel {
     if (command.conversation === undefined || command.request === undefined)
       throw new TypeError("A draft requires ticket facts and a conversation.");
-    const result = await this.ai.invoke(draftSupportReply, {
-      call: "draft-support-reply",
-      conversation: command.conversation,
+    const request = command.request;
+    const conversation = command.conversation;
+    this.update((state) => {
+      const changed = state.request === undefined ||
+        !equals(SupportRequestSchema, state.request, request) ||
+        state.conversation?.value !== conversation.value;
+      state.id = this.id;
+      state.request = request;
+      if (changed) state.reply = undefined;
+      state.conversation = conversation;
+    });
+    return this.modelCommands.create(draftSupportReply, {
+      conversation,
       input: command,
     });
-    if (!result.ok) return create(SupportReplyFailedSchema, {
-      id: this.id, request: command.request, conversation: command.conversation,
-      operation: result.operationId,
-    });
-    this.update((state) => {
-      state.id = this.id;
-      state.request = command.request;
-      state.reply = result.value;
-      state.conversation = command.conversation;
-    });
+  }
+
+  // prettier-ignore
+
+  /**
+   * Admits a validated reply only for the current draft request.
+   *
+   * @param event Typed model reply for a prepared request.
+   * @returns Reviewable reply when this request is still current.
+   */
+  @React async onReplied(event: ModelReplied): Promise<SupportReplySuggested | undefined> {
+    const command = await this.originalRequest(event.call?.id);
+    if (command.conversation?.value !== this.state.conversation?.value ||
+        command.request === undefined || this.state.request === undefined ||
+        !equals(SupportRequestSchema, command.request, this.state.request)) return undefined;
+    const reply = event.output && AnyPacker.tryUnpack(event.output, SupportReplySchema);
+    if (reply === undefined) throw new TypeError("Model reply has no validated support proposal.");
+    this.update((state) => { state.reply = reply; });
     return create(SupportReplySuggestedSchema, {
-      id: this.id, request: command.request, reply: result.value,
-      conversation: command.conversation, operation: result.operationId,
+      id: this.id, request: command.request, reply,
+      conversation: command.conversation, operation: event.call?.id,
     });
+  }
+
+  // prettier-ignore
+
+  /**
+   * Records a failed model request without producing a stale proposal.
+   *
+   * @param rejection Declared failure of the original model Command.
+   * @returns Failure for review when its request is still current.
+   */
+  @React async onFailed(rejection: ModelCallFailed): Promise<SupportReplyFailed | undefined> {
+    const command = await this.originalRequest(rejection.call?.id);
+    if (command.conversation?.value !== this.state.conversation?.value ||
+        command.request === undefined || this.state.request === undefined ||
+        !equals(SupportRequestSchema, command.request, this.state.request)) return undefined;
+    return create(SupportReplyFailedSchema, {
+      id: this.id, request: command.request, conversation: command.conversation,
+      operation: rejection.call?.id,
+    });
+  }
+
+  /**
+   * Reads the exact request Command that prepared a model call.
+   *
+   * @param callId Typed identity carried by the model outcome.
+   * @returns Original support draft request.
+   */
+  private async originalRequest(callId: AiOperationId | undefined): Promise<DraftSupportReply> {
+    if (callId === undefined) throw new TypeError("Model outcome has no call identity.");
+    const history = await this.modelCallHistory(callId);
+    if (history?.source.case !== "command")
+      throw new TypeError("Model request history has no original support Command.");
+    const command =
+      history.source.value.message &&
+      AnyPacker.tryUnpack(history.source.value.message, DraftSupportReplySchema);
+    if (command === undefined) throw new TypeError("Model request history has no support draft.");
+    return command;
   }
 }
 
@@ -136,9 +202,13 @@ export class SupportReview extends Projection<SupportTicketId, typeof SupportRev
    */
   @Subscribe onReplyFailed(event: SupportReplyFailed): void {
     this.update((state) => {
+      const sameRequest = state.request !== undefined && event.request !== undefined &&
+        equals(SupportRequestSchema, state.request, event.request) &&
+        state.conversation?.value === event.conversation?.value;
       state.id = event.id;
       state.request = event.request;
       state.conversation = event.conversation;
+      if (!sameRequest) state.reply = undefined;
       state.hasDraft = state.reply !== undefined;
       state.latestRequestFailed = true;
     });

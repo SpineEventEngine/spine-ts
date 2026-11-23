@@ -527,8 +527,6 @@ const supportBox = async (
       totalInputBytes: 32_768,
       totalOutputBytes: 262_144,
     },
-    concurrentOperations: 1,
-    queuedOperations: 0,
     hookTimeoutMs: 2_000,
   })
     .register(registration)
@@ -834,8 +832,6 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
         totalInputBytes: 32_768,
         totalOutputBytes: 262_144,
       },
-      concurrentOperations: 1,
-      queuedOperations: 0,
       hookTimeoutMs: 2_000,
     })
       .register(registration)

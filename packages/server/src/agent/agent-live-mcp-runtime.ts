@@ -574,7 +574,7 @@ export class AgentLiveMcpRuntime {
   private history(response: ToolResponse): AgentHistoryEntry {
     const occurredAt = Time.currentTime();
     return create(AgentHistoryEntrySchema, {
-      occurredAt,
+      whenOccurred: occurredAt,
       item: {
         case: "conversationRecord",
         value: create(ConversationRecordSchema, {
@@ -582,7 +582,7 @@ export class AgentLiveMcpRuntime {
           conversation: this.host.operation.conversation,
           operation: this.host.operation.operation,
           toolCall: response.call,
-          occurredAt,
+          whenOccurred: occurredAt,
           content: AnyPacker.pack(ToolResponseSchema, response),
         }),
       },

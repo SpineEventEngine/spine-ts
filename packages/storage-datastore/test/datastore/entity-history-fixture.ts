@@ -183,9 +183,20 @@ export class HistoryTransaction {
     return Promise.resolve([]);
   }
 
-  get(key: HistoryKey): Promise<[Record<string | symbol, unknown> | undefined]> {
+  get(
+    key: HistoryKey | HistoryKey[],
+  ): Promise<[Record<string | symbol, unknown> | undefined | Record<string | symbol, unknown>[]]> {
     if (this.client.backend.failTransactionRead !== undefined)
       return Promise.reject(this.client.backend.failTransactionRead);
+    if (Array.isArray(key)) {
+      for (const item of key) this.observe(item);
+      return Promise.resolve([
+        key.flatMap((item) => {
+          const found = this.client.entity(item);
+          return found === undefined ? [] : [found];
+        }),
+      ]);
+    }
     this.observe(key);
     return Promise.resolve([this.client.entity(key)]);
   }

@@ -126,7 +126,6 @@ function liveFixture(
     },
     SupportReplyAgentStateSchema,
     agentId,
-    ticketNumber,
     history,
     metadata,
     () => undefined,
@@ -372,7 +371,7 @@ describe("live Agent AI execution", () => {
     ]);
   });
 
-  it("rechecks model use after selection and before connecting the same invocation", async () => {
+  it("checks model use after selection only when the operation starts", async () => {
     let allowed = true;
     const connect = vi.fn(
       (
@@ -434,7 +433,7 @@ describe("live Agent AI execution", () => {
           customerQuestion: "Please draft",
         }),
       }),
-    ).rejects.toThrow("identity or authorization changed");
+    ).rejects.toThrow("Selected Agent model use was denied.");
     expect(connect).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
     expect(saved).toEqual([]);
@@ -737,7 +736,6 @@ describe("live Agent AI execution", () => {
       },
       SupportReplyAgentStateSchema,
       agentId,
-      "T-live",
       history,
       metadata,
       () => undefined,
@@ -942,7 +940,6 @@ describe("live Agent AI execution", () => {
       },
       SupportReplyAgentStateSchema,
       agentId,
-      "T-live",
       history,
       metadata,
       () => undefined,
@@ -1327,7 +1324,6 @@ describe("live Agent AI execution", () => {
       },
       SupportReplyAgentStateSchema,
       agentId,
-      "T-failed-tools",
       history,
       metadata,
       () => undefined,

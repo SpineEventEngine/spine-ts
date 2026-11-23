@@ -34,7 +34,7 @@ import {
 } from "@spine-event-engine/storage/provider";
 import {
   AgentHistoryRecords,
-  AgentModelPreferences,
+  AgentAttributes,
   eventStoreRecordSpec,
   EventStoreGroups,
   eventHistorySpec,
@@ -686,7 +686,6 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   ): Promise<void> {
     return this.admit(() => {
       TenantBoundary.of(input.context);
-      if (!input.stateType.trim()) throw new TypeError("Agent state type is required.");
       const spec = AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value));
       return this.prepareNative(
         input.context,
@@ -756,9 +755,9 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     );
     await this.prepareNative(
       context,
-      AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
-      AgentModelPreferences.group,
-      "spine_agent_model_preferences",
+      AgentAttributes.spec((value) => AgentHistoryHash.value(value)),
+      AgentAttributes.group,
+      "spine_agent_attributes",
       mode,
     );
   }
@@ -1093,7 +1092,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
       );
     const adapter: EntityCommitStorage = {
       commit: (work) => bundle.commits.commit(work),
-      readAgentPreferences: unsupported,
+      readAgentCurrent: unsupported,
       commitAgent: unsupported,
       ...this.retainCleanup(bundle, () => this.#commits.delete(adapter)),
     };
@@ -1207,8 +1206,8 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   ): RecordStorage<I, R> {
     if (group?.name === AgentHistoryRecords.group.name)
       return this.openNative(context, recordSpec, group, "spine_agent_history");
-    if (group?.name === AgentModelPreferences.group.name)
-      return this.openNative(context, recordSpec, group, "spine_agent_model_preferences");
+    if (group?.name === AgentAttributes.group.name)
+      return this.openNative(context, recordSpec, group, "spine_agent_attributes");
     const resolved = this.resolve(recordSpec, group, false);
     return this.openNative(context, recordSpec, group, resolved.layout?.kind);
   }

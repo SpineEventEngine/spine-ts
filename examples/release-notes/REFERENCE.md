@@ -1,6 +1,6 @@
 # Release Notes Studio technical reference
 
-Audience: coding agents implementing or checking the Release Notes Studio example. The [README](README.md) is the human walkthrough and contains build and launch instructions. This reference records the domain messages, Agent invocation, account and tool boundaries, terminal history evidence, history reads, and test seams. It does not replace the application's permission checks.
+Audience: coding agents implementing or checking the Release Notes Studio example. The [README](README.md) is the human walkthrough and contains build and launch instructions. This reference records the domain messages, Agent model Command, account and tool boundaries, terminal history evidence, history reads, and test seams. It does not replace the application's permission checks.
 
 ## Application lifecycle
 
@@ -14,16 +14,16 @@ Their cleanup closes the endpoint before the Application.
 
 A generation begins only after the trusted desktop service resolves the selected Git revisions and submits `RequestReleaseGeneration`. The Aggregate accepts the inputs before the Agent reacts. The sequence below names the code responsible for each transition and whether completion is synchronous or asynchronous.
 
-| Step                 | Responsible code                        | What happens                                                                              | Timing                                                                             |
-| -------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Choose the range     | Trusted desktop service                 | Resolves both revisions to full commit IDs and reads a catalog of committed changes.      | Asynchronous Git processes.                                                        |
-| Submit generation    | Trusted desktop service                 | Posts `RequestReleaseGeneration` with the selected inputs and model/account reference.    | Asynchronous Command submission.                                                   |
-| Accept the inputs    | `ReleaseDraft` Aggregate                | Checks the Command and emits `ReleaseGenerationRequested`.                                | Synchronous handler; persistence and Event delivery are asynchronous.              |
-| Draft the notes      | `ReleaseNotesAgent`                     | Reacts to that Event and awaits `this.ai.invoke(...)`.                                    | Asynchronous model interaction, including any MCP lookups and correction attempts. |
-| Return the proposal  | `ReleaseNotesAgent`                     | Emits `ReleaseNotesProposed`, or a domain failure Event.                                  | Local result construction; persistence and delivery are asynchronous.              |
-| Accept or discard it | `ReleaseDraft` Aggregate                | Applies the application's rules for whether the proposal still belongs to the draft.      | Synchronous handler; persistence and delivery are asynchronous.                    |
-| Show the result      | Projection and desktop service          | Expose committed draft state and history to the renderer.                                 | Asynchronous reads and notifications; synchronous rendering.                       |
-| Edit and export      | Aggregate, then trusted desktop service | Stores exact UTF-8 Markdown and prepares a Version-bound snapshot for native file saving. | Synchronous domain decisions, followed by asynchronous file writing.               |
+| Step                 | Responsible code                                  | What happens                                                                                                       | Timing                                                                |
+| -------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| Choose the range     | Trusted desktop service                           | Resolves both revisions to full commit IDs and reads a catalog of committed changes.                               | Asynchronous Git processes.                                           |
+| Submit generation    | Trusted desktop service                           | Posts `RequestReleaseGeneration` with the selected inputs and model/account reference.                             | Asynchronous Command submission.                                      |
+| Accept the inputs    | `ReleaseDraft` Aggregate                          | Checks the Command and emits `ReleaseGenerationRequested`.                                                         | Synchronous handler; persistence and Event delivery are asynchronous. |
+| Prepare generation   | `ReleaseNotesAgent`                               | Handles that Event with `@Command`, saves its generation, and returns `CallModel`.                                 | Ordinary Agent commit, followed by asynchronous model execution.      |
+| Return the proposal  | Framework model handler, then `ReleaseNotesAgent` | Executes the pinned deployment and delivers `ModelReplied` or `ModelCallFailed`; the Agent emits a domain outcome. | Asynchronous provider work and ordinary outcome delivery.             |
+| Accept or discard it | `ReleaseDraft` Aggregate                          | Applies the application's rules for whether the proposal still applies to the draft.                               | Synchronous handler; persistence and delivery are asynchronous.       |
+| Show the result      | Projection and desktop service                    | Expose committed draft state and history to the renderer.                                                          | Asynchronous reads and notifications; synchronous rendering.          |
+| Edit and export      | Aggregate, then trusted desktop service           | Stores exact UTF-8 Markdown and prepares a Version-bound snapshot for native file saving.                          | Synchronous domain decisions, followed by asynchronous file writing.  |
 
 An acknowledgement from `Client.post()` is not proof that all those steps have
 finished. The desktop service reads committed draft state and source-correlated
@@ -47,7 +47,7 @@ message ReleaseNotesAgentState {
     ReleaseDraftId id = 1;
 
     // Conversation retained for generations for this draft.
-    spine.ts.agent.ConversationId conversation = 2 [(validate) = true];
+    spine.agent.ConversationId conversation = 2 [(validate) = true];
 
     // Identifies the most recently handled generation.
     ReleaseGenerationId generation = 3 [(validate) = true];
@@ -124,99 +124,50 @@ The ChatGPT plan profile uses `prompt-and-validate`; it does not promise native
 schema-constrained generation. A configured attempt ceiling, when reached,
 produces a failed outcome for the handler to interpret.
 
-These checks establish that the cited evidence belongs to the selected range.
+These checks establish that the cited evidence comes from the selected range.
 They cannot establish that every sentence correctly explains the code. Human
 review remains necessary.
 
 Applications may configure model and invocation-wide ceilings. Tool continuation
 and correction both count toward a configured model-request ceiling.
 
-## Agent reaction and domain outcome
+## Agent model Command and domain outcome
 
-The Agent uses `@React`, just as a Process Manager reacts to an Event. The
-handler receives the accepted inputs and explicitly invokes the model operation.
-It does not import a provider SDK or create an MCP client.
+[model.ts](src/domain/model.ts) exports `draftReleaseNotes`. The Agent and
+`ReleaseNotesContext.create()` import this same definition. The Bounded Context
+registers it through `.add(ReleaseNotesAgent, { ai: { models: [draftReleaseNotes],
+resolveModel } })` and supplies the deployment registry through `.withAi(ai)`.
+The framework resolves the definition by Agent state type URL, operation name,
+and revision. The `ModelRef` chosen from the accepted generation identifies the
+provider deployment separately from the definition.
 
-<!-- prettier-ignore-start -->
-<!-- docs-snippet-path: examples/release-notes/src/domain/index.ts -->
+`ReleaseNotesAgent.onRequested()` receives `ReleaseGenerationRequested` with
+`@Command`. It saves the current generation identity and returns
+`this.modelCommands.create(draftReleaseNotes, { conversation: event.conversation,
+input: event })`. Construction makes no provider request. The Agent commit
+stores the complete prepared Command, triggering Event envelope, and pending
+call. The framework appends a complete submission-attempt Command before
+posting. Its process-local asynchronous handler invokes the pinned deployment,
+including authorized MCP tools and configured output validation.
 
-```ts
-import { create } from "@bufbuild/protobuf";
-import { Agent, React } from "@spine-event-engine/server";
+`ModelReplied` or the `ModelCallFailed` rejection later reaches the Agent. Its
+`@React` handler uses `modelCallHistory(callId)` to read the original complete
+request and triggering `ReleaseGenerationRequested` Event. It checks the
+current generation before emitting `ReleaseNotesProposed` or
+`ReleaseGenerationFailed`. The Aggregate still decides whether the result
+matches its pending generation and historical input Version. An older result
+is not automatically rejected by the framework; this application interprets
+it through its stored generation identity.
 
-import {
-    ReleaseGenerationFailedSchema,
-    ReleaseNotesProposedSchema,
-    type ReleaseGenerationFailed,
-    type ReleaseGenerationRequested,
-    type ReleaseNotesProposed,
-} from "../../generated/spine/examples/releasenotes/events_pb.js";
-import { ReleaseNotesAgentStateSchema } from
-    "../../generated/spine/examples/releasenotes/states_pb.js";
-import type { ReleaseDraftId } from
-    "../../generated/spine/examples/releasenotes/types_pb.js";
-import { draftReleaseNotes } from "./model.js";
+An Agent handler, declared output, or state transition failure follows the
+ordinary reception monitor: its default action acknowledges the Inbox row,
+while a custom action may repeat processing. A storage failure leaves the
+original row `TO_DELIVER`.
 
-/**
- * Prepares a proposal for the draft identified by this Entity's ID.
- */
-class ReleaseNotesAgent extends Agent<
-    ReleaseDraftId,
-    typeof ReleaseNotesAgentStateSchema
-> {
-    /**
-     * Invokes the selected model and returns a domain outcome for the Aggregate.
-     *
-     * @param event Accepted inputs, conversation, and evidence catalog.
-     * @returns A proposal or a safe failure tied to this generation.
-     */
-    @React
-    async onRequested(
-        event: ReleaseGenerationRequested,
-    ): Promise<ReleaseNotesProposed | ReleaseGenerationFailed> {
-        if (!event.conversation || !event.generation || !event.inputVersion) {
-            throw new TypeError("Generation requires its conversation, identity, and input Version.");
-        }
-        const result = await this.ai.invoke(draftReleaseNotes, {
-            call: "draft-release-notes",
-            conversation: event.conversation,
-            input: event,
-        });
-        this.update((state) => {
-            state.id = this.id;
-            state.conversation = event.conversation;
-            state.generation = event.generation;
-        });
-        if (!result.ok) {
-            return create(ReleaseGenerationFailedSchema, {
-                id: this.id,
-                generation: event.generation,
-                inputVersion: event.inputVersion,
-                reason: result.failure.code,
-                operation: result.operationId,
-            });
-        }
-        return create(ReleaseNotesProposedSchema, {
-            id: this.id,
-            generation: event.generation,
-            inputVersion: event.inputVersion,
-            document: result.value,
-            operation: result.operationId,
-        });
-    }
-}
-```
-<!-- prettier-ignore-end -->
-
-`call` identifies this invocation in the handler. It lets the runtime recognize
-the saved result when continuing interrupted execution; it is not a provider
-model ID. `conversation` groups related interactions. `input` is the typed,
-accepted Event supplied to this operation.
-
-The handler awaits the model. The framework records supported requests,
-responses, tool calls, and outcomes as they happen. The returned domain Event
-expresses what this application does with the result. A model failure does not
-erase the recorded interaction.
+If the Agent saves but the separate attempt append fails, the original row can
+be `DELIVERED` while the provider was never called. A saved
+pending call is not replayed at startup. Ordinary redelivery of an original
+`TO_DELIVER` signal may prepare a new call ID.
 
 ## Proposal acceptance rules
 
@@ -362,12 +313,12 @@ History is recorded for every Agent. There is no recording switch. Its repositor
 keeps indexes for that Agent instance; the desktop does not scan all System
 Events in the Bounded Context to find a few interactions.
 
-| Method                | Entries, newest first                                                                     |
-| --------------------- | ----------------------------------------------------------------------------------------- |
-| `fullHistory`         | A Protobuf oneof containing a conversation record, System Event, or emitted domain Event. |
-| `conversationHistory` | Conversation records for the supplied conversation ID.                                    |
-| `systemEventHistory`  | System Event envelopes.                                                                   |
-| `domainEventHistory`  | Domain Event envelopes emitted by this Agent.                                             |
+| Method                | Entries, newest first                                                                                                               |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `fullHistory`         | Provider exchanges, System Events, domain Events, prepared model requests, submission attempts, handled outcomes, and abandonments. |
+| `conversationHistory` | Provider exchanges for the supplied conversation ID.                                                                                |
+| `systemEventHistory`  | System Event envelopes.                                                                                                             |
+| `domainEventHistory`  | Domain Event envelopes emitted by this Agent.                                                                                       |
 
 Each call reads a page. Its `nextCursor` reads older entries. A page size is not
 a retention limit; continue until no cursor remains. An explicitly configured
@@ -416,18 +367,21 @@ Inside an Agent handler, the same four history methods are protected Entity
 methods. For example, `await this.conversationHistory({ conversation, pageSize: 25 })`
 reads prior records for an explicit conversation. Reading history does not
 itself send that history to the model or invoke a model. The handler must decide
-which information belongs in the next typed input.
+which information to include in the next typed input.
 
 The Agent's emitted domain history contains proposals and failures. The
-Aggregate's later acceptance and edit Events belong to the Aggregate, not
-to the Agent's `domainEventHistory`.
+Aggregate's later acceptance and edit Events are in the Aggregate's history.
+The Agent's full history also contains prepared requests, submission attempts,
+handled outcomes, and explicit abandonment. Conversation history retains only
+provider exchanges.
 
-The desktop follows the original generation source ID through paged Agent
-history. A matching committed proposal or failure Event proves that handler
-work finished, even if the Aggregate has not yet applied that Event. A matching
-`AgentInvocationTerminated` System Event with `MODEL_USE_DENIED` proves a
-pre-handler authorization denial. Missing evidence stays unknown; a canceled
-or edited draft does not establish that the Agent has stopped.
+The desktop finds the saved model request whose complete triggering Event
+matches the accepted generation source ID. It then matches a committed proposal
+or failure Event by the prepared call ID, generation ID, and input Version. A
+provider connection or use denial produces `ModelCallFailed`, which the Agent
+turns into the application's `ReleaseGenerationFailed` Event. Missing outcome
+evidence stays unknown; a canceled or edited draft does not prove remote work
+stopped.
 
 If Command submission remains unconfirmed, the desktop retains its original
 inputs and offers an explicit retry. That action repeats the saved Command with
@@ -442,11 +396,9 @@ observed, a timeout still means unknown; the desktop keeps the original work
 locked. Command acknowledgement alone does not establish the Aggregate's
 business outcome.
 
-Some failures happen before the handler starts. For example, an explicit model
-authorization denial stops the turn and records
-`AgentInvocationTerminated` with reason `MODEL_USE_DENIED`. No model call is made,
-and no application domain Event is invented for that denial. The desktop can
-read the source-correlated System Event even though the handler did not run.
+A failed or unmatched Agent outcome handler leaves its call pending and reports
+the outcome. The desktop treats an absent application outcome as unknown. An
+explicit abandonment would not cancel provider work or suppress a late reply.
 
 ## BlackBox and adapter tests
 
@@ -485,7 +437,7 @@ offers **Wait** and
 Bounded Context before the window. Local cancellation does not
 prove that the provider did no work or consumed no plan usage.
 
-The reusable Agent behavior is typed invocation, optional configured attempt and tool bounds,
-authorization hooks, recorded interactions, saved execution progress, and indexed
-history. The release workflow—including Git policy, proposal acceptance,
+The reusable Agent behavior is typed model Commands, direct invocation when
+needed, configured request and tool bounds, authorization hooks, recorded
+interactions, pending-call metadata, and indexed history. The release workflow—including Git policy, proposal acceptance,
 exact Markdown editing, sign-in flow, and file export—is this application's code.

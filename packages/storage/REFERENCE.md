@@ -106,14 +106,14 @@ appends. A complete System audit group is saved before its original Event is
 published. Its failure remains observable and does not create a replacement
 application Event.
 
-A typed receipt records live admission without a replayable execution record.
 `EntityCommitStorage.commitAgent()` atomically compares an exact Entity image
-and model preferences, then writes the accepted state, preference and history
-changes. An unchanged-state or preference-only turn can succeed without
+and complete Agent attributes, then writes the accepted state, attributes,
+and history changes. An attributes-only turn can succeed without
 increasing the Entity Version. Failed comparisons write no prefix. The ordinary
 `commit()` contract below remains separate and can retain prefix writes after
 an error. Built-in providers implement the live Agent operation with their
 native transaction semantics; custom providers must explicitly support it.
+Saved pending calls do not replay execution after restart.
 
 Memory coordinates these changes within a shared in-process backend;
 PostgreSQL, transactional MySQL/MariaDB, and Datastore use their native atomic

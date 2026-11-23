@@ -14,8 +14,12 @@
 
 import { clone, type Message } from "@bufbuild/protobuf";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
-import type { AgentHistoryEntry, ModelPreference } from "@spine-event-engine/proto/agent";
+import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+// prettier-ignore
+import type {
+  ActiveAgentRecord,
+} from "@spine-event-engine/proto/generated/spine/server/agent/active_agent_record_pb.js";
 
 import type { EntityRecord } from "../entity/entity-record.js";
 import type { StorageContext } from "../storage/storage.js";
@@ -92,14 +96,14 @@ export interface AgentCommitInput<I, S extends Message> {
   readonly expectedVersion: number;
 
   /**
-   * Absent record or complete preferences observed when the live turn began.
+   * Absent record or complete attributes observed when the live turn began.
    */
-  readonly expectedPreferences: readonly ModelPreference[] | undefined;
+  readonly expectedAttributes: ActiveAgentRecord | undefined;
 
   /**
-   * Complete preferences replacing the observed image.
+   * Complete attributes replacing the observed image.
    */
-  readonly preferences: readonly ModelPreference[];
+  readonly attributes: ActiveAgentRecord;
 
   /**
    * Optional changed current Entity and state-history mutation.
@@ -110,6 +114,21 @@ export interface AgentCommitInput<I, S extends Message> {
    * Final Agent audit entries committed with state and preferences.
    */
   readonly historyEntries?: readonly AgentHistoryEntry[];
+}
+
+/**
+ * One coordinated current-state and Agent-attributes provider image.
+ */
+export interface AgentCurrentData {
+  /**
+   * Saved domain Entity record, when one exists.
+   */
+  readonly current: EntityRecord | undefined;
+
+  /**
+   * Saved framework attributes, when one exists.
+   */
+  readonly attributes: ActiveAgentRecord | undefined;
 }
 
 /**
@@ -185,15 +204,15 @@ export interface EntityCommitStorage {
   commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<void>;
 
   /**
-   * Reads the current complete per-instance model selections.
+   * Reads current domain state and complete Agent attributes together.
    *
    * @param entityId Original typed Agent identifier.
-   * @returns Defensive preferences, or absence of the preference record.
+   * @returns Independent current-state and attributes images, including absence.
    */
-  readAgentPreferences(entityId: unknown): Promise<readonly ModelPreference[] | undefined>;
+  readAgentCurrent(entityId: unknown): Promise<AgentCurrentData>;
 
   /**
-   * Commits conditionally current state, final audit, and model selections together.
+   * Commits conditionally current state, final audit, and complete attributes together.
    *
    * @typeParam I Typed Agent identifier.
    * @typeParam S Generated Agent state.

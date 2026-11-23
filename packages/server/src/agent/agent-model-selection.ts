@@ -36,6 +36,7 @@ import {
   AiProviderModelNameSchema as ModelNameSchema,
   AiProviderNameSchema,
   ModelRefSchema,
+  type AiConnectionIdentity,
   type ModelPreference,
 } from "@spine-event-engine/proto/agent";
 import {
@@ -94,7 +95,7 @@ interface AgentModelSelectionAccess {
    * @param deadlineEpochMs Actual live deadline.
    * @param kind Generation or decision kind.
    * @param sourceMessage Original source payload for selection hooks.
-   * @returns Validated selected model and connection.
+   * @returns Validated selected model without opening its connection.
    */
   selectLiveKind(
     registry: AiRegistry,
@@ -106,6 +107,30 @@ interface AgentModelSelectionAccess {
     kind: "generation" | "decision",
     sourceMessage?: Any,
   ): Promise<AgentLiveModel>;
+
+  /**
+   * Finds a model when a deployment preference exists for this kind.
+   *
+   * @param registry Effective AI registry.
+   * @param repository Repository policy and capabilities.
+   * @param scope Original authorization scope.
+   * @param preferences Current committed instance preferences.
+   * @param signal Invocation cancellation.
+   * @param deadlineEpochMs Actual live deadline.
+   * @param kind Generation or decision kind.
+   * @param sourceMessage Original source payload for selection hooks.
+   * @returns Validated model, or absence when no selection was configured.
+   */
+  selectOptionalLiveKind(
+    registry: AiRegistry,
+    repository: RepositoryAiOptions,
+    scope: AiScope,
+    preferences: readonly ModelPreference[],
+    signal: AbortSignal,
+    deadlineEpochMs: number | undefined,
+    kind: "generation" | "decision",
+    sourceMessage?: Any,
+  ): Promise<AgentLiveModel | undefined>;
 
   /**
    * Resolves and copies one explicit model from the accepted payload.
@@ -140,6 +165,7 @@ interface AgentModelSelectionAccess {
    * @param deadlineEpochMs Absolute invocation deadline.
    * @param kind Generation or decision kind.
    * @param sourceMessage Original accepted payload.
+   * @param optional Whether an absent selection returns without error.
    * @returns A registered authorized deployment.
    */
   deployment(
@@ -151,7 +177,22 @@ interface AgentModelSelectionAccess {
     deadlineEpochMs: number | undefined,
     kind: "generation" | "decision",
     sourceMessage?: Any,
-  ): Promise<ReturnType<typeof selectDeployment>>;
+    optional?: boolean,
+  ): Promise<ReturnType<typeof selectDeployment> | undefined>;
+
+  /**
+   * Checks whether any selection source specifies a deployment.
+   *
+   * @param registry Effective registry defaults.
+   * @param normal Repository and persisted selection image.
+   * @param override Explicit resolver result.
+   * @returns Whether a deployment was selected.
+   */
+  hasSelection(
+    registry: AiRegistry,
+    normal: Parameters<typeof selectDeployment>[1],
+    override: ModelRef | undefined,
+  ): boolean;
 
   /**
    * Checks a concrete or inherited selection with repository policy.
@@ -204,7 +245,7 @@ interface AgentModelSelectionAccess {
     scope: AiScope,
     signal: AbortSignal,
     deadlineEpochMs: number | undefined,
-  ): Promise<AgentLiveModel["connection"]>;
+  ): Promise<AiConnectionIdentity>;
 
   /**
    * Converts a deployment role to its generated enum value.
@@ -316,7 +357,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
   },
 
   /**
-   * Selects a registered backend and its checked connection for one live kind.
+   * Selects a registered backend reference for one live kind.
    */
   async selectLiveKind(
     registry: AiRegistry,
@@ -328,7 +369,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     kind: "generation" | "decision",
     sourceMessage?: Any,
   ): Promise<AgentLiveModel> {
-    const registration = await this.deployment(
+    const selected = await this.selectOptionalLiveKind(
       registry,
       repository,
       scope,
@@ -338,18 +379,40 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
       kind,
       sourceMessage,
     );
-    const connection = await this.connection(
-      backendDefinition(registration),
+    if (selected === undefined) throw new TypeError(`${kind} has no deployment default`);
+    return selected;
+  },
+
+  /**
+   * Finds a live model only when one was configured or explicitly resolved.
+   */
+  async selectOptionalLiveKind(
+    registry: AiRegistry,
+    repository: RepositoryAiOptions,
+    scope: AiScope,
+    preferences: readonly ModelPreference[],
+    signal: AbortSignal,
+    deadlineEpochMs: number | undefined,
+    kind: "generation" | "decision",
+    sourceMessage?: Any,
+  ): Promise<AgentLiveModel | undefined> {
+    const registration = await this.deployment(
+      registry,
+      repository,
       scope,
+      preferences,
       signal,
       deadlineEpochMs,
+      kind,
+      sourceMessage,
+      true,
     );
+    if (registration === undefined) return undefined;
     const model = clone(ModelRefSchema, registration.ref);
     Validate.check(ModelRefSchema, model);
     return {
       kind: kind === "generation" ? AiModelKind.GENERATION : AiModelKind.DECISION,
       model,
-      connection,
     };
   },
 
@@ -375,7 +438,8 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     deadlineEpochMs: number | undefined,
     kind: "generation" | "decision",
     sourceMessage?: Any,
-  ): Promise<ReturnType<typeof selectDeployment>> {
+    optional = false,
+  ): Promise<ReturnType<typeof selectDeployment> | undefined> {
     const override = await this.resolveOverride(
       registry,
       repository,
@@ -386,6 +450,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
       sourceMessage,
     );
     const normal = this.selection(registry, repository, preferences, kind);
+    if (optional && !this.hasSelection(registry, normal, override)) return undefined;
     const registration = selectDeployment(registry, {
       ...normal,
       ...(override === undefined ? {} : { instancePreference: override }),
@@ -393,6 +458,28 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     if (override !== undefined)
       await this.authorizeSelection(registry, repository, scope, override, signal, deadlineEpochMs);
     return registration;
+  },
+
+  /**
+   * Checks whether any selection source specifies a deployment.
+   *
+   * @param registry Effective registry defaults.
+   * @param normal Repository and persisted selection image.
+   * @param override Explicit resolver result.
+   * @returns Whether a deployment was selected.
+   */
+  hasSelection(
+    registry: AiRegistry,
+    normal: Parameters<typeof selectDeployment>[1],
+    override: ModelRef | undefined,
+  ): boolean {
+    return (
+      override !== undefined ||
+      normal.instancePreference !== undefined ||
+      normal.repositoryDefault !== undefined ||
+      normal.contextDefault !== undefined ||
+      registryOptions(registry).defaultModels[normal.kind] !== undefined
+    );
   },
 
   /**
@@ -533,8 +620,8 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
   },
 
   /**
-   * Resolves a connection identity within the deadline. An explicit use denial
-   * becomes a safe terminal execution fault before the Agent handler runs.
+   * Resolves a connection identity within the deadline when a model is invoked.
+   * An explicit use denial becomes a typed terminal execution fault.
    *
    * @param backend Factory-proven selected backend callbacks.
    * @param scope Authenticated accepted-invocation scope.
@@ -547,7 +634,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     scope: AiScope,
     signal: AbortSignal,
     deadlineEpochMs: number | undefined,
-  ): Promise<AgentLiveModel["connection"]> {
+  ): Promise<AiConnectionIdentity> {
     if (signal.aborted) throw new Error("Agent model selection cancelled.");
     if (deadlineEpochMs !== undefined && deadlineEpochMs <= Time.currentTimeMillis())
       throw new Error("Agent model selection expired.");

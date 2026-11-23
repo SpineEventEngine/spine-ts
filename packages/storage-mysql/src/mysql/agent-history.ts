@@ -13,12 +13,12 @@
  */
 
 import { createHash } from "node:crypto";
-import { clone, toBinary } from "@bufbuild/protobuf";
-import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
+import { toBinary } from "@bufbuild/protobuf";
 import {
-  AgentHistoryRecordSchema,
-  type AgentHistoryRecord,
-} from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+  AgentHistoryEntrySchema,
+  type AgentHistoryEntry,
+  type AgentId,
+} from "@spine-event-engine/proto/agent";
 import {
   AgentHistoryKeys,
   AgentHistoryPages,
@@ -89,7 +89,7 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
    */
   constructor(
     private readonly input: AgentHistoryStorageInput<Id>,
-    private readonly records: MysqlRecordStorage<string, AgentHistoryRecord>,
+    private readonly records: MysqlRecordStorage<string, AgentHistoryEntry>,
     private readonly onAdmit: OnPublicOperation = (work) => work(),
     private readonly transaction?: MysqlAgentTransaction | undefined,
   ) {}
@@ -116,18 +116,15 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
     entries: readonly AgentHistoryEntry[],
   ): Promise<void> {
     this.requireOpen();
-    const key = this.key(entityId);
+    const agent = this.input.agent(entityId);
     const rows = entries.map((entry) => {
       if (
         AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry)).length >
         AgentHistoryIndexBytes
       )
         throw new RangeError("Agent history ordering key exceeds the MySQL index capacity.");
-      const row = clone(
-        AgentHistoryRecordSchema,
-        AgentHistoryRecords.record(this.input.stateType, key, entry),
-      );
-      if (toBinary(AgentHistoryRecordSchema, row).length > 65_535)
+      const row = AgentHistoryRecords.capture(agent, entry);
+      if (toBinary(AgentHistoryEntrySchema, row).length > 65_535)
         throw new RangeError("Agent history record exceeds the MySQL row capacity.");
       return row;
     });
@@ -168,7 +165,7 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
       throw new RangeError("Agent history ordering key exceeds the MySQL index capacity.");
     await this.ready();
     await this.records.writeImmutable(
-      AgentHistoryRecords.record(this.input.stateType, this.key(entityId), entry),
+      AgentHistoryRecords.capture(this.input.agent(entityId), entry),
     );
   }
 
@@ -183,6 +180,26 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
   }
 
   /**
+   * Reads a prepared request by its exact immutable primary identity.
+   *
+   * @param entityId Typed Agent identifier.
+   * @param callId Logical model call ID.
+   * @returns Original prepared request entry when present.
+   */
+  readModelRequest(entityId: Id, callId: string): Promise<AgentHistoryEntry | undefined> {
+    return this.onAdmit(async () => {
+      this.requireOpen();
+      await this.ready();
+      const agent = this.input.agent(entityId);
+      const slot = AgentHistoryHash.value(AgentHistoryRecords.requestSlot(agent, callId));
+      const record = await this.records.read(slot);
+      return record === undefined
+        ? undefined
+        : AgentHistoryRecords.requestEntry(record, agent, callId);
+    });
+  }
+
+  /**
    * Executes an admitted provider operation.
    *
    * @param request Typed history page request.
@@ -191,12 +208,12 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
   private async readAdmitted(request: AgentHistoryRead<Id>): Promise<AgentHistoryPage> {
     this.requireOpen();
     await this.ready();
-    const agentKey = this.key(request.entityId);
+    const agent = this.input.agent(request.entityId);
     const after =
       request.after === undefined ? undefined : AgentHistoryKeys.indexValue(request.after);
     this.validateView(request);
-    return AgentHistoryPages.read(request, after, (cursor, limit) =>
-      this.fetch(agentKey, request, cursor, limit),
+    return AgentHistoryPages.read(request, agent, after, (cursor, limit) =>
+      this.fetch(agent, request, cursor, limit),
     );
   }
 
@@ -235,28 +252,21 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
   /**
    * Reads a bounded native page with complete scope and view predicates.
    *
-   * @param agentKey Canonical Agent key.
+   * @param agent Complete typed Agent identity.
    * @param request View and response bounds.
    * @param after Exclusive encoded order key.
    * @param limit Maximum native rows for this chunk.
    * @returns Complete original stored records.
    */
   private async fetch(
-    agentKey: string,
+    agent: AgentId,
     request: AgentHistoryRead<Id>,
     after: string | undefined,
     limit: number,
-  ): Promise<readonly AgentHistoryRecord[]> {
-    const values: (string | number)[] = [
-      AgentHistoryHash.value(AgentHistoryRecords.scope(this.input.stateType, agentKey)),
-      this.input.stateType,
-      agentKey,
-    ];
-    const clauses = [
-      "`scope_digest` = ?",
-      "BINARY `state_type` = BINARY ?",
-      "BINARY `agent_key` = BINARY ?",
-    ];
+  ): Promise<readonly AgentHistoryEntry[]> {
+    const scope = AgentHistoryRecords.scope(agent);
+    const values: (string | number)[] = [AgentHistoryHash.value(scope), scope];
+    const clauses = ["`scope_digest` = ?", "BINARY `agent_key` = BINARY ?"];
     this.viewPredicate(request, clauses, values);
     if (after !== undefined) {
       values.push(after);
@@ -305,18 +315,6 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
       throw new TypeError("Conversation history requires a ConversationId.");
     if (request.after !== undefined && kind !== "full" && request.after.category !== kind)
       throw new TypeError("Agent history boundary category does not match the view.");
-  }
-
-  /**
-   * Converts a typed Agent ID to its canonical key.
-   *
-   * @param id Typed Agent identifier.
-   * @returns Canonical storage key.
-   */
-  private key(id: Id): string {
-    const key = this.input.id.key(id);
-    if (key.length === 0) throw new TypeError("Agent history Entity ID is required.");
-    return key;
   }
 
   /**

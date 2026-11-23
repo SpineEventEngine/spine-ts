@@ -109,8 +109,6 @@ export class DeliveryReadiness {
 
   readonly #local = new Set<Delivery>();
 
-  readonly #deferred = new Map<string, DeliveryReady>();
-
   #directDispatcher: ((message: InboxMessage, tenantId?: TenantId) => Promise<void>) | undefined;
 
   #closeAttempt: Promise<void> | undefined;
@@ -143,13 +141,9 @@ export class DeliveryReadiness {
   close(): Promise<void> {
     if (this.#closeAttempt !== undefined) return this.#closeAttempt;
     this.#closed = true;
-    this.#deferred.clear();
     this.#closeAttempt = (async () => {
       const errors: unknown[] = [];
-      while (this.#active.size > 0) {
-        const results = await Promise.allSettled([...this.#active]);
-        for (const result of results) if (result.status === "rejected") errors.push(result.reason);
-      }
+      await this.drain();
       const closing = await Promise.allSettled(
         [...this.#local].map((delivery) => delivery.close()),
       );
@@ -160,21 +154,14 @@ export class DeliveryReadiness {
   }
 
   /**
-   * Stores a ready route until Agent capacity is available.
-   * @param ready Route whose local dispatch was deferred.
+   * Waits for accepted local handoffs without closing later notifications.
+   *
+   * @returns Whether a handoff was active during this drain.
    */
-  defer(ready: DeliveryReady): void {
-    if (!this.#closed)
-      this.#deferred.set(InboxHandoff.readyKey(ready), InboxHandoff.cloneReady(ready));
-  }
-
-  /**
-   * Retries each deferred route after Agent capacity becomes available.
-   */
-  retryDeferred(): void {
-    const ready = [...this.#deferred.values()];
-    this.#deferred.clear();
-    for (const route of ready) this.notify(route);
+  async drain(): Promise<boolean> {
+    const hadWork = this.#active.size > 0;
+    while (this.#active.size > 0) await Promise.allSettled([...this.#active]);
+    return hadWork;
   }
 
   /**
@@ -426,8 +413,6 @@ export interface LocalInboxKeyInput {
  */
 export const InboxHandoff: Readonly<{
   ready(endpoint: DeliveryEndpoint, tenantId?: TenantId): DeliveryReady;
-  readyKey(ready: DeliveryReady): string;
-  cloneReady(ready: DeliveryReady): DeliveryReady;
   isPromiseLike(value: unknown): value is PromiseLike<unknown>;
   coordinate(options: {
     readonly handoffs: Map<string, Promise<InboxMessage>>;
@@ -469,20 +454,6 @@ export const InboxHandoff: Readonly<{
       targetTypeUrl: endpoint.targetTypeUrl,
       shard: new ShardIndex(endpoint.shard.index, endpoint.shard.ofTotal),
     });
-  },
-
-  readyKey(ready: DeliveryReady): string {
-    return JSON.stringify([
-      tenantKey(ready.tenantId),
-      ready.label,
-      ready.targetTypeUrl,
-      ready.shard.index,
-      ready.shard.ofTotal,
-    ]);
-  },
-
-  cloneReady(ready: DeliveryReady): DeliveryReady {
-    return InboxHandoff.ready(ready, ready.tenantId);
   },
 
   isPromiseLike(value: unknown): value is PromiseLike<unknown> {

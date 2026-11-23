@@ -52,10 +52,20 @@ import type {
   HistoryPage,
   HistoryRead,
 } from "@spine-event-engine/ai";
-import type { AgentHistoryEntry, ConversationRecord } from "@spine-event-engine/proto/agent";
+import type {
+  AgentHistoryEntry,
+  AiOperationId,
+  ConversationRecord,
+  ModelCall,
+} from "@spine-event-engine/proto/agent";
 
 import { AgentHistoryReads } from "../agent/agent-history.js";
 import { AgentAiBindings } from "../agent/agent-ai-binding.js";
+import {
+  ModelCommandBindings,
+  type AgentModelCommands,
+  type ModelCallHistory,
+} from "../agent/model-commands.js";
 
 import {
   describeEntityMetadata,
@@ -1587,6 +1597,37 @@ export abstract class Agent<Id, Schema extends DescriptorMessageSchema> extends 
    */
   protected get ai(): AgentAi {
     return AgentAiBindings.require(this);
+  }
+
+  /**
+   * Exposes detached model Command construction during the current Agent handler.
+   *
+   * @returns Handler-bound typed model Command operations.
+   */
+  protected get modelCommands(): AgentModelCommands {
+    return ModelCommandBindings.require(this);
+  }
+
+  /**
+   * Reads calls still pending when the current Agent handler began.
+   *
+   * The matching outcome remains here while its handler runs. The repository
+   * removes it only after that handler commits successfully.
+   *
+   * @returns Detached pending call metadata for this handler.
+   */
+  protected get pendingModelCalls(): readonly ModelCall[] {
+    return ModelCommandBindings.require(this).pendingCalls();
+  }
+
+  /**
+   * Reads one original prepared model request by its logical call ID.
+   *
+   * @param callId Logical model call identifier.
+   * @returns The request and complete triggering envelope when present.
+   */
+  protected modelCallHistory(callId: AiOperationId): Promise<ModelCallHistory | undefined> {
+    return AgentHistoryReads.modelRequest(this, callId);
   }
 
   /**

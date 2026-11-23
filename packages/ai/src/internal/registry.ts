@@ -112,17 +112,6 @@ const copyRegistryOptions = (options: AiRegistryOptions): Readonly<AiRegistryOpt
   const copy = Object.freeze({
     defaultModels: copyDefaults(options.defaultModels),
     invocationLimits: copyInvocationLimits(options.invocationLimits ?? {}),
-    ...(options.concurrentOperations === undefined
-      ? {}
-      : {
-          concurrentOperations: positiveInteger(
-            options.concurrentOperations,
-            "concurrentOperations",
-          ),
-        }),
-    ...(options.queuedOperations === undefined
-      ? {}
-      : { queuedOperations: positiveInteger(options.queuedOperations, "queuedOperations", true) }),
     ...(options.hookTimeoutMs === undefined
       ? {}
       : { hookTimeoutMs: positiveInteger(options.hookTimeoutMs, "hookTimeoutMs") }),

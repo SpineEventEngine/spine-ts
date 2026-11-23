@@ -12,14 +12,15 @@
  * the License.
  */
 
-import { create, equals } from "@bufbuild/protobuf";
+import { create, equals, type Message } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { createHash } from "node:crypto";
 import { AiModel, AiRegistry, Mcp, ModelRef } from "@spine-event-engine/ai";
 import {
   createBackendRegistration,
   type AiMcpProtocolControl,
 } from "@spine-event-engine/ai/spi/adapter";
-import { AnyPacker, EntityQuery } from "@spine-event-engine/core";
+import { AnyPacker, EntityQuery, TypeUrls } from "@spine-event-engine/core";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import {
   AgentHistoryCursorSchema,
@@ -31,15 +32,18 @@ import {
   AgentToolCallStartedSchema,
   AgentToolCallFinishedSchema,
   AgentModelSelectionChangedSchema,
+  AgentIdSchema,
   AiContentDigestSchema,
   AiModelKind,
   AiOutcome,
   ConversationIdSchema,
+  ModelCallSchema,
   GenerationRequestSchema,
   GenerationResponseSchema,
   ToolRequestSchema,
   ToolResponseSchema,
   type AgentHistoryEntry,
+  type ModelCall,
 } from "@spine-event-engine/proto/agent";
 import {
   Application,
@@ -60,6 +64,11 @@ import type {
   AgentHistoryCapacity,
   AgentHistoryStorage,
   AgentHistoryStorageInput,
+} from "@spine-event-engine/storage/provider";
+import {
+  AgentAttributes,
+  type EntityCommitStorage,
+  type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
 import { describe, expect, it } from "vitest";
 import { AiTestBackend, BlackBox } from "../src/index.js";
@@ -231,6 +240,12 @@ class ProjectAggregate extends Aggregate<string, typeof ProjectSchema> {
 class RecordingHistoryFactory extends InMemoryStorageFactory {
   readonly historyWrites: AgentHistoryEntry[] = [];
 
+  private agentCommitStorage?: EntityCommitStorage;
+
+  private pendingSeed: SupportReplyAgentId | undefined;
+
+  private savedSeed?: ModelCall;
+
   constructor(
     private readonly limits: AgentHistoryCapacity = {},
     backend?: InMemoryStorageBackend,
@@ -249,6 +264,99 @@ class RecordingHistoryFactory extends InMemoryStorageFactory {
       this.historyWrites.push(...entries);
     };
     return storage;
+  }
+
+  /**
+   * Captures the Agent commit handle so a test can seed pending work before dispatch.
+   *
+   * @param input Prepared Entity layout.
+   * @returns The provider commit handle.
+   */
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    const storage = super.createEntityCommitStorage(input);
+    if (input.stateSchema.typeName === SupportReplyAgentStateSchema.typeName) {
+      this.agentCommitStorage = storage;
+      return {
+        readAgentCurrent: async (id) => {
+          if (this.pendingSeed !== undefined) {
+            const seed = this.pendingSeed;
+            this.pendingSeed = undefined;
+            await this.writePendingSeed(seed);
+          }
+          return storage.readAgentCurrent(id);
+        },
+        commitAgent: (work) => storage.commitAgent(work),
+        commit: (work) => storage.commit(work),
+        close: () => storage.close(),
+        closeIdle: () => {
+          storage.closeIdle();
+        },
+      };
+    }
+    return storage;
+  }
+
+  /**
+   * Saves an existing model call to test that direct Agent turns retain it.
+   *
+   * @param id Agent that will receive the next command.
+   * @returns The pending call saved in complete attributes.
+   */
+  seedPending(id: SupportReplyAgentId): void {
+    this.pendingSeed = id;
+  }
+
+  /**
+   * Writes pending work on the first Agent read, after lazy storage creation.
+   *
+   * @param id Agent receiving the direct command.
+   */
+  private async writePendingSeed(id: SupportReplyAgentId): Promise<void> {
+    const storage = this.agentCommitStorage;
+    if (storage === undefined) throw new Error("Agent storage is absent.");
+    const agent = create(AgentIdSchema, {
+      stateTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+      entityId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
+    });
+    const call = create(ModelCallSchema, {
+      id: { value: "pending-before-direct-turn" },
+      replyContext: { value: "AiSupport" },
+      agent,
+      capability: { value: "draft-support-reply" },
+      capabilityRevision: { value: "v1" },
+      conversation: { value: "pending-conversation" },
+      whenRequested: create(TimestampSchema, { seconds: 1n }),
+    });
+    await storage.commitAgent({
+      entityId: id,
+      expectedVersion: 0,
+      expectedAttributes: undefined,
+      attributes: AgentAttributes.record(agent, [], [call]),
+    });
+    this.savedSeed = call;
+  }
+
+  /**
+   * Reads the pending calls after direct Agent dispatch.
+   *
+   * @param id Agent to inspect.
+   * @returns Saved pending calls.
+   */
+  async pending(id: SupportReplyAgentId) {
+    if (this.agentCommitStorage === undefined) throw new Error("Agent storage is absent.");
+    return (await this.agentCommitStorage.readAgentCurrent(id)).attributes?.pendingModelCalls;
+  }
+
+  /**
+   * Returns the exact pending call seeded before direct dispatch.
+   *
+   * @returns Pending model call.
+   */
+  seededCall() {
+    if (this.savedSeed === undefined) throw new Error("Pending call was not seeded.");
+    return this.savedSeed;
   }
 }
 
@@ -300,8 +408,6 @@ async function configuredBox(
       totalInputBytes: 8000,
       totalOutputBytes: 8000,
     },
-    concurrentOperations: 1,
-    queuedOperations: 0,
   }).register(backend.registration);
   if (alternate !== undefined) registry = registry.register(alternate.registration);
   const storageBackend = new InMemoryStorageBackend();
@@ -499,8 +605,6 @@ async function configuredToolBox(closeFailure?: "throw" | "never") {
       totalInputBytes: 16_384,
       totalOutputBytes: 16_384,
     },
-    concurrentOperations: 1,
-    queuedOperations: 0,
   })
     .register(registration)
     .registerTools(tools);
@@ -709,9 +813,10 @@ describe("Agent scripted execution through BlackBox", () => {
     alternate
       .forModel(proposal)
       .respondWith(create(ProposedSupportReplySchema, { reply: "Second reply" }));
-    const { blackBox, repository } = await configuredBox(primary, {}, alternate);
+    const { blackBox, repository, factory } = await configuredBox(primary, {}, alternate);
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
     try {
+      factory.seedPending(agent);
       const first = await blackBox
         .asGuest()
         .post(
@@ -730,6 +835,7 @@ describe("Agent scripted execution through BlackBox", () => {
         });
       expect(primary.requests()).toHaveLength(1);
       expect(alternate.requests()).toHaveLength(0);
+      expect(await factory.pending(agent)).toEqual([factory.seededCall()]);
       const preferenceHistory = await blackBox.readAgentHistory(repository, agent, {
         pageSize: 20,
       });
@@ -765,6 +871,7 @@ describe("Agent scripted execution through BlackBox", () => {
       );
       expect(primary.requests()).toHaveLength(1);
       expect(alternate.requests()).toHaveLength(1);
+      expect(await factory.pending(agent)).toEqual([factory.seededCall()]);
     } finally {
       await blackBox.close();
     }
@@ -802,10 +909,10 @@ describe("Agent scripted execution through BlackBox", () => {
           : [],
       );
       expect(contents.map((content) => content.typeUrl)).toContain(
-        "type.spine.io/spine.ts.agent.ToolRequest",
+        "type.spine.io/spine.agent.ToolRequest",
       );
       expect(contents.map((content) => content.typeUrl)).toContain(
-        "type.spine.io/spine.ts.agent.ToolResponse",
+        "type.spine.io/spine.agent.ToolResponse",
       );
       const request = contents
         .map((content) => AnyPacker.tryUnpack(content, ToolRequestSchema))
@@ -919,8 +1026,8 @@ describe("Agent scripted execution through BlackBox", () => {
           (entry) => entry.item.case === "conversationRecord" && entry.item.value.content?.typeUrl,
         ),
       ).toEqual([
-        "type.spine.io/spine.ts.agent.GenerationRequest",
-        "type.spine.io/spine.ts.agent.GenerationResponse",
+        "type.spine.io/spine.agent.GenerationRequest",
+        "type.spine.io/spine.agent.GenerationResponse",
       ]);
       if (
         exchanges[0]?.item.case === "conversationRecord" &&

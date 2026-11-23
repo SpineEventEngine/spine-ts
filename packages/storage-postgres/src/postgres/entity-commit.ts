@@ -12,14 +12,9 @@
  * the License.
  */
 
-import { clone, toBinary, type Message } from "@bufbuild/protobuf";
+import { toBinary, type Message } from "@bufbuild/protobuf";
 import type { Event, EventId } from "@spine-event-engine/proto";
-import {
-  AgentHistoryEntrySchema,
-  type AgentHistoryEntry,
-  type ModelPreference,
-} from "@spine-event-engine/proto/agent";
-import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+import { type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -29,14 +24,15 @@ import { type RecordSpec, type StorageGroup } from "@spine-event-engine/storage"
 import {
   TenantBoundary,
   AgentHistoryRecords,
-  AgentModelPreferences,
-  type PreferencesRecord,
+  AgentAttributes,
+  type ActiveAgentRecord,
   EntityCommitSnapshots,
   eventHistorySpec,
   eventStoreRecordSpec,
   EventStoreGroups,
   stateHistorySpec,
   type AgentCommitInput,
+  type AgentCurrentData,
   type EntityCommitInput,
   type EntityCommitStorage,
   type EntityStorageInput,
@@ -72,9 +68,9 @@ class PostgresCommitRecords<I, S extends Message> {
 
   events: PostgresRecordStorage<EventId, Event> | undefined;
 
-  history: PostgresRecordStorage<string, AgentHistoryRecord> | undefined;
+  history: PostgresRecordStorage<string, AgentHistoryEntry> | undefined;
 
-  preferences: PostgresRecordStorage<string, PreferencesRecord> | undefined;
+  attributes: PostgresRecordStorage<string, ActiveAgentRecord> | undefined;
 
   readonly #handles: PostgresRecordStorage<unknown, Message>[];
 
@@ -138,15 +134,15 @@ class PostgresCommitRecords<I, S extends Message> {
           AgentHistoryRecords.group,
         );
       if (this.history === undefined) acquired.push(history as never);
-      const preferences =
-        this.preferences ??
+      const attributes =
+        this.attributes ??
         open(
-          AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
-          AgentModelPreferences.group,
+          AgentAttributes.spec((value) => AgentHistoryHash.value(value)),
+          AgentAttributes.group,
         );
-      if (this.preferences === undefined) acquired.push(preferences as never);
+      if (this.attributes === undefined) acquired.push(attributes as never);
       this.history = history;
-      this.preferences = preferences;
+      this.attributes = attributes;
       this.#handles.push(...acquired);
     } catch (error) {
       const failures = this.closeGroup(acquired);
@@ -366,25 +362,26 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
    * @param entityId Typed Agent identifier.
    * @returns Current complete image or absence.
    */
-  readAgentPreferences(entityId: unknown): Promise<readonly ModelPreference[] | undefined> {
+  readAgentCurrent(entityId: unknown): Promise<AgentCurrentData> {
     if (!this.#open)
       return Promise.reject(new PostgresStorageOperationError("Entity commit storage is closed."));
     return this.track(async () => {
-      const key = AgentModelPreferences.key(this.entity, entityId as I);
+      const key = AgentAttributes.id(this.entity, entityId as I);
       const records = this.agentRecords();
-      await records.prepare();
-      const slot = `v1:${AgentHistoryHash.value(AgentModelPreferences.text(key))}`;
-      const storage = records.preferences;
-      if (storage === undefined) throw new Error("Agent preference storage is unavailable.");
-      const found = await storage.read(slot);
-      if (found === undefined) return undefined;
-      AgentModelPreferences.requireIdentity(found, key);
-      return AgentModelPreferences.copy(found.preferences);
+      const slot = `v1:${AgentHistoryHash.value(AgentAttributes.text(key))}`;
+      const storage = records.attributes;
+      if (storage === undefined) throw new Error("Agent attributes storage is unavailable.");
+      const found = await records.current.readPair(entityId as I, storage, slot);
+      if (found.second !== undefined) AgentAttributes.requireIdentity(found.second, key);
+      return {
+        current: found.first,
+        attributes: found.second === undefined ? undefined : AgentAttributes.copy(found.second),
+      };
     });
   }
 
   /**
-   * Commits state, final audit, and complete preferences in one native transaction.
+   * Commits state, final audit, and complete attributes in one native transaction.
    * @param input Captured Agent transition and initial images.
    * @returns Completion after the conditional group commits.
    * @typeParam Id Typed Agent identifier.
@@ -395,15 +392,16 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
       return Promise.reject(new PostgresStorageOperationError("Entity commit storage is closed."));
     return this.track(async () => {
       const id = this.entity.id.clone(input.entityId as unknown as I);
-      const key = AgentModelPreferences.key(this.entity, id);
+      const key = AgentAttributes.id(this.entity, id);
       const expected =
-        input.expectedPreferences === undefined
+        input.expectedAttributes === undefined
           ? undefined
-          : AgentModelPreferences.copy(input.expectedPreferences);
-      const next = AgentModelPreferences.record(key, input.preferences);
+          : AgentAttributes.copy(input.expectedAttributes);
+      const next = AgentAttributes.copy(input.attributes);
+      AgentAttributes.requireIdentity(next, key);
       const mutation = input.entityCommit && EntityCommitSnapshots.capture(input.entityCommit);
       const history =
-        input.historyEntries?.map((entry) => clone(AgentHistoryEntrySchema, entry)) ?? [];
+        input.historyEntries?.map((entry) => AgentHistoryRecords.capture(key, entry)) ?? [];
       this.validateAgent(id, input.expectedVersion, mutation);
       const records = this.agentRecords();
       if (mutation !== undefined) records.ensure(mutation as never, this.open);
@@ -484,33 +482,33 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
     records: PostgresCommitRecords<I, S>,
     id: I,
     version: number,
-    expected: readonly ModelPreference[] | undefined,
-    next: PreferencesRecord,
+    expected: ActiveAgentRecord | undefined,
+    next: ActiveAgentRecord,
     mutation: EntityCommitInput<Id, State> | undefined,
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
-    const preferenceStorage = records.preferences;
+    const attributesStorage = records.attributes;
     const historyStorage = records.history;
-    if (preferenceStorage === undefined || historyStorage === undefined || next.key === undefined)
+    if (attributesStorage === undefined || historyStorage === undefined || next.agent === undefined)
       throw new Error("Agent commit storage is incomplete.");
-    const preferences = preferenceStorage.historyExecutor();
-    const key = next.key;
-    const slot = `v1:${AgentHistoryHash.value(AgentModelPreferences.text(key))}`;
-    await preferences.transaction(async (client) => {
+    const attributes = attributesStorage.historyExecutor();
+    const key = next.agent;
+    const slot = `v1:${AgentHistoryHash.value(AgentAttributes.text(key))}`;
+    await attributes.transaction(async (client) => {
       await client.query("SELECT pg_advisory_xact_lock($1)", [
-        preferences.lock("agent-preferences", slot),
+        attributes.lock("agent-attributes", slot),
       ]);
-      const prior = await preferences.read(client, slot, "for-update");
-      if (prior !== undefined) AgentModelPreferences.requireIdentity(prior, key);
-      if (!AgentModelPreferences.same(prior?.preferences, expected))
-        throw new Error("Agent model preferences changed during the live turn.");
+      const prior = await attributes.read(client, slot, "for-update");
+      if (prior !== undefined) AgentAttributes.requireIdentity(prior, key);
+      if (!AgentAttributes.same(prior, expected))
+        throw new Error("Agent attributes changed during the live turn.");
       if (mutation === undefined) {
         const current = await records.current.historyExecutor().read(client, id, "for-update");
         if ((current?.version?.number ?? 0) !== version)
           throw new Error("Agent initial Entity Version is no longer current.");
       } else await records.applyConditional(client, mutation as never, version);
-      await this.appendAgentHistory(client, historyStorage, id, history);
-      await preferences.write(client, next);
+      await this.appendAgentHistory(client, historyStorage, history);
+      await attributes.write(client, next);
     });
   }
 
@@ -518,22 +516,16 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
    * Adds final Agent audit through the admitted transaction client.
    * @param client Active native transaction.
    * @param storage Retained Agent history family.
-   * @param id Captured Agent identifier.
    * @param history Final audit entries.
    * @returns Completion after final audit rows are appended.
    */
   private async appendAgentHistory(
     client: PoolClient,
-    storage: PostgresRecordStorage<string, AgentHistoryRecord>,
-    id: I,
+    storage: PostgresRecordStorage<string, AgentHistoryEntry>,
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
     const executor = storage.historyExecutor();
-    for (const entry of history)
-      await executor.appendImmutable(
-        client,
-        AgentHistoryRecords.record(this.entity.stateSchema.typeName, this.entity.id.key(id), entry),
-      );
+    for (const entry of history) await executor.appendImmutable(client, entry);
   }
 
   /**

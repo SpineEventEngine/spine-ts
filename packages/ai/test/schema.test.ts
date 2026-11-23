@@ -220,7 +220,7 @@ describe("descriptor-derived output admission", () => {
 
   it("rejects unsupported Any lowering and applies application validation after Proto checks", () => {
     expect(() => deriveOutputSchema(GenerationResponseSchema)).toThrow("admitted_output");
-    expect(() => deriveOutputSchema(AgentHistoryEntrySchema)).toThrow("occurred_at");
+    expect(() => deriveOutputSchema(AgentHistoryEntrySchema)).toThrow("when_occurred");
     expect(() => deriveOutputSchema({ kind: "enum" } as never)).toThrow("message descriptor");
     expect(parseCandidate(ModelRefSchema, "[]").ok).toBe(false);
     expect(

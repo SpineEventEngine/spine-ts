@@ -34,9 +34,16 @@ const endpoint = process.env.SPINE_MANAGED_REMOTE_DELIVERY_URL;
 if (endpoint === undefined)
   throw new Error("Managed remote Delivery fixture requires an endpoint.");
 
-const delivery = RemoteDelivery.connectTo({ endpoint });
 const handlerGate = process.env.SPINE_MANAGED_HANDLER_GATE;
 const isManagedChild = process.env.SPINE_MANAGED_SERVER_CHILD === "true";
+const replacing =
+  isManagedChild && handlerGate !== undefined && (await exists(join(handlerGate, "replacement")));
+const replacementEndpoint = process.env.SPINE_MANAGED_REMOTE_DELIVERY_REPLACEMENT_URL;
+if (replacing && replacementEndpoint === undefined)
+  throw new Error("Managed replacement requires its Delivery endpoint.");
+const delivery = RemoteDelivery.connectTo({
+  endpoint: replacing ? replacementEndpoint : endpoint,
+});
 // The application owns strategy selection; this fixture deliberately applies it
 // without comparing or serializing its identity.
 const strategy = UniformAcrossAllShards.forNumber(2);

@@ -29,7 +29,13 @@ export const RejectionGenerator: Readonly<{
       const sourceName = file.proto.name.split(/[\\/]/u).at(-1);
       const usesRejectionName =
         sourceName === "rejections.proto" || sourceName?.endsWith("_rejections.proto") === true;
-      if (!usesRejectionName || file.proto.name.startsWith("spine/delivery/")) continue;
+      // Public framework schemas cannot import the core runtime from the proto package.
+      if (
+        !usesRejectionName ||
+        file.proto.name.startsWith("spine/delivery/") ||
+        file.proto.name.startsWith("spine/agent/")
+      )
+        continue;
       RejectionGenerator.generateFile(schema, file);
     }
   },

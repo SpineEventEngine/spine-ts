@@ -35,9 +35,9 @@ Projections, and signal routing. It introduces the Agent APIs through the app:
 - **Application decisions around model output.** The Aggregate decides whether
   a proposal still applies. The person edits the final text and chooses what to export.
 
-There is no background generation. An accepted signal starts the Agent's work.
+Generation runs after the Agent saves a model Command. The request is retained in history, but there is no durable execution queue or startup replay of that Command.
 
-## Run the example
+## Running the example
 
 On macOS, use Node.js 24 or later, the repository's pinned pnpm version, and Git.
 Run these commands from the repository root:
@@ -58,7 +58,7 @@ You do not need Codex, an API key, Docker, or a database. The build bundles a
 verified Node.js binary for the local Git worker. This example currently targets
 macOS; it does not produce a signed or notarized installer.
 
-## 1. Sign in and choose a model
+## 1. Sign-in and model selection
 
 The first screen asks you to sign in with ChatGPT. The app opens the official
 sign-in page in your system browser. Once authorization succeeds and the account
@@ -123,7 +123,7 @@ removed when the backend closes. Signing out returns to the sign-in screen;
 reopening the app starts a new session. Your browser may remember its OpenAI
 login separately.
 
-## 2. Choose the changes to describe
+## 2. Changes selected for the draft
 
 Choose **New release**, select a project, enter a release name, and choose
 **From** and **To**. **Next** opens a separate **Review** step with comparison
@@ -153,7 +153,7 @@ The trusted service then posts `RequestReleaseGeneration`. The `ReleaseDraft`
 Aggregate accepts the inputs and emits `ReleaseGenerationRequested`. That Event
 starts the Agent.
 
-## 3. Give the Agent a domain ID and state
+## 3. Agent identity and state
 
 An Agent is used much like a Process Manager: signals reach its handlers through
 the repository, and it can update its Entity state and emit domain Events.
@@ -173,7 +173,7 @@ message ReleaseNotesAgentState {
     ReleaseDraftId id = 1;
 
     // Conversation retained for generations for this draft.
-    spine.ts.agent.ConversationId conversation = 2 [(validate) = true];
+    spine.agent.ConversationId conversation = 2 [(validate) = true];
 
     // Identifies the most recently handled generation.
     ReleaseGenerationId generation = 3 [(validate) = true];
@@ -187,7 +187,7 @@ is the application's identifier for a particular attempt to draft the release.
 The conversation itself is not an array in Entity state. The repository stores
 it separately, together with System Events and the Agent's emitted domain Events.
 
-## 4. Describe what the model should do
+## 4. Model operation definition
 
 The app declares the operation in [model.ts](src/domain/model.ts).
 An `AiModel` describes the job, not a provider account: it names the input and
@@ -252,26 +252,18 @@ attempt. These checks establish that citations exist; they cannot establish
 that every sentence explains the code correctly. That is why the result opens
 for human editing.
 
-## 5. Invoke the model from the Event handler
+## 5. Agent model Command
 
-The handler in [domain/index.ts](src/domain/index.ts) uses `@React` to receive
-`ReleaseGenerationRequested`. The following shows its model call, state update,
-and returned Events; the application's diagnostic logging is omitted.
+The handler in [release-notes-domain.ts](src/domain/release-notes-domain.ts) uses `@Command` to receive `ReleaseGenerationRequested` and return a typed `CallModel`. It saves the current generation identity before the provider starts.
 
 <!-- prettier-ignore-start -->
-<!-- docs-snippet-path: examples/release-notes/src/domain/index.ts -->
+<!-- docs-snippet-path: examples/release-notes/src/domain/release-notes-domain.ts -->
 
 ```ts
-import { create } from "@bufbuild/protobuf";
-import { Agent, React } from "@spine-event-engine/server";
-
-import {
-    ReleaseGenerationFailedSchema,
-    ReleaseNotesProposedSchema,
-    type ReleaseGenerationFailed,
-    type ReleaseGenerationRequested,
-    type ReleaseNotesProposed,
-} from "../../generated/spine/examples/releasenotes/events_pb.js";
+import type { CallModel } from "@spine-event-engine/proto/generated/spine/agent/commands_pb.js";
+import { Agent, Command } from "@spine-event-engine/server";
+import type { ReleaseGenerationRequested } from
+    "../../generated/spine/examples/releasenotes/events_pb.js";
 import { ReleaseNotesAgentStateSchema } from
     "../../generated/spine/examples/releasenotes/states_pb.js";
 import type { ReleaseDraftId } from
@@ -279,75 +271,37 @@ import type { ReleaseDraftId } from
 import { draftReleaseNotes } from "./model.js";
 
 /**
- * Prepares a proposal for the draft identified by this Entity's ID.
+ * Prepares evidence-backed release proposals for one draft.
  */
-class ReleaseNotesAgent extends Agent<
-    ReleaseDraftId,
-    typeof ReleaseNotesAgentStateSchema
-> {
+class ReleaseNotesAgent extends Agent<ReleaseDraftId, typeof ReleaseNotesAgentStateSchema> {
     /**
-     * Invokes the selected model and returns a domain outcome for the Aggregate.
+     * Prepares a model Command for an accepted generation.
      *
      * @param event Accepted inputs, conversation, and evidence catalog.
-     * @returns A proposal or a safe failure tied to this generation.
+     * @returns Model Command submitted after this Agent saves.
      */
-    @React
-    async onRequested(
-        event: ReleaseGenerationRequested,
-    ): Promise<ReleaseNotesProposed | ReleaseGenerationFailed> {
-        if (!event.conversation || !event.generation || !event.inputVersion) {
+    @Command onRequested(event: ReleaseGenerationRequested): CallModel {
+        if (!event.conversation || !event.generation || !event.inputVersion)
             throw new TypeError("Generation requires its conversation, identity, and input Version.");
-        }
-        const result = await this.ai.invoke(draftReleaseNotes, {
-            call: "draft-release-notes",
-            conversation: event.conversation,
-            input: event,
-        });
         this.update((state) => {
             state.id = this.id;
             state.conversation = event.conversation;
             state.generation = event.generation;
         });
-        if (!result.ok) {
-            return create(ReleaseGenerationFailedSchema, {
-                id: this.id,
-                generation: event.generation,
-                inputVersion: event.inputVersion,
-                reason: result.failure.code,
-                operation: result.operationId,
-            });
-        }
-        return create(ReleaseNotesProposedSchema, {
-            id: this.id,
-            generation: event.generation,
-            inputVersion: event.inputVersion,
-            document: result.value,
-            operation: result.operationId,
+        return this.modelCommands.create(draftReleaseNotes, {
+            conversation: event.conversation,
+            input: event,
         });
     }
 }
 ```
 <!-- prettier-ignore-end -->
 
-`input` supplies the typed Event to the operation. `conversation` links its
-records. `call` identifies this invocation within the handler, so the runtime
-can recognize recorded work when continuing an interrupted execution. It is
-not the provider model's name.
+`draftReleaseNotes` is exported by [model.ts](src/domain/model.ts). The Agent and `ReleaseNotesContext.create()` both import that definition. `.withAi(ai)` supplies the deployment registry, and `.add(ReleaseNotesAgent, { ai: { models: [draftReleaseNotes], resolveModel } })` registers the operation. The framework resolves the operation by Agent state type URL, name, and revision. `ModelRef` identifies the selected provider deployment, not the operation definition.
 
-The handler awaits `this.ai.invoke()`. During that wait, the framework calls the
-selected deployment, handles permitted tool calls and output checks, and records
-what happened. The handler receives either a typed value or a failure, then
-returns the appropriate domain Event.
+After the Agent commit, the framework records a submission attempt and posts the model Command. Its process-local asynchronous handler invokes the pinned deployment, including permitted Git tools and typed output checks. `ModelReplied` or `ModelCallFailed` later reaches the Agent. The complete [Agent implementation](src/domain/release-notes-domain.ts) uses `modelCallHistory(callId)` to read the original generation Event and emits `ReleaseNotesProposed` or `ReleaseGenerationFailed` for the Aggregate. The Agent checks its current generation before emitting either outcome. The app does not implement a model service or a separate model-work queue.
 
-The Bounded Context registers this Agent alongside the other Entities. In
-`ReleaseNotesContext.create()`, `.withAi(ai)` supplies the registry, and the
-Agent's repository options declare `models: [draftReleaseNotes]` and the
-application's `resolveModel` callback. The Agent uses the regular repository and
-signal-routing machinery; the app does not build a separate model-work queue.
-The factory returns a Bounded Context builder. Studio builds its Application from
-that declaration and closes the Application when the backend stops.
-
-## 6. Let the model ask for Git details
+## 6. Git detail tools
 
 Sometimes the initial catalog is not enough to explain a change. **MCP** is a
 protocol through which a model can ask an application to run a named tool and
@@ -398,29 +352,12 @@ needs none of that protocol code.
 These calls are asynchronous. The worker cannot edit the repository, push,
 publish a release, or execute an arbitrary shell command supplied by the model.
 
-## 7. Accept the proposal, then edit the Markdown
+## 7. Proposal acceptance and Markdown editing
 
-The model's answer is a proposal. The Aggregate decides whether it still belongs
+The model's answer is a proposal. The Aggregate decides whether it still applies
 to the draft:
 
-```mermaid
-sequenceDiagram
-    participant UI
-    participant Draft as ReleaseDraft Aggregate
-    participant Agent as ReleaseNotesAgent
-    participant Model as Model and MCP tools
-    participant View as Projection
-    UI->>Draft: RequestReleaseGeneration, async delivery
-    Note over Draft: Accept inputs, synchronous handler
-    Draft-->>Agent: ReleaseGenerationRequested, async delivery
-    Agent->>Model: this.ai.invoke(), async
-    Model-->>Agent: Typed result or failure
-    Note over Agent: Update state and construct Event, synchronous
-    Agent-->>Draft: Proposal or failure, async delivery
-    Note over Draft: Accept or discard, synchronous handler
-    Draft-->>View: Domain Event, async delivery
-    View-->>UI: Updated draft, async read
-```
+The editor posts `RequestReleaseGeneration`. The `ReleaseDraft` Aggregate saves its accepted inputs and emits `ReleaseGenerationRequested`. The Agent saves its current generation and returns `CallModel`. After that save, the framework executes the model Command asynchronously and delivers a typed reply or rejection to the Agent. The Agent emits a proposal or failure Event. The Aggregate checks its pending generation and input Version before changing the draft, and the Projection then updates the editor's view.
 
 While generation runs, the draft could be edited or generation canceled. The
 Aggregate remembers the pending generation ID and input Version, and the Agent
@@ -436,7 +373,7 @@ tabs let you edit and inspect it. Edits are saved in order for this session.
 **Copy Markdown** copies the editor text; **Export** saves that text through the
 native file dialog. Nothing is published automatically.
 
-## 8. Read the interaction history
+## 8. Interaction history
 
 While signed in, choose the history icon in the top bar. A panel slides in from
 the right. Each release has a collapsible section with its name and age, such as
@@ -446,7 +383,7 @@ Messages show the app's input, the model's output, and MCP calls and results.
 Long messages have a four-line preview; opening one displays the full recorded
 detail in a central dialog. **Load older** reads the next page.
 
-The panel uses the Agent repository's audit API. It does not keep a second chat
+The panel uses the Agent repository's full history API. It does not keep a second chat
 log or search the Bounded Context's entire System Event store. The read in
 [studio-service.ts](src/trusted/studio-service.ts) follows this pattern:
 
@@ -487,12 +424,12 @@ async function readHistory(
 size controls one read, not the total amount of retained history. Entries are
 returned newest first.
 
-| Method                | What it returns                                                                   |
-| --------------------- | --------------------------------------------------------------------------------- |
-| `fullHistory`         | A Protobuf oneof containing a conversation record, System Event, or domain Event. |
-| `conversationHistory` | Conversation records for a specified conversation.                                |
-| `systemEventHistory`  | Events describing the Agent's model and tool activity.                            |
-| `domainEventHistory`  | Domain Events emitted by this Agent, such as its proposal or failure.             |
+| Method                | What it returns                                                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `fullHistory`         | Conversation records, System Events, domain Events, prepared model requests, submission attempts, handled outcomes, and abandonments. |
+| `conversationHistory` | Provider exchanges for a specified conversation.                                                                                      |
+| `systemEventHistory`  | Agent System Events, separate from model request and attempt records.                                                                 |
+| `domainEventHistory`  | Domain Events emitted by this Agent, such as its proposal or failure.                                                                 |
 
 Recording is mandatory. Agent handlers can also read these four histories through
 their Entity API. Reading a history does not send it to a model; the handler
@@ -502,7 +439,7 @@ The Aggregate's later editing and acceptance Events are not part of this Agent's
 `domainEventHistory`. In this example all storage is in memory, so the recorded
 history disappears when the backend closes, just like the drafts.
 
-## 9. Test the workflow through BlackBox
+## 9. BlackBox workflow test
 
 The example tests post actual domain Commands through `BlackBox` and inspect
 the resulting Events and state. The [domain tests](test/release-domain.test.ts)

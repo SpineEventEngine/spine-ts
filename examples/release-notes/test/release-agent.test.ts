@@ -265,8 +265,6 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
   const registry = AiRegistry.create({
     defaultModels: { generation: model.ref },
     invocationLimits: {},
-    concurrentOperations: 1,
-    queuedOperations: 0,
   })
     .register(model)
     .registerTools(tools);

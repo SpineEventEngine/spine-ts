@@ -104,8 +104,7 @@ values, and custom options. This boundary is intentionally contract-only:
   subscription, and service contracts, and transitive time/net/UI support
   contracts are available without hand-written TypeScript shapes; and
 - buses, transport, and entity runtime behavior remain out of scope for this
-  package boundary. Runtime signal metadata belongs to the server/runtime
-  layer rather than the proto package.
+  package boundary. The server/runtime layer supplies runtime signal metadata.
 
 ## Repository routing boundary
 
@@ -192,8 +191,8 @@ external flag, and posts through the ordinary domain `EventBus`. Corrupt intake
 is logged and dropped. Imported events are delivered to external handlers and
 are never republished as domestic events, which is the loop-prevention boundary.
 The integration broker does not add Inbox persistence, retry, replay,
-deduplication, fencing, or producer election; delivery strength belongs to the
-configured message transport. Many bounded contexts may consume an event, while
+deduplication, fencing, or producer election; the configured message transport
+determines delivery strength. Many bounded contexts may consume an event, while
 one domain producer publishes it for each requesting origin.
 
 `ThirdPartyContext` is the public import facade. Its single-tenant form accepts a
@@ -266,7 +265,7 @@ Apart from creating the signal ID, the helpers deliberately define no runtime
 policy. They do not generate timestamps, actor or tenant context, event producer
 IDs, entity versions, origins, command system properties, storage records,
 acknowledgements, delivery state, bus dispatch, handler registration, or
-transport metadata. Those responsibilities belong to the server/runtime layers
+transport metadata. The server/runtime layers handle those responsibilities
 that run the workflow.
 
 ## Server Entity Metadata
@@ -791,7 +790,9 @@ and `Any.value` bytes. The package exposes no raw worker callback API; replay
 stays behind validated endpoints. Local posting handoffs cover command rows,
 projection subscriber rows, and process-manager event rows. Ordinary Command
 handlers and projection subscribers wait for the exact received row to replay;
-an accepted Agent interaction is never re-executed after interruption.
+an original Agent input still `TO_DELIVER` may be redelivered after interruption
+and create a new model call. Saved model calls do not replay from pending
+attributes or history.
 Framework replay validates the row label and pending `TO_DELIVER` status
 before projection or user handler code runs, and the posting path resolves only
 after that row reaches `DELIVERED`. Live

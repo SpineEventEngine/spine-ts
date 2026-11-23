@@ -13,16 +13,30 @@
  */
 
 // @vitest-environment jsdom
-import { create, createRegistry, toJson } from "@bufbuild/protobuf";
+import { create, createRegistry, toJson, type MessageShape } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyPacker } from "@spine-event-engine/core";
-import { VersionSchema } from "@spine-event-engine/proto";
+import { AnyPacker, type MessageSchema } from "@spine-event-engine/core";
+import { CommandSchema, EventSchema, VersionSchema } from "@spine-event-engine/proto";
 import {
+  AgentHistoryEntrySchema,
+  AiCapabilityNameSchema,
+  AiCapabilityRevisionSchema,
+  AiOperationIdSchema,
+  CallModelSchema,
+  ModelCallSchema,
+  ModelRepliedSchema,
+  ModelCallFailedSchema,
+  ModelRequestRecordSchema,
+  ModelSubmissionAttemptRecordSchema,
+  ModelOutcomeHandledRecordSchema,
+  ModelCallAbandonedRecordSchema,
   AiContentDigestSchema,
   AiDiagnosticIdSchema,
   AiOutcome,
   AiToolCallIdSchema,
   ConversationIdSchema,
+  ConversationRecordIdSchema,
+  ConversationRecordSchema,
   GenerationRequestSchema,
   GenerationResponseSchema,
   McpServerIdSchema,
@@ -50,14 +64,143 @@ import {
   ReleaseTitleSchema,
   RepositorySelectionIdSchema,
 } from "../generated/spine/examples/releasenotes/types_pb.js";
-import { historyAge, historyRecord } from "../src/studio-history-record.js";
+import {
+  historyAge,
+  historyKey,
+  historyMerge,
+  historyRecord,
+} from "../src/studio-history-record.js";
 import { HistoryDrawer } from "../src/studio-history-view.js";
 
-const object = (value: unknown): Record<string, unknown> => {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("Expected serialized Protobuf object");
-  return value as Record<string, unknown>;
-};
+test("prepared, attempted, handled, and abandoned model calls have distinct timeline records", () => {
+  const whenRequested = create(TimestampSchema, { seconds: 1791979260n });
+  const call = create(ModelCallSchema, {
+    id: create(AiOperationIdSchema, { value: "call-7" }),
+    capability: create(AiCapabilityNameSchema, { value: "draft-release-notes" }),
+    capabilityRevision: create(AiCapabilityRevisionSchema, { value: "1" }),
+    conversation: create(ConversationIdSchema, { value: "release-7" }),
+    whenRequested,
+  });
+  const payload = create(CallModelSchema, {
+    call,
+    model: create(ModelRefSchema, {
+      name: create(ModelNameSchema, { value: "release-model" }),
+      revision: create(ModelRevisionSchema, { value: "1" }),
+    }),
+    input: AnyPacker.pack(
+      ReleaseGenerationRequestedSchema,
+      create(ReleaseGenerationRequestedSchema),
+    ),
+  });
+  const command = create(CommandSchema, {
+    id: { uuid: "command-7" },
+    message: AnyPacker.pack(CallModelSchema, payload),
+  });
+  const source = create(EventSchema, {
+    id: { value: "source-7" },
+    message: AnyPacker.pack(
+      ReleaseGenerationRequestedSchema,
+      create(ReleaseGenerationRequestedSchema),
+    ),
+  });
+  const outcome = create(EventSchema, {
+    message: AnyPacker.pack(ModelRepliedSchema, create(ModelRepliedSchema, { call })),
+  });
+  const entries = [
+    create(AgentHistoryEntrySchema, {
+      whenOccurred: whenRequested,
+      item: {
+        case: "modelRequest",
+        value: create(ModelRequestRecordSchema, {
+          request: command,
+          source: { case: "event", value: source },
+        }),
+      },
+    }),
+    create(AgentHistoryEntrySchema, {
+      whenOccurred: create(TimestampSchema, { seconds: 1791979320n }),
+      item: {
+        case: "submissionAttempt",
+        value: create(ModelSubmissionAttemptRecordSchema, {
+          id: "attempt-7",
+          command,
+          whenAttempted: create(TimestampSchema, { seconds: 1791979320n }),
+        }),
+      },
+    }),
+    create(AgentHistoryEntrySchema, {
+      whenOccurred: create(TimestampSchema, { seconds: 1791979380n }),
+      item: {
+        case: "handledOutcome",
+        value: create(ModelOutcomeHandledRecordSchema, {
+          id: "handled-7",
+          call: call.id,
+          conversation: call.conversation,
+          outcome,
+          whenHandled: create(TimestampSchema, { seconds: 1791979380n }),
+        }),
+      },
+    }),
+    create(AgentHistoryEntrySchema, {
+      whenOccurred: create(TimestampSchema, { seconds: 1791979440n }),
+      item: {
+        case: "abandonment",
+        value: create(ModelCallAbandonedRecordSchema, {
+          id: "abandoned-7",
+          call: call.id,
+          conversation: call.conversation,
+          source: { case: "event", value: source },
+          whenAbandoned: create(TimestampSchema, { seconds: 1791979440n }),
+        }),
+      },
+    }),
+  ].map((entry) =>
+    toJson(AgentHistoryEntrySchema, entry, {
+      registry: createRegistry(
+        CallModelSchema,
+        ReleaseGenerationRequestedSchema,
+        ModelRepliedSchema,
+      ),
+    }),
+  );
+  expect(entries.map(historyKey)).toEqual([
+    "request:command-7",
+    "submissionAttempt:attempt-7",
+    "handledOutcome:handled-7",
+    "abandonment:abandoned-7",
+  ]);
+  expect(historyMerge(entries, entries)).toHaveLength(4);
+  expect(entries.map((entry) => historyRecord(entry).title)).toEqual([
+    "Model request prepared",
+    "Model submission attempted",
+    "Model reply handled",
+    "Model call abandoned",
+  ]);
+  expect(historyRecord(entries[0]).occurredAt).toBe("2026-10-14T12:01:00Z");
+  expect(historyRecord(entries[0]).exact).toContain("ReleaseGenerationRequested");
+  expect(historyRecord(entries[1]).preview).toContain("draft-release-notes@1");
+  expect(historyRecord(entries[2]).preview).toContain("call-7");
+  expect(historyRecord(entries[3]).detail).toContain("source-7");
+  const failed = create(AgentHistoryEntrySchema, {
+    whenOccurred: whenRequested,
+    item: {
+      case: "handledOutcome",
+      value: create(ModelOutcomeHandledRecordSchema, {
+        id: "handled-8",
+        call: call.id,
+        conversation: call.conversation,
+        outcome: create(EventSchema, {
+          message: AnyPacker.pack(ModelCallFailedSchema, create(ModelCallFailedSchema, { call })),
+        }),
+        whenHandled: whenRequested,
+      }),
+    },
+  });
+  const rejected = toJson(AgentHistoryEntrySchema, failed, {
+    registry: createRegistry(ModelCallFailedSchema),
+  });
+  expect(historyRecord(rejected).title).toBe("Model failure handled");
+});
 const id = create(ReleaseDraftIdSchema, { value: "draft" });
 const title = create(ReleaseTitleSchema, { value: "October release" });
 const comparison = create(ReleaseComparisonSchema, {
@@ -66,10 +209,21 @@ const comparison = create(ReleaseComparisonSchema, {
   target: create(GitCommitIdSchema, { value: "b".repeat(40) }),
   policy: ReleaseComparisonPolicy.SELECTED_NET_TREE,
 });
-const recorded = (type: string, content: Record<string, unknown>, identity: string) => ({
-  occurredAt: "2026-10-14T12:00:00Z",
-  conversationRecord: { id: { value: identity }, content: { "@type": type, ...content } },
-});
+const recorded = <S extends MessageSchema>(schema: S, content: MessageShape<S>, identity: string) =>
+  toJson(
+    AgentHistoryEntrySchema,
+    create(AgentHistoryEntrySchema, {
+      whenOccurred: create(TimestampSchema, { seconds: 1791979200n }),
+      item: {
+        case: "conversationRecord",
+        value: create(ConversationRecordSchema, {
+          id: create(ConversationRecordIdSchema, { value: identity }),
+          content: AnyPacker.pack(schema, content),
+        }),
+      },
+    }),
+    { registry: createRegistry(schema, ReleaseGenerationRequestedSchema) },
+  );
 
 afterEach(cleanup);
 
@@ -103,15 +257,7 @@ test("the prepared request shows actual instructions and typed release input whi
     promptJson: '{"messages":["hello"]}',
     digest: create(AiContentDigestSchema, { value: "b".repeat(64) }),
   });
-  const entry = recorded(
-    "type.spine.io/spine.ts.agent.GenerationRequest",
-    object(
-      toJson(GenerationRequestSchema, request, {
-        registry: createRegistry(ReleaseGenerationRequestedSchema),
-      }),
-    ),
-    "request",
-  );
+  const entry = recorded(GenerationRequestSchema, request, "request");
   const view = historyRecord(entry);
   expect(view.kind).toBe("App");
   expect(view.title).toBe("Request");
@@ -130,27 +276,27 @@ test("MCP call and domain event show their labels and full saved records", async
     argumentsJson: '{"from":"base","to":"target"}',
     effect: ToolEffect.READ,
   });
-  const toolEntry = recorded(
-    "type.spine.io/spine.ts.agent.ToolRequest",
-    object(toJson(ToolRequestSchema, call)),
-    "call",
-  );
+  const toolEntry = recorded(ToolRequestSchema, call, "call");
   const opened = create(ReleaseDraftOpenedSchema, {
     id,
     title,
     comparison,
     audience: "Release managers",
   });
-  const domainEntry = {
-    occurredAt: "2026-10-14T12:01:00Z",
-    domainEvent: {
-      id: { value: "event" },
-      message: {
-        "@type": "type.spine.examples.releasenotes.ReleaseDraftOpened",
-        ...object(toJson(ReleaseDraftOpenedSchema, opened)),
+  const domainEntry = toJson(
+    AgentHistoryEntrySchema,
+    create(AgentHistoryEntrySchema, {
+      whenOccurred: create(TimestampSchema, { seconds: 1791979260n }),
+      item: {
+        case: "domainEvent",
+        value: create(EventSchema, {
+          id: { value: "event" },
+          message: AnyPacker.pack(ReleaseDraftOpenedSchema, opened),
+        }),
       },
-    },
-  };
+    }),
+    { registry: createRegistry(ReleaseDraftOpenedSchema) },
+  );
   expect(historyRecord(toolEntry)).toMatchObject({
     kind: "Tool",
     speaker: "MCP",
@@ -200,11 +346,7 @@ test("a failed model response without output exposes and copies its saved diagno
     outcome: AiOutcome.FAILED,
     diagnosticId: create(AiDiagnosticIdSchema, { value: "diagnostic-1" }),
   });
-  const entry = recorded(
-    "type.spine.io/spine.ts.agent.GenerationResponse",
-    object(toJson(GenerationResponseSchema, failure)),
-    "failure",
-  );
+  const entry = recorded(GenerationResponseSchema, failure, "failure");
   const copyMarkdown = vi.fn().mockResolvedValue(undefined);
   render(
     <HistoryDrawer

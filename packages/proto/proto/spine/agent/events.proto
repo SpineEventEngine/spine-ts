@@ -1,0 +1,51 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+syntax = "proto3";
+
+package spine.agent;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "spine/agent/model_call.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+
+// Reports validated output from one model operation to its requesting Agent.
+message ModelReplied {
+  // Metadata identifying the request and exact Agent destination.
+  ModelCall call = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Typed output validated against the registered operation definition.
+  google.protobuf.Any output = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Time at which the model operation began executing.
+  google.protobuf.Timestamp when_started = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Time at which valid output became available.
+  google.protobuf.Timestamp when_completed = 4 [
+    (required) = true,
+    (validate) = true
+  ];
+}

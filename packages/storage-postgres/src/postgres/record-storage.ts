@@ -342,6 +342,72 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
+   * Reads two independently keyed record families in one PostgreSQL data statement.
+   *
+   * @typeParam J Other family identifier.
+   * @typeParam T Other family record.
+   * @param id Current-family identifier.
+   * @param other Second prepared record family.
+   * @param otherId Second-family identifier.
+   * @returns Both decoded images, including independent absence.
+   */
+  async readPair<J, T extends Message>(
+    id: I,
+    other: PostgresRecordStorage<J, T>,
+    otherId: J,
+  ): Promise<{ readonly first: R | undefined; readonly second: T | undefined }> {
+    await this.prepare();
+    await other.prepare();
+    return this.using(async (client) => {
+      const result = await client.query<{
+        first_bytes: Uint8Array | Buffer | null;
+        second_bytes: Uint8Array | Buffer | null;
+      }>(
+        `SELECT first."bytes" AS first_bytes, second."bytes" AS second_bytes
+           FROM (SELECT 1) seed
+           LEFT JOIN ${this.qualified()} first ON first."ID" = $1
+           LEFT JOIN ${other.qualified()} second ON second."ID" = $2`,
+        [this.id(id), other.id(otherId)],
+      );
+      const row = result.rows[0];
+      if (row === undefined)
+        throw new PostgresStorageDataError("PostgreSQL pair read returned no row.");
+      return this.decodePair(row, other);
+    });
+  }
+
+  /**
+   * Decodes both nullable record images returned by the pair statement.
+   *
+   * @typeParam J Other family identifier.
+   * @typeParam T Other family record.
+   * @param row One native pair row.
+   * @param other Second record family.
+   * @returns Independently optional decoded records.
+   */
+  private decodePair<J, T extends Message>(
+    row: { first_bytes: Uint8Array | Buffer | null; second_bytes: Uint8Array | Buffer | null },
+    other: PostgresRecordStorage<J, T>,
+  ): { readonly first: R | undefined; readonly second: T | undefined } {
+    try {
+      return {
+        first:
+          row.first_bytes === null
+            ? undefined
+            : fromBinary(this.recordSpec.recordType, bytes(row.first_bytes)),
+        second:
+          row.second_bytes === null
+            ? undefined
+            : fromBinary(other.recordSpec.recordType, bytes(row.second_bytes)),
+      };
+    } catch (error) {
+      throw new PostgresStorageDataError("Stored PostgreSQL record data is invalid.", {
+        cause: error,
+      });
+    }
+  }
+
+  /**
    * Closes this handle and unregisters it from the factory.
    */
   override close(): void {

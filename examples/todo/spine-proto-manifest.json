@@ -1,8 +1,8 @@
 {
   "formatVersion": 2,
-  "generationId": "bb624d2a-3c26-4d4a-b769-15b87fd028b6",
+  "generationId": "3444c759-f7f3-44d4-801e-0c5e6861dfd2",
   "packageName": "@spine-event-engine/example-todo",
-  "packageVersion": "2.0.0-snapshot.31",
+  "packageVersion": "2.0.0-snapshot.32",
   "protoFiles": [
     "spine/examples/todo/task_assignee.proto",
     "spine/examples/todo/task_commands.proto",

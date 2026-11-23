@@ -31,7 +31,7 @@ const response = (text: string) => {
     occurredAt: "2026-10-14T12:00:00Z",
     conversationRecord: {
       id: { value: "reply" },
-      content: { "@type": "type.spine.io/spine.ts.agent.GenerationResponse", ...content },
+      content: { "@type": "type.spine.io/spine.agent.GenerationResponse", ...content },
     },
   };
 };

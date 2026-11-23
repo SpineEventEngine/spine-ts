@@ -80,12 +80,22 @@ export class AgentLiveAiRuntime implements AgentAi {
 
   #closed = false;
 
+  #unsettledTransports = 0;
+
+  /**
+   * Determines whether a reserved physical request still lacks a confirmed response.
+   *
+   * @returns Whether remote work may have happened without a known result.
+   */
+  outcomeUnknown(): boolean {
+    return this.#unsettledTransports > 0;
+  }
+
   /**
    * Binds selected models and one invocation-wide local budget.
    *
    * @param audit Retained history audit for this invocation.
    * @param budget Invocation-wide resource budget.
-   * @param checkSession Callback that validates the current execution session.
    * @param deadlineEpochMs Absolute invocation deadline, when configured.
    * @param onSelect Callback that stages a model selection.
    * @param registry Registered AI models or MCP servers.
@@ -104,7 +114,6 @@ export class AgentLiveAiRuntime implements AgentAi {
     private readonly deadlineEpochMs: number | undefined,
     private readonly onSelect: (kind: AiModelKind, model: ModelRef | undefined) => void,
     private readonly audit: AgentLiveAudit<unknown>,
-    private readonly checkSession: () => Promise<void> = () => Promise.resolve(),
   ) {
     this.#signal = AbortSignal.any([signal, this.#controller.signal]);
   }
@@ -132,8 +141,47 @@ export class AgentLiveAiRuntime implements AgentAi {
     try {
       this.validateRequest(model, request);
       this.budget.reserveOperation();
-      await this.checkSession();
+      this.#signal.throwIfAborted();
       const operationId = create(AiOperationIdSchema, { value: randomUUID() });
+      const outcome = await this.execute(model, request, operationId);
+      this.requireOpen();
+      return outcome.ok
+        ? { ok: true, value: outcome.value as MessageShape<O>, operationId }
+        : { ok: false, failure: outcome.failure, operationId };
+    } finally {
+      this.#busy = false;
+    }
+  }
+
+  /**
+   * Executes an admitted model Command with its transported operation identity.
+   *
+   * The Command input and definition binding have already been checked during
+   * ordinary Command admission. This runtime retains output validation,
+   * authorization, audit, and explicitly configured corrective attempts.
+   *
+   * @typeParam I Generated input descriptor.
+   * @typeParam O Generated output descriptor.
+   * @param model Registered capability selected by the Command.
+   * @param request Decoded typed input and conversation.
+   * @param operationId Identity captured when the Agent constructed the Command.
+   * @returns Typed model result with the original operation identity.
+   */
+  async executeAdmitted<I extends MessageSchema, O extends MessageSchema>(
+    model: AiModel<I, O>,
+    request: {
+      readonly call: string;
+      readonly conversation: MessageShape<typeof ConversationIdSchema>;
+      readonly input: MessageShape<I>;
+    },
+    operationId: MessageShape<typeof AiOperationIdSchema>,
+  ): Promise<AiResult<MessageShape<O>>> {
+    this.requireOpen();
+    if (this.#busy) throw new Error("Admitted model Command runtime is already executing.");
+    this.#busy = true;
+    try {
+      this.budget.reserveOperation();
+      this.#signal.throwIfAborted();
       const outcome = await this.execute(model, request, operationId);
       this.requireOpen();
       return outcome.ok
@@ -244,9 +292,9 @@ export class AgentLiveAiRuntime implements AgentAi {
   ) {
     const { backend, selected } = this.selectedBackend(model);
     const operation = { operation: operationId, conversation: request.conversation };
-    const audit = new AgentLiveAiAudit(this.audit, operation, selected, model);
     const deadline = this.operationDeadline(model);
-    const identity = await this.authorize(backend, selected, deadline);
+    const { identity, connection } = await this.authorize(backend, selected, deadline);
+    const audit = new AgentLiveAiAudit(this.audit, operation, { ...selected, connection }, model);
     await audit.started(request.input);
     return this.runAuthorized(
       model,
@@ -288,7 +336,7 @@ export class AgentLiveAiRuntime implements AgentAi {
     const attempts = new Map<string, LiveAttempt>();
     const mcp = this.mcp(model, backend, operation, audit, attempts, deadline);
     return this.withMcp(mcp, async () => {
-      await this.checkSession();
+      this.#signal.throwIfAborted();
       let advertised: readonly AiMcpAdvertisedTool[] | undefined;
       try {
         advertised = await mcp?.prepare();
@@ -508,7 +556,7 @@ export class AgentLiveAiRuntime implements AgentAi {
     deadline: number | undefined,
     advertised: readonly AiMcpAdvertisedTool[] | undefined,
   ) {
-    await this.checkSession();
+    this.#signal.throwIfAborted();
     const connected = await AgentModelSelection.awaitHook(
       backend.connect(this.scope, identity, control),
       this.#signal,
@@ -516,7 +564,7 @@ export class AgentLiveAiRuntime implements AgentAi {
     );
     if (!this.sameIdentity(connected.identity, identity))
       throw new Error("Agent backend connection identity changed.");
-    await this.checkSession();
+    this.#signal.throwIfAborted();
     return AgentModelSelection.awaitHook(
       backend.execute({
         call: request.call,
@@ -570,7 +618,7 @@ export class AgentLiveAiRuntime implements AgentAi {
   }
 
   /**
-   * Checks authenticated nonsecret identity immediately before connection.
+   * Opens the selected connection identity and rechecks it before backend use.
    *
    * @param backend Selected AI backend registration.
    * @param deadline Operation deadline, when configured.
@@ -582,7 +630,10 @@ export class AgentLiveAiRuntime implements AgentAi {
     selected: AgentLiveModel,
     deadline: number | undefined,
   ) {
-    await this.checkSession();
+    this.#signal.throwIfAborted();
+    const connection =
+      selected.connection ??
+      (await AgentModelSelection.connection(backend, this.scope, this.#signal, deadline));
     const control = {
       signal: this.#signal,
       ...(deadline === undefined ? {} : { deadlineEpochMs: deadline }),
@@ -592,15 +643,15 @@ export class AgentLiveAiRuntime implements AgentAi {
       this.#signal,
       deadline,
     );
-    await this.checkSession();
+    this.#signal.throwIfAborted();
     const allowed = await AgentModelSelection.awaitHook(
       backend.authorizeUse(this.scope, identity, control),
       this.#signal,
       deadline,
     );
-    if (!allowed || !this.sameIdentity(identity, this.savedIdentity(selected.connection)))
+    if (!allowed || !this.sameIdentity(identity, this.savedIdentity(connection)))
       throw new Error("Agent model identity or authorization changed.");
-    return identity;
+    return { identity, connection };
   }
 
   /**
@@ -785,6 +836,7 @@ export class AgentLiveAiRuntime implements AgentAi {
       throw new Error("Agent provider request exceeds its operation byte bounds.");
     const ticket = this.budget.reservePhysical(bytes, credit ?? limits.maxOutputBytes, "model");
     attempt.reservation = ticket;
+    this.#unsettledTransports++;
     return ticket.maxOutputBytes;
   }
 
@@ -819,6 +871,7 @@ export class AgentLiveAiRuntime implements AgentAi {
     if (attempt === undefined || attempt.completed)
       throw new Error("Agent model attempt is unknown or completed.");
     const ticket = this.ticket(attempts, completion.ticketId);
+    this.#unsettledTransports--;
     await audit.attemptFinished(completion);
     if (completion.receivedBytes !== undefined)
       this.budget.settlePhysical(ticket, completion.receivedBytes);

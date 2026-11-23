@@ -44,6 +44,9 @@ import {
 } from "../../../server/test-fixtures/generated/entity-metadata/support_ai_types_pb.js";
 import {
   conversation as storedRequest,
+  modelRequest,
+  scope,
+  submissionAttempt,
   response as storedResponse,
 } from "./agent-history-fixtures.js";
 
@@ -55,16 +58,9 @@ import {
 import {
   SupportReplyAgentIdSchema,
 } from "../../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
-import { AgentHistoryConformance } from "../../src/provider.js";
+import { AgentHistoryConformance, AgentHistoryRecords } from "../../src/provider.js";
 import { AgentHistoryStorageFactories } from "../../src/provider.js";
-import type { AgentHistoryStorageInput } from "../../src/provider.js";
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
-
-const scope: AgentHistoryStorageInput<string> = {
-  context: { name: "Support", multitenant: false },
-  stateType: "spine.server.testing.SupportReplyAgentState",
-  id: { key: (ticketNumber) => ticketNumber },
-};
 
 function packed<T extends Message>(schema: GenMessage<T>, message: T) {
   return AnyPacker.pack(schema, message);
@@ -85,11 +81,11 @@ function conversationRecord(
     id: create(ConversationRecordIdSchema, { value: id }),
     conversation: create(ConversationIdSchema, { value: conversationId }),
     operation: create(AiOperationIdSchema, { value: "draft-reply" }),
-    occurredAt: time,
+    whenOccurred: time,
     content: packed(schema, content),
   });
   return create(AgentHistoryEntrySchema, {
-    occurredAt: time,
+    whenOccurred: time,
     item: { case: "conversationRecord", value: record },
   });
 }
@@ -135,7 +131,7 @@ function event(id: string, time: Timestamp, system: boolean): AgentHistoryEntry 
             typeUrl: TypeUrls.derive(EventIdSchema),
           }),
           kind: AiModelKind.GENERATION,
-          changedAt: time,
+          whenChanged: time,
         }),
       )
     : packed(
@@ -148,12 +144,44 @@ function event(id: string, time: Timestamp, system: boolean): AgentHistoryEntry 
     message: payload,
   });
   return create(AgentHistoryEntrySchema, {
-    occurredAt: time,
+    whenOccurred: time,
     item: { case: system ? "systemEvent" : "domainEvent", value: envelope },
   });
 }
 
 describe("in-memory Agent history", () => {
+  it("finds a prepared request exactly and orders equal-time model entries", async () => {
+    const factory = new InMemoryStorageFactory();
+    const storage = AgentHistoryStorageFactories.create(factory, scope);
+    const time = occurredAt(9n, 7);
+    const request = modelRequest("call-1", time);
+    const attempted = submissionAttempt("attempt-1", request, time);
+    try {
+      await storage.appendAll("T-history", [attempted, request]);
+      await expect(storage.readModelRequest("T-history", "call-1")).resolves.toEqual(
+        AgentHistoryRecords.capture(scope.agent("T-history"), request),
+      );
+      await expect(storage.readModelRequest("other", "call-1")).resolves.toBeUndefined();
+      await expect(storage.readModelRequest("T-history", "missing")).resolves.toBeUndefined();
+      const page = await storage.read({
+        entityId: "T-history",
+        view: { kind: "full" },
+        count: 10,
+      });
+      expect(page.entries).toEqual(
+        [request, attempted].map((entry) =>
+          AgentHistoryRecords.capture(scope.agent("T-history"), entry),
+        ),
+      );
+      await expect(
+        storage.append("T-history", modelRequest("call-1", occurredAt(10n))),
+      ).rejects.toThrow(/conflict/);
+    } finally {
+      storage.close();
+      await factory.close();
+    }
+  });
+
   it("appends a conversation and System audit group atomically", async () => {
     const factory = new InMemoryStorageFactory();
     const storage = AgentHistoryStorageFactories.create(factory, scope);
@@ -168,7 +196,9 @@ describe("in-memory Agent history", () => {
         view: { kind: "full" },
         count: 5,
       });
-      expect(afterFailure.entries).toEqual([existing]);
+      expect(afterFailure.entries).toEqual([
+        AgentHistoryRecords.capture(scope.agent("T-history"), existing),
+      ]);
       const system = event("system-batch", occurredAt(4n), true);
       await storage.appendAll("T-history", [request, system]);
       await storage.appendAll("T-history", [request, system]);

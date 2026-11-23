@@ -13,10 +13,14 @@
  */
 
 import { toBinary } from "@bufbuild/protobuf";
-import { AgentHistoryEntrySchema, type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
-import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+import {
+  AgentHistoryEntrySchema,
+  type AgentHistoryEntry,
+  type AgentId,
+} from "@spine-event-engine/proto/agent";
 
 import { AgentHistoryKeys, type AgentHistoryPage } from "./agent-history.js";
+import { AgentHistoryRecords } from "./agent-history-record-spec.js";
 
 /**
 
@@ -28,14 +32,16 @@ export const AgentHistoryPages = {
    * Reads complete-key native query chunks until a count or byte boundary.
    *
    * @param input Positive count and byte bounds.
+   * @param agent Requested complete Agent identity.
    * @param after Optional exclusive encoded boundary.
    * @param fetch Reads at most the requested count from one indexed provider view.
    * @returns Independent original entries and continuation status.
    */
   async read(
     input: { readonly count: number; readonly maxBytes?: number },
+    agent: AgentId,
     after: string | undefined,
-    fetch: (after: string | undefined, limit: number) => Promise<readonly AgentHistoryRecord[]>,
+    fetch: (after: string | undefined, limit: number) => Promise<readonly AgentHistoryEntry[]>,
   ): Promise<AgentHistoryPage> {
     AgentHistoryPages.validate(input);
     const entries: AgentHistoryEntry[] = [];
@@ -46,7 +52,7 @@ export const AgentHistoryPages = {
       const records = await fetch(next, limit);
       if (records.length === 0) return { entries: Object.freeze(entries), hasMore: false };
       for (const record of records) {
-        const entry = AgentHistoryPages.entry(record);
+        const entry = AgentHistoryPages.entry(record, agent);
         const length = toBinary(AgentHistoryEntrySchema, entry).length;
         if (
           entries.length === input.count ||
@@ -80,13 +86,13 @@ export const AgentHistoryPages = {
   },
 
   /**
-   * Reads a complete original entry from its internal envelope.
+   * Validates a complete directly stored entry against the requested Agent.
    *
-   * @param record Stored history envelope.
+   * @param record Stored history entry.
+   * @param agent Requested complete Agent identity.
    * @returns Complete original entry.
    */
-  entry(record: AgentHistoryRecord): AgentHistoryEntry {
-    if (record.entry === undefined) throw new Error("Agent history stored record lacks its entry.");
-    return record.entry;
+  entry(record: AgentHistoryEntry, agent: AgentId): AgentHistoryEntry {
+    return AgentHistoryRecords.requireIdentity(record, agent);
   },
 };

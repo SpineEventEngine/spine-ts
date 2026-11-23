@@ -587,19 +587,6 @@ export interface AiRegistryOptions {
   readonly invocationLimits?: AiInvocationLimits;
 
   /**
-   * Maximum concurrent Agent signal executions sharing this registry object.
-   * A slot covers the handlers and completion, including saved-output delivery.
-   * This limit applies within one process.
-   */
-  readonly concurrentOperations?: number;
-
-  /**
-   * Maximum additional Agent executions waiting in memory for a slot.
-   * Further accepted signals remain in durable storage until capacity is available.
-   */
-  readonly queuedOperations?: number;
-
-  /**
    * Maximum duration allowed for an application callback.
    */
   readonly hookTimeoutMs?: number;
