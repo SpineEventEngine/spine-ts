@@ -15,7 +15,7 @@
 import { create } from "@bufbuild/protobuf";
 import { expect, it, vi } from "vitest";
 import { ShardedWorkAvailableSchema } from "@spine-event-engine/proto/delivery-server";
-import { DeliveryClient } from "../src/client/client.js";
+import { DeliveryClient, DeliveryProtocolError } from "../src/client/client.js";
 import { transport } from "./shared-fixtures.js";
 
 it("releases a paused work stream immediately when its caller aborts", async () => {
@@ -35,4 +35,34 @@ it("releases a paused work stream immediately when its caller aborts", async () 
   expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
   client.close();
   expect(fake.streamAborts).toBe(1);
+});
+
+it("rejects work observation before transport for a closed or pre-aborted caller", async () => {
+  const fake = transport();
+  const client = DeliveryClient.usingTransport(fake.transport);
+  const cancelled = new AbortController();
+  const reason = new Error("caller stopped");
+  cancelled.abort(reason);
+  await expect(
+    client.observeAvailableShards({ signal: cancelled.signal })[Symbol.asyncIterator]().next(),
+  ).rejects.toBe(reason);
+  client.close();
+  await expect(client.observeAvailableShards()[Symbol.asyncIterator]().next()).rejects.toThrow(
+    "Delivery client is closed.",
+  );
+  expect(fake.streamAborts).toBe(0);
+});
+
+it("rejects a work notice without a shard and closes its stream", async () => {
+  const fake = transport();
+  fake.streamReplyAndHold([create(ShardedWorkAvailableSchema)]);
+  const client = DeliveryClient.usingTransport(fake.transport);
+  try {
+    await expect(
+      client.observeAvailableShards()[Symbol.asyncIterator]().next(),
+    ).rejects.toBeInstanceOf(DeliveryProtocolError);
+    expect(fake.streamAborts).toBe(1);
+  } finally {
+    client.close();
+  }
 });

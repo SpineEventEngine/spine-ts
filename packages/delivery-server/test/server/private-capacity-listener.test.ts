@@ -40,6 +40,16 @@ describe("private capacity listener", () => {
       await expect(
         client.reserve({ ticket, growth: { rows: 1n, bytes: 20n, shards: 1n } }),
       ).rejects.toMatchObject({ code: Code.Unauthenticated });
+      for (const request of [
+        { growth: { rows: 1n, bytes: 20n, shards: 1n } },
+        { ticket },
+        { ticket: { ...ticket, sequence: 0n }, growth: { rows: 1n, bytes: 20n, shards: 1n } },
+      ]) {
+        await expect(
+          client.reserve(request, { headers: { authorization: "Bearer child-secret" } }),
+        ).rejects.toMatchObject({ code: Code.InvalidArgument });
+      }
+      expect(ledger.usage()).toEqual({ rows: 0, bytes: 0, shards: 0 });
       await expect(
         client.reserve(
           { ticket, growth: { rows: 1n, bytes: 20n, shards: 1n } },

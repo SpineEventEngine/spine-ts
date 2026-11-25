@@ -124,6 +124,20 @@ describe("global child capacity", () => {
     }).toThrow(expect.objectContaining({ code: Code.FailedPrecondition }));
   });
 
+  it("ignores an older autonomous usage report after a newer committed mutation", () => {
+    const ledger = new CapacityLedger(limits);
+    ledger.replace(0, "first");
+    const committed = { rows: 1, bytes: 20, shards: 1 };
+    const first = ticket(0, "first", 1);
+    ledger.reserve(first, committed);
+    ledger.report(first, committed, 3n);
+    ledger.reportUsage(0, "first", 2n, zero);
+    expect(ledger.usage()).toEqual(committed);
+    expect(() => {
+      ledger.reserve(ticket(0, "first", 2), { rows: 2, bytes: 80, shards: 1 });
+    }).toThrow(expect.objectContaining({ code: Code.ResourceExhausted }));
+  });
+
   it("retires out-of-order reports without leaking an earlier reservation", () => {
     const ledger = new CapacityLedger(limits);
     ledger.replace(0, "first");

@@ -1441,11 +1441,11 @@ const ServerEnvironmentValues = Object.freeze({
    * Rejects competing delivery and application storage configuration.
    *
    * @param settings Supplies the configured facilities.
-   * @param delivery Supplies an openable delivery facility, when configured.
+   * @param delivery Supplies configured delivery fields before facility opening.
    */
   validateDeliveryStorage(
     settings: ServerEnvironmentSettings,
-    delivery: ServerEnvironmentDelivery | undefined,
+    delivery: Partial<ServerEnvironmentDelivery> | undefined,
   ): void {
     if ("shardObserver" in settings)
       throw new TypeError(
@@ -1531,7 +1531,7 @@ const ServerEnvironmentValues = Object.freeze({
     type: EnvironmentType,
     settings: ServerEnvironmentSettings,
   ): RequiredFacilities {
-    const delivery = ServerEnvironmentValues.openableDelivery(settings.delivery);
+    const delivery = settings.delivery as Partial<ServerEnvironmentDelivery> | undefined;
     ServerEnvironmentValues.validateDeliveryStorage(settings, delivery);
     const configuredCapacity = settings.subscriptionQueueCapacity;
     if (
@@ -1547,7 +1547,9 @@ const ServerEnvironmentValues = Object.freeze({
     return {
       subscriptionQueueCapacity: capacity,
       storageFactory:
-        settings.storageFactory ?? delivery?.storageFactory ?? new InMemoryStorageFactory(),
+        settings.storageFactory ??
+        (typeof delivery?.open === "function" ? delivery.storageFactory : undefined) ??
+        new InMemoryStorageFactory(),
       ai: settings.ai,
       integrationChannelFactory:
         settings.integrationChannelFactory ?? new InMemoryTransportFactory(),

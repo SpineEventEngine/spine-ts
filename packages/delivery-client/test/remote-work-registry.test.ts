@@ -126,6 +126,10 @@ describe("RemoteWorkRegistry", () => {
     ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
     expect(Date.now() - started).toBeLessThan(500);
     expect(fake.unary).toHaveBeenCalledTimes(2);
+    expect(fake.unary.mock.calls[0]?.[4]).toMatchObject({
+      worker: { nodeId: { value: "node" }, value: "worker" },
+    });
+    expect(fake.unary.mock.calls[1]?.[4]).toEqual(fake.unary.mock.calls[0]?.[4]);
   });
 
   it("ends managed pickup recovery promptly when the client closes during backoff", async () => {

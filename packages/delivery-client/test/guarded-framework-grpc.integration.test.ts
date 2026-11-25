@@ -27,9 +27,6 @@ import {
 } from "@spine-event-engine/proto/delivery-server";
 import { DeliveryClient, RemoteInbox, RemoteWorkRegistry } from "../src/index.js";
 import { domainMessage } from "./shared-fixtures.js";
-import { Delivery as CoreDelivery } from "../../server/src/delivery/delivery.js";
-import { deliveryControls } from "../../server/src/delivery/delivery-builder.js";
-import { ApplicationWorkObserver } from "../../server/src/delivery/application-work-observer.js";
 
 const servers: DeliveryServer[] = [];
 const clients: DeliveryClient[] = [];
@@ -57,45 +54,51 @@ describe("guarded framework delivery over gRPC", () => {
     const runtimes = ["east", "west", "north"].map((node) => {
       const client = DeliveryClient.connectTo(server.baseUrl);
       clients.push(client);
-      const core = new CoreDelivery({
-        context: { name: "JoinedRemoteDelivery", multitenant: false },
-        storageFactory: {} as never,
-        inbox: new RemoteInbox(client),
-        workRegistry: new RemoteWorkRegistry(client),
-        strategy: { shardCount: 3, shardFor: () => required(shards[0], "first shard") },
-        node,
-      });
-      core.setDispatcher(async (message) => {
+      const delivery = new DeliveryBuilder()
+        .withContext({ name: "JoinedRemoteDelivery", multitenant: false })
+        .withStorageFactory({} as never)
+        .withInbox(new RemoteInbox(client))
+        .withWorkRegistry(new RemoteWorkRegistry(client))
+        .withStrategy({ shardCount: 3, shardFor: () => required(shards[0], "first shard") })
+        .withNode(node)
+        .build();
+      const onMessage = async (message: { id: { value: string } }) => {
         const delivered = seen.get(node) ?? [];
         delivered.push(message.id.value);
         seen.set(node, delivered);
         if (node !== "north") await paused.promise;
-      });
-      const publicDelivery = deliveryControls.managed(core);
-      const observer = new ApplicationWorkObserver(
-        { observeAvailableShards: (options) => client.observeAvailableShards(options) },
-        publicDelivery,
-        server.baseUrl,
-        undefined,
-        1,
-      );
-      return { core, observer, publicDelivery };
+      };
+      return { client, delivery, onMessage };
     });
-    const east = required(runtimes[0], "east runtime").publicDelivery.deliverMessagesFrom(
-      required(shards[0], "first shard"),
-    );
-    const west = required(runtimes[1], "west runtime").publicDelivery.deliverMessagesFrom(
-      required(shards[1], "second shard"),
-    );
+    const eastRuntime = required(runtimes[0], "east runtime");
+    const westRuntime = required(runtimes[1], "west runtime");
+    const east = eastRuntime.delivery.run({
+      shard: required(shards[0], "first shard"),
+      onMessage: eastRuntime.onMessage,
+    });
+    const west = westRuntime.delivery.run({
+      shard: required(shards[1], "second shard"),
+      onMessage: westRuntime.onMessage,
+    });
+    const noticeAbort = new AbortController();
+    let notices: AsyncIterator<ShardIndex> | undefined;
     try {
       await vi.waitFor(() => {
         expect((seen.get("east")?.length ?? 0) + (seen.get("west")?.length ?? 0)).toBe(2);
       });
-      await Promise.all(runtimes.slice(0, 2).map(({ observer }) => observer.start()));
       const thirdRow = required(rows[2], "third row");
       await writer.writeOne(thirdRow);
       const north = required(runtimes[2], "north runtime");
-      await north.observer.start();
+      notices = north.client
+        .observeAvailableShards({ signal: noticeAbort.signal })
+        [Symbol.asyncIterator]();
+      const discovered = await notices.next();
+      if (discovered.done) throw new Error("Late work subscription ended before discovery.");
+      expect(discovered.value.index).toBe(2);
+      await north.delivery.run({
+        shard: required(shards[2], "third shard"),
+        onMessage: north.onMessage,
+      });
       await vi.waitFor(() => {
         expect(seen.get("north")).toEqual(["node-join-2"]);
       });
@@ -105,11 +108,10 @@ describe("guarded framework delivery over gRPC", () => {
       expect(seen.get("east")?.length).toBe(1);
       expect(seen.get("west")?.length).toBe(1);
     } finally {
+      noticeAbort.abort();
+      await notices?.return?.();
       paused.resolve(undefined);
       await Promise.allSettled([east, west]);
-      await Promise.all(runtimes.map(({ observer }) => observer.whenIdle()));
-      await Promise.all(runtimes.map(({ observer }) => observer.close()));
-      await Promise.all(runtimes.map(({ core }) => core.close()));
     }
     for (const row of rows) expect((await writer.findOne(row.id))?.status).toBe("DELIVERED");
   });

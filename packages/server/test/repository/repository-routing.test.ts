@@ -14495,6 +14495,22 @@ describe("repository signal routing", () => {
         close: () => held.close(),
         inbox: held.inbox,
         workRegistry: held.shards,
+        source: {
+          async *observeAvailableShards({ signal } = {}) {
+            yield shard;
+            await new Promise<void>((resolve) => {
+              if (signal?.aborted) resolve();
+              else
+                signal?.addEventListener(
+                  "abort",
+                  () => {
+                    resolve();
+                  },
+                  { once: true },
+                );
+            });
+          },
+        },
       } satisfies ServerEnvironmentDelivery,
     };
     setup.index = new TestTenantIndex();
@@ -14522,6 +14538,9 @@ describe("repository signal routing", () => {
     const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
 
     try {
+      await vi.waitFor(() => {
+        expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+      });
       await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
       await expect(

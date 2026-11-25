@@ -70,13 +70,22 @@ describe("forked delivery children", () => {
           return fork(entry, args, options);
         },
       );
+      const ready = Promise.withResolvers<undefined>();
+      const detach = pool.onChange(() => {
+        try {
+          pool.endpoint(0);
+          ready.resolve(undefined);
+        } catch {
+          // A failed generation has not announced its replacement yet.
+        }
+      });
       try {
         await pool.start();
-        await vi.waitFor(() => {
-          expect(pool.endpoint(0).pid).toBeGreaterThan(0);
-        });
+        await ready.promise;
+        expect(pool.endpoint(0).pid).toBeGreaterThan(0);
         expect(attempts).toBeGreaterThanOrEqual(2);
       } finally {
+        detach();
         await pool.close();
       }
     },

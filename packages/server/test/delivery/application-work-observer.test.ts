@@ -105,6 +105,19 @@ function row(id: string, shard: ShardIndex) {
 }
 
 describe("ApplicationWorkObserver", () => {
+  it("rejects an invalid explicit concurrency bound and a start after close", async () => {
+    const source = new Notices();
+    for (const invalid of [0, -1, 1.5, Number.NaN]) {
+      expect(
+        () => new ApplicationWorkObserver(source, {} as never, "test", undefined, invalid),
+      ).toThrow("maxConcurrentDeliveries must be a positive safe integer.");
+    }
+    const observer = new ApplicationWorkObserver(source, {} as never, "test", undefined, 1);
+    await observer.close();
+    await expect(observer.start()).rejects.toThrow("Delivery observation is closed.");
+    expect(source.opens).toBe(0);
+  });
+
   it("paces repeated transient disconnects with the prior increasing reconnect policy", async () => {
     vi.useFakeTimers();
     try {
