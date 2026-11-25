@@ -57,7 +57,7 @@ export interface CapacityTicket {
 
 interface SlotUsage {
   readonly generation: string;
-  readonly reservations: Map<bigint, CapacityUsage>;
+  readonly reservations: Map<bigint, { readonly phase: bigint; readonly growth: CapacityUsage }>;
   readonly retiredGaps: Set<bigint>;
   committed: CapacityUsage;
   retiredThrough: bigint;
@@ -101,26 +101,30 @@ export class CapacityLedger {
    *
    * @param ticket Correlates the child's mutation.
    * @param growth Counts possible positive resource growth.
+   * @param phase Orders updated growth estimates for the same ticket.
    */
-  reserve(ticket: CapacityTicket, growth: CapacityUsage): void {
+  reserve(ticket: CapacityTicket, growth: CapacityUsage, phase = 0n): void {
     const slot = this.#current(ticket);
     CapacityLedger.#validateUsage(growth);
+    if (phase < 0n) throw new ConnectError("Delivery capacity phase is invalid.", Code.InvalidArgument);
     if (CapacityLedger.#retired(slot, ticket.sequence))
       throw new ConnectError("Delivery capacity ticket is retired.", Code.FailedPrecondition);
     const previous = slot.reservations.get(ticket.sequence);
     if (previous !== undefined) {
-      if (!CapacityLedger.#same(previous, growth))
+      if (phase < previous.phase) return;
+      if (phase === previous.phase && !CapacityLedger.#same(previous.growth, growth))
         throw new ConnectError("Delivery capacity ticket changed.", Code.FailedPrecondition);
-      return;
+      if (phase === previous.phase) return;
     }
     const usage = this.usage();
+    const prior = previous?.growth ?? zero;
     if (
-      usage.rows + growth.rows > this.limits.maxRetainedMessages ||
-      usage.bytes + growth.bytes > this.limits.maxRetainedBytes ||
-      usage.shards + growth.shards > this.limits.maxTrackedShards
+      usage.rows - prior.rows + growth.rows > this.limits.maxRetainedMessages ||
+      usage.bytes - prior.bytes + growth.bytes > this.limits.maxRetainedBytes ||
+      usage.shards - prior.shards + growth.shards > this.limits.maxTrackedShards
     )
       throw new ConnectError("Delivery retained-state capacity is full.", Code.ResourceExhausted);
-    slot.reservations.set(ticket.sequence, Object.freeze({ ...growth }));
+    slot.reservations.set(ticket.sequence, { phase, growth: Object.freeze({ ...growth }) });
   }
 
   /**
@@ -200,7 +204,7 @@ export class CapacityLedger {
       rows += slot.committed.rows;
       bytes += slot.committed.bytes;
       shards += slot.committed.shards;
-      for (const growth of slot.reservations.values()) {
+      for (const { growth } of slot.reservations.values()) {
         rows += growth.rows;
         bytes += growth.bytes;
         shards += growth.shards;

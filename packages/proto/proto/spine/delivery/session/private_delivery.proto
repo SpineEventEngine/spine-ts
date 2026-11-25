@@ -75,6 +75,9 @@ message CapacityReservation {
 
   // Holds only the possible positive growth of that mutation.
   CapacityUsage growth = 2 [(required) = true];
+
+  // Orders updated growth estimates for the same mutation before it commits.
+  uint64 phase = 3;
 }
 
 // Reconciles one mutation with the child's exact usage after it settles.

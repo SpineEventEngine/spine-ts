@@ -26,9 +26,12 @@ export interface CapacityReservationClient {
    *
    * @param ticket Correlates this mutation.
    * @param growth Counts possible positive resource growth.
+   * @param signal Cancels a hanging private request.
+   * @param phase Orders a later growth estimate for this ticket.
    * @returns Completion after the parent reserves capacity.
    */
-  reserve(ticket: CapacityTicket, growth: CapacityUsage, signal?: AbortSignal): Promise<void>;
+  reserve(ticket: CapacityTicket, growth: CapacityUsage, signal?: AbortSignal,
+    phase?: bigint): Promise<void>;
 
   /**
    * Updates a reservation with exact committed usage.
@@ -36,15 +39,21 @@ export interface CapacityReservationClient {
    * @param ticket Correlates this mutation.
    * @param usage Counts the child's resources after commit.
    * @param revision Orders this report after earlier state transitions.
+   * @param signal Cancels a hanging private request.
    * @returns Completion after the parent updates its ledger.
    */
-  report(ticket: CapacityTicket, usage: CapacityUsage, revision: bigint,
-    signal?: AbortSignal): Promise<void>;
+  report(
+    ticket: CapacityTicket,
+    usage: CapacityUsage,
+    revision: bigint,
+    signal?: AbortSignal,
+  ): Promise<void>;
 
   /**
    * Cancels a reservation when the mutation did not commit.
    *
    * @param ticket Correlates this mutation.
+   * @param signal Cancels a hanging private request.
    * @returns Completion after the parent retires the ticket.
    */
   cancel(ticket: CapacityTicket, signal?: AbortSignal): Promise<void>;
@@ -56,6 +65,7 @@ export interface CapacityReservationClient {
 interface PendingMutation {
   readonly ticket: CapacityTicket;
   readonly growth: () => CapacityUsage;
+  readonly refresh: (() => CapacityUsage) | undefined;
   readonly operation: () => Promise<unknown>;
   readonly snapshot: () => { readonly usage: CapacityUsage; readonly revision: bigint };
   readonly signal: AbortSignal | undefined;
@@ -99,6 +109,7 @@ export class CapacityMutationGate {
    * @param operation Applies the existing validated service handler.
    * @param snapshot Reads exact state after the handler settles.
    * @param signal Cancels the request before its mutation begins.
+   * @param refresh Recomputes exact growth after a delayed parent reserve.
    * @returns The existing service handler result.
    */
   run<T>(
@@ -107,6 +118,7 @@ export class CapacityMutationGate {
     operation: () => Promise<T>,
     snapshot: () => { readonly usage: CapacityUsage; readonly revision: bigint },
     signal?: AbortSignal,
+    refresh?: () => CapacityUsage,
   ): Promise<T> {
     try {
       this.#requireTicket(ticket);
@@ -117,7 +129,7 @@ export class CapacityMutationGate {
         (this.#active?.ticket.sequence === ticket.sequence ? this.#active : undefined);
       if (existing !== undefined) return existing.promise as Promise<T>;
       if (signal?.aborted) throw CapacityMutationGate.#abort(signal);
-      return this.#enqueue(ticket, growth, operation, snapshot, signal);
+      return this.#enqueue(ticket, growth, operation, snapshot, signal, refresh);
     } catch (error) {
       return Promise.reject(
         error instanceof Error ? error : new Error("Delivery mutation failed."),
@@ -136,6 +148,7 @@ export class CapacityMutationGate {
     operation: () => Promise<T>,
     snapshot: () => { readonly usage: CapacityUsage; readonly revision: bigint },
     signal?: AbortSignal,
+    refresh?: () => CapacityUsage,
   ): Promise<T> {
     const deferred = Promise.withResolvers<unknown>();
     const onAbort = () => {
@@ -145,6 +158,7 @@ export class CapacityMutationGate {
     const entry: PendingMutation = {
       ticket,
       growth,
+      refresh,
       operation,
       snapshot,
       signal,
@@ -276,9 +290,19 @@ export class CapacityMutationGate {
   async #execute(entry: PendingMutation): Promise<unknown> {
     const { ticket, signal } = entry;
     if (signal?.aborted) throw CapacityMutationGate.#abort(signal);
-    const growth = entry.growth();
+    let growth = entry.growth();
+    let phase = 0n;
     try {
-      await this.#repeat((abort) => this.capacity.reserve(ticket, growth, abort), signal);
+      await this.#repeat((abort) => this.capacity.reserve(ticket, growth, abort, phase), signal);
+      while (entry.refresh !== undefined) {
+        if (signal?.aborted || this.#closed.signal.aborted)
+          throw CapacityMutationGate.#abort(signal?.aborted ? signal : this.#closed.signal);
+        const refreshed = entry.refresh();
+        if (CapacityMutationGate.#same(growth, refreshed)) break;
+        growth = refreshed;
+        phase++;
+        await this.#repeat((abort) => this.capacity.reserve(ticket, growth, abort, phase), signal);
+      }
     } catch (error) {
       await this.#cancelTicket(ticket);
       throw error;
@@ -300,6 +324,20 @@ export class CapacityMutationGate {
   }
 
   /**
+   * Compares the complete possible growth of two reservation phases.
+   */
+  static #same(left: CapacityUsage, right: CapacityUsage): boolean {
+    return left.rows === right.rows && left.bytes === right.bytes && left.shards === right.shards;
+  }
+
+  /**
+   * Reads terminal or caller cancellation after an asynchronous boundary.
+   */
+  #stopped(signal?: AbortSignal): boolean {
+    return this.#closed.signal.aborted || signal?.aborted === true;
+  }
+
+  /**
    * Retries ambiguous private transport failures until success or shutdown.
    */
   async #repeat(call: (signal: AbortSignal) => Promise<void>, signal?: AbortSignal): Promise<void> {
@@ -312,7 +350,7 @@ export class CapacityMutationGate {
         await this.#callWithAbort(call, signal);
         return;
       } catch (error) {
-        if (this.#closed.signal.aborted || signal?.aborted) throw error;
+        if (this.#stopped(signal)) throw error;
         if (error instanceof ConnectError && CapacityMutationGate.#terminal(error.code))
           throw error;
         const observed = Math.max(1, Math.ceil(Time.monotonicTime() - started));
@@ -330,15 +368,18 @@ export class CapacityMutationGate {
       try {
         await this.#repeat((signal) => this.capacity.cancel(ticket, signal));
       } catch (error) {
-        if (!this.#closed.signal.aborted) throw error;
+        if (!this.#stopped()) throw error;
       }
       return;
     }
     const attempt = new AbortController();
-    const end = setImmediate(() => attempt.abort());
+    const end = setImmediate(() => { attempt.abort(); });
     try {
-      await this.#callWithAbort((signal) => this.capacity.cancel(ticket, signal),
-        attempt.signal, true);
+      await this.#callWithAbort(
+        (signal) => this.capacity.cancel(ticket, signal),
+        attempt.signal,
+        true,
+      );
     } catch {
       // Slot replacement retires uncertain capacity after this child exits.
     } finally {
@@ -349,31 +390,51 @@ export class CapacityMutationGate {
   /**
    * Races a private RPC against caller and child shutdown, including stalled transports.
    */
-  #callWithAbort(call: (signal: AbortSignal) => Promise<void>, signal?: AbortSignal,
-    ignoreClose = false): Promise<void> {
-    const active = ignoreClose ? signal : signal === undefined ? this.#closed.signal :
-      AbortSignal.any([signal, this.#closed.signal]);
-    if (active === undefined) throw new TypeError("Private cleanup signal is missing.");
+  #callWithAbort(
+    call: (signal: AbortSignal) => Promise<void>,
+    signal?: AbortSignal,
+    ignoreClose = false,
+  ): Promise<void> {
+    const active = this.#callSignal(signal, ignoreClose);
     return new Promise<void>((resolve, reject) => {
       const abort = () => {
         active.removeEventListener("abort", abort);
         reject(CapacityMutationGate.#abort(active));
       };
       active.addEventListener("abort", abort, { once: true });
-      if (active.aborted) { abort(); return; }
+      if (active.aborted) {
+        abort();
+        return;
+      }
       try {
-        void call(active).then(() => {
-          active.removeEventListener("abort", abort);
-          resolve();
-        }, (error: unknown) => {
-          active.removeEventListener("abort", abort);
-          reject(error instanceof Error ? error : new Error("Private capacity call failed."));
-        });
+        void call(active).then(
+          () => {
+            active.removeEventListener("abort", abort);
+            resolve();
+          },
+          (error: unknown) => {
+            active.removeEventListener("abort", abort);
+            reject(error instanceof Error ? error : new Error("Private capacity call failed."));
+          },
+        );
       } catch (error) {
         active.removeEventListener("abort", abort);
         reject(error instanceof Error ? error : new Error("Private capacity call failed."));
       }
     });
+  }
+
+  /**
+   * Combines caller and child cancellation for an unanswered private RPC.
+   */
+  #callSignal(signal: AbortSignal | undefined, ignoreClose: boolean): AbortSignal {
+    if (ignoreClose) {
+      if (signal === undefined) throw new TypeError("Private cleanup signal is missing.");
+      return signal;
+    }
+    return signal === undefined
+      ? this.#closed.signal
+      : AbortSignal.any([signal, this.#closed.signal]);
   }
 
   /**

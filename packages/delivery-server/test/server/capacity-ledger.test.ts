@@ -26,6 +26,19 @@ const ticket = (slot: number, generation: string, sequence: number) => ({
 });
 
 describe("global child capacity", () => {
+  it("adjusts one correlated ticket without letting an old phase restore its charge", () => {
+    const ledger = new CapacityLedger({ ...limits, maxRetainedBytes: 71 });
+    ledger.replace(0, "first");
+    const id = ticket(0, "first", 1);
+    const growth = { rows: 1, bytes: 70, shards: 1 };
+    ledger.reserve(id, growth, 0n);
+    ledger.reserve(id, { ...growth, bytes: 71 }, 1n);
+    ledger.reserve(id, growth, 0n);
+    expect(ledger.usage()).toEqual({ ...growth, bytes: 71 });
+    expect(() => { ledger.reserve(id, { ...growth, bytes: 72 }, 2n); })
+      .toThrow(expect.objectContaining({ code: Code.ResourceExhausted }));
+    expect(ledger.usage()).toEqual({ ...growth, bytes: 71 });
+  });
   it("holds an uncertain reservation while another slot uses remaining headroom", () => {
     const ledger = new CapacityLedger(limits);
     ledger.replace(0, "first");

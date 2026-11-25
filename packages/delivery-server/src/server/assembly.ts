@@ -64,9 +64,19 @@ export interface DeliveryAssembly {
   readonly managed: ServiceImpl<typeof ManagedShardService>;
 
   /**
+   * Captures session revisions at private child request receipt.
+   */
+  readonly sessionRuntime: ShardSessionRuntime;
+
+  /**
    * Serves session-guarded Inbox acknowledgement and cleanup.
    */
   readonly guarded: ServiceImpl<typeof GuardedInboxService>;
+
+  /**
+   * Plans an exact guarded acknowledgement for private capacity admission.
+   */
+  readonly guardedRuntime: GuardedInboxRuntime;
 
   /**
    * Streams advisory notifications for free pending shards.
@@ -120,8 +130,8 @@ export const DeliveryAssembly: Readonly<{
     const admission = new MutationAdmission();
     const admin = AdminPublisher.create(state);
     const observing = ShardObserving.create(state, configuration.reminderIntervalMs ?? 10_000);
-    const onStoredChange = admin.publish.bind(admin);
-    const onWorkChange = observing.changed.bind(observing);
+    const onStoredChange = admin.publish.bind(admin),
+      onWorkChange = observing.changed.bind(observing);
     const onShardTransition = (shard: ShardIndex) => {
       admin.publish(shard);
       observing.changed(shard);
@@ -139,7 +149,9 @@ export const DeliveryAssembly: Readonly<{
       inbox: InboxHandlers.create(state, admission, onStoredChange, onWorkChange),
       shards: sessions.raw,
       managed: sessions.managed,
+      sessionRuntime: sessions,
       guarded: guarded.service,
+      guardedRuntime: guarded,
       admin: admin.service,
       observing: observing.service,
       closeAdmission: admission.close.bind(admission),

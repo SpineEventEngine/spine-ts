@@ -148,25 +148,61 @@ export class ShardSessionRuntime {
         return this.#admission.run(context.signal, () => this.#pick(shard, worker, "MANAGED"));
       },
       renewShardSession: async (request, context) => {
-        const shard = SessionValues.requireShard(request.shard);
-        const worker = SessionValues.requireWorker(request.worker);
-        const id = SessionValues.requireId(request.sessionId);
-        this.#requireHandle(request);
-        const revision = this.#state.session(shard)?.revision;
-        return this.#admission.run(context.signal, () => this.#renew(shard, worker, id, revision));
+        return this.renewAtRevision(request, context.signal, this.receivedRevision(request.shard));
       },
       releaseShardSession: async (request, context) => {
-        const shard = SessionValues.requireShard(request.shard);
-        const worker = SessionValues.requireWorker(request.worker);
-        const id = SessionValues.requireId(request.sessionId);
-        this.#requireHandle(request);
-        const revision = this.#state.session(shard)?.revision;
-        await this.#admission.run(context.signal, () => {
-          this.#releaseMatching(shard, worker, id, revision);
-        });
-        return {};
+        return this.releaseAtRevision(request, context.signal, this.receivedRevision(request.shard));
       },
     };
+  }
+
+  /**
+   * Captures the current revision at the authoritative child request boundary.
+   *
+   * @param shard Identifies the shard in the received handle.
+   * @returns The current internal revision, if a session exists.
+   */
+  receivedRevision(shard: ShardIndex | undefined): number | undefined {
+    return this.#state.session(SessionValues.requireShard(shard))?.revision;
+  }
+
+  /**
+   * Renews only the revision observed before a private capacity wait, so a
+   * queued request cannot apply to a later revision of the same session.
+   *
+   * @param request Supplies the session handle.
+   * @param signal Cancels before admission.
+   * @param revision Captures the received revision.
+   * @returns The renewed handle.
+   */
+  renewAtRevision(request: DeliverySessionHandle, signal: AbortSignal,
+    revision: number | undefined): Promise<DeliverySessionHandle> {
+    const shard = SessionValues.requireShard(request.shard);
+    const worker = SessionValues.requireWorker(request.worker);
+    const id = SessionValues.requireId(request.sessionId);
+    this.#requireHandle(request);
+    return this.#admission.run(signal, () => this.#renew(shard, worker, id, revision));
+  }
+
+  /**
+   * Releases only the revision observed before a private capacity wait, so a
+   * delayed release cannot clear a session renewed while it was queued.
+   *
+   * @param request Supplies the session handle.
+   * @param signal Cancels before admission.
+   * @param revision Captures the received revision.
+   * @returns An empty response after the matching session is released.
+   */
+  async releaseAtRevision(request: DeliverySessionHandle, signal: AbortSignal,
+    revision: number | undefined): Promise<Record<string, never>> {
+    const shard = SessionValues.requireShard(request.shard);
+    const worker = SessionValues.requireWorker(request.worker);
+    const id = SessionValues.requireId(request.sessionId);
+    this.#requireHandle(request);
+    await this.#admission.run(signal, () => {
+      this.#releaseMatching(shard, worker, id, revision);
+    });
+    return {};
   }
 
   /**
@@ -439,6 +475,24 @@ export class ShardSessionRuntime {
     return SessionValues.copyTime(value);
   }
 }
+
+/**
+ * Validates pickup inputs before a private capacity request.
+ */
+export const DeliverySessionInputs: Readonly<{
+  /**
+   * Validates a complete shard identity.
+   */
+  requireShard: (shard: ShardIndex | undefined) => ShardIndex;
+
+  /**
+   * Validates a complete worker identity.
+   */
+  requireWorker: (worker: WorkerId | undefined) => WorkerId;
+}> = Object.freeze({
+  requireShard: (shard: ShardIndex | undefined): ShardIndex => SessionValues.requireShard(shard),
+  requireWorker: (worker: WorkerId | undefined): WorkerId => SessionValues.requireWorker(worker),
+});
 
 /**
  * Validates session inputs, times, and definitive RPC errors.

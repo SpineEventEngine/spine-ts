@@ -338,7 +338,7 @@ export const InboxMessages: Readonly<{
 /**
  * Validates Inbox shard identities and batch consistency.
  */
-const InboxShards: Readonly<{
+export const InboxShards: Readonly<{
   // prettier-ignore
 
   /**

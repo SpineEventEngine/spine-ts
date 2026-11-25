@@ -304,6 +304,23 @@ describe("typed Shard sessions", () => {
     core.close();
   });
 
+  it("keeps a renewal when a private release captured its revision before a capacity wait", async () => {
+    const assembly = DeliveryAssembly.create();
+    try {
+      const first = pickedHandle(await assembly.managed.pickShardRaw(request, context));
+      const delayedRevision = assembly.sessionRuntime.receivedRevision(first.shard);
+      await assembly.managed.renewShardSession(first, context);
+      await assembly.sessionRuntime.releaseAtRevision(
+        first, new AbortController().signal, delayedRevision,
+      );
+      expect((await assembly.managed.pickShardRaw(
+        create(DeliveryShardPickupSchema, { shard, worker: rival }), context,
+      )).result.case).toBe("busy");
+    } finally {
+      assembly.closeSessions();
+    }
+  });
+
   it("rejects a renewal that entered after a release in the same admission batch", async () => {
     const core = InMemoryDelivery.create();
     const first = pickedHandle(await core.managed.pickShardRaw(request, context));

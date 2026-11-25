@@ -58,7 +58,7 @@ export class PrivateCapacityHandlers {
         const ticket = this.#ticket(request.ticket, context.requestHeader);
         if (request.growth === undefined)
           throw new ConnectError("Delivery capacity growth is missing.", Code.InvalidArgument);
-        this.ledger.reserve(ticket, PrivateCapacityHandlers.#usage(request.growth));
+        this.ledger.reserve(ticket, PrivateCapacityHandlers.#usage(request.growth), request.phase);
         return {};
       },
       report: (request, context) => {

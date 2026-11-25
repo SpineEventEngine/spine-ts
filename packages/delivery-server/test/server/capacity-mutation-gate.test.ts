@@ -28,6 +28,37 @@ const ticket = (slot: number, generation: string, sequence: number) => ({
 });
 
 describe("per-child mutation admission", () => {
+  it("refreshes exact growth after a delayed reservation before applying a mutation", async () => {
+    const ledger = new CapacityLedger({ ...limits, maxRetainedBytes: 71 });
+    ledger.replace(0, "first");
+    const release = Promise.withResolvers<undefined>();
+    let phase = 0;
+    const gate = new CapacityMutationGate({
+      reserve: async (id, amount, _signal, receivedPhase) => {
+        if (receivedPhase === 0n) await release.promise;
+        ledger.reserve(id, amount, receivedPhase);
+      },
+      report: (id, usage, revision) => {
+        ledger.report(id, usage, revision);
+        return Promise.resolve();
+      },
+      cancel: (id) => {
+        ledger.cancel(id);
+        return Promise.resolve();
+      },
+    });
+    const running = gate.run(ticket(0, "first", 1),
+      () => ({ ...growth, bytes: 70 }),
+      () => Promise.resolve("committed"),
+      () => ({ usage: { ...growth, bytes: 71 }, revision: 1n }),
+      undefined,
+      () => ({ ...growth, bytes: ++phase === 1 ? 71 : 71 }),
+    );
+    release.resolve(undefined);
+    await expect(running).resolves.toBe("committed");
+    expect(ledger.usage().bytes).toBe(71);
+    expect(phase).toBe(2);
+  });
   it("lets a second slot commit with headroom before the first slot settles", async () => {
     const ledger = new CapacityLedger(limits);
     ledger.replace(0, "first");
@@ -464,7 +495,7 @@ describe("per-child mutation admission", () => {
       report: () => Promise.resolve(),
       cancel: () => {
         enteredCancel.resolve(undefined);
-        return new Promise<undefined>(() => {});
+        return new Promise<undefined>(() => { /* Deliberately unanswered transport. */ });
       },
     });
     const controller = new AbortController();
@@ -489,7 +520,7 @@ describe("per-child mutation admission", () => {
     const gate = new CapacityMutationGate({
       reserve: () => {
         enteredReserve.resolve(undefined);
-        return new Promise<undefined>(() => {});
+        return new Promise<undefined>(() => { /* Deliberately unanswered transport. */ });
       },
       report: () => Promise.resolve(),
       cancel: () => Promise.resolve(),

@@ -27,7 +27,7 @@ import {
   type ShardIndex,
 } from "@spine-event-engine/proto/delivery";
 
-import { InMemoryDeliveryState } from "./in-memory-delivery-state.js";
+import { InMemoryDeliveryState, type DeliveryResourceUsage } from "./in-memory-delivery-state.js";
 import { InboxMessages } from "./inbox-service.js";
 import { MutationAdmission } from "./mutation-admission.js";
 import { ShardSessionRuntime } from "./shard-service.js";
@@ -68,17 +68,65 @@ export class GuardedInboxRuntime {
   }
 
   /**
+   * Calculates an acknowledgement's exact final-state usage from its original wire row.
+   *
+   * @param request Supplies the session and original decoded row.
+   * @param whenAcknowledged Supplies the timestamp also used for commit.
+   * @returns The state totals if a matching pending row is completed.
+   */
+  projectedAcknowledgement(
+    request: GuardedInboxRequest,
+    whenAcknowledged: Timestamp,
+  ): DeliveryResourceUsage {
+    const expected = InboxMessages.required(request.expected).message;
+    const session = request.session;
+    if (session === undefined)
+      throw new ConnectError("Managed session handle is required.", Code.InvalidArgument);
+    const shard = this.sessions.requireManaged(session);
+    if (expected.id?.index?.index !== shard.index || expected.id.index.ofTotal !== shard.ofTotal)
+      throw new ConnectError("Inbox row shard differs from session.", Code.InvalidArgument);
+    const current = this.state.messages.get(DeliveryMessages.key(expected));
+    if (
+      current?.status !== InboxMessageStatus.TO_DELIVER ||
+      expected.status !== InboxMessageStatus.TO_DELIVER ||
+      !GuardedWire.same(current, expected)
+    )
+      return this.state.usage();
+    return this.state.projectedUsage([
+      InboxMessages.required(this.#completed(current, whenAcknowledged)),
+    ]);
+  }
+
+  /**
+   * Applies an acknowledgement using the same timestamp as capacity planning.
+   *
+   * @param request Supplies the session and original decoded row.
+   * @param signal Cancels before mutation admission.
+   * @param whenAcknowledged Fixes the first completion deadline.
+   * @returns The matched completion or stale-row result.
+   */
+  acknowledgeAt(
+    request: GuardedInboxRequest,
+    signal: AbortSignal,
+    whenAcknowledged: Timestamp,
+  ): Promise<GuardedInboxResult> {
+    return this.#admit(request, signal, "ACK", whenAcknowledged);
+  }
+
+  /**
    * Admits one guarded mutation and checks its live session inside admission.
    *
    * @param request Supplies the handle and original row.
    * @param signal Cancels before admission.
    * @param operation Selects acknowledgement or one cleanup path.
+   * @param whenAcknowledged Fixes the completion timestamp in private admission.
    * @returns A matched row result or a stale-row result.
    */
   #admit(
     request: GuardedInboxRequest,
     signal: AbortSignal,
     operation: "ACK" | "PENDING" | "EXPIRED",
+    whenAcknowledged?: Timestamp,
   ): Promise<GuardedInboxResult> {
     const expected = InboxMessages.required(request.expected).message;
     const session = request.session;
@@ -88,7 +136,7 @@ export class GuardedInboxRuntime {
       const shard = this.sessions.requireManaged(session);
       if (expected.id?.index?.index !== shard.index || expected.id.index.ofTotal !== shard.ofTotal)
         throw new ConnectError("Inbox row shard differs from session.", Code.InvalidArgument);
-      return this.#apply(expected, shard, operation);
+      return this.#apply(expected, shard, operation, whenAcknowledged);
     });
   }
 
@@ -98,16 +146,19 @@ export class GuardedInboxRuntime {
    * @param expected Supplies the original wire snapshot.
    * @param shard Identifies the authorized shard.
    * @param operation Selects the status transition.
+   * @param whenAcknowledged Fixes the completion timestamp when supplied.
    * @returns The guarded mutation result.
    */
   #apply(
     expected: NonNullable<GuardedInboxRequest["expected"]>,
     shard: ShardIndex,
     operation: "ACK" | "PENDING" | "EXPIRED",
+    whenAcknowledged?: Timestamp,
   ): GuardedInboxResult {
     const key = DeliveryMessages.key(expected);
     const current = this.state.messages.get(key);
-    if (operation === "ACK") return this.#acknowledge(key, expected, current, shard);
+    if (operation === "ACK")
+      return this.#acknowledge(key, expected, current, shard, whenAcknowledged);
     if (operation === "PENDING" && expected.status !== InboxMessageStatus.TO_DELIVER)
       return create(GuardedInboxResultSchema);
     if (operation === "EXPIRED" && expected.status !== InboxMessageStatus.DELIVERED)
@@ -130,6 +181,7 @@ export class GuardedInboxRuntime {
    * @param expected Supplies the read pending snapshot.
    * @param current Supplies the stored row, when present.
    * @param shard Identifies the authorized shard.
+   * @param whenAcknowledged Fixes the completion timestamp when supplied.
    * @returns The completed row on an exact match.
    */
   #acknowledge(
@@ -137,6 +189,7 @@ export class GuardedInboxRuntime {
     expected: NonNullable<GuardedInboxRequest["expected"]>,
     current: NonNullable<GuardedInboxRequest["expected"]> | undefined,
     shard: ShardIndex,
+    whenAcknowledged?: Timestamp,
   ): GuardedInboxResult {
     if (expected.status !== InboxMessageStatus.TO_DELIVER || current === undefined)
       return create(GuardedInboxResultSchema);
@@ -149,16 +202,23 @@ export class GuardedInboxRuntime {
         message: DeliveryMessages.copy(current),
       });
     if (!GuardedWire.same(current, expected)) return create(GuardedInboxResultSchema);
-    const completed = clone(InboxMessageSchema, current);
-    const now = this.now();
-    completed.status = InboxMessageStatus.DELIVERED;
-    completed.keepUntil = create(TimestampSchema, { seconds: now.seconds + 5n, nanos: now.nanos });
+    const completed = this.#completed(current, whenAcknowledged ?? this.now());
     const record = InboxMessages.required(completed);
     this.state.putAll([record]);
     this.state.rememberAcknowledgement(key, GuardedWire.bytes(expected));
     this.onStoredChange?.(shard);
     this.onWorkChange?.(shard);
     return create(GuardedInboxResultSchema, { matched: true, message: completed });
+  }
+
+  /**
+   * Clones the canonical row with its first completion deadline and unknown fields.
+   */
+  #completed(current: NonNullable<GuardedInboxRequest["expected"]>, now: Timestamp) {
+    const completed = clone(InboxMessageSchema, current);
+    completed.status = InboxMessageStatus.DELIVERED;
+    completed.keepUntil = create(TimestampSchema, { seconds: now.seconds + 5n, nanos: now.nanos });
+    return completed;
   }
 
   /**
