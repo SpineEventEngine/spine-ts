@@ -31,11 +31,17 @@ describe("InMemoryDeliveryState", () => {
     state.putAll([
       { message: create(InboxMessageSchema, { id: { uuid: "message", index: shard } }), bytes: 1 },
     ]);
-    state.setSession(shard, worker, 42);
+    state.setSession(
+      shard,
+      worker,
+      { $typeName: "google.protobuf.Timestamp", seconds: 0n, nanos: 42 },
+      "session-1",
+      "RAW",
+    );
     state.release(shard);
     const record = state.shards.get("0/1");
     expect(record?.worker).toBeUndefined();
-    expect(record?.whenLastPicked).toBe(42);
+    expect(record?.whenLastPicked).toMatchObject({ seconds: 0n, nanos: 42 });
   });
 
   it("prunes a released shard after its last retained message is removed", () => {
@@ -45,12 +51,24 @@ describe("InMemoryDeliveryState", () => {
     const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
     const message = create(InboxMessageSchema, { id: { uuid: "message", index: first } });
     state.putAll([{ message, bytes: 1 }]);
-    state.setSession(first, worker, 42);
+    state.setSession(
+      first,
+      worker,
+      { $typeName: "google.protobuf.Timestamp", seconds: 0n, nanos: 42 },
+      "session-1",
+      "RAW",
+    );
     state.release(first);
     state.delete(message);
     expect(state.shards.has("0/2")).toBe(false);
     expect(() => {
-      state.setSession(second, worker, 43);
+      state.setSession(
+        second,
+        worker,
+        { $typeName: "google.protobuf.Timestamp", seconds: 0n, nanos: 43 },
+        "session-2",
+        "RAW",
+      );
     }).not.toThrow();
   });
 

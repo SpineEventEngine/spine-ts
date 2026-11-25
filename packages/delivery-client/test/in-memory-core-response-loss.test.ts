@@ -15,7 +15,11 @@
 import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
 import { describe, expect, it, vi } from "vitest";
 
-import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
+import {
+  InboxService,
+  ManagedShardService,
+  ShardService,
+} from "@spine-event-engine/proto/delivery-server";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
@@ -407,16 +411,19 @@ describe("in-memory delivery core response loss", () => {
     const core = InMemoryDelivery.create();
     let pickups = 0;
     const transport = createRouterTransport((router) => {
-      router.service(ShardService, {
-        ...core.shards,
-        pickShard: async (request, context) => {
+      router.service(InboxService, core.inbox);
+      router.service(ManagedShardService, {
+        ...core.managed,
+        pickShardForDelivery: async (request, context) => {
           pickups += 1;
-          await core.shards.pickShard(request, context);
+          await core.managed.pickShardForDelivery(request, context);
           throw new ConnectError("lost", Code.Unavailable);
         },
       });
     });
-    const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(transport));
+    const client = DeliveryClient.usingTransport(transport);
+    await client.writeOne(domainMessage("lost-pickup"));
+    const registry = new RemoteWorkRegistry(client);
     await expect(
       registry.pickUp(
         ShardIndex.single(),
@@ -435,16 +442,19 @@ describe("in-memory delivery core response loss", () => {
   it("proves a lost release committed through a direct subsequent pickup", async () => {
     const core = InMemoryDelivery.create();
     const normal = DeliveryClient.usingTransport(
-      createRouterTransport((router) => router.service(ShardService, core.shards)),
+      createRouterTransport((router) => {
+        router.service(ShardService, core.shards);
+        router.service(ManagedShardService, core.managed);
+      }),
     );
     const session = await normal.pickUp(ShardIndex.single(), { nodeId: "node", value: "worker" });
     if (session === undefined) throw new Error("Expected pickup.");
     const lost = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
-        router.service(ShardService, {
-          ...core.shards,
-          releaseSession: async (request, context) => {
-            await core.shards.releaseSession(request, context);
+        router.service(ManagedShardService, {
+          ...core.managed,
+          releaseShardSession: async (request, context) => {
+            await core.managed.releaseShardSession(request, context);
             throw new ConnectError("lost", Code.Unavailable);
           },
         });
@@ -458,14 +468,18 @@ describe("in-memory delivery core response loss", () => {
 
   it("proves a lost expiration release committed through a direct pickup", async () => {
     let now = 10;
-    const core = InMemoryDelivery.create({ now: () => now });
+    const core = InMemoryDelivery.create({ now: () => timestampFromDate(new Date(now)) });
     const normal = DeliveryClient.usingTransport(
-      createRouterTransport((router) => router.service(ShardService, core.shards)),
+      createRouterTransport((router) => {
+        router.service(ShardService, core.shards);
+        router.service(ManagedShardService, core.managed);
+      }),
     );
     await normal.pickUp(ShardIndex.single(), { nodeId: "node", value: "worker" });
     now = 11;
     const lost = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
+        router.service(ManagedShardService, core.managed);
         router.service(ShardService, {
           ...core.shards,
           releaseSessions: async (request, context) => {
@@ -483,9 +497,12 @@ describe("in-memory delivery core response loss", () => {
 
   it("observes 101 committed expired shard sessions", async () => {
     let now = 0;
-    const core = InMemoryDelivery.create({ now: () => now });
+    const core = InMemoryDelivery.create({ now: () => timestampFromDate(new Date(now)) });
     const client = DeliveryClient.usingTransport(
-      createRouterTransport((router) => router.service(ShardService, core.shards)),
+      createRouterTransport((router) => {
+        router.service(ShardService, core.shards);
+        router.service(ManagedShardService, core.managed);
+      }),
     );
     for (let index = 0; index < 101; index += 1) {
       await client.pickUp(new ShardIndex(index, 101), {
@@ -499,14 +516,18 @@ describe("in-memory delivery core response loss", () => {
 
   it("classifies an oversized post-commit expiration response as unknown", async () => {
     let now = 0;
-    const core = InMemoryDelivery.create({ now: () => now });
+    const core = InMemoryDelivery.create({ now: () => timestampFromDate(new Date(now)) });
     const normal = DeliveryClient.usingTransport(
-      createRouterTransport((router) => router.service(ShardService, core.shards)),
+      createRouterTransport((router) => {
+        router.service(ShardService, core.shards);
+        router.service(ManagedShardService, core.managed);
+      }),
     );
     await normal.pickUp(ShardIndex.single(), { nodeId: "node", value: "worker" });
     now = 1;
     const oversized = DeliveryClient.usingTransport(
-      createRouterTransport((router) =>
+      createRouterTransport((router) => {
+        router.service(ManagedShardService, core.managed);
         router.service(ShardService, {
           ...core.shards,
           releaseSessions: async (request, context) => {
@@ -515,8 +536,8 @@ describe("in-memory delivery core response loss", () => {
             if (first?.worker !== undefined) first.worker.value = "x".repeat(4_200_000);
             return response;
           },
-        }),
-      ),
+        });
+      }),
     );
     await expect(oversized.releaseExpired(1)).rejects.toMatchObject({
       operation: "RELEASE_EXPIRED",

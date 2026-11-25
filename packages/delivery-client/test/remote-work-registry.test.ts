@@ -19,13 +19,11 @@ import { ShardIndex } from "@spine-event-engine/server";
 import {
   ExpiredSessionSchema,
   ExpiredSessionsReleasedSchema,
-  LiquorPickUpOutcomeSchema,
+  DeliveryShardPickupOutcomeSchema,
+  DeliverySessionHandleSchema,
+  DeliveryShardPickupSchema,
   OptionalInboxMessageSchema,
-  PickUpShardSchema,
   ReleaseExpiredSessionsSchema,
-  ReleaseShardSchema,
-  ShardAlreadyPickedUpSchema,
-  ShardPickedUpSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { describe, expect, it } from "vitest";
@@ -42,14 +40,6 @@ describe("RemoteWorkRegistry", () => {
   it("fails closed when package-internal client access is unavailable", () => {
     const unavailable = {} as DeliveryClient;
 
-    expect(() =>
-      deliveryClientAccess.probePickUp(
-        unavailable,
-        ShardIndex.single(),
-        { nodeId: "node", value: "worker" },
-        {},
-      ),
-    ).toThrow("Delivery client probe access is unavailable.");
     expect(() => deliveryClientAccess.observeOnce(unavailable)).toThrow(
       "Delivery client observation access is unavailable.",
     );
@@ -95,7 +85,7 @@ describe("RemoteWorkRegistry", () => {
       }),
     ).resolves.toMatchObject({ kind: "EXCLUSIVE" });
     expect(fake.unary).toHaveBeenLastCalledWith(
-      expect.objectContaining({ name: "PickShard" }),
+      expect.objectContaining({ name: "PickShardForDelivery" }),
       expect.any(AbortSignal),
       123,
       undefined,
@@ -130,7 +120,7 @@ describe("RemoteWorkRegistry", () => {
     expect(workers[0]?.value).not.toBe(workers[1]?.value);
   });
 
-  it("validates only the exact retained remote worker and pickup time", async () => {
+  it("renews only the exact retained remote session", async () => {
     const workers: { nodeId: string; value: string }[] = [];
     const registry = new RemoteWorkRegistry(
       DeliveryClient.usingTransport(workerTransport(workers, "same-owner")),
@@ -139,7 +129,7 @@ describe("RemoteWorkRegistry", () => {
     if (session === undefined) throw new Error("Remote shard was not acquired.");
 
     await expect(registry.validateOwnership(session)).resolves.toBe(session);
-    expect(workers).toHaveLength(2);
+    expect(workers).toHaveLength(1);
   });
 
   it("invalidates a retained session after a different worker takes over", async () => {
@@ -154,7 +144,7 @@ describe("RemoteWorkRegistry", () => {
     await expect(registry.release(session)).resolves.toBe(false);
   });
 
-  it("releases an accidental probe pickup and fails validation closed", async () => {
+  it("retains a healthy session during renewal without another pickup", async () => {
     const workers: { nodeId: string; value: string }[] = [];
     const registry = new RemoteWorkRegistry(
       DeliveryClient.usingTransport(workerTransport(workers)),
@@ -162,9 +152,9 @@ describe("RemoteWorkRegistry", () => {
     const session = await registry.pickUp(ShardIndex.single(), workerId("node", "worker-1"));
     if (session === undefined) throw new Error("Remote shard was not acquired.");
 
-    await expect(registry.validateOwnership(session)).resolves.toBeUndefined();
-    await expect(registry.release(session)).resolves.toBe(false);
-    expect(workers).toHaveLength(2);
+    await expect(registry.validateOwnership(session)).resolves.toBe(session);
+    await expect(registry.release(session)).resolves.toBe(true);
+    expect(workers).toHaveLength(1);
   });
 
   it("fails an uncertain ownership probe closed without retaining a marker", async () => {
@@ -207,13 +197,15 @@ describe("RemoteWorkRegistry", () => {
     const worker = { nodeId: "node-a", value: "worker-a" };
     const wireWorker = create(WorkerIdSchema, { nodeId: { value: "node-a" }, value: "worker-a" });
     fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
+      create(DeliveryShardPickupOutcomeSchema, {
+        result: {
           case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
+          value: create(DeliverySessionHandleSchema, {
             shard: create(ShardIndexSchema, { index: 0, ofTotal: 2 }),
             worker: wireWorker,
             whenPicked: { seconds: 2n, nanos: 0 },
+            sessionId: "raw-session",
+            lifetime: { seconds: 60n, nanos: 0 },
           }),
         },
       }),
@@ -225,16 +217,17 @@ describe("RemoteWorkRegistry", () => {
       kind: "EXCLUSIVE",
       shard,
       worker,
-      whenPicked: new Date(2_000),
+      whenPicked: { seconds: 2n, nanos: 0 },
+      sessionId: "raw-session",
     });
     expect(Object.isFrozen(session)).toBe(true);
     expect(Object.isFrozen(session?.worker)).toBe(true);
     expect(fake.unary).toHaveBeenLastCalledWith(
-      expect.objectContaining({ name: "PickShard" }),
+      expect.objectContaining({ name: "PickShardRaw" }),
       expect.any(AbortSignal),
       30_000,
       undefined,
-      create(PickUpShardSchema, {
+      create(DeliveryShardPickupSchema, {
         shard: create(ShardIndexSchema, { index: 0, ofTotal: 2 }),
         worker: wireWorker,
       }),
@@ -244,13 +237,16 @@ describe("RemoteWorkRegistry", () => {
     if (session === undefined) throw new Error("Shard session was not acquired.");
     await expect(client.release(session)).resolves.toBeUndefined();
     expect(fake.unary).toHaveBeenLastCalledWith(
-      expect.objectContaining({ name: "ReleaseSession" }),
+      expect.objectContaining({ name: "ReleaseShardSession" }),
       expect.any(AbortSignal),
       30_000,
       undefined,
-      create(ReleaseShardSchema, {
+      create(DeliverySessionHandleSchema, {
         shard: create(ShardIndexSchema, { index: 0, ofTotal: 2 }),
         worker: wireWorker,
+        sessionId: "raw-session",
+        whenPicked: { seconds: 2n, nanos: 0 },
+        lifetime: { seconds: 60n, nanos: 0 },
       }),
     );
 
@@ -272,8 +268,8 @@ describe("RemoteWorkRegistry", () => {
         kind: "EXCLUSIVE",
         shard,
         worker,
-        whenPicked: new Date(2_000),
-        whenReleased: new Date(3_000),
+        whenPicked: { seconds: 2n, nanos: 0 },
+        whenReleased: { seconds: 3n, nanos: 0 },
       },
     ]);
     expect(Object.isFrozen(released)).toBe(true);
@@ -290,29 +286,26 @@ describe("RemoteWorkRegistry", () => {
     expect(fake.unary).toHaveBeenCalledTimes(3);
   });
 
-  it("maps already-picked-up, validates shard mutation responses, and prevents invalid calls", async () => {
+  it("maps busy pickup, validates shard mutation responses, and prevents invalid calls", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
     const shard = ShardIndex.single();
     const worker = { nodeId: "node-a", value: "worker-a" };
     fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "alreadyPickedUp",
-          value: create(ShardAlreadyPickedUpSchema, {
-            worker: create(WorkerIdSchema, { nodeId: { value: "node-b" }, value: "worker-b" }),
-            whenPicked: { seconds: 1n, nanos: 0 },
-          }),
+      create(DeliveryShardPickupOutcomeSchema, {
+        result: {
+          case: "busy",
+          value: create(WorkerIdSchema, { nodeId: { value: "node-b" }, value: "worker-b" }),
         },
       }),
     );
     await expect(client.pickUp(shard, worker)).resolves.toBeUndefined();
 
-    fake.reply(create(LiquorPickUpOutcomeSchema));
+    fake.reply(create(DeliveryShardPickupOutcomeSchema));
     await expect(client.pickUp(shard, worker)).rejects.toBeInstanceOf(DeliveryProtocolError);
     fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: { case: "alreadyPickedUp", value: create(ShardAlreadyPickedUpSchema) },
+      create(DeliveryShardPickupOutcomeSchema, {
+        result: { case: "busy", value: create(WorkerIdSchema) },
       }),
     );
     await expect(client.pickUp(shard, worker)).rejects.toBeInstanceOf(DeliveryProtocolError);
@@ -393,7 +386,14 @@ describe("RemoteWorkRegistry", () => {
     });
     fake.fail(new Error("timeout: secret-payload"));
     await expect(
-      client.release({ kind: "EXCLUSIVE", shard, worker, whenPicked: new Date(0) }),
+      client.release({
+        kind: "EXCLUSIVE",
+        shard,
+        worker,
+        whenPicked: { $typeName: "google.protobuf.Timestamp", seconds: 0n, nanos: 0 },
+        sessionId: "session-1",
+        lifetime: { $typeName: "google.protobuf.Duration", seconds: 60n, nanos: 0 },
+      }),
     ).rejects.toMatchObject({ operation: "RELEASE_SHARD" });
     fake.fail(new ConnectError("cancelled: secret-payload", Code.Canceled));
     try {
@@ -413,90 +413,55 @@ describe("RemoteWorkRegistry", () => {
 
 function workerTransport(
   workers: { nodeId: string; value: string }[],
-  probeOutcome?: "same-owner" | "other-owner",
+  renewalOutcome?: "same-owner" | "other-owner",
 ): Transport {
   let pickups = 0;
   const unaryTransport: Pick<Transport, "unary"> = {
     unary: (method, _signal, _timeoutMs, _header, input) => {
+      let response: unknown;
       if (method.name === "FindOne") {
-        return Promise.resolve({
-          stream: false,
-          method,
-          header: new Headers(),
-          trailer: new Headers(),
-          service: method.parent,
-          message: create(OptionalInboxMessageSchema, {
-            message: message("command", "synchronize"),
-          }),
-        } as never);
-      }
-      if (method.name === "ReleaseSession") {
-        return Promise.resolve({
-          stream: false,
-          method,
-          header: new Headers(),
-          trailer: new Headers(),
-          service: method.parent,
-          message: create(EmptySchema),
-        } as never);
-      }
-      if (method.name === "PickShard") {
+        response = create(OptionalInboxMessageSchema, {
+          message: message("command", "synchronize"),
+        });
+      } else if (method.name === "ReleaseShardSession") {
+        response = create(EmptySchema);
+      } else if (method.name === "RenewShardSession") {
+        if (renewalOutcome === "other-owner")
+          return Promise.reject(new ConnectError("Session ended.", Code.FailedPrecondition));
+        response = input;
+      } else if (method.name === "PickShardForDelivery") {
         const request = input as {
           shard: unknown;
           worker: { nodeId?: { value: string }; value: string };
         };
-        const worker = {
+        workers.push({
           nodeId: request.worker.nodeId?.value ?? "",
           value: request.worker.value,
-        };
-        workers.push(worker);
+        });
         pickups += 1;
-        return Promise.resolve({
-          stream: false,
-          method,
-          header: new Headers(),
-          trailer: new Headers(),
-          service: method.parent,
-          message: create(
-            LiquorPickUpOutcomeSchema,
-            pickups > 1 && probeOutcome !== undefined
-              ? {
-                  value: {
-                    case: "alreadyPickedUp",
-                    value: create(ShardAlreadyPickedUpSchema, {
-                      worker: create(WorkerIdSchema, {
-                        nodeId: {
-                          value:
-                            probeOutcome === "same-owner"
-                              ? (workers[0]?.nodeId ?? "")
-                              : "replacement-node",
-                        },
-                        value:
-                          probeOutcome === "same-owner"
-                            ? (workers[0]?.value ?? "")
-                            : "replacement-worker",
-                      }),
-                      whenPicked: { seconds: 1n, nanos: 0 },
-                    }),
-                  },
-                }
-              : {
-                  value: {
-                    case: "pickedUp",
-                    value: create(ShardPickedUpSchema, {
-                      shard: request.shard as never,
-                      worker: create(WorkerIdSchema, {
-                        nodeId: { value: worker.nodeId },
-                        value: worker.value,
-                      }),
-                      whenPicked: { seconds: BigInt(pickups), nanos: 0 },
-                    }),
-                  },
-                },
-          ),
-        } as never);
+        response = create(DeliveryShardPickupOutcomeSchema, {
+          result: {
+            case: "pickedUp",
+            value: create(DeliverySessionHandleSchema, {
+              shard: request.shard as never,
+              worker: request.worker as never,
+              sessionId: `fixture-${String(pickups)}`,
+              whenPicked: { seconds: BigInt(pickups), nanos: 0 },
+              lifetime: { seconds: 60n, nanos: 0 },
+            }),
+          },
+        });
+      } else {
+        throw new Error(`Unexpected method ${method.name}`);
       }
-      throw new Error(`Unexpected method ${method.name}`);
+      return Promise.resolve({
+        stream: false,
+        method,
+        header: new Headers(),
+        trailer: new Headers(),
+        service: method.parent,
+        message: response,
+      } as never);
     },
   };
   return unaryTransport as unknown as Transport;

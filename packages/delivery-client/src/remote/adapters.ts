@@ -33,7 +33,8 @@ import { ShardIndex } from "@spine-event-engine/server";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 
 import { conditionalPickUp, InboxRetention } from "@spine-event-engine/server/spi/delivery";
-import { DeliveryClient, deliveryClientAccess } from "../client/client.js";
+import { DeliveryClient } from "../client/client.js";
+import { Code, ConnectError } from "@connectrpc/connect";
 import {
   DeliveryPagingError,
   DeliveryProtocolError,
@@ -351,8 +352,13 @@ class RemoteSessionOwner {
       ...(options?.signal === undefined ? {} : { signal: options.signal }),
       ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
     };
-    const remote = await this.client.pickUp(shardIndex, RemoteValues.worker(worker), operation);
-    if (remote === undefined) return undefined;
+    const pickup = await this.client.pickUpForDelivery(
+      shardIndex,
+      RemoteValues.worker(worker),
+      operation,
+    );
+    if (pickup.kind !== "PICKED") return undefined;
+    const remote = pickup.session;
     const session = RemoteValues.freeze({
       kind: "EXCLUSIVE" as const,
       shard: DeliveryShardCodec.snapshot(shardIndex),
@@ -405,38 +411,14 @@ class RemoteSessionOwner {
     if (session.kind !== "EXCLUSIVE") return undefined;
     const remote = this.#sessions.get(session);
     if (remote === undefined) return undefined;
-    const probe = await deliveryClientAccess.probePickUp(
-      this.client,
-      session.shard,
-      remote.worker,
-      options ?? {},
-    );
-    if (probe.kind === "PICKED") {
-      await this.#cleanupAccidentalPickup(probe.session);
-      this.#invalidate(session);
-      return undefined;
-    }
-    if (
-      RemoteValues.sameWorker(probe.session.worker, remote.worker) &&
-      probe.session.whenPicked.getTime() === remote.whenPicked.getTime()
-    ) {
-      return session;
-    }
-    this.#invalidate(session);
-    return undefined;
-  }
-
-  /**
-   * Calls the client to release a probe session acquired accidentally.
-   *
-   * @param session Supplies the session to release.
-   * @returns Completion after the bounded release attempt.
-   */
-  async #cleanupAccidentalPickup(session: RemoteShardSession): Promise<void> {
     try {
-      await this.client.release(session, { timeoutMs: 1_000 });
-    } catch {
-      // Validation remains failed closed when bounded cleanup is uncertain.
+      const renewed = await this.client.renew(remote, options);
+      this.#sessions.set(session, renewed);
+      return session;
+    } catch (error) {
+      this.#invalidate(session);
+      if (error instanceof ConnectError && error.code === Code.FailedPrecondition) return undefined;
+      throw error;
     }
   }
 
@@ -464,8 +446,9 @@ class RemoteSessionOwner {
       !Number.isSafeInteger(observation.messages) ||
       observation.messages < 0 ||
       (observation.lastPicked !== undefined &&
-        (!(observation.lastPicked instanceof Date) ||
-          Number.isNaN(observation.lastPicked.getTime())))
+        (!Number.isInteger(observation.lastPicked.nanos) ||
+          observation.lastPicked.nanos < 0 ||
+          observation.lastPicked.nanos >= 1_000_000_000))
     )
       throw new DeliveryProtocolError();
     if (observation.status !== "NOT_PICKED") return;

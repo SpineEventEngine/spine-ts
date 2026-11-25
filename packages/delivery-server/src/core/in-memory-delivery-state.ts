@@ -20,6 +20,8 @@ import {
   type WorkerId,
 } from "@spine-event-engine/proto/delivery";
 
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+
 import { DeliveryLimits, type DeliveryStateLimits } from "./limits.js";
 import { DeliveryMessages, DeliveryShards, DeliveryWorkers } from "./wire-values.js";
 
@@ -40,9 +42,24 @@ export interface ShardRecord {
   readonly worker: WorkerId | undefined;
 
   /**
-   * Records the pickup time in milliseconds.
+   * Records the latest pickup or renewal with full timestamp precision.
    */
-  readonly whenLastPicked: number | undefined;
+  readonly whenLastPicked: Timestamp | undefined;
+
+  /**
+   * Identifies one fresh pickup across its renewals.
+   */
+  readonly sessionId?: string;
+
+  /**
+   * Distinguishes raw and work-aware pickup behavior.
+   */
+  readonly kind?: "RAW" | "MANAGED";
+
+  /**
+   * Changes on each renewal to guard replacement of the current record.
+   */
+  readonly revision?: number;
 }
 
 /**
@@ -226,13 +243,26 @@ export class InMemoryDeliveryState {
    * @param shard Identifies the shard.
    * @param worker Identifies the worker.
    * @param whenPicked Records the pickup time.
+   * @param sessionId Identifies the fresh pickup.
+   * @param kind Distinguishes raw and managed pickup.
+   * @param revision Changes on renewal.
    */
-  setSession(shard: ShardIndex, worker: WorkerId, whenPicked: number): void {
+  setSession(
+    shard: ShardIndex,
+    worker: WorkerId,
+    whenPicked: Timestamp,
+    sessionId: string,
+    kind: "RAW" | "MANAGED",
+    revision = 1,
+  ): void {
     this.#ensureShardCapacity(shard);
     this.shards.set(DeliveryShards.key(shard), {
       shard: DeliveryShards.copy(shard),
       worker: DeliveryWorkers.copy(worker),
       whenLastPicked: whenPicked,
+      sessionId,
+      kind,
+      revision,
     });
     this.#trackedKeys.add(DeliveryShards.key(shard));
   }
@@ -247,7 +277,12 @@ export class InMemoryDeliveryState {
     const key = DeliveryShards.key(shard);
     const record = this.shards.get(key);
     if (record?.worker === undefined) return undefined;
-    if (this.#buckets.has(key)) this.shards.set(key, { ...record, worker: undefined });
+    if (this.#buckets.has(key))
+      this.shards.set(key, {
+        shard: record.shard,
+        worker: undefined,
+        whenLastPicked: record.whenLastPicked,
+      });
     else {
       this.shards.delete(key);
       this.#trackedKeys.delete(key);

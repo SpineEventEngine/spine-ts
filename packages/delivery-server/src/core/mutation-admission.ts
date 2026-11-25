@@ -19,7 +19,9 @@ import { Code, ConnectError } from "@connectrpc/connect";
  */
 export class MutationAdmission {
   #pending: { readonly admit: () => void; readonly reject: (error: Error) => void }[] = [];
+
   #scheduled = false;
+
   #closed = false;
 
   /**
@@ -34,6 +36,8 @@ export class MutationAdmission {
 
   /**
    * Queues one synchronous state mutation.
+   *
+   * @typeParam T The committed result type.
    * @param signal Cancels admission before commit.
    * @param commit Performs the linearized mutation.
    * @returns Resolves with the committed value.
@@ -46,6 +50,32 @@ export class MutationAdmission {
       return Promise.reject(
         new ConnectError("Delivery mutation queue is full.", Code.ResourceExhausted),
       );
+    return this.#enqueue(signal, commit);
+  }
+
+  /**
+   * Queues a server lifecycle mutation behind admitted caller operations.
+   *
+   * Session expiry must not be lost when the caller queue is at capacity.
+   * @typeParam T The committed result type.
+   * @param commit Performs the lifecycle mutation.
+   * @returns Resolves after the ordered commit.
+   */
+  runSystem<T>(commit: () => T): Promise<T> {
+    if (this.#closed)
+      return Promise.reject(new ConnectError("Delivery server is closed.", Code.Unavailable));
+    return this.#enqueue(undefined, commit);
+  }
+
+  /**
+   * Queues one ordered state mutation after validation.
+   *
+   * @typeParam T The committed result type.
+   * @param signal Cancels a caller mutation before admission.
+   * @param commit Applies the synchronous mutation.
+   * @returns The committed result.
+   */
+  #enqueue<T>(signal: AbortSignal | undefined, commit: () => T): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const admission = () => {
         if (signal?.aborted) {

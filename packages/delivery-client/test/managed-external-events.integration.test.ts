@@ -28,9 +28,9 @@ import {
   AdminService,
   InboxService,
   ShardService,
+  ManagedShardService,
 } from "@spine-event-engine/proto/delivery-server";
 import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
-import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import {
   CommandService,
   SubscriptionService,
@@ -44,7 +44,7 @@ import { ProjectOverviewStateSchema } from "@spine-event-engine/server-test-fixt
 import { DeliveryAssembly } from "@spine-event-engine/delivery-server/testing";
 import { SignalMetadata, UniformAcrossAllShards } from "@spine-event-engine/server";
 import { afterEach, expect, it } from "vitest";
-import { RemoteDelivery } from "../src/index.js";
+import { DeliveryClient, RemoteDelivery } from "../src/index.js";
 
 const childPath = fileURLToPath(
   new URL("../test-fixtures/managed-external-events-application.mjs", import.meta.url),
@@ -148,10 +148,11 @@ it(
       Identifiers.pack("string", "t0210-third-party"),
       TypeUrls.derive(ProjectOverviewStateSchema),
     );
-    const held = await holder.workRegistry.pickUp(
-      shard,
-      create(WorkerIdSchema, { nodeId: { value: "test-process" }, value: "third-party-held" }),
-    );
+    const rawClient = DeliveryClient.connectTo(delivery.baseUrl);
+    const held = await rawClient.pickUp(shard, {
+      nodeId: "test-process",
+      value: "third-party-held",
+    });
     if (held === undefined) throw new Error("Expected the remote shard to be available.");
     try {
       const completed = fileAppears(directory, "third-party-complete");
@@ -162,7 +163,8 @@ it(
       expect(pending[0]?.shard).toEqual(shard);
       expect(typeof pending[0]?.signalId).toBe("string");
     } finally {
-      await holder.workRegistry.release(held);
+      await rawClient.release(held);
+      rawClient.close();
       await holder.close();
     }
     const thirdParty = await bounded(updates.next(), "third-party external state update");
@@ -319,6 +321,7 @@ class DeliveryListener {
         routes: (router) => {
           router.service(InboxService, this.#assembly.inbox);
           router.service(ShardService, this.#assembly.shards);
+          router.service(ManagedShardService, this.#assembly.managed);
           router.service(AdminService, this.#assembly.admin);
         },
       }),
@@ -335,6 +338,7 @@ class DeliveryListener {
   async close(): Promise<void> {
     this.#assembly.closeAdmission();
     this.#assembly.closeAdmin();
+    this.#assembly.closeSessions();
     for (const session of this.#sessions) session.close();
     if (this.#server?.listening)
       await new Promise<void>((resolve) => {

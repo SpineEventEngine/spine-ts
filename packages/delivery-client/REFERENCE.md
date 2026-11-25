@@ -59,11 +59,20 @@ reconnects only within configured limits. A slow consumer can receive
 `DeliveryShardObservationError`. Its setup timeout never limits an acknowledged active stream. Observation is a hint: reconcile a known
 mutation with `shardSnapshot()` before a later action.
 
-The remote protocol has no renewable lease fence or separate per-pickup-time
-fence. Release is conditional on the supplied worker matching the current
-owner, so a stale worker cannot release a newer worker's session. A `PICKED`
-observation does not clear uncertainty; only `NOT_PICKED` invalidates a stale
-local session and permits a new pickup. Do not release a stale session.
+`pickUpForDelivery()` requests a shard with pending work.
+`pickUp()` also permits deliberately taking an empty shard.
+A successful TS pickup returns a session handle for one worker and shard.
+The handle carries a session ID and the lifetime set by the server. Keep that
+handle when calling `renew()` or `release()`. If a worker misses the reply to
+its managed pickup of shard 4, it can repeat that pickup with the same run ID. While the original session is
+live, the server returns the same session ID. After releasing the shard, a new
+run receives a fresh session ID. A delayed release from the first run leaves
+the second run active.
+
+Pickup and release reports expose Protobuf `Timestamp` values in `whenPicked`
+and `whenReleased`. Admin observations expose the same precision in
+`lastPicked` when populated. A caller can convert a timestamp to a JavaScript
+`Date` for display. Keep the original seconds and nanoseconds for comparisons.
 
 `RemoteInbox` and `RemoteWorkRegistry` satisfy the server delivery-builder
 ports. `RemoteInbox` rereads the exact pending remote row before acknowledgement

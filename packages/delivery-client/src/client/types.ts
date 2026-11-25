@@ -13,7 +13,7 @@
  */
 
 import { ShardIndex } from "@spine-event-engine/server";
-import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import type { Duration, Timestamp } from "@bufbuild/protobuf/wkt";
 
 /**
  * Stable public worker identity represented by the frozen `WorkerId` wire type.
@@ -57,19 +57,82 @@ export interface RemoteShardSession {
   /**
    * Records when the remote service granted the session.
    */
-  readonly whenPicked: Date;
+  readonly whenPicked: Timestamp;
+
+  /**
+   * Identifies this pickup across renewals and excludes later pickups.
+   */
+  readonly sessionId: string;
+
+  /**
+   * Gives the server's session lifetime between successful renewals.
+   */
+  readonly lifetime: Duration;
 }
+
+/**
+ * Reports one definitive work-aware pickup result.
+ */
+export type DeliveryManagedPickupOutcome =
+  | Readonly<{
+      /**
+       * Reports that a session was granted or recovered.
+       */
+      readonly kind: "PICKED";
+
+      /**
+       * Carries the complete granted session.
+       */
+      readonly session: RemoteShardSession;
+    }>
+  | Readonly<{
+      /**
+       * Reports that another session currently holds the shard.
+       */
+      readonly kind: "BUSY";
+
+      /**
+       * Identifies the current worker.
+       */
+      readonly worker: DeliveryWorkerId;
+    }>
+  | Readonly<{
+      /**
+       * Reports that the free shard has no pending work.
+       */
+      readonly kind: "NO_WORK";
+    }>;
 
 /**
  * A detached observation of a session released for inactivity.
  */
-export interface ReleasedShardSession extends RemoteShardSession {
+export interface ReleasedShardSession {
   // prettier-ignore
+
+  /**
+   * Identifies the released session kind.
+   */
+  readonly kind: "EXCLUSIVE";
+
+  /**
+   * Identifies the released shard.
+   */
+  readonly shard: ShardIndex;
+
+  /**
+   * Identifies the former worker.
+   */
+  readonly worker: DeliveryWorkerId;
+
+  /**
+   * Records the former pickup with full precision.
+   */
+  readonly whenPicked: Timestamp;
 
   /**
    * Records when the remote service released the inactive session.
    */
-  readonly whenReleased: Date;
+  readonly whenReleased: Timestamp;
 }
 
 /**
@@ -91,7 +154,7 @@ export interface RemoteShardObservation {
   /**
    * Records the most recent pickup when the server provides it.
    */
-  readonly lastPicked?: Date;
+  readonly lastPicked?: Timestamp;
 
   /**
    * Counts messages currently reported for the shard.
@@ -200,6 +263,8 @@ export class DeliveryOutcomeUnknownError extends Error {
     | "REMOVE_ONE"
     | "REMOVE_MANY"
     | "PICK_UP_SHARD"
+    | "PICK_UP_FOR_DELIVERY"
+    | "RENEW_SHARD"
     | "RELEASE_SHARD"
     | "RELEASE_EXPIRED";
 
@@ -233,7 +298,12 @@ export class DeliveryOutcomeUnknownError extends Error {
     this.operation = operation;
     if (typeof reconciliation === "string")
       this.reconciliation = Object.freeze({ kind: "OBSERVE_SHARD", scope: reconciliation });
-    else if (operation === "PICK_UP_SHARD" || operation === "RELEASE_SHARD")
+    else if (
+      operation === "PICK_UP_SHARD" ||
+      operation === "PICK_UP_FOR_DELIVERY" ||
+      operation === "RENEW_SHARD" ||
+      operation === "RELEASE_SHARD"
+    )
       this.reconciliation = Object.freeze({
         kind: "OBSERVE_SHARD",
         shards: Object.freeze(

@@ -31,6 +31,7 @@ export { RemoteDelivery, type RemoteDeliveryConfig } from "./remote/remote-deliv
 
 export type {
   DeliveryClientOptions,
+  DeliveryManagedPickupOutcome,
   DeliveryFindOneOptions,
   DeliveryMutationOptions,
   DeliveryReadPageOptions,

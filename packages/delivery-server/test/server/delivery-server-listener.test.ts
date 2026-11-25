@@ -79,7 +79,7 @@ describe("DeliveryServer listener", () => {
         }),
       ).rejects.toMatchObject({ code: Code.InvalidArgument });
       await expect(createClient(ShardService, transport).pickShard({})).rejects.toMatchObject({
-        code: Code.InvalidArgument,
+        code: Code.FailedPrecondition,
       });
     } finally {
       sessions.abort();

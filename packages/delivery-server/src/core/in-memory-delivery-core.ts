@@ -14,12 +14,17 @@
 
 import { Time } from "@spine-event-engine/core/time";
 import type { ServiceImpl } from "@connectrpc/connect";
-import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  InboxService,
+  ManagedShardService,
+  ShardService,
+} from "@spine-event-engine/proto/delivery-server";
 
 import { InboxHandlers } from "./inbox-service.js";
 import { InMemoryDeliveryState } from "./in-memory-delivery-state.js";
 import { MutationAdmission } from "./mutation-admission.js";
-import { ShardHandlers } from "./shard-service.js";
+import { ShardSessionRuntime } from "./shard-service.js";
 
 /**
  * Configures the listener-free in-memory delivery core.
@@ -28,16 +33,16 @@ export interface DeliveryCoreOptions {
   // prettier-ignore
 
   /**
-   * Automatic pickup expiry; zero disables automatic stale takeover.
+   * Positive session lifetime in milliseconds; defaults to 60 seconds.
    */
   readonly processingTimeoutMs?: number;
 
   /**
-   * Returns a deterministic wall-clock value in Unix milliseconds.
+   * Returns a deterministic full-precision Protobuf timestamp.
    *
-   * @returns Provides the current Unix time in milliseconds.
+   * @returns Provides the current timestamp.
    */
-  readonly now?: () => number;
+  readonly now?: () => Timestamp;
 
   /**
    * Maximum retained records; integer from 1 through 2,147,483,647.
@@ -70,6 +75,16 @@ export interface DeliveryCore {
    * Serves Shard RPCs.
    */
   readonly shards: ServiceImpl<typeof ShardService>;
+
+  /**
+   * Serves typed raw and managed session calls.
+   */
+  readonly managed: ServiceImpl<typeof ManagedShardService>;
+
+  /**
+   * Cancels pending expiry timers.
+   */
+  close(): void;
 }
 
 /**
@@ -97,15 +112,18 @@ export const InMemoryDelivery: Readonly<{
    * @throws {RangeError} When the processing timeout is not a finite non-negative number.
    */
   create(options: DeliveryCoreOptions = {}): DeliveryCore {
-    const timeout = options.processingTimeoutMs ?? 0;
-    if (!Number.isFinite(timeout) || timeout < 0)
+    const timeout = options.processingTimeoutMs ?? 60_000;
+    if (!Number.isSafeInteger(timeout) || timeout <= 0)
       throw new RangeError("Processing timeout is invalid.");
     const state = new InMemoryDeliveryState(options);
     const admission = new MutationAdmission();
-    const now = options.now ?? (() => Time.currentTimeMillis());
+    const now = options.now ?? (() => Time.currentTime());
+    const sessions = new ShardSessionRuntime(state, admission, now, timeout);
     return Object.freeze({
       inbox: InboxHandlers.create(state, admission),
-      shards: ShardHandlers.create(state, admission, now, timeout),
+      shards: sessions.raw,
+      managed: sessions.managed,
+      close: sessions.close.bind(sessions),
     });
   },
 });

@@ -18,8 +18,7 @@ import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 
 import {
-  PickUpShardSchema,
-  ReleaseShardSchema,
+  DeliveryShardPickupSchema,
   RemoveMessageSchema,
   ShardStatus,
   WriteMessageSchema,
@@ -49,11 +48,12 @@ describe("delivery assembly Admin projection", () => {
     await assembly.inbox.writeOne(create(WriteMessageSchema, { message: firstMessage }), context);
     await assembly.inbox.writeOne(create(WriteMessageSchema, { message: firstMessage }), context);
     await assembly.inbox.removeOne(create(RemoveMessageSchema, { message: missing }), context);
-    await assembly.shards.pickShard(create(PickUpShardSchema, { shard: second, worker }), context);
-    await assembly.shards.releaseSession(
-      create(ReleaseShardSchema, { shard: second, worker }),
+    const pickup = await assembly.managed.pickShardRaw(
+      create(DeliveryShardPickupSchema, { shard: second, worker }),
       context,
     );
+    if (pickup.result.case !== "pickedUp") throw new Error("Expected a session.");
+    await assembly.managed.releaseShardSession(pickup.result.value, context);
 
     const snapshot = assembly.admin.getShardInfo(create(EmptySchema), context) as ShardInfoList;
     expect(snapshot).toMatchObject({

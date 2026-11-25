@@ -722,8 +722,8 @@ release a newer session. `DeliveryMonitor` marks failed reception delivered by
 default and continues independent targets; a custom monitor may choose an
 immediate repeat of failed processing. The supervisor
 rescans pending shards every 10 seconds by default, independently of its
-60-second stale-session threshold and the configurable Delivery server processing
-timeout, which is disabled by default. See [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers)
+60-second stale-session threshold and the configurable Delivery server
+session lifetime, which defaults to 60 seconds. See [recovery timers](../../packages/delivery-server/REFERENCE.md#session-lifetime-and-work-reminders)
 for the separate responsibilities and limits. After a failed run,
 release-generated remote observations of that shard are held locally until the next periodic rescan. Explicit notifications remain
 admissible; newly enqueued remote work on the failed shard may wait for the

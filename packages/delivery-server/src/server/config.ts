@@ -117,8 +117,8 @@ export const DeliveryConfig: Readonly<{
         DeliveryConfig.number(
           options.processingTimeoutSeconds,
           "SHARD_PROCESSING_TIMEOUT",
-          0,
-          0,
+          60,
+          1,
           MAX_DELIVERY_LIMIT,
           "processing timeout",
         ) * 1_000,

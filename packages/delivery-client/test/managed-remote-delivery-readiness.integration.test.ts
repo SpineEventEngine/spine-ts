@@ -29,6 +29,7 @@ import {
   AdminService,
   InboxService,
   ShardService,
+  ManagedShardService,
 } from "@spine-event-engine/proto/delivery-server";
 import { SignalMetadata } from "@spine-event-engine/server";
 import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
@@ -459,6 +460,7 @@ class GatedDeliveryListener {
         routes: (router) => {
           router.service(InboxService, this.#assembly.inbox);
           router.service(ShardService, this.#assembly.shards);
+          router.service(ManagedShardService, this.#assembly.managed);
           router.service(AdminService, {
             ...this.#assembly.admin,
             getShardInfo: async (request, context) => {
@@ -485,6 +487,7 @@ class GatedDeliveryListener {
     this.releaseSnapshot();
     this.#assembly.closeAdmission();
     this.#assembly.closeAdmin();
+    this.#assembly.closeSessions();
     for (const session of this.#sessions) session.close();
     const server = this.#server;
     if (server?.listening) await closeListener(server);

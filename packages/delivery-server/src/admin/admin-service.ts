@@ -204,11 +204,6 @@ const AdminSnapshots: Readonly<{
     readonly newStatus: ShardStatus;
     readonly newMessagesCount: number;
   };
-
-  /**
-   * Converts milliseconds to a protobuf timestamp.
-   */
-  timestamp: (milliseconds: number) => { readonly seconds: bigint; readonly nanos: number };
 }> = Object.freeze({
   snapshot: (state: InMemoryDeliveryState): ReturnType<typeof create<typeof ShardInfoListSchema>> =>
     create(ShardInfoListSchema, {
@@ -227,18 +222,13 @@ const AdminSnapshots: Readonly<{
       ...(record?.whenLastPicked === undefined
         ? {}
         : {
-            lastPicked: AdminSnapshots.timestamp(record.whenLastPicked),
-            whenLastPicked: AdminSnapshots.timestamp(record.whenLastPicked),
+            lastPicked: record.whenLastPicked,
+            whenLastPicked: record.whenLastPicked,
           }),
       messages,
       newStatus: record?.worker === undefined ? ShardStatus.NOT_PICKED : ShardStatus.PICKED,
       newMessagesCount: messages,
     };
-  },
-
-  timestamp: (milliseconds: number): { readonly seconds: bigint; readonly nanos: number } => {
-    const seconds = Math.floor(milliseconds / 1_000);
-    return { seconds: BigInt(seconds), nanos: (milliseconds - seconds * 1_000) * 1_000_000 };
   },
 });
 

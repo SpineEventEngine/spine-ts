@@ -12,8 +12,9 @@ This reference describes the public in-memory Delivery server API. Read the
 ## Public entry points
 
 `InMemoryDelivery.create(options)` returns `DeliveryCore` with Connect handler
-implementations `inbox` and `shards`. The caller registers these handlers and
-provides the network lifecycle. For a listener with work observation, Admin,
+implementations `inbox`, `shards`, and `managed`. The caller registers these handlers and
+provides the network lifecycle. Call `close()` on the core during shutdown to
+cancel session timers. For a listener with work observation, Admin,
 and health, start a `DeliveryServer`.
 
 `DeliveryServer` is the standalone lifecycle owner. Its constructor validates
@@ -37,7 +38,7 @@ which override defaults. Invalid values throw before a listener is created:
 - `maxInboundMessageBytes` / `MAX_INBOUND_MESSAGE_SIZE`: integer 1–2147483647;
   default 4194304;
 - `processingTimeoutSeconds` / `SHARD_PROCESSING_TIMEOUT`: integer
-  0–2147483647; default 0, which disables timeout-based takeover during pickup;
+  seconds of inactivity before the server expires a session, default 60;
 - retained message/byte limits: integer 1–2147483647; defaults 10000 and
   33554432;
 - tracked shards: integer 1–1000; default 1000.
@@ -60,23 +61,18 @@ For example, setting it to 30 gives workers thirty seconds before the server
 sends a reminder for the same unclaimed shard. A new subscriber still receives
 that shard during initial discovery. Taking the shard stops its reminders.
 
-## Recovery timers
+## Session lifetime and work reminders
 
-The application `DeliverySupervisor` scans for pending work every 10 seconds by
-default; its `recoveryMs` option retains an explicit override. This scan is
-separate from the supervisor's default 60-second stale-session threshold
-(`staleMs`) and `ShardedWorkRegistry`'s default 30-second SQL lease (`leaseMs`).
-The in-memory Delivery server uses a separate processing timeout: `processingTimeoutSeconds` on the listener, or
-`processingTimeoutMs` on `InMemoryDelivery`. Its default is zero, which disables
-automatic pickup takeover; applications may configure a positive timeout.
-This does not disable the application supervisor's separate release of stale
-sessions. A positive server processing timeout alone does not shorten the
-supervisor's stale-session threshold.
+The standalone server uses `processingTimeoutSeconds` for session lifetime.
+In an embedded core, set `processingTimeoutMs`. The default is 60 seconds.
+After a successful renewal the worker has another session lifetime to complete
+its work or renew again.
 
-A scan can encounter a busy shard, an unexpired session, unavailable storage, or
-failed processing. Request deadlines, retry delays, and Delivery shutdown bounds also
-have separate responsibilities. A 10-second scan interval therefore guarantees
-neither delivery within 10 seconds nor worker takeover within 10 seconds.
+Suppose a worker takes shard 4 at noon and immediately loses its connection.
+At 12:01 the default session expires. If a Command is still waiting there,
+the server offers shard 4 to connected subscribers. If nobody takes it,
+subscribers receive the next reminder ten seconds later by default.
+A successful pickup by another worker stops those reminders.
 
 ## Delivery semantics
 

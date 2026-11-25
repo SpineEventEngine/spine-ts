@@ -26,10 +26,9 @@ import {
 } from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import {
-  LiquorPickUpOutcomeSchema,
+  DeliveryShardPickupOutcomeSchema,
   OptionalInboxMessageSchema,
-  ShardAlreadyPickedUpSchema,
-  ShardPickedUpSchema,
+  DeliverySessionHandleSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
   InboxIdSchema,
@@ -73,13 +72,15 @@ export function transport(): {
       const request = args[4] as { shard: unknown; worker: unknown };
       const shard = request.shard as { index?: number; ofTotal?: number };
       pickedWorkers.set(`${String(shard.index)}/${String(shard.ofTotal)}`, request.worker);
-      return create(LiquorPickUpOutcomeSchema, {
-        value: {
+      return create(DeliveryShardPickupOutcomeSchema, {
+        result: {
           case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
+          value: create(DeliverySessionHandleSchema, {
             shard: request.shard as never,
             worker: request.worker as never,
             whenPicked: { seconds: 1n, nanos: 0 },
+            sessionId: "fixture-session",
+            lifetime: { seconds: 60n, nanos: 0 },
           }),
         },
       });
@@ -89,14 +90,8 @@ export function transport(): {
       const key = `${String(request.shard.index)}/${String(request.shard.ofTotal)}`;
       const worker = pickedWorkers.get(key);
       if (worker === undefined) throw new Error("No prior picked worker.");
-      return create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "alreadyPickedUp",
-          value: create(ShardAlreadyPickedUpSchema, {
-            worker: worker as never,
-            whenPicked: { seconds: 1n, nanos: 0 },
-          }),
-        },
+      return create(DeliveryShardPickupOutcomeSchema, {
+        result: { case: "busy", value: worker as never },
       });
     }
     if (typeof reply === "object" && "held" in reply) {
@@ -211,13 +206,15 @@ export function echoPickup(fake: ReturnType<typeof transport>): void {
   fake.unary.mockImplementationOnce(
     (_method: unknown, _signal: unknown, _timeoutMs: unknown, _header: unknown, input: unknown) => {
       const request = input as { shard: unknown; worker: unknown };
-      return create(LiquorPickUpOutcomeSchema, {
-        value: {
+      return create(DeliveryShardPickupOutcomeSchema, {
+        result: {
           case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
+          value: create(DeliverySessionHandleSchema, {
             shard: request.shard as never,
             worker: request.worker as never,
             whenPicked: { seconds: 1n, nanos: 0 },
+            sessionId: "fixture-session",
+            lifetime: { seconds: 60n, nanos: 0 },
           }),
         },
       });

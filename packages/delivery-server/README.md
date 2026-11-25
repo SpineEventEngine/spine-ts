@@ -48,7 +48,7 @@ then defaults.
 | Listener host     | `HOST`                     | `127.0.0.1` |
 | Listener port     | `PORT`                     | `8484`      |
 | Inbound size      | `MAX_INBOUND_MESSAGE_SIZE` | 4 MiB       |
-| Pickup timeout    | `SHARD_PROCESSING_TIMEOUT` | disabled    |
+| Session lifetime  | `SHARD_PROCESSING_TIMEOUT` | 60 seconds  |
 | Work reminder     | `WORK_REMINDER_SECONDS`    | 10 seconds  |
 | Retained messages | `MAX_RETAINED_MESSAGES`    | 10,000      |
 | Retained bytes    | `MAX_RETAINED_BYTES`       | 32 MiB      |
@@ -57,7 +57,7 @@ then defaults.
 ## 🧩 Embed the handlers
 
 Use `InMemoryDelivery.create()` when an application provides the Connect router and
-listener itself. Register `DeliveryCore.inbox` and `.shards` on the router as
+listener itself. Register the inbox, shard, and managed-session handlers on the router as
 shown below. The application manages the network listener and its lifecycle.
 
 An embedded consumer must declare and install direct dependencies on
@@ -71,7 +71,11 @@ delivery server's transitive dependencies.
 ```ts
 import { createRouterTransport } from "@connectrpc/connect";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
-import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
+import {
+  InboxService,
+  ManagedShardService,
+  ShardService,
+} from "@spine-event-engine/proto/delivery-server";
 
 const delivery = InMemoryDelivery.create({
   processingTimeoutMs: 30_000,
@@ -82,14 +86,19 @@ const delivery = InMemoryDelivery.create({
 const transport = createRouterTransport((router) => {
   router.service(InboxService, delivery.inbox);
   router.service(ShardService, delivery.shards);
+  router.service(ManagedShardService, delivery.managed);
 });
 void transport;
+
+// During application shutdown, cancel the core's session timers.
+delivery.close();
 ```
 
-The example explicitly enables a 30-second processing timeout. The default is
-zero, which disables timeout-based takeover during shard pickup. The application
-supervisor can still release stale sessions. Its recovery scan and
-stale-session threshold are separate [recovery timers](REFERENCE.md#recovery-timers).
+The example gives a picked-up shard a 30-second session. The default is 60
+seconds. The server expires the session if the worker stops renewing it.
+If the shard still has pending work, subscribers can immediately try to take it.
+The work reminder interval controls how often the server repeats the notice
+while the shard is free.
 
 The standalone listener exposes Inbox, Shard, Shard Observing, Admin, and gRPC health services.
 It binds only to the loopback address by default. An explicit non-loopback host

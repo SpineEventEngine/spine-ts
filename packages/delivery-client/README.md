@@ -170,9 +170,10 @@ void delivery;
 
 Read operations may use the configured bounded retry policy. Mutations do not
 retry automatically: if a response is lost, first read the named fact and
-decide what happened. The protocol is unauthenticated and offers no durable
-client state, exactly-once effects, or renewable fencing. It does not persist
-attempt history or quarantine records.
+decide what happened. A session renewal permits the worker to continue processing its shard.
+If a connection fails after a handler saves its result but before the inbox row
+is acknowledged, another worker may invoke that handler again. Keep this case
+in mind when a handler calls an external service.
 
 ## 🔗 Learn more
 

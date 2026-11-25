@@ -12,242 +12,402 @@
  * the License.
  */
 
+import { randomUUID } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
+import { DurationSchema, TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import {
+  DeliverySessionHandleSchema,
+  DeliveryShardPickupOutcomeSchema as PickupOutcomeSchema,
   ExpiredSessionSchema,
   ExpiredSessionsReleasedSchema,
-  LiquorPickUpOutcomeSchema as PickUpOutcomeSchema,
-  ShardAlreadyPickedUpSchema as AlreadyPickedUpSchema,
-  ShardPickedUpSchema,
+  ManagedShardService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 import type { ShardIndex, WorkerId } from "@spine-event-engine/proto/delivery";
 
-import { InMemoryDeliveryState } from "./in-memory-delivery-state.js";
+import { InMemoryDeliveryState, type ShardRecord } from "./in-memory-delivery-state.js";
 import { MAX_DELIVERY_RESPONSE_SHARDS, MAX_DELIVERY_WORKER_BYTES } from "./limits.js";
 import { MutationAdmission } from "./mutation-admission.js";
 import { DeliveryShards, DeliveryWorkers } from "./wire-values.js";
 
+/** Records fields required by every live raw or managed session. */
+interface ActiveShardRecord extends ShardRecord {
+  readonly worker: WorkerId;
+  readonly whenLastPicked: Timestamp;
+  readonly sessionId: string;
+  readonly kind: "RAW" | "MANAGED";
+  readonly revision: number;
+}
+
 /**
- * Provides Shard RPC handler implementations.
+ * A session runtime shared by the raw and managed RPC surfaces.
  */
-export const ShardHandlers: Readonly<{
-  // prettier-ignore
+export class ShardSessionRuntime {
+  readonly #state: InMemoryDeliveryState;
+
+  readonly #admission: MutationAdmission;
+
+  readonly #now: () => Timestamp;
+
+  readonly #lifetimeMs: number;
+
+  readonly #onTransition: ((shard: ShardIndex) => void) | undefined;
+
+  readonly #timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  #closed = false;
 
   /**
-   * Creates Shard RPC handlers.
-   *
-   * @param state Stores the Shard sessions served by the handlers.
-   * @param admission Controls mutation admission and cancellation.
-   * @param now Supplies the current millisecond time.
-   * @param processingTimeoutMs Holds the automatic processing timeout.
-   * @param onTransition Observes picked and released shard transitions.
-   * @returns The Shard service implementation.
+   * Serves the frozen raw Shard RPC descriptor.
    */
-  create: (
+  readonly raw: ServiceImpl<typeof ShardService>;
+
+  /**
+   * Serves the TS session-handle RPC descriptor.
+   */
+  readonly managed: ServiceImpl<typeof ManagedShardService>;
+
+  /**
+   * Creates one session authority for both RPC surfaces.
+   *
+   * @param state Stores shard pickup records.
+   * @param admission Serializes and cancels mutations.
+   * @param now Supplies a full-precision wall clock sample.
+   * @param lifetimeMs Sets the positive session lifetime in milliseconds.
+   * @param onTransition Publishes pickup and release changes.
+   */
+  constructor(
     state: InMemoryDeliveryState,
     admission: MutationAdmission,
-    now: () => number,
-    processingTimeoutMs: number,
+    now: () => Timestamp,
+    lifetimeMs: number,
     onTransition?: (shard: ShardIndex) => void,
-  ) => ServiceImpl<typeof ShardService>;
-}> = Object.freeze({
-  create: (
-    state: InMemoryDeliveryState,
-    admission: MutationAdmission,
-    now: () => number,
-    processingTimeoutMs: number,
-    onTransition?: (shard: ShardIndex) => void,
-  ): ServiceImpl<typeof ShardService> => ({
-    pickShard: async (request, context) => {
-      const shard = ShardInputs.requireShard(request.shard);
-      const worker = DeliveryWorkers.copy(ShardInputs.requireWorker(request.worker));
-      const pendingOnly = ShardInputs.pendingOnly(context.requestHeader);
-      return admission.run(context.signal, () => {
-        const pickedAt = ShardTime.current(now);
-        const current = state.session(shard);
-        const stale =
-          current !== undefined &&
-          processingTimeoutMs > 0 &&
-          pickedAt - ShardInputs.requireWhenPicked(current) > processingTimeoutMs;
-        const refreshed =
-          current !== undefined &&
-          !stale &&
-          ShardInputs.revalidating(context.requestHeader) &&
-          ShardInputs.sameWorker(current.worker, worker);
-        if (current === undefined || stale || refreshed) {
-          if (pendingOnly && !state.hasPending(shard)) throw ShardErrors.noPendingWork();
-          state.setSession(shard, worker, pickedAt);
-          if (ShardInputs.revalidating(context.requestHeader))
-            context.responseHeader.set(
-              "x-spine-delivery-revalidation",
-              refreshed ? "refreshed" : "picked",
-            );
-          if (pendingOnly)
-            context.responseHeader.set("x-spine-delivery-outcome", "pending-acknowledged");
-          onTransition?.(shard);
-          return create(PickUpOutcomeSchema, {
-            value: {
-              case: "pickedUp",
-              value: create(ShardPickedUpSchema, {
-                shard: DeliveryShards.copy(shard),
-                worker: DeliveryWorkers.copy(worker),
-                whenPicked: ShardTime.timestamp(pickedAt),
-              }),
-            },
-          });
-        }
-        if (pendingOnly)
-          context.responseHeader.set("x-spine-delivery-outcome", "pending-acknowledged");
-        if (ShardInputs.revalidating(context.requestHeader))
-          context.responseHeader.set("x-spine-delivery-revalidation", "lost");
-        return create(PickUpOutcomeSchema, {
-          value: {
-            case: "alreadyPickedUp",
-            value: create(AlreadyPickedUpSchema, {
-              worker: DeliveryWorkers.copy(ShardInputs.requireWorker(current.worker)),
-              whenPicked: ShardTime.timestamp(ShardInputs.requireWhenPicked(current)),
-            }),
-          },
+  ) {
+    if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs <= 0)
+      throw new RangeError("Delivery session lifetime is invalid.");
+    this.#state = state;
+    this.#admission = admission;
+    this.#now = now;
+    this.#lifetimeMs = lifetimeMs;
+    this.#onTransition = onTransition;
+    this.raw = this.#rawService();
+    this.managed = this.#managedService();
+  }
+
+  /**
+   * Creates the frozen raw descriptor with explicit worker-only rejection.
+   *
+   * @returns The raw service implementation.
+   */
+  #rawService(): ServiceImpl<typeof ShardService> {
+    return {
+      pickShard: () => Promise.reject(SessionValues.unsupported()),
+      releaseSession: () => Promise.reject(SessionValues.unsupported()),
+      releaseSessions: async (request, context) => {
+        const duration = request.inactivityPeriod;
+        if (duration === undefined || !SessionValues.validDuration(duration))
+          throw SessionValues.invalid("Inactivity period is invalid.");
+        return this.#admission.run(context.signal, () => this.#releaseInactive(duration));
+      },
+    };
+  }
+
+  /**
+   * Creates the typed raw and managed session descriptor.
+   *
+   * @returns The managed service implementation.
+   */
+  #managedService(): ServiceImpl<typeof ManagedShardService> {
+    return {
+      pickShardRaw: async (request, context) => {
+        const shard = SessionValues.requireShard(request.shard);
+        const worker = SessionValues.requireWorker(request.worker);
+        return this.#admission.run(context.signal, () => this.#pick(shard, worker, "RAW"));
+      },
+      pickShardForDelivery: async (request, context) => {
+        const shard = SessionValues.requireShard(request.shard);
+        const worker = SessionValues.requireWorker(request.worker);
+        return this.#admission.run(context.signal, () => this.#pick(shard, worker, "MANAGED"));
+      },
+      renewShardSession: async (request, context) => {
+        const shard = SessionValues.requireShard(request.shard);
+        const worker = SessionValues.requireWorker(request.worker);
+        const id = SessionValues.requireId(request.sessionId);
+        this.#requireHandle(request);
+        return this.#admission.run(context.signal, () => this.#renew(shard, worker, id));
+      },
+      releaseShardSession: async (request, context) => {
+        const shard = SessionValues.requireShard(request.shard);
+        const worker = SessionValues.requireWorker(request.worker);
+        const id = SessionValues.requireId(request.sessionId);
+        this.#requireHandle(request);
+        await this.#admission.run(context.signal, () => {
+          this.#releaseMatching(shard, worker, id);
         });
+        return {};
+      },
+    };
+  }
+
+  /**
+   * Updates only the current record with the matching session identity.
+   *
+   * @param shard Identifies the requested shard.
+   * @param worker Identifies the requesting worker.
+   * @param id Identifies the session to renew.
+   * @returns The updated session handle.
+   */
+  #renew(shard: ShardIndex, worker: WorkerId, id: string) {
+    const current = this.#live(shard);
+    if (!SessionValues.matches(current, worker, id)) throw SessionValues.lost();
+    const whenPicked = SessionValues.later(SessionValues.requireTime(current), this.#sample());
+    this.#state.setSession(shard, worker, whenPicked, id, current.kind, current.revision + 1);
+    this.#schedule(shard, id);
+    this.#onTransition?.(shard);
+    return this.#handle(SessionValues.requireActive(this.#state.session(shard)));
+  }
+
+  /**
+   * Removes only the current record with the matching session identity.
+   *
+   * @param shard Identifies the requested shard.
+   * @param worker Identifies the requesting worker.
+   * @param id Identifies the session to release.
+   */
+  #releaseMatching(shard: ShardIndex, worker: WorkerId, id: string): void {
+    const current = this.#live(shard);
+    if (SessionValues.matches(current, worker, id)) this.#release(shard);
+  }
+
+  /**
+   * Stops session timers after the listener closes.
+   */
+  close(): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    for (const timer of this.#timers.values()) clearTimeout(timer);
+    this.#timers.clear();
+  }
+
+  /**
+   * Requires the complete typed handle on renewal and release.
+   */
+  #requireHandle(value: {
+    whenPicked?: Timestamp | undefined;
+    lifetime?: { seconds: bigint; nanos: number } | undefined;
+  }): void {
+    if (
+      value.whenPicked === undefined ||
+      value.lifetime === undefined ||
+      !Number.isInteger(value.whenPicked.nanos) ||
+      value.whenPicked.nanos < 0 ||
+      value.whenPicked.nanos >= 1_000_000_000 ||
+      !SessionValues.validDuration(value.lifetime) ||
+      value.lifetime.seconds * 1_000_000_000n + BigInt(value.lifetime.nanos) !==
+        BigInt(this.#lifetimeMs) * 1_000_000n
+    )
+      throw SessionValues.invalid("Delivery session handle is incomplete or invalid.");
+  }
+
+  /**
+   * Grants a free shard or returns its current state.
+   */
+  #pick(shard: ShardIndex, worker: WorkerId, kind: "RAW" | "MANAGED") {
+    const current = this.#live(shard);
+    if (current !== undefined) {
+      if (current.kind === kind && SessionValues.sameWorker(current.worker, worker)) {
+        const whenPicked = SessionValues.later(SessionValues.requireTime(current), this.#sample());
+        this.#state.setSession(
+          shard,
+          worker,
+          whenPicked,
+          current.sessionId,
+          kind,
+          current.revision + 1,
+        );
+        this.#schedule(shard, current.sessionId);
+        this.#onTransition?.(shard);
+        return this.#picked(SessionValues.requireActive(this.#state.session(shard)));
+      }
+      return create(PickupOutcomeSchema, {
+        result: { case: "busy", value: DeliveryWorkers.copy(current.worker) },
       });
-    },
-    releaseSession: async (request, context) => {
-      const shard = ShardInputs.requireShard(request.shard);
-      const worker = ShardInputs.requireWorker(request.worker);
-      await admission.run(context.signal, () => {
-        const current = state.session(shard);
-        if (current !== undefined && ShardInputs.sameWorker(current.worker, worker)) {
-          state.release(shard);
-          onTransition?.(shard);
-        }
-      });
-      return {};
-    },
-    releaseSessions: async (request, context) => {
-      if (request.inactivityPeriod === undefined)
-        throw ShardErrors.invalid("Inactivity period is missing.");
-      if (!ShardInputs.validDuration(request.inactivityPeriod))
-        throw ShardErrors.invalid("Inactivity period is invalid.");
-      const period =
-        Number(request.inactivityPeriod.seconds) * 1_000 +
-        Math.trunc(request.inactivityPeriod.nanos / 1_000_000);
-      if (!Number.isFinite(period) || period < 0)
-        throw ShardErrors.invalid("Inactivity period is invalid.");
-      return admission.run(context.signal, () => {
-        const releasedAt = ShardTime.current(now);
-        const released = [];
-        for (const record of state.shards.values()) {
-          if (released.length === MAX_DELIVERY_RESPONSE_SHARDS) break;
-          const session = state.session(record.shard);
+    }
+    if (kind === "MANAGED" && !this.#state.hasPending(shard))
+      return create(PickupOutcomeSchema, { result: { case: "noWork", value: {} } });
+    const id = randomUUID();
+    this.#state.setSession(shard, worker, this.#sample(), id, kind);
+    this.#schedule(shard, id);
+    this.#onTransition?.(shard);
+    return this.#picked(SessionValues.requireActive(this.#state.session(shard)));
+  }
+
+  /**
+   * Returns a success with a second clock sample, following JVM pickup timing.
+   */
+  #picked(record: ActiveShardRecord) {
+    return create(PickupOutcomeSchema, {
+      result: { case: "pickedUp", value: this.#handle(record, this.#sample()) },
+    });
+  }
+
+  /**
+   * Builds a detached typed session handle.
+   */
+  #handle(record: ActiveShardRecord, whenPicked = record.whenLastPicked) {
+    const seconds = Math.floor(this.#lifetimeMs / 1_000);
+    return create(DeliverySessionHandleSchema, {
+      shard: DeliveryShards.copy(record.shard),
+      worker: DeliveryWorkers.copy(record.worker),
+      sessionId: record.sessionId,
+      whenPicked: SessionValues.copyTime(whenPicked),
+      lifetime: create(DurationSchema, {
+        seconds: BigInt(seconds),
+        nanos: (this.#lifetimeMs - seconds * 1_000) * 1_000_000,
+      }),
+    });
+  }
+
+  /**
+   * Reads a session and expires it before a competing admission.
+   */
+  #live(shard: ShardIndex): ActiveShardRecord | undefined {
+    const current = this.#state.session(shard);
+    if (current === undefined) return undefined;
+    if (
+      SessionValues.nanoseconds(this.#sample()) -
+        SessionValues.nanoseconds(SessionValues.requireTime(current)) >=
+      BigInt(this.#lifetimeMs) * 1_000_000n
+    ) {
+      this.#release(shard);
+      return undefined;
+    }
+    return SessionValues.requireActive(current);
+  }
+
+  /**
+   * Releases the current record and publishes newly available work.
+   */
+  #release(shard: ShardIndex): void {
+    const key = DeliveryShards.key(shard);
+    const timer = this.#timers.get(key);
+    if (timer !== undefined) clearTimeout(timer);
+    this.#timers.delete(key);
+    if (this.#state.release(shard) !== undefined) this.#onTransition?.(shard);
+  }
+
+  /**
+   * Scans current records at the request's exact inactivity threshold.
+   */
+  #releaseInactive(period: { seconds: bigint; nanos: number }) {
+    const selectedAt = this.#sample();
+    const threshold = period.seconds * 1_000_000_000n + BigInt(period.nanos);
+    const released = [];
+    for (const record of this.#state.shards.values()) {
+      if (released.length === MAX_DELIVERY_RESPONSE_SHARDS) break;
+      const retained = this.#state.session(record.shard);
+      if (retained === undefined) continue;
+      const session = SessionValues.requireActive(retained);
+      const inactive =
+        SessionValues.nanoseconds(selectedAt) -
+        SessionValues.nanoseconds(SessionValues.requireTime(session));
+      if (inactive < threshold) continue;
+      this.#release(record.shard);
+      released.push(
+        create(ExpiredSessionSchema, {
+          shard: DeliveryShards.copy(session.shard),
+          worker: DeliveryWorkers.copy(session.worker),
+          whenPicked: SessionValues.copyTime(SessionValues.requireTime(session)),
+          whenReleased: this.#sample(),
+        }),
+      );
+    }
+    return create(ExpiredSessionsReleasedSchema, { shard: released });
+  }
+
+  /**
+   * Reschedules one expiry; long lifetimes use multiple Node timer intervals.
+   */
+  #schedule(shard: ShardIndex, id: string): void {
+    const key = DeliveryShards.key(shard);
+    const old = this.#timers.get(key);
+    if (old !== undefined) clearTimeout(old);
+    const current = this.#state.session(shard);
+    if (current === undefined) return;
+    const remaining =
+      SessionValues.nanoseconds(SessionValues.requireTime(current)) +
+      BigInt(this.#lifetimeMs) * 1_000_000n -
+      SessionValues.nanoseconds(this.#sample());
+    const delay = Math.max(1, Math.min(Number(remaining / 1_000_000n), 2_147_483_647));
+    const timer = setTimeout(() => {
+      if (this.#closed) return;
+      void this.#admission
+        .runSystem(() => {
+          const live = this.#state.session(shard);
+          if (live?.sessionId !== id) return;
           if (
-            session !== undefined &&
-            releasedAt - ShardInputs.requireWhenPicked(session) >= period
-          ) {
-            state.release(record.shard);
-            onTransition?.(record.shard);
-            released.push(
-              create(ExpiredSessionSchema, {
-                shard: DeliveryShards.copy(session.shard),
-                worker: DeliveryWorkers.copy(ShardInputs.requireWorker(session.worker)),
-                whenPicked: ShardTime.timestamp(ShardInputs.requireWhenPicked(session)),
-                whenReleased: ShardTime.timestamp(releasedAt),
-              }),
-            );
-          }
-        }
-        return create(ExpiredSessionsReleasedSchema, { shard: released });
-      });
-    },
-  }),
-});
+            SessionValues.nanoseconds(this.#sample()) -
+              SessionValues.nanoseconds(SessionValues.requireTime(live)) >=
+            BigInt(this.#lifetimeMs) * 1_000_000n
+          )
+            this.#release(shard);
+          else this.#schedule(shard, id);
+        })
+        .catch(() => {
+          // Terminal admission closure has already cleared all session timers.
+        });
+    }, delay);
+    timer.unref();
+    this.#timers.set(key, timer);
+  }
+
+  /**
+   * Reads and validates a full-precision clock sample.
+   */
+  #sample(): Timestamp {
+    const value = this.#now();
+    if (
+      value.seconds < -62_135_596_800n ||
+      value.seconds > 253_402_300_799n ||
+      !Number.isInteger(value.nanos) ||
+      value.nanos < 0 ||
+      value.nanos >= 1_000_000_000
+    )
+      throw new RangeError("Delivery clock returned an invalid timestamp.");
+    return SessionValues.copyTime(value);
+  }
+}
 
 /**
- * Validates Shard requests and converts their inputs.
+ * Validates session inputs, times, and definitive RPC errors.
  */
-const ShardInputs: Readonly<{
-  // prettier-ignore
-
+const SessionValues = Object.freeze({
   /**
-   * Requires a Shard session pickup time.
+   * Validates the required fields of a live session record.
    *
-   * @param record Holds the Shard session record.
-   * @returns The recorded pickup time in milliseconds.
+   * @param record Supplies a possibly released record.
+   * @returns The complete active record.
    */
-  requireWhenPicked: (record: { readonly whenLastPicked: number | undefined }) => number;
-
-  /**
-   * Requires a valid worker identity.
-   *
-   * @param worker Holds the candidate worker identity.
-   * @returns The validated worker identity.
-   */
-  requireWorker: (worker: WorkerId | undefined) => WorkerId;
-
-  /**
-   * Compares complete stable worker identities.
-   */
-  sameWorker: (first: WorkerId | undefined, second: WorkerId) => boolean;
-
-  /**
-   * Requires a valid Shard identity.
-   *
-   * @param shard Holds the candidate Shard identity.
-   * @returns The validated Shard identity.
-   */
-  requireShard: (shard: ShardIndex | undefined) => ShardIndex;
-
-  /**
-   * Reads the optional conditional-pickup request mode.
-   *
-   * @param headers Supplies request metadata.
-   * @returns Whether pickup must find pending work.
-   */
-  pendingOnly: (headers: Headers | undefined) => boolean;
-
-  /**
-   * Determines whether a pickup explicitly refreshes its current worker ownership.
-   */
-  revalidating: (headers: Headers | undefined) => boolean;
-
-  /**
-   * Validates a protobuf duration.
-   *
-   * @param value Holds the candidate duration.
-   * @returns Whether the duration is within protobuf bounds.
-   */
-  validDuration: (value: { readonly seconds: bigint; readonly nanos: number }) => boolean;
-
-  /**
-   * Measures a string's UTF-8 size.
-   *
-   * @param value Holds the string to measure.
-   * @returns The UTF-8 byte length.
-   */
-  utf8Bytes: (value: string) => number;
-}> = Object.freeze({
-  requireWhenPicked: (record: { readonly whenLastPicked: number | undefined }): number => {
-    if (record.whenLastPicked === undefined)
-      throw new TypeError("Delivery shard session is invalid.");
-    return record.whenLastPicked;
-  },
-  requireWorker: (worker: WorkerId | undefined): WorkerId => {
+  requireActive(record: ShardRecord | undefined): ActiveShardRecord {
     if (
-      worker?.nodeId === undefined ||
-      worker.value.trim().length === 0 ||
-      worker.nodeId.value.trim().length === 0 ||
-      ShardInputs.utf8Bytes(worker.value) + ShardInputs.utf8Bytes(worker.nodeId.value) >
-        MAX_DELIVERY_WORKER_BYTES
-    ) {
-      throw ShardErrors.invalid("Delivery worker is invalid.");
-    }
-    return worker;
+      record?.worker === undefined ||
+      record.whenLastPicked === undefined ||
+      record.sessionId === undefined ||
+      record.kind === undefined ||
+      record.revision === undefined
+    )
+      throw new TypeError("Delivery shard session is invalid.");
+    return record as ActiveShardRecord;
   },
-  sameWorker: (first, second): boolean =>
-    first?.nodeId?.value === second.nodeId?.value && first?.value === second.value,
-  revalidating: (headers): boolean => headers?.get("x-spine-delivery-revalidate") === "true",
-  requireShard: (shard: ShardIndex | undefined): ShardIndex => {
+
+  /**
+   * Validates a shard identity.
+   *
+   * @param shard Supplies the candidate shard.
+   * @returns The valid shard.
+   */
+  requireShard(shard: ShardIndex | undefined): ShardIndex {
     if (
       shard === undefined ||
       !Number.isInteger(shard.index) ||
@@ -255,86 +415,161 @@ const ShardInputs: Readonly<{
       !Number.isInteger(shard.ofTotal) ||
       shard.ofTotal < 1 ||
       shard.index >= shard.ofTotal
-    ) {
-      throw ShardErrors.invalid("Delivery shard is invalid.");
-    }
+    )
+      throw SessionValues.invalid("Delivery shard is invalid.");
     return shard;
   },
-  pendingOnly: (headers: Headers | undefined): boolean => {
-    const mode = headers?.get("x-spine-delivery-pickup-mode");
-    if (mode === null || mode === undefined) return false;
-    if (mode === "pending") return true;
-    throw ShardErrors.invalid("Delivery pickup mode is invalid.");
+
+  /**
+   * Validates a complete stable worker identity.
+   *
+   * @param worker Supplies the candidate worker.
+   * @returns The valid worker.
+   */
+  requireWorker(worker: WorkerId | undefined): WorkerId {
+    if (
+      worker?.nodeId === undefined ||
+      !worker.value.trim() ||
+      !worker.nodeId.value.trim() ||
+      new TextEncoder().encode(worker.value + worker.nodeId.value).byteLength >
+        MAX_DELIVERY_WORKER_BYTES
+    )
+      throw SessionValues.invalid("Delivery worker is invalid.");
+    return worker;
   },
-  validDuration: (value: { readonly seconds: bigint; readonly nanos: number }): boolean =>
-    value.seconds >= 0n &&
-    value.seconds <= 315_576_000_000n &&
-    Number.isInteger(value.nanos) &&
-    value.nanos >= 0 &&
-    value.nanos < 1_000_000_000,
-  utf8Bytes: (value: string): number => new TextEncoder().encode(value).byteLength,
-});
-
-/**
- * Validates Shard clocks and converts protobuf timestamps.
- */
-const ShardTime: Readonly<{
-  // prettier-ignore
 
   /**
-   * Converts milliseconds to a protobuf timestamp.
+   * Validates a session identity.
    *
-   * @param milliseconds Holds the millisecond time.
-   * @returns The equivalent protobuf timestamp.
+   * @param id Supplies the candidate session ID.
+   * @returns The nonempty ID.
    */
-  timestamp: (milliseconds: number) => { seconds: bigint; nanos: number };
-
-  /**
-   * Reads and validates the current millisecond time.
-   *
-   * @param now Supplies the current millisecond time.
-   * @returns The valid current millisecond time.
-   */
-  current: (now: () => number) => number;
-}> = Object.freeze({
-  timestamp: (milliseconds: number): { seconds: bigint; nanos: number } => {
-    const seconds = Math.floor(milliseconds / 1_000);
-    return { seconds: BigInt(seconds), nanos: (milliseconds - seconds * 1_000) * 1_000_000 };
+  requireId(id: string): string {
+    if (!id.trim()) throw SessionValues.invalid("Delivery session ID is missing.");
+    return id;
   },
-  current: (now: () => number): number => {
-    const value = now();
-    if (!Number.isInteger(value) || value < -62_135_596_800_000 || value > 253_402_300_799_999)
-      throw new RangeError("Delivery clock returned an invalid millisecond value.");
-    return value;
+
+  /**
+   * Matches a live record against its worker and session ID.
+   *
+   * @param record Supplies the current record.
+   * @param worker Supplies the requesting worker.
+   * @param id Supplies the session ID.
+   * @returns Whether the record matches.
+   */
+  matches(
+    record: ActiveShardRecord | undefined,
+    worker: WorkerId,
+    id: string,
+  ): record is ActiveShardRecord {
+    return (
+      record?.sessionId === id &&
+      record.worker.nodeId?.value === worker.nodeId?.value &&
+      record.worker.value === worker.value
+    );
   },
-});
-
-/**
- * Creates Shard RPC errors.
- */
-const ShardErrors: Readonly<{
-  // prettier-ignore
 
   /**
-   * Creates an invalid-argument RPC error.
+   * Compares complete stable worker identities.
    *
-   * @param message Describes the invalid request.
-   * @returns The invalid-argument error.
+   * @param first Supplies the held worker.
+   * @param second Supplies the requesting worker.
+   * @returns Whether the workers match.
    */
-  invalid: (message: string) => ConnectError;
+  sameWorker(first: WorkerId | undefined, second: WorkerId): boolean {
+    return first?.nodeId?.value === second.nodeId?.value && first?.value === second.value;
+  },
 
   /**
-   * Creates the exact no-pending-work conditional pickup outcome.
+   * Validates a retained pickup time.
    *
-   * @returns The conditional pickup error.
+   * @param record Supplies the current record.
+   * @returns Its full-precision pickup time.
    */
-  noPendingWork: () => ConnectError;
-}> = Object.freeze({
-  invalid: (message: string): ConnectError => new ConnectError(message, Code.InvalidArgument),
-  noPendingWork: (): ConnectError =>
-    new ConnectError(
-      "Delivery shard has no pending work.",
+  requireTime(record: ShardRecord): Timestamp {
+    if (record.whenLastPicked === undefined)
+      throw new TypeError("Delivery session has no pickup time.");
+    return record.whenLastPicked;
+  },
+
+  /**
+   * Converts a timestamp to integer nanoseconds.
+   *
+   * @param value Supplies the timestamp.
+   * @returns Its epoch nanoseconds.
+   */
+  nanoseconds(value: Timestamp): bigint {
+    return value.seconds * 1_000_000_000n + BigInt(value.nanos);
+  },
+
+  /**
+   * Copies a timestamp without sharing mutable wire fields.
+   *
+   * @param value Supplies the timestamp.
+   * @returns A detached timestamp.
+   */
+  copyTime(value: Timestamp): Timestamp {
+    return create(TimestampSchema, { seconds: value.seconds, nanos: value.nanos });
+  },
+
+  /**
+   * Returns the later of two pickup samples.
+   *
+   * @param first Supplies the stored sample.
+   * @param second Supplies the current sample.
+   * @returns The later timestamp.
+   */
+  later(first: Timestamp, second: Timestamp): Timestamp {
+    return first.seconds > second.seconds ||
+      (first.seconds === second.seconds && first.nanos >= second.nanos)
+      ? first
+      : second;
+  },
+
+  /**
+   * Validates the frozen Duration wire range.
+   *
+   * @param value Supplies the candidate duration.
+   * @returns Whether it is valid.
+   */
+  validDuration(value: { seconds: bigint; nanos: number }): boolean {
+    return (
+      value.seconds >= 0n &&
+      value.seconds <= 315_576_000_000n &&
+      Number.isInteger(value.nanos) &&
+      value.nanos >= 0 &&
+      value.nanos < 1_000_000_000
+    );
+  },
+
+  /**
+   * Creates an invalid-argument session error.
+   *
+   * @param message Describes the invalid input.
+   * @returns The RPC error.
+   */
+  invalid(message: string): ConnectError {
+    return new ConnectError(message, Code.InvalidArgument);
+  },
+
+  /**
+   * Creates a failed-precondition error for a lost session.
+   *
+   * @returns The RPC error.
+   */
+  lost(): ConnectError {
+    return new ConnectError("Delivery session is no longer live.", Code.FailedPrecondition);
+  },
+
+  /**
+   * Creates a failed-precondition error for worker-only methods.
+   *
+   * @returns The RPC error.
+   */
+  unsupported(): ConnectError {
+    return new ConnectError(
+      "A typed delivery session handle is required.",
       Code.FailedPrecondition,
-      new Headers([["x-spine-delivery-outcome", "no-pending-work"]]),
-    ),
+    );
+  },
 });

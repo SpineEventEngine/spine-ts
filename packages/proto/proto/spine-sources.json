@@ -499,6 +499,10 @@
       "sha256": "614caf2608bf3fc36a419f887305ae6b7b1cfad657800b5bc3a5d886d396bd86"
     },
     {
+      "localPath": "packages/proto/proto/spine/delivery/session/managed_sessions.proto",
+      "sha256": "e4506d693b7d3e19ec121335af66aa8bbcf9ac7d7e3e8a1f317bab6064009f35"
+    },
+    {
       "localPath": "packages/proto/proto/spine/deployment/node_discovery.proto",
       "sha256": "7c300d215a1757c17b7bd1a89cebb4825df28a58fcc119f2aa6d5535d7520073"
     },

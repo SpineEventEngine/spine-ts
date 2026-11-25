@@ -24,8 +24,7 @@ import {
 } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import {
-  PickUpShardSchema,
-  ReleaseShardSchema,
+  DeliveryShardPickupSchema,
   RemoveMessageSchema,
   WriteMessageSchema,
 } from "@spine-event-engine/proto/delivery-server";
@@ -46,6 +45,26 @@ const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worke
 afterEach(() => vi.useRealTimers());
 
 describe("ShardObservingService", () => {
+  it("reoffers pending work when a quiet held session expires on its own", async () => {
+    vi.useFakeTimers();
+    const assembly = DeliveryAssembly.create({ processingTimeoutMs: 50 });
+    await assembly.inbox.writeOne({ message: message("expires") }, context);
+    const picked = await assembly.managed.pickShardForDelivery(
+      create(DeliveryShardPickupSchema, { shard, worker }),
+      context,
+    );
+    expect(picked.result.case).toBe("pickedUp");
+    const stream = assembly.observing
+      .observeAll(create(EmptySchema), context)
+      [Symbol.asyncIterator]();
+    const next = stream.next();
+    await vi.advanceTimersByTimeAsync(51);
+    await expect(next).resolves.toMatchObject({ value: { shard } });
+    await stream.return?.();
+    assembly.closeSessions();
+    assembly.closeObserving();
+  });
+
   it("accepts a safe interval longer than one Node timer slot", () => {
     expect(DeliveryConfig.resolve({ workReminderSeconds: 3_000_000 }).reminderIntervalMs).toBe(
       3_000_000_000,
@@ -95,12 +114,16 @@ describe("ShardObservingService", () => {
   it("stays silent while held, then reports pending work on release", async () => {
     const assembly = DeliveryAssembly.create();
     await assembly.inbox.writeOne(create(WriteMessageSchema, { message: message("one") }), context);
-    await assembly.shards.pickShard(create(PickUpShardSchema, { shard, worker }), context);
+    const pickup = await assembly.managed.pickShardRaw(
+      create(DeliveryShardPickupSchema, { shard, worker }),
+      context,
+    );
+    if (pickup.result.case !== "pickedUp") throw new Error("Expected a session.");
     const stream = assembly.observing
       .observeAll(create(EmptySchema), context)
       [Symbol.asyncIterator]();
     const next = stream.next();
-    await assembly.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
+    await assembly.managed.releaseShardSession(pickup.result.value, context);
     await expect(next).resolves.toMatchObject({ value: { shard } });
     await stream.return?.();
     assembly.closeObserving();
@@ -115,7 +138,11 @@ describe("ShardObservingService", () => {
       .observeAll(create(EmptySchema), context)
       [Symbol.asyncIterator]();
     await expect(stream.next()).resolves.toMatchObject({ value: { shard } });
-    await assembly.shards.pickShard(create(PickUpShardSchema, { shard, worker }), context);
+    const pickup = await assembly.managed.pickShardRaw(
+      create(DeliveryShardPickupSchema, { shard, worker }),
+      context,
+    );
+    if (pickup.result.case !== "pickedUp") throw new Error("Expected a session.");
     const afterPickup = stream.next();
     let settled = false;
     void afterPickup.then(() => {
@@ -123,7 +150,7 @@ describe("ShardObservingService", () => {
     });
     await vi.advanceTimersByTimeAsync(10_000);
     expect(settled).toBe(false);
-    await assembly.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
+    await assembly.managed.releaseShardSession(pickup.result.value, context);
     await expect(afterPickup).resolves.toMatchObject({ value: { shard } });
     await assembly.inbox.removeOne(create(RemoveMessageSchema, { message: first }), context);
     const afterRemoval = stream.next();
@@ -167,7 +194,10 @@ describe("ShardObservingService", () => {
     await expect(stream.next()).resolves.toMatchObject({ value: { shard } });
     await assembly.inbox.writeOne({ message: message("busy", busy) }, context);
     await assembly.inbox.writeOne({ message: message("removed", removed) }, context);
-    await assembly.shards.pickShard(create(PickUpShardSchema, { shard: busy, worker }), context);
+    await assembly.managed.pickShardRaw(
+      create(DeliveryShardPickupSchema, { shard: busy, worker }),
+      context,
+    );
     await assembly.inbox.removeOne({ message: message("removed", removed) }, context);
     await assembly.inbox.writeOne({ message: message("valid", valid) }, context);
     await expect(stream.next()).resolves.toMatchObject({ value: { shard: valid } });

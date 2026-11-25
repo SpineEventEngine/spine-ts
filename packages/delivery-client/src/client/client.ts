@@ -23,18 +23,21 @@ import {
   InboxService,
   AdminService,
   ShardService,
+  ManagedShardService,
+  DeliveryShardPickupSchema,
+  DeliveryShardPickupOutcomeSchema as PickupOutcomeSchema,
+  type DeliveryShardPickupOutcome,
+  DeliverySessionHandleSchema,
+  type DeliverySessionHandle,
   ShardObservingService,
   PageOfMessagesSchema,
   ReadMessagesSinceTimeSchema as ReadSinceTimeSchema,
   OptionalInboxMessageSchema,
   ShardInfoListSchema,
-  LiquorPickUpOutcomeSchema as PickUpOutcomeSchema,
   ExpiredSessionsReleasedSchema,
-  PickUpShardSchema,
   RemoveMessageSchema,
   RemoveMessagesSchema,
   ReleaseExpiredSessionsSchema,
-  ReleaseShardSchema,
   WriteMessageSchema,
   WriteMessagesSchema,
 } from "@spine-event-engine/proto/delivery-server";
@@ -52,6 +55,7 @@ import {
   type ReleasedShardSession,
   type RemoteShardObservation,
   type RemoteShardSession,
+  type DeliveryManagedPickupOutcome,
 } from "./types.js";
 import { ShardObservationStream } from "./shard-observation.js";
 import { DeliveryMessageCodec, DeliveryRequestCodec, DeliveryShardCodec } from "../wire/codec.js";
@@ -76,6 +80,7 @@ export type {
   ReleasedShardSession,
   RemoteShardObservation,
   RemoteShardSession,
+  DeliveryManagedPickupOutcome,
 } from "./types.js";
 
 /**
@@ -85,6 +90,8 @@ export class DeliveryClient {
   readonly #inbox: ReturnType<typeof createClient<typeof InboxService>>;
 
   readonly #shards: ReturnType<typeof createClient<typeof ShardService>>;
+
+  readonly #managed: ReturnType<typeof createClient<typeof ManagedShardService>>;
 
   readonly #admin: ReturnType<typeof createClient<typeof AdminService>>;
 
@@ -134,12 +141,10 @@ export class DeliveryClient {
     );
     this.#inbox = createClient(InboxService, transport);
     this.#shards = createClient(ShardService, transport);
+    this.#managed = createClient(ManagedShardService, transport);
     this.#admin = createClient(AdminService, transport);
     this.#observing = createClient(ShardObservingService, transport);
     this.#onCloseOwnedTransport = onCloseOwnedTransport;
-    deliveryClientProbes.set(this, (shardIndex, workerId, options) =>
-      this.#probePickUp(shardIndex, workerId, options),
-    );
     deliveryClientObservations.set(this, (options) => this.#observeShardUpdates(options, 0));
   }
 
@@ -457,85 +462,162 @@ export class DeliveryClient {
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions = {},
   ): Promise<RemoteShardSession | undefined> {
-    const result = await this.#probePickUp(shardIndex, workerId, options);
+    const result = await this.#pickUp(shardIndex, workerId, options, "RAW");
     return result.kind === "PICKED" ? result.session : undefined;
   }
 
-  async #probePickUp(
+  /**
+   * Acquires pending work or recovers the live managed session of the same worker.
+   *
+   * @param shardIndex Identifies the requested shard.
+   * @param workerId Identifies one stable processing run.
+   * @param options Bounds or cancels the mutation.
+   * @returns The complete managed outcome, including the handle on success.
+   */
+  pickUpForDelivery(
     shardIndex: ShardIndex,
     workerId: DeliveryWorkerId,
-    options: DeliveryMutationOptions,
-  ): Promise<RemoteShardProbe> {
-    const requestedShard = DeliveryShardCodec.encode(shardIndex);
-    const requestedWorker = DeliveryShardCodec.encodeWorker(workerId);
-    const response = await this.#mutation(
-      "PICK_UP_SHARD",
-      [DeliveryShardCodec.snapshot(shardIndex)],
-      options,
-      async (signal, timeoutMs) => {
-        const request = create(PickUpShardSchema, {
-          shard: requestedShard,
-          worker: requestedWorker,
-        });
-        DeliveryRequestCodec.requestBytes(PickUpShardSchema, request);
-        return {
-          kind: "PICKED" as const,
-          value: await this.#shards.pickShard(
-            request,
-            DeliveryRequestCodec.callOptions(signal, timeoutMs),
-          ),
-        };
-      },
-    );
-    DeliveryRequestCodec.responseBytes(PickUpOutcomeSchema, response.value);
-    if (response.value.value.case === "alreadyPickedUp") {
-      const held = response.value.value.value;
-      DeliveryShardCodec.validatePicked(held, shardIndex);
-      if (held.worker === undefined || held.whenPicked === undefined)
-        throw DeliveryRequestCodec.protocol();
-      return Object.freeze({
-        kind: "ALREADY_PICKED" as const,
-        session: Object.freeze({
-          kind: "EXCLUSIVE" as const,
-          shard: DeliveryShardCodec.snapshot(shardIndex),
-          worker: DeliveryShardCodec.decodeWorker(held.worker),
-          whenPicked: DeliveryShardCodec.date(held.whenPicked),
-        }),
-      });
-    }
-    if (response.value.value.case !== "pickedUp") throw DeliveryRequestCodec.protocol();
-    const picked = DeliveryShardCodec.decodePicked(
-      response.value.value.value,
-      shardIndex,
-      workerId,
-    );
-    return Object.freeze({ kind: "PICKED" as const, session: picked });
+    options: DeliveryMutationOptions = {},
+  ): Promise<DeliveryManagedPickupOutcome> {
+    return this.#pickUp(shardIndex, workerId, options, "MANAGED");
   }
 
   /**
-   * Performs one exclusive shard-session release.
-   * @param value Supplies the session to release.
-   * @param options Bounds or cancels the mutation.
-   * @returns A promise that completes after the delivery server releases the session.
+   * Performs a typed raw or managed pickup.
+   */
+  async #pickUp(
+    shardIndex: ShardIndex,
+    workerId: DeliveryWorkerId,
+    options: DeliveryMutationOptions,
+    kind: "RAW" | "MANAGED",
+  ): Promise<DeliveryManagedPickupOutcome> {
+    const request = create(DeliveryShardPickupSchema, {
+      shard: DeliveryShardCodec.encode(shardIndex),
+      worker: DeliveryShardCodec.encodeWorker(workerId),
+    });
+    DeliveryRequestCodec.requestBytes(DeliveryShardPickupSchema, request);
+    const response = await this.#mutation<DeliveryShardPickupOutcome>(
+      kind === "RAW" ? "PICK_UP_SHARD" : "PICK_UP_FOR_DELIVERY",
+      [DeliveryShardCodec.snapshot(shardIndex)],
+      options,
+      (signal, timeoutMs) => {
+        const call = DeliveryRequestCodec.callOptions(signal, timeoutMs);
+        return kind === "RAW"
+          ? this.#managed.pickShardRaw(request, call)
+          : this.#managed.pickShardForDelivery(request, call);
+      },
+    );
+    return this.#decodePickup(response, shardIndex, workerId);
+  }
+
+  /**
+   * Decodes one definitive typed pickup outcome.
+   *
+   * @param response Supplies the wire outcome.
+   * @param shardIndex Identifies the requested shard.
+   * @param workerId Identifies the requesting worker.
+   * @returns The detached pickup result.
+   */
+  #decodePickup(
+    response: DeliveryShardPickupOutcome,
+    shardIndex: ShardIndex,
+    workerId: DeliveryWorkerId,
+  ): DeliveryManagedPickupOutcome {
+    DeliveryRequestCodec.responseBytes(PickupOutcomeSchema, response);
+    const result = (response as Partial<DeliveryShardPickupOutcome>).result;
+    if (result === undefined) throw DeliveryRequestCodec.protocol();
+    switch (result.case) {
+      case "pickedUp":
+        return Object.freeze({
+          kind: "PICKED" as const,
+          session: DeliveryShardCodec.decodePicked(result.value, shardIndex, workerId),
+        });
+      case "busy":
+        return Object.freeze({
+          kind: "BUSY" as const,
+          worker: DeliveryShardCodec.decodeWorker(result.value),
+        });
+      case "noWork":
+        return Object.freeze({ kind: "NO_WORK" as const });
+      default:
+        throw DeliveryRequestCodec.protocol();
+    }
+  }
+
+  /**
+   * Updates only the live shard session identified by the supplied handle.
+   *
+   * @param value Supplies the complete session handle.
+   * @param options Bounds or cancels the renewal.
+   * @returns The refreshed handle with the same session identity.
+   */
+  async renew(
+    value: RemoteShardSession,
+    options: DeliveryMutationOptions = {},
+  ): Promise<RemoteShardSession> {
+    const request = this.#encodeSession(value);
+    const response = await this.#mutation<DeliverySessionHandle>(
+      "RENEW_SHARD",
+      [DeliveryShardCodec.snapshot(value.shard)],
+      options,
+      (signal, timeoutMs) =>
+        this.#managed.renewShardSession(
+          request,
+          DeliveryRequestCodec.callOptions(signal, timeoutMs),
+        ),
+    );
+    DeliveryRequestCodec.responseBytes(DeliverySessionHandleSchema, response);
+    const renewed = DeliveryShardCodec.decodePicked(response, value.shard, value.worker);
+    if (renewed.sessionId !== value.sessionId) throw DeliveryRequestCodec.protocol();
+    return renewed;
+  }
+
+  /**
+   * Removes only the live shard session identified by the supplied handle.
+   *
+   * @param value Supplies the complete session handle.
+   * @param options Bounds or cancels the release.
+   * @returns Completion after the matching session is released.
    */
   async release(value: RemoteShardSession, options: DeliveryMutationOptions = {}): Promise<void> {
-    const sessionShard = DeliveryShardCodec.encode(value.shard);
-    const sessionWorker = DeliveryShardCodec.encodeWorker(value.worker);
-    if (!(value.whenPicked instanceof Date) || Number.isNaN(value.whenPicked.getTime()))
-      throw new TypeError("Delivery shard session is invalid.");
+    const request = this.#encodeSession(value);
     await this.#mutation(
       "RELEASE_SHARD",
       [DeliveryShardCodec.snapshot(value.shard)],
       options,
-      (signal, timeoutMs) => {
-        const request = create(ReleaseShardSchema, { shard: sessionShard, worker: sessionWorker });
-        DeliveryRequestCodec.requestBytes(ReleaseShardSchema, request);
-        return this.#shards.releaseSession(
+      (signal, timeoutMs) =>
+        this.#managed.releaseShardSession(
           request,
           DeliveryRequestCodec.callOptions(signal, timeoutMs),
-        );
-      },
+        ),
     );
+  }
+
+  /**
+   * Encodes and validates a complete session handle for a mutation.
+   */
+  #encodeSession(value: RemoteShardSession) {
+    const candidate = value as Partial<RemoteShardSession>;
+    if (
+      typeof candidate.sessionId !== "string" ||
+      !candidate.sessionId ||
+      typeof candidate.whenPicked?.seconds !== "bigint" ||
+      !Number.isInteger(candidate.whenPicked.nanos) ||
+      typeof candidate.lifetime?.seconds !== "bigint" ||
+      !Number.isInteger(candidate.lifetime.nanos)
+    )
+      throw new TypeError("Delivery shard session is invalid.");
+    const request = create(DeliverySessionHandleSchema, {
+      shard: DeliveryShardCodec.encode(value.shard),
+      worker: DeliveryShardCodec.encodeWorker(value.worker),
+      sessionId: value.sessionId,
+      whenPicked: DeliveryShardCodec.timestamp(value.whenPicked),
+      lifetime: value.lifetime,
+    });
+    if (!request.sessionId || request.lifetime === undefined)
+      throw new TypeError("Delivery shard session is invalid.");
+    DeliveryRequestCodec.requestBytes(DeliverySessionHandleSchema, request);
+    return request;
   }
 
   /**
@@ -649,8 +731,11 @@ export class DeliveryClient {
     try {
       return await invoke(controller.signal, timeoutMs);
     } catch (error) {
-      if (error instanceof ConnectError && error.code === Code.InvalidArgument)
-        throw DeliveryRequestCodec.protocol();
+      if (error instanceof ConnectError) {
+        if (error.code === Code.InvalidArgument) throw DeliveryRequestCodec.protocol();
+        if (error.code === Code.Unimplemented || error.code === Code.FailedPrecondition)
+          throw error;
+      }
       throw new DeliveryOutcomeUnknownError(operation, reconciliation);
     } finally {
       options.signal?.removeEventListener("abort", abort);
@@ -681,19 +766,6 @@ export class DeliveryClient {
   }
 }
 
-type RemoteShardProbe =
-  | Readonly<{ readonly kind: "PICKED"; readonly session: RemoteShardSession }>
-  | Readonly<{ readonly kind: "ALREADY_PICKED"; readonly session: RemoteShardSession }>;
-
-const deliveryClientProbes = new WeakMap<
-  DeliveryClient,
-  (
-    shardIndex: ShardIndex,
-    workerId: DeliveryWorkerId,
-    options: DeliveryMutationOptions,
-  ) => Promise<RemoteShardProbe>
->();
-
 const deliveryClientObservations = new WeakMap<
   DeliveryClient,
   (options: DeliveryFindOneOptions) => DeliveryShardObservationStream
@@ -703,27 +775,11 @@ const deliveryClientObservations = new WeakMap<
  * Provides package-internal frozen-wire ownership probes without extending the public client API.
  */
 export const deliveryClientAccess: Readonly<{
-  probePickUp: (
-    client: DeliveryClient,
-    shardIndex: ShardIndex,
-    workerId: DeliveryWorkerId,
-    options: DeliveryMutationOptions,
-  ) => Promise<RemoteShardProbe>;
   observeOnce: (
     client: DeliveryClient,
     options?: DeliveryFindOneOptions,
   ) => DeliveryShardObservationStream;
 }> = Object.freeze({
-  probePickUp(
-    client: DeliveryClient,
-    shardIndex: ShardIndex,
-    workerId: DeliveryWorkerId,
-    options: DeliveryMutationOptions,
-  ): Promise<RemoteShardProbe> {
-    const probe = deliveryClientProbes.get(client);
-    if (probe === undefined) throw new TypeError("Delivery client probe access is unavailable.");
-    return probe(shardIndex, workerId, options);
-  },
   observeOnce(
     client: DeliveryClient,
     options: DeliveryFindOneOptions = {},

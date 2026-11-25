@@ -16,9 +16,8 @@ import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 
 import {
-  PickUpShardSchema,
+  DeliveryShardPickupSchema,
   ReleaseExpiredSessionsSchema,
-  ReleaseShardSchema,
   RemoveMessageSchema,
   WriteMessagesSchema,
   WriteMessageSchema,
@@ -32,7 +31,7 @@ import {
 import { InMemoryDeliveryState } from "../../src/core/in-memory-delivery-state.js";
 import { InboxHandlers } from "../../src/core/inbox-service.js";
 import { MutationAdmission } from "../../src/core/mutation-admission.js";
-import { ShardHandlers } from "../../src/core/shard-service.js";
+import { ShardSessionRuntime } from "../../src/core/shard-service.js";
 import { domainMessage } from "./domain-message.js";
 
 const context = { signal: new AbortController().signal } as never;
@@ -41,46 +40,53 @@ const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worke
 const message = (uuid: string) => domainMessage(uuid, shard);
 
 describe("Shard transition notifications", () => {
-  it("notifies initial pickup, stale takeover, explicit release, and expired release in admission order", async () => {
-    let now = 0;
+  it("notifies pickup, renewal, release, and explicit expiry in admission order", async () => {
+    let nanos = 0;
     const transitions: string[] = [];
-    const shards = ShardHandlers.create(
+    const sessions = new ShardSessionRuntime(
       new InMemoryDeliveryState(),
       new MutationAdmission(),
-      () => now,
+      () => ({ $typeName: "google.protobuf.Timestamp", seconds: 1n, nanos }),
       10,
       (value) => transitions.push(`${String(value.index)}/${String(value.ofTotal)}`),
     );
-    const pick = () => shards.pickShard(create(PickUpShardSchema, { shard, worker }), context);
-    await pick();
-    now = 11;
-    await pick();
-    await shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
-    await pick();
-    now = 21;
-    await shards.releaseSessions(
+    const request = create(DeliveryShardPickupSchema, { shard, worker });
+    const first = await sessions.managed.pickShardRaw(request, context);
+    if (first.result.case !== "pickedUp") throw new Error("Expected a session.");
+    nanos = 1_000_000;
+    await sessions.managed.renewShardSession(first.result.value, context);
+    await sessions.managed.releaseShardSession(first.result.value, context);
+    await sessions.managed.pickShardRaw(request, context);
+    nanos = 12_000_000;
+    await sessions.raw.releaseSessions(
       create(ReleaseExpiredSessionsSchema, {
         inactivityPeriod: { seconds: 0n, nanos: 10_000_000 },
       }),
       context,
     );
     expect(transitions).toEqual(["0/1", "0/1", "0/1", "0/1", "0/1"]);
+    sessions.close();
   });
 
-  it("does not notify failed pickup or missing release", async () => {
+  it("does not notify no-work or conflicting managed pickup", async () => {
     const transitions: number[] = [];
-    const shards = ShardHandlers.create(
+    const sessions = new ShardSessionRuntime(
       new InMemoryDeliveryState(),
       new MutationAdmission(),
-      () => 0,
-      0,
+      () => ({ $typeName: "google.protobuf.Timestamp", seconds: 1n, nanos: 0 }),
+      60_000,
       (value) => transitions.push(value.index),
     );
-    const request = create(PickUpShardSchema, { shard, worker });
-    await shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
-    await shards.pickShard(request, context);
-    await shards.pickShard(request, context);
+    const request = create(DeliveryShardPickupSchema, { shard, worker });
+    expect((await sessions.managed.pickShardForDelivery(request, context)).result.case).toBe(
+      "noWork",
+    );
+    await sessions.managed.pickShardRaw(request, context);
+    expect((await sessions.managed.pickShardForDelivery(request, context)).result.case).toBe(
+      "busy",
+    );
     expect(transitions).toEqual([0]);
+    sessions.close();
   });
 });
 

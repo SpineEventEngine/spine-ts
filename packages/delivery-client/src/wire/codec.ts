@@ -31,7 +31,7 @@ import {
   type ExpiredSession,
   type ShardInfo,
   type ShardInfoUpdate,
-  type ShardPickedUp,
+  type DeliverySessionHandle,
   ShardStatus,
 } from "@spine-event-engine/proto/delivery-server";
 import {
@@ -696,7 +696,7 @@ type DeliveryShardCodecApi = Readonly<{
    * @returns The immutable exclusive session.
    */
   decodePicked(
-    value: ShardPickedUp,
+    value: DeliverySessionHandle,
     expectedShard: ShardIndex,
     expectedWorker: DeliveryWorkerId,
   ): RemoteShardSession;
@@ -731,6 +731,14 @@ type DeliveryShardCodecApi = Readonly<{
    * @returns The decoded date.
    */
   date(value: { seconds: bigint; nanos: number }): Date;
+
+  /**
+   * Copies a validated full-precision timestamp.
+   *
+   * @param value Supplies the wire timestamp.
+   * @returns A detached timestamp.
+   */
+  timestamp(value: { seconds: bigint; nanos: number }): Timestamp;
 
   /**
    * Decodes a shard status.
@@ -773,7 +781,7 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     if (value.index === undefined || !Number.isSafeInteger(value.messages) || value.messages < 0)
       throw DeliveryRequestCodec.protocol();
     const lastPicked =
-      value.lastPicked === undefined ? undefined : DeliveryShardCodec.date(value.lastPicked);
+      value.lastPicked === undefined ? undefined : DeliveryShardCodec.timestamp(value.lastPicked);
     return DeliveryValues.freeze({
       shard: DeliveryShardCodec.decode(value.index),
       status: DeliveryShardCodec.status(value.status),
@@ -798,7 +806,7 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     const lastPicked =
       value.whenLastPicked === undefined
         ? undefined
-        : DeliveryShardCodec.date(value.whenLastPicked);
+        : DeliveryShardCodec.timestamp(value.whenLastPicked);
     return DeliveryValues.freeze({
       shard: DeliveryShardCodec.decode(value.index),
       status: DeliveryShardCodec.status(value.newStatus),
@@ -856,11 +864,21 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
    * @returns The immutable exclusive session.
    */
   decodePicked(
-    value: ShardPickedUp,
+    value: DeliverySessionHandle,
     expectedShard: ShardIndex,
     expectedWorker: DeliveryWorkerId,
   ): RemoteShardSession {
-    if (value.shard === undefined || value.worker === undefined || value.whenPicked === undefined)
+    if (
+      value.shard === undefined ||
+      value.worker === undefined ||
+      value.whenPicked === undefined ||
+      value.lifetime === undefined ||
+      !value.sessionId.trim() ||
+      value.lifetime.seconds < 0n ||
+      value.lifetime.nanos < 0 ||
+      value.lifetime.nanos >= 1_000_000_000 ||
+      (value.lifetime.seconds === 0n && value.lifetime.nanos === 0)
+    )
       throw DeliveryRequestCodec.protocol();
     const shard = DeliveryShardCodec.decode(value.shard);
     const worker = DeliveryShardCodec.decodeWorker(value.worker);
@@ -875,7 +893,9 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
       kind: "EXCLUSIVE",
       shard,
       worker,
-      whenPicked: DeliveryShardCodec.date(value.whenPicked),
+      whenPicked: DeliveryShardCodec.timestamp(value.whenPicked),
+      sessionId: value.sessionId,
+      lifetime: value.lifetime,
     });
   },
 
@@ -922,8 +942,8 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
       kind: "EXCLUSIVE",
       shard: DeliveryShardCodec.decode(value.shard),
       worker: DeliveryShardCodec.decodeWorker(value.worker),
-      whenPicked: DeliveryShardCodec.date(value.whenPicked),
-      whenReleased: DeliveryShardCodec.date(value.whenReleased),
+      whenPicked: DeliveryShardCodec.timestamp(value.whenPicked),
+      whenReleased: DeliveryShardCodec.timestamp(value.whenReleased),
     });
   },
 
@@ -941,6 +961,24 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     const result = new Date(millis);
     if (Number.isNaN(result.getTime())) throw DeliveryRequestCodec.protocol();
     return result;
+  },
+
+  /**
+   * Copies a validated full-precision timestamp.
+   *
+   * @param value Supplies the wire timestamp.
+   * @returns A detached timestamp.
+   */
+  timestamp(value: { seconds: bigint; nanos: number }): Timestamp {
+    if (
+      !Number.isInteger(value.nanos) ||
+      value.nanos < 0 ||
+      value.nanos >= 1_000_000_000 ||
+      value.seconds < -62_135_596_800n ||
+      value.seconds > 253_402_300_799n
+    )
+      throw DeliveryRequestCodec.protocol();
+    return create(TimestampSchema, { seconds: value.seconds, nanos: value.nanos });
   },
 
   /**

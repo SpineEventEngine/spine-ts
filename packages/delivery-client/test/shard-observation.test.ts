@@ -16,8 +16,8 @@ import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { ShardIndex } from "@spine-event-engine/server";
 import {
-  LiquorPickUpOutcomeSchema,
-  ShardPickedUpSchema,
+  DeliveryShardPickupOutcomeSchema,
+  DeliverySessionHandleSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
   ShardInfoListSchema,
@@ -60,7 +60,7 @@ describe("DeliveryClient shard observation", () => {
     const snapshot = await client.shardSnapshot();
 
     expect(snapshot).toMatchObject([{ status: "PICKED", messages: 2 }]);
-    expect(snapshot[0]?.lastPicked).toEqual(new Date(1_000));
+    expect(snapshot[0]?.lastPicked).toMatchObject({ seconds: 1n, nanos: 0 });
     expect(Object.isFrozen(snapshot)).toBe(true);
     expect(Object.isFrozen(snapshot[0])).toBe(true);
     expect(fake.unary).toHaveBeenCalledTimes(2);
@@ -586,21 +586,23 @@ describe("DeliveryClient shard observation", () => {
       await expect(client.shardSnapshot()).rejects.toBeInstanceOf(DeliveryProtocolError);
     }
     fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: { case: "pickedUp", value: create(ShardPickedUpSchema) },
+      create(DeliveryShardPickupOutcomeSchema, {
+        result: { case: "pickedUp", value: create(DeliverySessionHandleSchema) },
       }),
     );
     await expect(client.pickUp(ShardIndex.single(), worker)).rejects.toBeInstanceOf(
       DeliveryProtocolError,
     );
     fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
+      create(DeliveryShardPickupOutcomeSchema, {
+        result: {
           case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
+          value: create(DeliverySessionHandleSchema, {
             shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
             worker: create(WorkerIdSchema, { nodeId: { value: "wrong" }, value: "worker" }),
             whenPicked: { seconds: 1n, nanos: 0 },
+            sessionId: "fixture-session",
+            lifetime: { seconds: 60n, nanos: 0 },
           }),
         },
       }),
@@ -650,7 +652,12 @@ describe("DeliveryClient shard observation", () => {
     await expect(registry.release(session)).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
     await expect(registry.release(session)).resolves.toBe(false);
     registry.reconcile(
-      Object.freeze({ shard, status: "PICKED" as const, messages: 0, lastPicked: new Date(1_000) }),
+      Object.freeze({
+        shard,
+        status: "PICKED" as const,
+        messages: 0,
+        lastPicked: { $typeName: "google.protobuf.Timestamp" as const, seconds: 1n, nanos: 0 },
+      }),
     );
     await expect(registry.release(session)).resolves.toBe(false);
     registry.reconcile(Object.freeze({ shard, status: "NOT_PICKED" as const, messages: 0 }));
@@ -695,7 +702,7 @@ describe("DeliveryClient shard observation", () => {
         kind: "EXCLUSIVE",
         shard: ShardIndex.single(),
         worker: { nodeId: "node", value: "worker" },
-        whenPicked: new Date("invalid"),
+        whenPicked: new Date("invalid") as never,
       }),
     ).rejects.toThrow("Delivery shard session is invalid.");
     expect(fake.unary).not.toHaveBeenCalled();

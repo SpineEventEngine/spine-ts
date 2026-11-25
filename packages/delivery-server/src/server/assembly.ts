@@ -18,6 +18,7 @@ import type { ShardIndex } from "@spine-event-engine/proto/delivery";
 import {
   AdminService,
   InboxService,
+  ManagedShardService,
   ShardObservingService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
@@ -26,7 +27,7 @@ import { AdminPublisher } from "../admin/admin-service.js";
 import { InMemoryDeliveryState } from "../core/in-memory-delivery-state.js";
 import { InboxHandlers } from "../core/inbox-service.js";
 import { MutationAdmission } from "../core/mutation-admission.js";
-import { ShardHandlers } from "../core/shard-service.js";
+import { ShardSessionRuntime } from "../core/shard-service.js";
 import { ShardObserving } from "../core/shard-observing-service.js";
 import { DEFAULT_DELIVERY_STATE_LIMITS } from "../core/limits.js";
 import type { DeliveryConfiguration } from "./config.js";
@@ -46,6 +47,11 @@ export interface DeliveryAssembly {
    * Provides Shard handlers backed by the shared delivery state.
    */
   readonly shards: ServiceImpl<typeof ShardService>;
+
+  /**
+   * Serves typed raw and managed delivery sessions.
+   */
+  readonly managed: ServiceImpl<typeof ManagedShardService>;
 
   /**
    * Streams advisory notifications for free pending shards.
@@ -71,6 +77,11 @@ export interface DeliveryAssembly {
    * Clears work-observation streams and reminders.
    */
   closeObserving(): void;
+
+  /**
+   * Cancels all session expiry timers.
+   */
+  closeSessions(): void;
 }
 
 /**
@@ -94,30 +105,29 @@ export const DeliveryAssembly: Readonly<{
     const admission = new MutationAdmission();
     const admin = AdminPublisher.create(state);
     const observing = ShardObserving.create(state, configuration.reminderIntervalMs ?? 10_000);
-    const onStoredChange = (shard: ShardIndex) => {
-      admin.publish(shard);
-    };
-    const onWorkChange = (shard: ShardIndex) => {
-      observing.changed(shard);
-    };
+    const onStoredChange = admin.publish.bind(admin);
+    const onWorkChange = observing.changed.bind(observing);
     const onShardTransition = (shard: ShardIndex) => {
       admin.publish(shard);
       observing.changed(shard);
     };
+    const sessions = new ShardSessionRuntime(
+      state,
+      admission,
+      () => Time.currentTime(),
+      configuration.processingTimeoutMs ?? 60_000,
+      onShardTransition,
+    );
     return Object.freeze({
       inbox: InboxHandlers.create(state, admission, onStoredChange, onWorkChange),
-      shards: ShardHandlers.create(
-        state,
-        admission,
-        () => Time.currentTimeMillis(),
-        configuration.processingTimeoutMs ?? 0,
-        onShardTransition,
-      ),
+      shards: sessions.raw,
+      managed: sessions.managed,
       admin: admin.service,
       observing: observing.service,
       closeAdmission: admission.close.bind(admission),
       closeAdmin: admin.close.bind(admin),
       closeObserving: observing.close.bind(observing),
+      closeSessions: sessions.close.bind(sessions),
     });
   },
 });
@@ -140,7 +150,7 @@ type DeliveryAssemblyConfiguration = Partial<
  * Default settings for listener-free assembly tests and callers.
  */
 const DEFAULT_ASSEMBLY_CONFIGURATION: DeliveryAssemblyConfiguration = Object.freeze({
-  processingTimeoutMs: 0,
+  processingTimeoutMs: 60_000,
   reminderIntervalMs: 10_000,
   ...DEFAULT_DELIVERY_STATE_LIMITS,
 });

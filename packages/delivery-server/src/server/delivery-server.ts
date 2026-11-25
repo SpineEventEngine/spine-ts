@@ -22,6 +22,7 @@ import {
   AdminService,
   Health,
   InboxService,
+  ManagedShardService,
   ShardObservingService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
@@ -231,6 +232,7 @@ export class DeliveryServer {
       closeAdmin: () => {
         this.#assembly?.closeAdmin();
         this.#assembly?.closeObserving();
+        this.#assembly?.closeSessions();
       },
       closeNetwork: async () => {
         try {
@@ -256,14 +258,13 @@ export class DeliveryServer {
     const server = http2.createServer(
       connectNodeAdapter({
         routes: (router) => {
+          const health = HealthHandlers.create(() => this.#serving);
           router.service(InboxService, core.inbox);
           router.service(ShardService, core.shards);
+          router.service(ManagedShardService, core.managed);
           router.service(ShardObservingService, core.observing);
           router.service(AdminService, core.admin);
-          router.service(
-            Health,
-            HealthHandlers.create(() => this.#serving),
-          );
+          router.service(Health, health);
         },
         readMaxBytes: this.#configuration.maxInboundMessageBytes,
       }),

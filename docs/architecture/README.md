@@ -781,8 +781,8 @@ normally also completes delivery and is followed by delivered acknowledgement.
 A successful handler with failed acknowledgement gets finite
 acknowledgement-only retries. The supervisor
 rescans pending shards every 10 seconds by default, separately from the
-60-second stale-session threshold and the configurable Delivery server processing
-timeout, which is disabled by default. These [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers)
+60-second stale-session threshold and the configurable Delivery server
+session lifetime, which defaults to 60 seconds. These [recovery timers](../../packages/delivery-server/REFERENCE.md#session-lifetime-and-work-reminders)
 do not guarantee a delivery or takeover deadline. The ordinary Delivery
 supervisor adds no persisted attempts, quarantine, receipts, markers, or dead-letter storage.
 Callback snapshots copy `Date` values

@@ -23,13 +23,14 @@ import {
 } from "../src/index.js";
 
 describe("InMemoryDelivery", () => {
-  it("creates an isolated core with only Inbox and Shard handler seams", () => {
+  it("creates an isolated core with typed session handlers and cleanup", () => {
     const options: DeliveryCoreOptions = {};
     const core: DeliveryCore = InMemoryDelivery.create(options);
 
     expect(core.inbox).toBeDefined();
     expect(core.shards).toBeDefined();
-    expect("close" in core).toBe(false);
+    expect(core.managed).toBeDefined();
+    core.close();
   });
 });
 
