@@ -22,6 +22,18 @@ import { PrivateCapacityClient } from "../../src/server/private-capacity-client.
 import { PrivateCapacityListener } from "../../src/server/private-capacity-listener.js";
 
 describe("private capacity listener", () => {
+  it("keeps the private capacity port closed when shutdown precedes startup", async () => {
+    const listener = new PrivateCapacityListener(
+      new CapacityLedger({ maxRetainedMessages: 1, maxRetainedBytes: 50, maxTrackedShards: 1 }),
+      new Map(),
+    );
+    expect(() => listener.baseUrl).toThrow("has not started");
+    await listener.close();
+    await expect(listener.start()).rejects.toThrow("is closed");
+    await listener.close();
+    expect(() => listener.baseUrl).toThrow("has not started");
+  });
+
   it("reserves capacity only for the matching child credential and generation", async () => {
     const ledger = new CapacityLedger({
       maxRetainedMessages: 1,

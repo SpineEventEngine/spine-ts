@@ -12,10 +12,16 @@
  * the License.
  */
 
+import { createServer } from "node:http2";
+
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
-import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
+import {
+  connectNodeAdapter,
+  createGrpcTransport,
+  Http2SessionManager,
+} from "@connectrpc/connect-node";
 import {
   AdminService,
   DeliveryShardPickupSchema,
@@ -35,6 +41,7 @@ import {
   ShardIndexSchema,
   WorkerIdSchema,
 } from "@spine-event-engine/proto/delivery";
+import { PrivateChildService } from "@spine-event-engine/proto/generated/spine/delivery/session/private_delivery_pb.js";
 import { describe, expect, it, vi } from "vitest";
 
 import { domainMessage } from "../core/domain-message.js";
@@ -293,6 +300,41 @@ describe("multi-process public Delivery endpoint", () => {
     } finally {
       proxy.close();
       await pool.close();
+    }
+  });
+
+  it("keeps shards with equal index and different totals separate on the same child", async () => {
+    const server = new DeliveryServer({ port: 0, processCount: 2 });
+    await server.start();
+    const sessions = new Http2SessionManager(server.baseUrl);
+    const transport = createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: sessions });
+    const inbox = createClient(InboxService, transport);
+    const admin = createClient(AdminService, transport);
+    const managed = createClient(ManagedShardService, transport);
+    const guarded = createClient(GuardedInboxService, transport);
+    const smaller = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    const larger = create(ShardIndexSchema, { index: 1, ofTotal: 3 });
+    const first = domainMessage("same-uuid", smaller);
+    const second = domainMessage("same-uuid", larger);
+    const worker = create(WorkerIdSchema, { nodeId: { value: "replica" }, value: "pass" });
+    try {
+      await inbox.writeOne({ message: second });
+      await inbox.writeOne({ message: first });
+      const snapshot = await admin.getShardInfo({});
+      expect(snapshot.shards.map((info) => info.index)).toEqual([smaller, larger]);
+
+      const session = pickedHandle(await managed.pickShardForDelivery({ shard: smaller, worker }));
+      await expect(guarded.acknowledge({ session, expected: second })).rejects.toMatchObject({
+        code: Code.InvalidArgument,
+      });
+      await expect(guarded.acknowledge({ session, expected: first })).resolves.toMatchObject({
+        matched: true,
+      });
+      expect((await inbox.newestMessageToDeliver(larger)).message).toEqual(second);
+      expect((await inbox.newestMessageToDeliver(smaller)).message).toBeUndefined();
+    } finally {
+      sessions.abort();
+      await server.close();
     }
   });
 
@@ -755,6 +797,76 @@ describe("multi-process public Delivery endpoint", () => {
       blocked = false;
       reserveSpy.mockRestore();
       proxy.close();
+      await pool.close();
+    }
+  });
+
+  it("retries the barrier after lost replies without repeating a committed write", async () => {
+    const pool = new DeliveryChildPool(1, DeliveryConfig.resolve({ port: 0 }));
+    await pool.start();
+    const child = pool.endpoint(0);
+    const privateSessions = new Http2SessionManager(child.baseUrl);
+    const transport = createGrpcTransport({
+      baseUrl: child.baseUrl,
+      sessionManager: privateSessions,
+    });
+    const inbox = createClient(InboxService, transport);
+    const control = createClient(PrivateChildService, transport);
+    const writes: string[] = [];
+    const barriers: bigint[] = [];
+    const settled = Promise.withResolvers<undefined>();
+    const relay = createServer(
+      connectNodeAdapter({
+        routes(router) {
+          router.service(InboxService, {
+            async writeOne(request, context) {
+              writes.push(request.message?.id?.uuid ?? "");
+              await inbox.writeOne(request, { headers: context.requestHeader });
+              throw new ConnectError("Reply lost after commit.", Code.Unavailable);
+            },
+          });
+          router.service(PrivateChildService, {
+            async barrier(request, context) {
+              barriers.push(request.sequence);
+              if (barriers.length < 3)
+                throw new ConnectError("Barrier unavailable.", Code.Unavailable);
+              const response = await control.barrier(request, { headers: context.requestHeader });
+              settled.resolve(undefined);
+              return response;
+            },
+          });
+        },
+      }),
+    );
+    const proxy = new DeliveryParentProxy(pool);
+    try {
+      await new Promise<void>((resolve) => relay.listen(0, "127.0.0.1", resolve));
+      const address = relay.address();
+      if (address === null || typeof address === "string") throw new Error("Missing relay port.");
+      vi.spyOn(pool, "endpoint").mockReturnValue({
+        ...child,
+        baseUrl: `http://127.0.0.1:${String(address.port)}`,
+      });
+      const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
+      const row = domainMessage("one-committed-write", shard);
+      if (row.id === undefined) throw new Error("Missing InboxMessage ID.");
+      const context = { signal: new AbortController().signal, timeoutMs: () => undefined } as never;
+      await expect(
+        proxy.inbox().writeOne(create(WriteMessageSchema, { message: row }), context),
+      ).rejects.toMatchObject({ code: Code.Unavailable });
+      await settled.promise;
+      const found = await inbox.findOne(row.id, { headers: { authorization: child.credential } });
+      expect(found.message).toEqual(row);
+      expect(writes).toEqual([row.id.uuid]);
+      expect(barriers).toEqual([1n, 1n, 1n]);
+    } finally {
+      proxy.close();
+      privateSessions.abort();
+      await new Promise<void>((resolve) =>
+        relay.close(() => {
+          resolve();
+        }),
+      );
       await pool.close();
     }
   });

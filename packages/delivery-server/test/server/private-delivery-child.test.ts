@@ -39,6 +39,29 @@ import { PrivateCapacityListener } from "../../src/server/private-capacity-liste
 import { PrivateDeliveryChild } from "../../src/server/private-delivery-child.js";
 
 describe("private delivery child", () => {
+  it("keeps a retired child from binding a private port after shutdown", async () => {
+    const configuration = DeliveryConfig.resolve({ port: 0 });
+    const capacity = new PrivateCapacityListener(new CapacityLedger(configuration), new Map());
+    await capacity.start();
+    const child = new PrivateDeliveryChild({
+      slot: 0,
+      generation: "first",
+      credential: "Bearer child",
+      capacityCredential: "Bearer capacity",
+      capacityBaseUrl: capacity.baseUrl,
+      configuration,
+    });
+    try {
+      expect(() => child.baseUrl).toThrow("has not started");
+      await child.close();
+      await expect(child.start()).rejects.toThrow("is closed");
+      expect(() => child.baseUrl).toThrow("has not started");
+    } finally {
+      await child.close();
+      await capacity.close();
+    }
+  });
+
   it("ends a generation after an autonomous expiry report is rejected permanently", async () => {
     const configuration = { ...DeliveryConfig.resolve({ port: 0 }), processingTimeoutMs: 20 };
     const ledger = new CapacityLedger(configuration);

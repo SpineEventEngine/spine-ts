@@ -60,6 +60,61 @@ describe("typed Shard sessions", () => {
     }
   });
 
+  it("keeps a long session through the first Node timer and expires at the full lifetime", async () => {
+    vi.useFakeTimers();
+    const firstTimer = 2_147_483_647;
+    const core = InMemoryDelivery.create({ processingTimeoutMs: firstTimer + 10 });
+    const competing = create(DeliveryShardPickupSchema, { shard, worker: rival });
+    try {
+      const first = pickedHandle(await core.managed.pickShardRaw(request, context));
+      await vi.advanceTimersByTimeAsync(firstTimer);
+      expect((await core.managed.pickShardRaw(competing, context)).result?.case).toBe("busy");
+      await vi.advanceTimersByTimeAsync(10);
+      const second = pickedHandle(await core.managed.pickShardRaw(competing, context));
+      expect(second.sessionId).not.toBe(first.sessionId);
+    } finally {
+      core.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the live session when a renewal or release has an invalid handle", async () => {
+    const core = InMemoryDelivery.create();
+    try {
+      const active = pickedHandle(await core.managed.pickShardRaw(request, context));
+      await expect(
+        core.managed.renewShardSession({ ...active, sessionId: " " }, context),
+      ).rejects.toMatchObject({ code: Code.InvalidArgument });
+      await expect(
+        core.managed.releaseShardSession({ ...active, whenPicked: undefined }, context),
+      ).rejects.toMatchObject({ code: Code.InvalidArgument });
+      const renewed = await core.managed.renewShardSession(active, context);
+      expect(renewed.sessionId).toBe(active.sessionId);
+    } finally {
+      core.close();
+    }
+  });
+
+  it("skips a shard with a released session and a pending row during inactivity cleanup", async () => {
+    const core = InMemoryDelivery.create();
+    try {
+      const row = domainMessage("waiting-after-release", shard);
+      await core.inbox.writeOne(create(WriteMessageSchema, { message: row }), context);
+      const handle = pickedHandle(await core.managed.pickShardForDelivery(request, context));
+      await core.managed.releaseShardSession(handle, context);
+      const free = await core.shards.releaseSessions(
+        create(ReleaseExpiredSessionsSchema, {
+          inactivityPeriod: { seconds: 0n, nanos: 1_000 },
+        }),
+        context,
+      );
+      expect(free.shard).toEqual([]);
+      expect((await core.inbox.newestMessageToDeliver(shard, context)).message).toEqual(row);
+    } finally {
+      core.close();
+    }
+  });
+
   it("returns no work for a free empty managed shard but grants a raw handle", async () => {
     const core = InMemoryDelivery.create();
     expect((await core.managed.pickShardForDelivery(request, context)).result?.case).toBe("noWork");
