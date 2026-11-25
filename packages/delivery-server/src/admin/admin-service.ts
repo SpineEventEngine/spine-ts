@@ -74,6 +74,7 @@ export const AdminPublisher: Readonly<{
 }> = Object.freeze({
   create: (state: InMemoryDeliveryState): AdminPublisherHandle => {
     const subscribers = new Set<Subscriber>();
+    let closed = false;
     const update = (shard: ShardIndex): SubscriptionResponse =>
       create(SubscriptionResponseSchema, {
         value: {
@@ -85,11 +86,14 @@ export const AdminPublisher: Readonly<{
       get subscriberCount() {
         return subscribers.size;
       },
-      service: AdminSubscriptions.create(state, subscribers, update),
+      service: AdminSubscriptions.create(state, subscribers, update, () => closed),
       publish(shard) {
+        if (closed) return;
         for (const subscriber of subscribers) subscriber.offer(shard);
       },
       close() {
+        if (closed) return;
+        closed = true;
         for (const subscriber of subscribers) subscriber.close();
         subscribers.clear();
       },
@@ -107,17 +111,19 @@ const AdminSubscriptions = Object.freeze({
    * @param state Supplies current shard state.
    * @param subscribers Tracks active streams.
    * @param update Reads the latest full shard observation.
+   * @param isClosed Reports terminal publisher closure.
    * @returns The Admin service handlers.
    */
   create(
     state: InMemoryDeliveryState,
     subscribers: Set<Subscriber>,
     update: (shard: ShardIndex) => SubscriptionResponse,
+    isClosed: () => boolean,
   ): ServiceImpl<typeof AdminService> {
     return {
       getShardInfo: () => AdminSnapshots.snapshot(state),
       subscribeToShardUpdates: (_request, context) =>
-        AdminStreams.observe(state, subscribers, update, context),
+        AdminStreams.observe(state, subscribers, update, isClosed, context),
     };
   },
 });
@@ -132,6 +138,7 @@ const AdminStreams = Object.freeze({
    * @param state Supplies current shard state.
    * @param subscribers Tracks active streams.
    * @param update Reads the latest full shard observation.
+   * @param isClosed Reports terminal publisher closure.
    * @param context Supplies cancellation for the stream.
    * @returns The acknowledgement followed by shard updates.
    */
@@ -139,19 +146,23 @@ const AdminStreams = Object.freeze({
     state: InMemoryDeliveryState,
     subscribers: Set<Subscriber>,
     update: (shard: ShardIndex) => SubscriptionResponse,
+    isClosed: () => boolean,
     context: Parameters<ServiceImpl<typeof AdminService>["subscribeToShardUpdates"]>[1],
   ): AsyncIterable<SubscriptionResponse> {
+    if (isClosed() || context.signal.aborted) return;
+    const onAbort = () => {
+      subscriber.cancel();
+    };
     const subscriber = new Subscriber(update, () => {
       subscribers.delete(subscriber);
+      context.signal.removeEventListener("abort", onAbort);
     });
-    const onAbort = subscriber.cancel.bind(subscriber);
     context.signal.addEventListener("abort", onAbort, { once: true });
     try {
       subscribers.add(subscriber);
       const replay = [...state.knownShards()];
       subscriber.setReplay(replay);
       yield create(SubscriptionResponseSchema, { value: { case: "created", value: true } });
-      if (context.signal.aborted) return;
       for (const shard of replay) {
         const frame = subscriber.replay(shard);
         if (frame !== undefined) yield frame;
@@ -162,7 +173,6 @@ const AdminStreams = Object.freeze({
         yield next;
       }
     } finally {
-      context.signal.removeEventListener("abort", onAbort);
       subscriber.close();
     }
   },
@@ -329,12 +339,15 @@ class Subscriber {
     }
     const frame = this.#update(shard);
     const signature = Buffer.from(toBinary(SubscriptionResponseSchema, frame)).toString("base64");
-    if (this.#lastState.get(key) === signature) return undefined;
-    this.#lastState.set(key, signature);
     const empty =
       frame.value.case === "update" &&
       frame.value.value.newMessagesCount === 0 &&
       frame.value.value.newStatus === ShardStatus.NOT_PICKED;
+    if (this.#lastState.get(key) === signature) {
+      if (empty) this.#lastState.delete(key);
+      return undefined;
+    }
+    this.#lastState.set(key, signature);
     const entry: ShardCooldown = {
       shard: DeliveryShards.copy(shard),
       dirty: false,

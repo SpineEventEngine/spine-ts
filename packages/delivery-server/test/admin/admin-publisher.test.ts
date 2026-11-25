@@ -51,7 +51,7 @@ describe("Admin publisher", () => {
     await requireReturn(stream)(undefined);
   });
 
-  it("completes immediately after acknowledging an already aborted caller", async () => {
+  it("does not register or acknowledge a call aborted before subscription starts", async () => {
     const controller = new AbortController();
     controller.abort();
     const publisher = AdminPublisher.create(new InMemoryDeliveryState());
@@ -59,10 +59,9 @@ describe("Admin publisher", () => {
       .subscribeToShardUpdates(create(EmptySchema), { signal: controller.signal } as never)
       [Symbol.asyncIterator]();
 
-    await expect(stream.next()).resolves.toMatchObject({
-      value: { value: { case: "created", value: true } },
-    });
     await expect(stream.next()).resolves.toEqual({ done: true, value: undefined });
+    expect(publisher.subscriberCount).toBe(0);
+    publisher.close();
   });
 
   it("completes a waiting stream during publisher shutdown", async () => {
@@ -74,6 +73,67 @@ describe("Admin publisher", () => {
     const waiting = stream.next();
     publisher.close();
     await expect(waiting).resolves.toMatchObject({ done: true });
+  });
+
+  it("keeps close terminal for later idle and pending subscribers", async () => {
+    for (const seeded of [false, true]) {
+      const state = new InMemoryDeliveryState();
+      if (seeded) {
+        const row = domainMessage("pending", shard);
+        state.putAll([{ message: row, bytes: encodedBytes(row) }]);
+      }
+      const publisher = AdminPublisher.create(state);
+      publisher.close();
+      const stream = publisher.service
+        .subscribeToShardUpdates(create(EmptySchema), context)
+        [Symbol.asyncIterator]();
+      await expect(stream.next()).resolves.toEqual({ done: true, value: undefined });
+      publisher.publish(shard);
+      expect(publisher.subscriberCount).toBe(0);
+    }
+  });
+
+  it("detaches a paused subscriber's abort listener when the publisher closes", async () => {
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, "removeEventListener");
+    const publisher = AdminPublisher.create(new InMemoryDeliveryState());
+    const stream = publisher.service
+      .subscribeToShardUpdates(create(EmptySchema), { signal: controller.signal } as never)
+      [Symbol.asyncIterator]();
+    await stream.next();
+    expect(publisher.subscriberCount).toBe(1);
+    publisher.close();
+    expect(publisher.subscriberCount).toBe(0);
+    expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+    await expect(stream.next()).resolves.toEqual({ done: true, value: undefined });
+  });
+
+  it("retires a final empty state after equivalent changes during cooldown", async () => {
+    vi.useFakeTimers();
+    const state = new InMemoryDeliveryState();
+    const publisher = AdminPublisher.create(state);
+    const stream = publisher.service
+      .subscribeToShardUpdates(create(EmptySchema), context)
+      [Symbol.asyncIterator]();
+    await stream.next();
+    publisher.publish(shard);
+    await expect(stream.next()).resolves.toMatchObject({
+      value: { value: { case: "update", value: { newMessagesCount: 0 } } },
+    });
+    const row = domainMessage("churn", shard);
+    state.putAll([{ message: row, bytes: encodedBytes(row) }]);
+    publisher.publish(shard);
+    state.delete(row);
+    publisher.publish(shard);
+    await vi.advanceTimersByTimeAsync(25);
+    expect(vi.getTimerCount()).toBe(0);
+    publisher.publish(shard);
+    await expect(stream.next()).resolves.toMatchObject({
+      value: { value: { case: "update", value: { newMessagesCount: 0 } } },
+    });
+    await stream.return?.();
+    publisher.close();
+    vi.useRealTimers();
   });
 
   it("rejects the 101st distinct pending shard update with the stable resource error", async () => {
