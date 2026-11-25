@@ -17,12 +17,17 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   InboxService,
+  WriteMessageSchema,
   ManagedShardService,
   GuardedInboxService,
   ShardService,
   type DeliveryShardPickupOutcome,
 } from "@spine-event-engine/proto/delivery-server";
-import { InboxMessageSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
+import {
+  InboxMessageIdSchema,
+  InboxMessageSchema,
+  WorkerIdSchema,
+} from "@spine-event-engine/proto/delivery";
 import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Time } from "@spine-event-engine/core/time";
@@ -54,7 +59,7 @@ describe("in-memory delivery core response loss", () => {
       InboxMessageSchema,
       new Uint8Array([...toBinary(InboxMessageSchema, wire), 0x98, 0x06, 0x7b]),
     );
-    await core.inbox.writeOne({ message: unknown }, context);
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: unknown }), context);
     const registry = new RemoteWorkRegistry(client);
     const session = await registry.pickUp(
       ShardIndex.single(),
@@ -66,17 +71,17 @@ describe("in-memory delivery core response loss", () => {
     expect((await inbox.markDelivered(read, undefined, session))?.status).toBe("DELIVERED");
     const retained = (
       await core.inbox.findOne(
-        {
+        create(InboxMessageIdSchema, {
           index: unknown.id?.index,
           uuid: unknown.id?.uuid ?? "",
-        },
+        }),
         context,
       )
     ).message;
-    expect(retained?.$unknown).toEqual(unknown.$unknown);
+    expect(retained && create(InboxMessageSchema, retained).$unknown).toEqual(unknown.$unknown);
 
     const duplicate = DeliveryMessageCodec.encode(domainMessage("wire-duplicate"));
-    await core.inbox.writeOne({ message: duplicate }, context);
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: duplicate }), context);
     const readDuplicate = await client.findOne({
       value: "wire-duplicate",
       shard: ShardIndex.single(),
@@ -85,7 +90,7 @@ describe("in-memory delivery core response loss", () => {
     const changedDuplicate = clone(InboxMessageSchema, duplicate);
     if (changedDuplicate.whenReceived === undefined) throw new Error("Expected receive time.");
     changedDuplicate.whenReceived.nanos += 1;
-    await core.inbox.writeOne({ message: changedDuplicate }, context);
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: changedDuplicate }), context);
     expect(await inbox.removeDuplicate(readDuplicate, undefined, session)).toBe(false);
 
     const expired = DeliveryMessageCodec.encode({
@@ -93,14 +98,14 @@ describe("in-memory delivery core response loss", () => {
       status: "DELIVERED",
       keepUntil: new Date(0),
     });
-    await core.inbox.writeOne({ message: expired }, context);
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: expired }), context);
     const readExpired = await client.findOne({ value: "wire-expired", shard: ShardIndex.single() });
     if (readExpired === undefined) throw new Error("Expected delivered read.");
     const changedExpired = fromBinary(
       InboxMessageSchema,
       new Uint8Array([...toBinary(InboxMessageSchema, expired), 0x98, 0x06, 0x7b]),
     );
-    await core.inbox.writeOne({ message: changedExpired }, context);
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: changedExpired }), context);
     expect(await inbox.removeDelivered(readExpired, undefined, session)).toBe(false);
     core.close();
   });

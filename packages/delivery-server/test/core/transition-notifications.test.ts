@@ -32,6 +32,7 @@ import { InMemoryDeliveryState } from "../../src/core/in-memory-delivery-state.j
 import { InboxHandlers } from "../../src/core/inbox-service.js";
 import { MutationAdmission } from "../../src/core/mutation-admission.js";
 import { ShardSessionRuntime } from "../../src/core/shard-service.js";
+import { pickedHandle } from "../session-fixtures.js";
 import { domainMessage } from "./domain-message.js";
 
 const context = { signal: new AbortController().signal } as never;
@@ -52,10 +53,10 @@ describe("Shard transition notifications", () => {
     );
     const request = create(DeliveryShardPickupSchema, { shard, worker });
     const first = await sessions.managed.pickShardRaw(request, context);
-    if (first.result.case !== "pickedUp") throw new Error("Expected a session.");
+    const handle = pickedHandle(first);
     nanos = 1_000_000;
-    await sessions.managed.renewShardSession(first.result.value, context);
-    await sessions.managed.releaseShardSession(first.result.value, context);
+    await sessions.managed.renewShardSession(handle, context);
+    await sessions.managed.releaseShardSession(handle, context);
     await sessions.managed.pickShardRaw(request, context);
     nanos = 12_000_000;
     await sessions.raw.releaseSessions(
@@ -78,11 +79,11 @@ describe("Shard transition notifications", () => {
       (value) => transitions.push(value.index),
     );
     const request = create(DeliveryShardPickupSchema, { shard, worker });
-    expect((await sessions.managed.pickShardForDelivery(request, context)).result.case).toBe(
+    expect((await sessions.managed.pickShardForDelivery(request, context)).result?.case).toBe(
       "noWork",
     );
     await sessions.managed.pickShardRaw(request, context);
-    expect((await sessions.managed.pickShardForDelivery(request, context)).result.case).toBe(
+    expect((await sessions.managed.pickShardForDelivery(request, context)).result?.case).toBe(
       "busy",
     );
     expect(transitions).toEqual([0]);

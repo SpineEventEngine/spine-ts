@@ -33,6 +33,7 @@ import {
 
 import { DeliveryAssembly } from "../../src/server/assembly.js";
 import { domainMessage as message } from "../core/domain-message.js";
+import { pickedHandle } from "../session-fixtures.js";
 
 const context = { signal: new AbortController().signal } as never;
 const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
@@ -52,8 +53,7 @@ describe("delivery assembly Admin projection", () => {
       create(DeliveryShardPickupSchema, { shard: second, worker }),
       context,
     );
-    if (pickup.result.case !== "pickedUp") throw new Error("Expected a session.");
-    await assembly.managed.releaseShardSession(pickup.result.value, context);
+    await assembly.managed.releaseShardSession(pickedHandle(pickup), context);
 
     const snapshot = assembly.admin.getShardInfo(create(EmptySchema), context) as ShardInfoList;
     expect(snapshot).toMatchObject({

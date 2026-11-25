@@ -19,8 +19,11 @@ import { describe, expect, it } from "vitest";
 import {
   DeliveryShardPickupSchema,
   GuardedInboxRequestSchema,
+  RemoveMessageSchema,
+  WriteMessageSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
+  InboxMessageIdSchema,
   InboxMessageSchema,
   InboxMessageStatus,
   ShardIndexSchema,
@@ -28,6 +31,7 @@ import {
 } from "@spine-event-engine/proto/delivery";
 import { InMemoryDelivery } from "../../src/index.js";
 import { domainMessage } from "./domain-message.js";
+import { pickedHandle } from "../session-fixtures.js";
 
 const context = { signal: new AbortController().signal } as never;
 const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
@@ -44,7 +48,7 @@ async function acquire(
   core: ReturnType<typeof InMemoryDelivery.create>,
   row: ReturnType<typeof domainMessage>,
 ) {
-  await core.inbox.writeOne({ message: row }, context);
+  await core.inbox.writeOne(create(WriteMessageSchema, { message: row }), context);
   const result = await core.managed.pickShardForDelivery(
     create(DeliveryShardPickupSchema, {
       shard,
@@ -52,11 +56,79 @@ async function acquire(
     }),
     context,
   );
-  if (result.result.case !== "pickedUp") throw new Error("Expected managed pickup.");
-  return result.result.value;
+  return pickedHandle(result);
 }
 
 describe("guarded Inbox mutations", () => {
+  it("rejects a missing handle and a row from another shard before changing storage", async () => {
+    const core = InMemoryDelivery.create();
+    const expected = domainMessage("authorized", shard);
+    const session = await acquire(core, expected);
+    expect(() =>
+      core.guarded.acknowledge(create(GuardedInboxRequestSchema, { expected }), context),
+    ).toThrow();
+    const anotherShard = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    const wrong = create(GuardedInboxRequestSchema, {
+      session,
+      expected: domainMessage("elsewhere", anotherShard),
+    });
+    for (const mutate of [
+      core.guarded.acknowledge,
+      core.guarded.removePendingDuplicate,
+      core.guarded.removeExpiredDelivered,
+    ]) {
+      await expect(mutate(wrong, context)).rejects.toMatchObject({ code: Code.InvalidArgument });
+    }
+    const retained = await core.inbox.findOne(
+      create(InboxMessageIdSchema, { index: shard, uuid: "authorized" }),
+      context,
+    );
+    expect(retained.message?.status).toBe(InboxMessageStatus.TO_DELIVER);
+    core.close();
+  });
+
+  it("does not match an operation with the wrong row status or a missing ACK row", async () => {
+    const core = InMemoryDelivery.create();
+    const pending = domainMessage("status", shard);
+    const session = await acquire(core, pending);
+    const pendingRequest = create(GuardedInboxRequestSchema, { session, expected: pending });
+    expect((await core.guarded.removeExpiredDelivered(pendingRequest, context)).matched).toBe(
+      false,
+    );
+    const first = await core.guarded.acknowledge(pendingRequest, context);
+    if (first.message === undefined) throw new Error("Expected completion.");
+    const completed = create(InboxMessageSchema, first.message);
+    const completedRequest = create(GuardedInboxRequestSchema, { session, expected: completed });
+    expect((await core.guarded.acknowledge(completedRequest, context)).matched).toBe(false);
+    expect((await core.guarded.removePendingDuplicate(completedRequest, context)).matched).toBe(
+      false,
+    );
+    await core.inbox.removeOne(create(RemoveMessageSchema, { message: completed }), context);
+    expect((await core.guarded.acknowledge(pendingRequest, context)).matched).toBe(false);
+    core.close();
+  });
+
+  it("keeps a completed row before its full-precision deadline and removes it at the boundary", async () => {
+    let now = create(TimestampSchema, { seconds: 10n, nanos: 123_456 });
+    const core = InMemoryDelivery.create({ now: () => now });
+    const pending = domainMessage("deadline", shard);
+    const session = await acquire(core, pending);
+    const first = await core.guarded.acknowledge(
+      create(GuardedInboxRequestSchema, { session, expected: pending }),
+      context,
+    );
+    if (first.message === undefined) throw new Error("Expected completion.");
+    const completed = create(InboxMessageSchema, first.message);
+    expect(completed.keepUntil).toMatchObject({ seconds: 15n, nanos: 123_456 });
+    const request = create(GuardedInboxRequestSchema, { session, expected: completed });
+    now = create(TimestampSchema, { seconds: 15n, nanos: 123_455 });
+    expect((await core.guarded.removeExpiredDelivered(request, context)).matched).toBe(false);
+    now = create(TimestampSchema, { seconds: 15n, nanos: 123_456 });
+    expect((await core.guarded.removeExpiredDelivered(request, context)).matched).toBe(true);
+    expect((await core.guarded.removeExpiredDelivered(request, context)).matched).toBe(true);
+    core.close();
+  });
+
   it("retains the first completion deadline on an exact retry", async () => {
     let now = create(TimestampSchema, { seconds: 10n, nanos: 123_456 });
     const core = InMemoryDelivery.create({ now: () => now });
@@ -85,14 +157,14 @@ describe("guarded Inbox mutations", () => {
     const nanos = clone(InboxMessageSchema, expected);
     if (nanos.whenReceived === undefined) throw new Error("Missing receive time.");
     nanos.whenReceived.nanos += 1;
-    await core.inbox.writeOne({ message: nanos }, context);
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: nanos }), context);
     expect((await core.guarded.acknowledge(request, context)).matched).toBe(false);
     expect((await core.guarded.removePendingDuplicate(request, context)).matched).toBe(false);
     const unknown = fromBinary(
       InboxMessageSchema,
       new Uint8Array([...toBinary(InboxMessageSchema, expected), 0x98, 0x06, 0x7b]),
     );
-    await core.inbox.writeOne({ message: unknown }, context);
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: unknown }), context);
     expect((await core.guarded.acknowledge(request, context)).matched).toBe(false);
     expect((await core.guarded.removePendingDuplicate(request, context)).matched).toBe(false);
     core.close();
@@ -110,20 +182,20 @@ describe("guarded Inbox mutations", () => {
       }),
       context,
     );
-    const completed = first.message;
-    if (completed === undefined) throw new Error("Expected completion.");
+    if (first.message === undefined) throw new Error("Expected completion.");
+    const completed = create(InboxMessageSchema, first.message);
     const request = create(GuardedInboxRequestSchema, { session, expected: completed });
     now = create(TimestampSchema, { seconds: 15n, nanos: 0 });
     const replacement = clone(InboxMessageSchema, completed);
     if (replacement.keepUntil === undefined) throw new Error("Missing deadline.");
     replacement.keepUntil.nanos += 1;
-    await core.inbox.writeOne({ message: replacement }, context);
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: replacement }), context);
     expect((await core.guarded.removeExpiredDelivered(request, context)).matched).toBe(false);
     const unknown = fromBinary(
       InboxMessageSchema,
       new Uint8Array([...toBinary(InboxMessageSchema, completed), 0x98, 0x06, 0x7b]),
     );
-    await core.inbox.writeOne({ message: unknown }, context);
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: unknown }), context);
     expect((await core.guarded.removeExpiredDelivered(request, context)).matched).toBe(false);
     await core.managed.releaseShardSession(session, context);
     await expect(core.guarded.removeExpiredDelivered(request, context)).rejects.toMatchObject({
@@ -141,14 +213,17 @@ describe("guarded Inbox mutations", () => {
     const expected = domainMessage("takeover", shard);
     const first = await acquire(core, expected);
     elapsed = 60_000;
-    const successor = await core.managed.pickShardForDelivery(
-      create(DeliveryShardPickupSchema, {
-        shard,
-        worker: create(WorkerIdSchema, { nodeId: { value: "other" }, value: "run" }),
-      }),
-      context,
+    const successor = pickedHandle(
+      await core.managed.pickShardForDelivery(
+        create(DeliveryShardPickupSchema, {
+          shard,
+          worker: create(WorkerIdSchema, { nodeId: { value: "other" }, value: "run" }),
+        }),
+        context,
+      ),
     );
-    expect(successor.result.case).toBe("pickedUp");
+
+    expect(successor.sessionId).not.toBe(first.sessionId);
     const stale = create(GuardedInboxRequestSchema, { session: first, expected });
     await expect(core.guarded.acknowledge(stale, context)).rejects.toMatchObject({
       code: Code.FailedPrecondition,
@@ -160,7 +235,12 @@ describe("guarded Inbox mutations", () => {
       code: Code.FailedPrecondition,
     });
     expect(
-      (await core.inbox.findOne({ index: shard, uuid: "takeover" }, context)).message?.status,
+      (
+        await core.inbox.findOne(
+          create(InboxMessageIdSchema, { index: shard, uuid: "takeover" }),
+          context,
+        )
+      ).message?.status,
     ).toBe(InboxMessageStatus.TO_DELIVER);
     core.close();
   });
@@ -181,7 +261,12 @@ describe("guarded Inbox mutations", () => {
       ),
     ).rejects.toThrow();
     expect(
-      (await core.inbox.findOne({ index: shard, uuid: "cancelled" }, context)).message?.status,
+      (
+        await core.inbox.findOne(
+          create(InboxMessageIdSchema, { index: shard, uuid: "cancelled" }),
+          context,
+        )
+      ).message?.status,
     ).toBe(InboxMessageStatus.TO_DELIVER);
     core.close();
   });
@@ -195,7 +280,7 @@ describe("guarded Inbox mutations", () => {
     expect((await core.guarded.removePendingDuplicate(duplicate, context)).matched).toBe(true);
     expect((await core.guarded.removePendingDuplicate(duplicate, context)).matched).toBe(true);
     const later = domainMessage("completed-retry", shard);
-    await core.inbox.writeOne({ message: later }, context);
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: later }), context);
     const completed = await core.guarded.acknowledge(
       create(GuardedInboxRequestSchema, {
         session,
@@ -204,8 +289,9 @@ describe("guarded Inbox mutations", () => {
       context,
     );
     if (completed.message === undefined) throw new Error("Expected completion.");
+    const completedRow = create(InboxMessageSchema, completed.message);
     now = create(TimestampSchema, { seconds: 15n, nanos: 0 });
-    const cleanup = create(GuardedInboxRequestSchema, { session, expected: completed.message });
+    const cleanup = create(GuardedInboxRequestSchema, { session, expected: completedRow });
     expect((await core.guarded.removeExpiredDelivered(cleanup, context)).matched).toBe(true);
     expect((await core.guarded.removeExpiredDelivered(cleanup, context)).matched).toBe(true);
     core.close();

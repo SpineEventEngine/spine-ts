@@ -15,6 +15,7 @@
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { afterEach, expect, it, vi } from "vitest";
+import { RemoveMessageSchema, WriteMessageSchema } from "@spine-event-engine/proto/delivery-server";
 import { ShardIndexSchema, InboxMessageStatus } from "@spine-event-engine/proto/delivery";
 import { DeliveryAssembly } from "../../src/server/assembly.js";
 import { AdminPublisher } from "../../src/admin/admin-service.js";
@@ -30,7 +31,7 @@ afterEach(() => vi.useRealTimers());
 it("reports stored completions and replays known shards after the ACK", async () => {
   const assembly = DeliveryAssembly.create();
   const completed = domainMessage("done", shard, 0, 1, InboxMessageStatus.DELIVERED);
-  await assembly.inbox.writeOne({ message: completed }, context);
+  await assembly.inbox.writeOne(create(WriteMessageSchema, { message: completed }), context);
   expect(assembly.admin.getShardInfo(create(EmptySchema), context)).toMatchObject({
     shards: [{ index: shard, messages: 1 }],
   });
@@ -55,12 +56,12 @@ it("coalesces repeated changes independently by shard and sends final free empty
   const first = domainMessage("first", shard);
   const second = domainMessage("second", shard);
   const otherRow = domainMessage("other", other);
-  await assembly.inbox.writeOne({ message: first }, context);
+  await assembly.inbox.writeOne(create(WriteMessageSchema, { message: first }), context);
   await expect(stream.next()).resolves.toMatchObject({
     value: { value: { case: "update", value: { index: shard, newMessagesCount: 1 } } },
   });
-  await assembly.inbox.writeOne({ message: second }, context);
-  await assembly.inbox.writeOne({ message: otherRow }, context);
+  await assembly.inbox.writeOne(create(WriteMessageSchema, { message: second }), context);
+  await assembly.inbox.writeOne(create(WriteMessageSchema, { message: otherRow }), context);
   await expect(stream.next()).resolves.toMatchObject({
     value: { value: { case: "update", value: { index: other, newMessagesCount: 1 } } },
   });
@@ -69,8 +70,8 @@ it("coalesces repeated changes independently by shard and sends final free empty
   await expect(delayed).resolves.toMatchObject({
     value: { value: { case: "update", value: { index: shard, newMessagesCount: 2 } } },
   });
-  await assembly.inbox.removeOne({ message: first }, context);
-  await assembly.inbox.removeOne({ message: second }, context);
+  await assembly.inbox.removeOne(create(RemoveMessageSchema, { message: first }), context);
+  await assembly.inbox.removeOne(create(RemoveMessageSchema, { message: second }), context);
   const empty = stream.next();
   await vi.advanceTimersByTimeAsync(25);
   await expect(empty).resolves.toMatchObject({
@@ -87,7 +88,10 @@ it("keeps the 25 ms window independent for two subscribers that connect at diffe
     .subscribeToShardUpdates(create(EmptySchema), context)
     [Symbol.asyncIterator]();
   await first.next();
-  await assembly.inbox.writeOne({ message: domainMessage("one", shard) }, context);
+  await assembly.inbox.writeOne(
+    create(WriteMessageSchema, { message: domainMessage("one", shard) }),
+    context,
+  );
   await expect(first.next()).resolves.toMatchObject({
     value: { value: { case: "update", value: { newMessagesCount: 1 } } },
   });
@@ -99,7 +103,10 @@ it("keeps the 25 ms window independent for two subscribers that connect at diffe
   await expect(second.next()).resolves.toMatchObject({
     value: { value: { case: "update", value: { newMessagesCount: 1 } } },
   });
-  await assembly.inbox.writeOne({ message: domainMessage("two", shard) }, context);
+  await assembly.inbox.writeOne(
+    create(WriteMessageSchema, { message: domainMessage("two", shard) }),
+    context,
+  );
   const firstUpdate = first.next();
   const secondUpdate = second.next();
   await vi.advanceTimersByTimeAsync(15);
@@ -126,21 +133,21 @@ it("reports the exact stored total after concurrent writes, rewrites, and repeat
   const one = domainMessage("one", shard);
   const two = domainMessage("two", shard);
   await Promise.all([
-    assembly.inbox.writeOne({ message: one }, context),
-    assembly.inbox.writeOne({ message: two }, context),
+    assembly.inbox.writeOne(create(WriteMessageSchema, { message: one }), context),
+    assembly.inbox.writeOne(create(WriteMessageSchema, { message: two }), context),
   ]);
   await assembly.inbox.writeOne(
-    {
+    create(WriteMessageSchema, {
       message: domainMessage("one", shard, 1, 1, InboxMessageStatus.DELIVERED),
-    },
+    }),
     context,
   );
   expect(assembly.admin.getShardInfo(create(EmptySchema), context)).toMatchObject({
     shards: [{ index: shard, messages: 2 }],
   });
   await Promise.all([
-    assembly.inbox.removeOne({ message: one }, context),
-    assembly.inbox.removeOne({ message: one }, context),
+    assembly.inbox.removeOne(create(RemoveMessageSchema, { message: one }), context),
+    assembly.inbox.removeOne(create(RemoveMessageSchema, { message: one }), context),
   ]);
   expect(assembly.admin.getShardInfo(create(EmptySchema), context)).toMatchObject({
     shards: [{ index: shard, messages: 1 }],

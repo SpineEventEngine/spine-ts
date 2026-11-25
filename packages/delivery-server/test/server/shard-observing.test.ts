@@ -37,6 +37,7 @@ import {
 } from "@spine-event-engine/proto/delivery";
 import { DeliveryAssembly } from "../../src/server/assembly.js";
 import { DeliveryConfig } from "../../src/server/config.js";
+import { pickedHandle } from "../session-fixtures.js";
 
 const context = { signal: new AbortController().signal } as never;
 const shard = create(ShardIndexSchema, { index: 2, ofTotal: 4 });
@@ -48,12 +49,15 @@ describe("ShardObservingService", () => {
   it("reoffers pending work when a quiet held session expires on its own", async () => {
     vi.useFakeTimers();
     const assembly = DeliveryAssembly.create({ processingTimeoutMs: 50 });
-    await assembly.inbox.writeOne({ message: message("expires") }, context);
+    await assembly.inbox.writeOne(
+      create(WriteMessageSchema, { message: message("expires") }),
+      context,
+    );
     const picked = await assembly.managed.pickShardForDelivery(
       create(DeliveryShardPickupSchema, { shard, worker }),
       context,
     );
-    expect(picked.result.case).toBe("pickedUp");
+    expect(picked.result?.case).toBe("pickedUp");
     const stream = assembly.observing
       .observeAll(create(EmptySchema), context)
       [Symbol.asyncIterator]();
@@ -95,13 +99,13 @@ describe("ShardObservingService", () => {
   it("discovers existing free work and reminds at the original interval despite further writes", async () => {
     vi.useFakeTimers();
     const assembly = DeliveryAssembly.create({ reminderIntervalMs: 10_000 });
-    await assembly.inbox.writeOne({ message: message("one") }, context);
+    await assembly.inbox.writeOne(create(WriteMessageSchema, { message: message("one") }), context);
     const stream = assembly.observing
       .observeAll(create(EmptySchema), context)
       [Symbol.asyncIterator]();
     await expect(stream.next()).resolves.toMatchObject({ value: { shard } });
     await vi.advanceTimersByTimeAsync(3_000);
-    await assembly.inbox.writeOne({ message: message("two") }, context);
+    await assembly.inbox.writeOne(create(WriteMessageSchema, { message: message("two") }), context);
     await expect(stream.next()).resolves.toMatchObject({ value: { shard } });
     await vi.advanceTimersByTimeAsync(6_999);
     const reminder = stream.next();
@@ -118,12 +122,12 @@ describe("ShardObservingService", () => {
       create(DeliveryShardPickupSchema, { shard, worker }),
       context,
     );
-    if (pickup.result.case !== "pickedUp") throw new Error("Expected a session.");
+    const handle = pickedHandle(pickup);
     const stream = assembly.observing
       .observeAll(create(EmptySchema), context)
       [Symbol.asyncIterator]();
     const next = stream.next();
-    await assembly.managed.releaseShardSession(pickup.result.value, context);
+    await assembly.managed.releaseShardSession(handle, context);
     await expect(next).resolves.toMatchObject({ value: { shard } });
     await stream.return?.();
     assembly.closeObserving();
@@ -142,7 +146,7 @@ describe("ShardObservingService", () => {
       create(DeliveryShardPickupSchema, { shard, worker }),
       context,
     );
-    if (pickup.result.case !== "pickedUp") throw new Error("Expected a session.");
+    const handle = pickedHandle(pickup);
     const afterPickup = stream.next();
     let settled = false;
     void afterPickup.then(() => {
@@ -150,7 +154,7 @@ describe("ShardObservingService", () => {
     });
     await vi.advanceTimersByTimeAsync(10_000);
     expect(settled).toBe(false);
-    await assembly.managed.releaseShardSession(pickup.result.value, context);
+    await assembly.managed.releaseShardSession(handle, context);
     await expect(afterPickup).resolves.toMatchObject({ value: { shard } });
     await assembly.inbox.removeOne(create(RemoveMessageSchema, { message: first }), context);
     const afterRemoval = stream.next();
@@ -187,19 +191,34 @@ describe("ShardObservingService", () => {
     const busy = create(ShardIndexSchema, { index: 0, ofTotal: 4 });
     const removed = create(ShardIndexSchema, { index: 1, ofTotal: 4 });
     const valid = create(ShardIndexSchema, { index: 3, ofTotal: 4 });
-    await assembly.inbox.writeOne({ message: message("initial") }, context);
+    await assembly.inbox.writeOne(
+      create(WriteMessageSchema, { message: message("initial") }),
+      context,
+    );
     const stream = assembly.observing
       .observeAll(create(EmptySchema), context)
       [Symbol.asyncIterator]();
     await expect(stream.next()).resolves.toMatchObject({ value: { shard } });
-    await assembly.inbox.writeOne({ message: message("busy", busy) }, context);
-    await assembly.inbox.writeOne({ message: message("removed", removed) }, context);
+    await assembly.inbox.writeOne(
+      create(WriteMessageSchema, { message: message("busy", busy) }),
+      context,
+    );
+    await assembly.inbox.writeOne(
+      create(WriteMessageSchema, { message: message("removed", removed) }),
+      context,
+    );
     await assembly.managed.pickShardRaw(
       create(DeliveryShardPickupSchema, { shard: busy, worker }),
       context,
     );
-    await assembly.inbox.removeOne({ message: message("removed", removed) }, context);
-    await assembly.inbox.writeOne({ message: message("valid", valid) }, context);
+    await assembly.inbox.removeOne(
+      create(RemoveMessageSchema, { message: message("removed", removed) }),
+      context,
+    );
+    await assembly.inbox.writeOne(
+      create(WriteMessageSchema, { message: message("valid", valid) }),
+      context,
+    );
     await expect(stream.next()).resolves.toMatchObject({ value: { shard: valid } });
     await stream.return?.();
     assembly.closeObserving();
@@ -207,7 +226,10 @@ describe("ShardObservingService", () => {
 
   it("finishes immediately when closed before subscription or called with an aborted signal", async () => {
     const assembly = DeliveryAssembly.create();
-    await assembly.inbox.writeOne({ message: message("pending") }, context);
+    await assembly.inbox.writeOne(
+      create(WriteMessageSchema, { message: message("pending") }),
+      context,
+    );
     const aborted = new AbortController();
     aborted.abort();
     await expect(
@@ -231,7 +253,10 @@ describe("ShardObservingService", () => {
     const assembly = DeliveryAssembly.create();
     const controller = new AbortController();
     const remove = vi.spyOn(controller.signal, "removeEventListener");
-    await assembly.inbox.writeOne({ message: message("pending") }, context);
+    await assembly.inbox.writeOne(
+      create(WriteMessageSchema, { message: message("pending") }),
+      context,
+    );
     const stream = assembly.observing
       .observeAll(create(EmptySchema), { signal: controller.signal } as never)
       [Symbol.asyncIterator]();

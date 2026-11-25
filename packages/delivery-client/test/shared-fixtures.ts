@@ -92,10 +92,13 @@ export function transport(): {
       const worker = pickedWorkers.get(key);
       if (worker === undefined) throw new Error("No prior picked worker.");
       return create(DeliveryShardPickupOutcomeSchema, {
-        result: { case: "busy", value: create(DeliveryShardBusySchema, {
-          worker: worker as never,
-          whenPicked: { seconds: 1n, nanos: 0 },
-        }) },
+        result: {
+          case: "busy",
+          value: create(DeliveryShardBusySchema, {
+            worker: worker as never,
+            whenPicked: { seconds: 1n, nanos: 0 },
+          }),
+        },
       });
     }
     if (typeof reply === "object" && "held" in reply) {

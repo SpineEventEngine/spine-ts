@@ -18,6 +18,7 @@ import { Code } from "@connectrpc/connect";
 import { describe, expect, it } from "vitest";
 import {
   DeliveryShardPickupSchema,
+  WriteMessageSchema,
   PickUpShardSchema,
   ReleaseExpiredSessionsSchema,
   ReleaseShardSchema,
@@ -26,6 +27,7 @@ import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/deli
 
 import { InMemoryDelivery } from "../../src/index.js";
 import { domainMessage, encodedBytes } from "./domain-message.js";
+import { pickedHandle } from "../session-fixtures.js";
 
 const context = { signal: new AbortController().signal } as never;
 const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
@@ -33,23 +35,14 @@ const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run-1
 const rival = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run-2" });
 const request = create(DeliveryShardPickupSchema, { shard, worker });
 
-function picked(
-  result: Awaited<
-    ReturnType<ReturnType<typeof InMemoryDelivery.create>["managed"]["pickShardRaw"]>
-  >,
-) {
-  if (result.result.case !== "pickedUp") throw new Error("Expected a pickup.");
-  return result.result.value;
-}
-
 describe("typed Shard sessions", () => {
   it("returns no work for a free empty managed shard but grants a raw handle", async () => {
     const core = InMemoryDelivery.create();
-    expect((await core.managed.pickShardForDelivery(request, context)).result.case).toBe("noWork");
-    const raw = picked(await core.managed.pickShardRaw(request, context));
+    expect((await core.managed.pickShardForDelivery(request, context)).result?.case).toBe("noWork");
+    const raw = pickedHandle(await core.managed.pickShardRaw(request, context));
     expect(raw.sessionId).toBeTruthy();
     expect(raw).toMatchObject({ lifetime: { seconds: 60n } });
-    expect((await core.managed.pickShardForDelivery(request, context)).result.case).toBe("busy");
+    expect((await core.managed.pickShardForDelivery(request, context)).result?.case).toBe("busy");
     await core.managed.releaseShardSession(raw, context);
     core.close();
   });
@@ -59,28 +52,28 @@ describe("typed Shard sessions", () => {
     const core = InMemoryDelivery.create({
       now: () => create(TimestampSchema, { seconds: 10n, nanos: nanos++ }),
     });
-    const handle = picked(await core.managed.pickShardRaw(request, context));
+    const handle = pickedHandle(await core.managed.pickShardRaw(request, context));
     const busy = await core.managed.pickShardRaw(
       create(DeliveryShardPickupSchema, { shard, worker: rival }),
       context,
     );
     expect(handle.whenPicked).toMatchObject({ nanos: 1 });
-    expect(busy.result.case).toBe("busy");
-    if (busy.result.case === "busy")
+    expect(busy.result?.case).toBe("busy");
+    if (busy.result?.case === "busy")
       expect(busy.result.value.whenPicked).toMatchObject({ nanos: 0 });
     core.close();
   });
 
   it("renews a raw same-worker pickup but never renews managed through raw pickup", async () => {
     const core = InMemoryDelivery.create();
-    const first = picked(await core.managed.pickShardRaw(request, context));
-    const renewedRaw = picked(await core.managed.pickShardRaw(request, context));
+    const first = pickedHandle(await core.managed.pickShardRaw(request, context));
+    const renewedRaw = pickedHandle(await core.managed.pickShardRaw(request, context));
     expect(renewedRaw.sessionId).toBe(first.sessionId);
     await core.managed.releaseShardSession(first, context);
     const row = domainMessage("pending", shard);
-    await core.inbox.writeOne({ message: row }, context);
-    const managed = picked(await core.managed.pickShardForDelivery(request, context));
-    expect((await core.managed.pickShardRaw(request, context)).result.case).toBe("busy");
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: row }), context);
+    const managed = pickedHandle(await core.managed.pickShardForDelivery(request, context));
+    expect((await core.managed.pickShardRaw(request, context)).result?.case).toBe("busy");
     const renewed = await core.managed.renewShardSession(managed, context);
     expect(renewed.sessionId).toBe(managed.sessionId);
     expect(encodedBytes(row)).toBeGreaterThan(0);
@@ -89,7 +82,7 @@ describe("typed Shard sessions", () => {
 
   it("rejects worker-only mutation calls and keeps the current typed session", async () => {
     const core = InMemoryDelivery.create();
-    const handle = picked(await core.managed.pickShardRaw(request, context));
+    const handle = pickedHandle(await core.managed.pickShardRaw(request, context));
     await expect(
       core.shards.pickShard(create(PickUpShardSchema, { shard, worker }), context),
     ).rejects.toMatchObject({ code: Code.FailedPrecondition });
@@ -105,7 +98,7 @@ describe("typed Shard sessions", () => {
           }),
           context,
         )
-      ).result.case,
+      ).result?.case,
     ).toBe("busy");
     await core.managed.releaseShardSession(handle, context);
     core.close();
@@ -114,7 +107,7 @@ describe("typed Shard sessions", () => {
   it("preserves nanoseconds for exact 499/500 microsecond inactivity boundaries", async () => {
     let now = create(TimestampSchema, { seconds: 10n, nanos: 0 });
     const core = InMemoryDelivery.create({ now: () => now });
-    const handle = picked(await core.managed.pickShardRaw(request, context));
+    const handle = pickedHandle(await core.managed.pickShardRaw(request, context));
     expect(handle).toMatchObject({ whenPicked: { nanos: 0 } });
     const release = create(ReleaseExpiredSessionsSchema, {
       inactivityPeriod: { seconds: 0n, nanos: 500_000 },
@@ -122,7 +115,7 @@ describe("typed Shard sessions", () => {
     now = create(TimestampSchema, { seconds: 10n, nanos: 499_000 });
     expect((await core.shards.releaseSessions(release, context)).shard).toHaveLength(0);
     now = create(TimestampSchema, { seconds: 10n, nanos: 500_000 });
-    const released = (await core.shards.releaseSessions(release, context)).shard;
+    const released = (await core.shards.releaseSessions(release, context)).shard ?? [];
     expect(released).toHaveLength(1);
     expect(released[0]?.whenPicked?.nanos).toBe(0);
     expect(released[0]?.whenReleased?.nanos).toBe(500_000);
@@ -131,9 +124,9 @@ describe("typed Shard sessions", () => {
 
   it("ignores a stale release for a later pickup by the same worker", async () => {
     const core = InMemoryDelivery.create();
-    const old = picked(await core.managed.pickShardRaw(request, context));
+    const old = pickedHandle(await core.managed.pickShardRaw(request, context));
     await core.managed.releaseShardSession(old, context);
-    const current = picked(await core.managed.pickShardRaw(request, context));
+    const current = pickedHandle(await core.managed.pickShardRaw(request, context));
     expect(current.sessionId).not.toBe(old.sessionId);
     await core.managed.releaseShardSession(old, context);
     expect(
@@ -145,7 +138,7 @@ describe("typed Shard sessions", () => {
           }),
           context,
         )
-      ).result.case,
+      ).result?.case,
     ).toBe("busy");
     core.close();
   });
@@ -157,7 +150,7 @@ describe("typed Shard sessions", () => {
     await expect(
       core.managed.pickShardRaw(request, { signal: cancelled.signal } as never),
     ).rejects.toThrow("cancelled");
-    expect((await core.managed.pickShardRaw(request, context)).result.case).toBe("pickedUp");
+    expect((await core.managed.pickShardRaw(request, context)).result?.case).toBe("pickedUp");
     core.close();
   });
 
@@ -184,7 +177,7 @@ describe("typed Shard sessions", () => {
         context,
       ),
     ).rejects.toMatchObject({ code: Code.InvalidArgument });
-    expect((await core.managed.pickShardRaw(request, context)).result.case).toBe("pickedUp");
+    expect((await core.managed.pickShardRaw(request, context)).result?.case).toBe("pickedUp");
     core.close();
   });
 
@@ -204,7 +197,7 @@ describe("typed Shard sessions", () => {
   it("enforces tracked-shard capacity and frees it after a raw release", async () => {
     const core = InMemoryDelivery.create({ maxTrackedShards: 1 });
     const other = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
-    const first = picked(await core.managed.pickShardRaw(request, context));
+    const first = pickedHandle(await core.managed.pickShardRaw(request, context));
     await expect(
       core.managed.pickShardRaw(
         create(DeliveryShardPickupSchema, {
@@ -224,7 +217,7 @@ describe("typed Shard sessions", () => {
           }),
           context,
         )
-      ).result.case,
+      ).result?.case,
     ).toBe("pickedUp");
     core.close();
   });
@@ -249,13 +242,13 @@ describe("typed Shard sessions", () => {
       context,
     );
     expect(outcome.shard).toHaveLength(2);
-    expect(outcome.shard.map((value) => value.shard?.index)).toEqual([0, 1]);
+    expect((outcome.shard ?? []).map((value) => value.shard?.index)).toEqual([0, 1]);
     core.close();
   });
 
   it("keeps a renewed revision when an earlier release enters the same admission batch", async () => {
     const core = InMemoryDelivery.create();
-    const first = picked(await core.managed.pickShardRaw(request, context));
+    const first = pickedHandle(await core.managed.pickShardRaw(request, context));
     const renewal = core.managed.renewShardSession(first, context);
     const staleRelease = core.managed.releaseShardSession(first, context);
     const refreshed = await renewal;
@@ -270,7 +263,7 @@ describe("typed Shard sessions", () => {
           }),
           context,
         )
-      ).result.case,
+      ).result?.case,
     ).toBe("busy");
     await core.managed.releaseShardSession(first, context);
     expect(
@@ -282,19 +275,19 @@ describe("typed Shard sessions", () => {
           }),
           context,
         )
-      ).result.case,
+      ).result?.case,
     ).toBe("pickedUp");
     core.close();
   });
 
   it("rejects a renewal that entered after a release in the same admission batch", async () => {
     const core = InMemoryDelivery.create();
-    const first = picked(await core.managed.pickShardRaw(request, context));
+    const first = pickedHandle(await core.managed.pickShardRaw(request, context));
     const release = core.managed.releaseShardSession(first, context);
     const renewal = core.managed.renewShardSession(first, context);
     await release;
     await expect(renewal).rejects.toMatchObject({ code: Code.FailedPrecondition });
-    expect((await core.managed.pickShardRaw(request, context)).result.case).toBe("pickedUp");
+    expect((await core.managed.pickShardRaw(request, context)).result?.case).toBe("pickedUp");
     core.close();
   });
 
@@ -306,16 +299,16 @@ describe("typed Shard sessions", () => {
       now: () => wall,
       monotonicNow: () => elapsed,
     });
-    const first = picked(await core.managed.pickShardRaw(request, context));
+    const first = pickedHandle(await core.managed.pickShardRaw(request, context));
     elapsed = 90;
     wall = create(TimestampSchema, { seconds: 5n, nanos: 0 });
     const renewed = await core.managed.renewShardSession(first, context);
     expect(renewed.whenPicked).toMatchObject({ seconds: 10n });
     elapsed = 189;
     const competing = create(DeliveryShardPickupSchema, { shard, worker: rival });
-    expect((await core.managed.pickShardRaw(competing, context)).result.case).toBe("busy");
+    expect((await core.managed.pickShardRaw(competing, context)).result?.case).toBe("busy");
     elapsed = 190;
-    expect((await core.managed.pickShardRaw(competing, context)).result.case).toBe("pickedUp");
+    expect((await core.managed.pickShardRaw(competing, context)).result?.case).toBe("pickedUp");
     core.close();
   });
 });

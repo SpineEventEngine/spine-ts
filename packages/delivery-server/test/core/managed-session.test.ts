@@ -14,11 +14,15 @@
 
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
-import { DeliveryShardPickupSchema } from "@spine-event-engine/proto/delivery-server";
+import {
+  DeliveryShardPickupSchema,
+  WriteMessageSchema,
+} from "@spine-event-engine/proto/delivery-server";
 import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 
 import { InMemoryDelivery } from "../../src/index.js";
 import { domainMessage, encodedBytes } from "./domain-message.js";
+import { pickedHandle } from "../session-fixtures.js";
 
 const context = { signal: new AbortController().signal } as never;
 const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
@@ -28,21 +32,19 @@ describe("managed delivery sessions", () => {
   it("recovers the same live worker and rejects a stale release after a fresh pickup", async () => {
     const core = InMemoryDelivery.create();
     const message = domainMessage("managed-1", shard);
-    await core.inbox.writeOne({ message }, context);
+    await core.inbox.writeOne(create(WriteMessageSchema, { message }), context);
     const request = create(DeliveryShardPickupSchema, { shard, worker });
-    const first = await core.managed.pickShardForDelivery(request, context);
-    expect(first.result.case).toBe("pickedUp");
-    const handle = first.result.value;
-    const recovered = await core.managed.pickShardForDelivery(request, context);
-    expect(recovered.result.value.sessionId).toBe(handle.sessionId);
+    const handle = pickedHandle(await core.managed.pickShardForDelivery(request, context));
+    const recovered = pickedHandle(await core.managed.pickShardForDelivery(request, context));
+    expect(recovered.sessionId).toBe(handle.sessionId);
     const renewed = await core.managed.renewShardSession(handle, context);
     expect(renewed.sessionId).toBe(handle.sessionId);
     await core.managed.releaseShardSession(handle, context);
-    const second = await core.managed.pickShardForDelivery(request, context);
-    expect(second.result.value.sessionId).not.toBe(handle.sessionId);
+    const second = pickedHandle(await core.managed.pickShardForDelivery(request, context));
+    expect(second.sessionId).not.toBe(handle.sessionId);
     await core.managed.releaseShardSession(handle, context);
-    const stillLive = await core.managed.pickShardForDelivery(request, context);
-    expect(stillLive.result.value.sessionId).toBe(second.result.value.sessionId);
+    const stillLive = pickedHandle(await core.managed.pickShardForDelivery(request, context));
+    expect(stillLive.sessionId).toBe(second.sessionId);
     expect(encodedBytes(message)).toBeGreaterThan(0);
   });
 });

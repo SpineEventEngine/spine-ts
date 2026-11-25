@@ -13,7 +13,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { EmptySchema } from "@bufbuild/protobuf/wkt";
+import { DurationSchema, EmptySchema } from "@bufbuild/protobuf/wkt";
 import { ShardIndex } from "@spine-event-engine/server";
 import {
   DeliveryShardPickupOutcomeSchema,
@@ -703,6 +703,8 @@ describe("DeliveryClient shard observation", () => {
         shard: ShardIndex.single(),
         worker: { nodeId: "node", value: "worker" },
         whenPicked: new Date("invalid") as never,
+        sessionId: "invalid-snapshot",
+        lifetime: create(DurationSchema, { seconds: 60n }),
       }),
     ).rejects.toThrow("Delivery shard session is invalid.");
     expect(fake.unary).not.toHaveBeenCalled();
