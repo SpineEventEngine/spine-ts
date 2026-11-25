@@ -196,9 +196,13 @@ describe("guarded Inbox mutations", () => {
     expect((await core.guarded.removePendingDuplicate(duplicate, context)).matched).toBe(true);
     const later = domainMessage("completed-retry", shard);
     await core.inbox.writeOne({ message: later }, context);
-    const completed = await core.guarded.acknowledge(create(GuardedInboxRequestSchema, {
-      session, expected: later,
-    }), context);
+    const completed = await core.guarded.acknowledge(
+      create(GuardedInboxRequestSchema, {
+        session,
+        expected: later,
+      }),
+      context,
+    );
     if (completed.message === undefined) throw new Error("Expected completion.");
     now = create(TimestampSchema, { seconds: 15n, nanos: 0 });
     const cleanup = create(GuardedInboxRequestSchema, { session, expected: completed.message });

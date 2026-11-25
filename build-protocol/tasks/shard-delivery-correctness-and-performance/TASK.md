@@ -23,7 +23,7 @@ Implementation sequence and decisions:
 - An application's nodes use the same configuration. A joining node must discover existing free work through its own subscription, even through a multi-process parent. A custom observer receives an inbox row after a successful write or after a normal run finds a late pending row. An exception during processing still releases the session. Distinguish lookup failure from callback failure.
 - Add child-process capacity settlement before enabling distributed writes. Reserve global capacity across slots, account for uncertain outcomes, and settle using a barrier ordered after the original mutation. Aggregate global results only when all required slots responded.
 
-The single-process observing endpoint and its low-level client are implemented. The indexed inbox and stored-row Admin reporting are implemented. Typed sessions, server expiry and same-run pickup recovery are implemented. Current milestone: guarded worker mutations and renewal during processing. Pending milestones: framework/application observation, child-process topology, combined verification and release review.
+The single-process observing endpoint and its low-level client are implemented. The indexed inbox and stored-row Admin reporting are implemented. Typed sessions, server expiry and same-run pickup recovery are implemented. Worker mutations now require the managed session and exact read row. Current milestone: framework/application observation. Pending milestones: child-process topology, combined verification and release review.
 
 Milestone 1 review corrections: queued work notices are removed when a shard becomes held or empty, and availability is checked again before sending. Closed or already-aborted streams end without registering a subscriber; shutdown detaches active abort listeners. The low-level client detaches its caller listener and active read immediately on abort, including while paused after a response. Tests use a packed To-do `CreateTask` Command and typed task target. Focused server and client observation tests, package typecheck, ESLint, TSDoc, and cleanup checks pass. Automatic session expiry remains in the managed-sessions milestone.
 
@@ -54,3 +54,17 @@ pickup replies, release while renewal is in flight, explicit and automatic
 expiry, malformed handles and cancellation while waiting to retry. Worker-side
 renewal through a long-running handler and guarded writes remain part of the
 following milestone.
+
+
+## Guarded remote processing
+
+The server checks a worker's session and the original inbox row in the same
+mutation for acknowledgement, duplicate removal, and expired-row cleanup.
+A real client/server drain exercises the guarded path. Tests cover replacements
+that differ only by nanoseconds or unknown fields, preserving the first
+acknowledgement deadline, and a three-minute handler under a 60-second session.
+An uncertain guarded operation identifies its row for inspection.
+
+A run uses a fresh worker UUID. If the configured node name and UUID together
+would exceed the existing wire limit, the client uses a stable digest of the
+node name on the wire. The application still uses its configured node name.

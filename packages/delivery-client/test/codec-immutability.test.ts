@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, toBinary } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
   AnySchema,
   Int32ValueSchema,
@@ -145,6 +145,54 @@ describe("delivery codec and immutable snapshots", () => {
       "RemoveExpiredDelivered",
       "RemovePendingDuplicate",
     ]);
+  });
+
+  it("rejects malformed guarded acknowledgement and deletion replies", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    fake.replyPickup();
+    const pickup = await client.pickUpForDelivery(ShardIndex.single(), {
+      nodeId: "node",
+      value: "run",
+    });
+    if (pickup.kind !== "PICKED") throw new Error("Expected a managed session.");
+    const expected = DeliveryMessageCodec.encode(domainMessage("guarded-reply"));
+    const completed = clone(InboxMessageSchema, expected);
+    completed.status = InboxMessageStatus.DELIVERED;
+    completed.keepUntil = create(TimestampSchema, { seconds: 10n, nanos: 123 });
+    const changed = clone(InboxMessageSchema, completed);
+    if (changed.id === undefined) throw new Error("Expected an Inbox row ID.");
+    changed.id.uuid = "different";
+    const pending = clone(InboxMessageSchema, expected);
+    const invalidDeadline = clone(InboxMessageSchema, completed);
+    invalidDeadline.keepUntil = create(TimestampSchema, { seconds: 10n, nanos: 1_000_000_000 });
+    const missingUnknown = fromBinary(
+      InboxMessageSchema,
+      new Uint8Array([...toBinary(InboxMessageSchema, expected), 0x98, 0x06, 0x7b]),
+    );
+
+    for (const message of [undefined, pending, changed, invalidDeadline]) {
+      fake.reply(create(GuardedInboxResultSchema, { matched: true, message }));
+      await expect(client.acknowledgeGuarded(pickup.session, expected)).rejects.toBeInstanceOf(
+        DeliveryProtocolError,
+      );
+    }
+    fake.reply(create(GuardedInboxResultSchema, { matched: true, message: completed }));
+    await expect(client.acknowledgeGuarded(pickup.session, missingUnknown)).rejects.toBeInstanceOf(
+      DeliveryProtocolError,
+    );
+    fake.reply(create(GuardedInboxResultSchema, { matched: false, message: completed }));
+    await expect(client.acknowledgeGuarded(pickup.session, expected)).rejects.toBeInstanceOf(
+      DeliveryProtocolError,
+    );
+    fake.reply(create(GuardedInboxResultSchema, { matched: true, message: completed }));
+    await expect(client.removeDuplicateGuarded(pickup.session, expected)).rejects.toBeInstanceOf(
+      DeliveryProtocolError,
+    );
+    fake.reply(create(GuardedInboxResultSchema, { matched: false, message: completed }));
+    await expect(client.removeDeliveredGuarded(pickup.session, expected)).rejects.toBeInstanceOf(
+      DeliveryProtocolError,
+    );
   });
 
   it("validates an empty-filter read cursor and caller cancellation before remote I/O", async () => {

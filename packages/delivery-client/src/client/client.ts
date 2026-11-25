@@ -790,7 +790,9 @@ export class DeliveryClient {
   }
 
   /**
-   * Completes an exact read row while its managed session remains current.
+   * Completes an exact original wire read row, including unknown fields, with
+   * one guarded RPC under the current managed session. An unknown outcome
+   * raises `DeliveryOutcomeUnknownError` with its full message ID.
    *
    * @param session Supplies the managed session handle.
    * @param expected Supplies the original wire row from a remote read.
@@ -811,11 +813,14 @@ export class DeliveryClient {
     );
     if (!result.matched) return undefined;
     if (result.message === undefined) throw DeliveryRequestCodec.protocol();
+    DeliveryMessageCodec.validateAcknowledgement(expected, result.message);
     return DeliveryMessageCodec.copyWire(result.message);
   }
 
   /**
-   * Removes an exact pending duplicate under its managed session.
+   * Removes an exact original pending wire read row, including unknown fields,
+   * with one guarded RPC under the current managed session. An unknown outcome
+   * raises `DeliveryOutcomeUnknownError` with its full message ID.
    *
    * @param session Supplies the managed session handle.
    * @param expected Supplies the original wire row.
@@ -837,7 +842,9 @@ export class DeliveryClient {
   }
 
   /**
-   * Removes an exact expired completion under its managed session.
+   * Removes an exact original delivered wire read row, including unknown fields,
+   * with one guarded RPC under the current managed session. An unknown outcome
+   * raises `DeliveryOutcomeUnknownError` with its full message ID.
    *
    * @param session Supplies the managed session handle.
    * @param expected Supplies the original wire row.
@@ -885,12 +892,13 @@ export class DeliveryClient {
     DeliveryRequestCodec.requestBytes(GuardedInboxRequestSchema, request);
     const result = await this.#mutation(
       operation,
-      [DeliveryShardCodec.snapshot(session.shard)],
+      [DeliveryMessageCodec.fullId(expected)],
       options,
       (signal, timeoutMs) => invoke(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
     DeliveryRequestCodec.responseBytes(GuardedInboxResultSchema, result);
-    if (!result.matched && result.message !== undefined) throw DeliveryRequestCodec.protocol();
+    if (result.message !== undefined && (operation !== "ACKNOWLEDGE" || !result.matched))
+      throw DeliveryRequestCodec.protocol();
     return result;
   }
 

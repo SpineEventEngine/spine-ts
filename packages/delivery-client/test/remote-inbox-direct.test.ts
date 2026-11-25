@@ -45,9 +45,6 @@ class Client {
       }),
     }),
   );
-  readonly pickUp = vi.fn(() =>
-    Promise.resolve({ worker: { nodeId: "node", value: "worker" }, whenPicked: new Date(0) }),
-  );
   pageSize = 2;
 }
 

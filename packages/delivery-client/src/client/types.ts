@@ -368,10 +368,7 @@ const DeliveryOutcomeValues = Object.freeze({
       operation === "PICK_UP_SHARD" ||
       operation === "PICK_UP_FOR_DELIVERY" ||
       operation === "RENEW_SHARD" ||
-      operation === "RELEASE_SHARD" ||
-      operation === "ACKNOWLEDGE" ||
-      operation === "REMOVE_DUPLICATE_GUARDED" ||
-      operation === "REMOVE_DELIVERED_GUARDED"
+      operation === "RELEASE_SHARD"
     );
   },
 });

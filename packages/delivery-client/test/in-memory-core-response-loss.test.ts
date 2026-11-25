@@ -22,17 +22,89 @@ import {
   ShardService,
   type DeliveryShardPickupOutcome,
 } from "@spine-event-engine/proto/delivery-server";
-import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
-import { create } from "@bufbuild/protobuf";
-import { timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { InboxMessageSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
+import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Time } from "@spine-event-engine/core/time";
 import { DeliveryBuilder, ShardIndex, type InboxMessage } from "@spine-event-engine/server";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
 import { DeliveryClient, DeliveryOutcomeUnknownError, RemoteWorkRegistry } from "../src/index.js";
 import { RemoteInbox } from "../src/remote/adapters.js";
+import { DeliveryMessageCodec } from "../src/wire/codec.js";
 import { domainMessage } from "./shared-fixtures.js";
 
 describe("in-memory delivery core response loss", () => {
+  it("retains unknown wire fields and nanos across decoded guarded mutations", async () => {
+    const core = InMemoryDelivery.create();
+    const client = DeliveryClient.usingTransport(
+      createRouterTransport((router) => {
+        router.service(InboxService, core.inbox);
+        router.service(ManagedShardService, core.managed);
+        router.service(GuardedInboxService, core.guarded);
+      }),
+    );
+    const context = { signal: new AbortController().signal } as never;
+    const inbox = new RemoteInbox(client);
+    const pending = domainMessage("wire-retained");
+    const wire = DeliveryMessageCodec.encode({
+      ...pending,
+      whenReceived: create(TimestampSchema, { seconds: 10n, nanos: 123_456_789 }),
+    });
+    const unknown = fromBinary(
+      InboxMessageSchema,
+      new Uint8Array([...toBinary(InboxMessageSchema, wire), 0x98, 0x06, 0x7b]),
+    );
+    await core.inbox.writeOne({ message: unknown }, context);
+    const registry = new RemoteWorkRegistry(client);
+    const session = await registry.pickUp(
+      ShardIndex.single(),
+      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run" }),
+    );
+    const read = await client.findOne(pending.id);
+    if (session === undefined || read === undefined) throw new Error("Expected a live read.");
+    expect(read.whenReceived.nanos).toBe(123_456_789);
+    expect((await inbox.markDelivered(read, undefined, session))?.status).toBe("DELIVERED");
+    const retained = (
+      await core.inbox.findOne(
+        {
+          index: unknown.id?.index,
+          uuid: unknown.id?.uuid ?? "",
+        },
+        context,
+      )
+    ).message;
+    expect(retained?.$unknown).toEqual(unknown.$unknown);
+
+    const duplicate = DeliveryMessageCodec.encode(domainMessage("wire-duplicate"));
+    await core.inbox.writeOne({ message: duplicate }, context);
+    const readDuplicate = await client.findOne({
+      value: "wire-duplicate",
+      shard: ShardIndex.single(),
+    });
+    if (readDuplicate === undefined) throw new Error("Expected pending read.");
+    const changedDuplicate = clone(InboxMessageSchema, duplicate);
+    if (changedDuplicate.whenReceived === undefined) throw new Error("Expected receive time.");
+    changedDuplicate.whenReceived.nanos += 1;
+    await core.inbox.writeOne({ message: changedDuplicate }, context);
+    expect(await inbox.removeDuplicate(readDuplicate, undefined, session)).toBe(false);
+
+    const expired = DeliveryMessageCodec.encode({
+      ...domainMessage("wire-expired"),
+      status: "DELIVERED",
+      keepUntil: new Date(0),
+    });
+    await core.inbox.writeOne({ message: expired }, context);
+    const readExpired = await client.findOne({ value: "wire-expired", shard: ShardIndex.single() });
+    if (readExpired === undefined) throw new Error("Expected delivered read.");
+    const changedExpired = fromBinary(
+      InboxMessageSchema,
+      new Uint8Array([...toBinary(InboxMessageSchema, expired), 0x98, 0x06, 0x7b]),
+    );
+    await core.inbox.writeOne({ message: changedExpired }, context);
+    expect(await inbox.removeDelivered(readExpired, undefined, session)).toBe(false);
+    core.close();
+  });
+
   it("persists an application-clock completion through the guarded Inbox service", async () => {
     const core = InMemoryDelivery.create();
     const client = DeliveryClient.usingTransport(
@@ -363,13 +435,65 @@ describe("in-memory delivery core response loss", () => {
     const read = await lostClient.findOne(pending.id);
     if (session === undefined || read === undefined) throw new Error("Expected a live read.");
     const lost = new RemoteInbox(lostClient);
-    await expect(lost.markDelivered(read, undefined, session)).rejects.toBeInstanceOf(
-      DeliveryOutcomeUnknownError,
-    );
+    await expect(lost.markDelivered(read, undefined, session)).rejects.toMatchObject({
+      operation: "ACKNOWLEDGE",
+      reconciliation: { kind: "FIND_MESSAGE", messageIds: ["0/1:lost-delivered"] },
+    });
     await expect(lost.markDelivered(read, undefined, session)).resolves.toMatchObject({
       status: "DELIVERED",
     });
   });
+
+  it.each([
+    ["pending duplicate", "removePendingDuplicate", "removeDuplicate"],
+    ["expired completion", "removeExpiredDelivered", "removeDelivered"],
+  ] as const)(
+    "reports the exact message after a committed %s response is lost",
+    async (_label, rpc, method) => {
+      const core = InMemoryDelivery.create();
+      const pending = domainMessage(`lost-${method}`);
+      const source =
+        method === "removeDelivered"
+          ? { ...pending, status: "DELIVERED" as const, keepUntil: new Date(0) }
+          : pending;
+      const normal = DeliveryClient.usingTransport(
+        createRouterTransport((router) => {
+          router.service(InboxService, core.inbox);
+          router.service(ManagedShardService, core.managed);
+          router.service(GuardedInboxService, core.guarded);
+        }),
+      );
+      await normal.writeOne(source);
+      if (method === "removeDelivered") await normal.writeOne(domainMessage("work-for-cleanup"));
+      const lostClient = DeliveryClient.usingTransport(
+        createRouterTransport((router) => {
+          router.service(InboxService, core.inbox);
+          router.service(ManagedShardService, core.managed);
+          router.service(GuardedInboxService, {
+            ...core.guarded,
+            [rpc]: async (request: never, context: never) => {
+              await core.guarded[rpc](request, context);
+              throw new ConnectError("lost", Code.Unavailable);
+            },
+          });
+        }),
+      );
+      const registry = new RemoteWorkRegistry(lostClient);
+      const session = await registry.pickUp(
+        ShardIndex.single(),
+        create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run" }),
+      );
+      const read = await lostClient.findOne(source.id);
+      if (session === undefined || read === undefined) throw new Error("Expected a live read.");
+      const inbox = new RemoteInbox(lostClient);
+      await expect(inbox[method](read, undefined, session)).rejects.toMatchObject({
+        operation:
+          method === "removeDelivered" ? "REMOVE_DELIVERED_GUARDED" : "REMOVE_DUPLICATE_GUARDED",
+        reconciliation: { kind: "FIND_MESSAGE", messageIds: [`0/1:lost-${method}`] },
+      });
+      await expect(normal.findOne(source.id)).resolves.toBeUndefined();
+    },
+  );
 
   it("makes a committed write reconcilable after its response is lost", async () => {
     const core = InMemoryDelivery.create();

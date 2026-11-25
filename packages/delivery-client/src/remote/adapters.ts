@@ -13,7 +13,7 @@
  */
 
 import { Time } from "@spine-event-engine/core/time";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { create } from "@bufbuild/protobuf";
 
@@ -277,15 +277,15 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Completes the exact read row under its live managed session.
+   * Completes the original decoded read row with one guarded RPC. Its retained
+   * wire snapshot, including unknown fields, must match under the live handle.
    *
-   * @param message Supplies the expected pending message snapshot.
-   * @param options Bounds or cancels the remote read and delivered upsert.
+   * @param message Supplies the original decoded pending read result.
+   * @param options Bounds or cancels the guarded RPC.
    * @param session Supplies the current local exclusive session.
    * @returns The completed row written by this attempt, or a matching completed
-   * row already found with its stored deadline. Returns `undefined` when the row
-   * is absent or its content differs. A write with an unknown outcome raises its
-   * transport error.
+   * row already found with its stored deadline. A stale row returns `undefined`.
+   * An unknown outcome raises `DeliveryOutcomeUnknownError` for reconciliation.
    */
   async markDelivered(
     message: InboxMessage,
@@ -302,12 +302,14 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Removes an eligible delivered row by ID through the remote delivery server.
+   * Removes an exact expired delivered read row with one guarded RPC. The
+   * retained wire snapshot includes unknown fields and requires a live handle.
    *
-   * @param message Supplies the delivered snapshot.
-   * @param options Bounds remote reads and removal.
+   * @param message Supplies the original decoded delivered read result.
+   * @param options Bounds or cancels the guarded RPC.
    * @param session Supplies the current local exclusive session.
-   * @returns Whether the removal request completed.
+   * @returns Whether the row matched or was already absent. An unknown outcome
+   * raises `DeliveryOutcomeUnknownError` for reconciliation.
    */
   async removeDelivered(
     message: InboxMessage,
@@ -322,12 +324,14 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Removes one pending duplicate by ID through the remote delivery server.
+   * Removes an exact pending duplicate read row with one guarded RPC. The
+   * retained wire snapshot includes unknown fields and requires a live handle.
    *
-   * @param message Supplies the pending duplicate snapshot.
-   * @param options Bounds remote reads and removal.
+   * @param message Supplies the original decoded pending read result.
+   * @param options Bounds or cancels the guarded RPC.
    * @param session Supplies the current local exclusive session.
-   * @returns Whether the removal request completed.
+   * @returns Whether the row matched or was already absent. An unknown outcome
+   * raises `DeliveryOutcomeUnknownError` for reconciliation.
    */
   async removeDuplicate(
     message: InboxMessage,
@@ -613,11 +617,18 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
    * Creates a fresh worker identity for one independent asynchronous run.
    *
    * @param worker Supplies the configured application node.
-   * @returns A complete run-specific worker identity.
+   * @returns A run-specific worker identity. A stable digest aliases the node
+   * ID on the wire only when the full node ID and UUID exceed 128 UTF-8 bytes.
    */
   workerForRun(worker: WorkerId): WorkerId {
-    const node = RemoteValues.worker(worker).nodeId;
-    return create(WorkerIdSchema, { nodeId: { value: node }, value: randomUUID() });
+    const configuredNode = RemoteValues.worker(worker).nodeId;
+    const value = randomUUID();
+    const combined = new TextEncoder().encode(configuredNode + value).length;
+    const node =
+      combined <= 128
+        ? configuredNode
+        : `n-${createHash("sha256").update(configuredNode).digest("hex")}`;
+    return create(WorkerIdSchema, { nodeId: { value: node }, value });
   }
 
   /**

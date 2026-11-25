@@ -38,6 +38,23 @@ import { deliveryClientAccess } from "../src/client/client.js";
 import { echoPickup, message, transport } from "./shared-fixtures.js";
 
 describe("RemoteWorkRegistry", () => {
+  it("keeps a full UUID per run within the existing UTF-8 worker boundary", () => {
+    const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(transport().transport));
+    for (const length of [92, 93, 100, 127]) {
+      const nodeId = "n".repeat(length);
+      const configured = workerId(nodeId, "x");
+      const first = registry.workerForRun(configured);
+      const second = registry.workerForRun(configured);
+      expect(first.value).not.toBe(second.value);
+      expect(first.nodeId?.value).toBe(second.nodeId?.value);
+      if (length <= 92) expect(first.nodeId?.value).toBe(nodeId);
+      else expect(first.nodeId?.value).toMatch(/^n-[0-9a-f]{64}$/);
+      expect(
+        new TextEncoder().encode((first.nodeId?.value ?? "") + first.value).length,
+      ).toBeLessThanOrEqual(128);
+    }
+  });
+
   it("fails closed when package-internal client access is unavailable", () => {
     const unavailable = {} as DeliveryClient;
 
