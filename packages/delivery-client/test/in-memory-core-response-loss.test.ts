@@ -19,6 +19,7 @@ import {
   InboxService,
   ManagedShardService,
   ShardService,
+  type DeliveryShardPickupOutcome,
 } from "@spine-event-engine/proto/delivery-server";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { create } from "@bufbuild/protobuf";
@@ -407,36 +408,41 @@ describe("in-memory delivery core response loss", () => {
     await expect(client.findOne(message.id)).resolves.toBeUndefined();
   });
 
-  it("retains no client-side marker after a lost pickup outcome", async () => {
+  it("recovers the same managed session after the first pickup reply is lost", async () => {
     const core = InMemoryDelivery.create();
     let pickups = 0;
+    let firstSessionId: string | undefined;
     const transport = createRouterTransport((router) => {
       router.service(InboxService, core.inbox);
       router.service(ManagedShardService, {
         ...core.managed,
         pickShardForDelivery: async (request, context) => {
           pickups += 1;
-          await core.managed.pickShardForDelivery(request, context);
-          throw new ConnectError("lost", Code.Unavailable);
+          const result = await core.managed.pickShardForDelivery(request, context);
+          if (pickups === 1) {
+            const outcome = result as DeliveryShardPickupOutcome;
+            if (outcome.result.case === "pickedUp") firstSessionId = outcome.result.value.sessionId;
+            throw new ConnectError("lost", Code.Unavailable);
+          }
+          return result;
         },
       });
     });
     const client = DeliveryClient.usingTransport(transport);
     await client.writeOne(domainMessage("lost-pickup"));
     const registry = new RemoteWorkRegistry(client);
-    await expect(
-      registry.pickUp(
-        ShardIndex.single(),
-        create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker-1" }),
-      ),
-    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
-    await expect(
-      registry.pickUp(
-        ShardIndex.single(),
-        create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker-2" }),
-      ),
-    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    const session = await registry.pickUp(
+      ShardIndex.single(),
+      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker-1" }),
+    );
+    expect(session).toMatchObject({ kind: "EXCLUSIVE" });
     expect(pickups).toBe(2);
+    const recovered = await client.pickUpForDelivery(ShardIndex.single(), {
+      nodeId: "node",
+      value: "worker-1",
+    });
+    expect(recovered.kind).toBe("PICKED");
+    if (recovered.kind === "PICKED") expect(recovered.session.sessionId).toBe(firstSessionId);
   });
 
   it("proves a lost release committed through a direct subsequent pickup", async () => {

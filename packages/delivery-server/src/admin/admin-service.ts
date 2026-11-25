@@ -13,6 +13,7 @@
  */
 
 import { create, toBinary } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import {
   AdminService,
@@ -204,6 +205,17 @@ const AdminSnapshots: Readonly<{
     readonly newStatus: ShardStatus;
     readonly newMessagesCount: number;
   };
+
+  /**
+   * Copies one stored timestamp into an Admin response.
+   *
+   * @param value Supplies the retained timestamp.
+   * @returns A detached timestamp.
+   */
+  copyTime: (value: { seconds: bigint; nanos: number }) => {
+    readonly seconds: bigint;
+    readonly nanos: number;
+  };
 }> = Object.freeze({
   snapshot: (state: InMemoryDeliveryState): ReturnType<typeof create<typeof ShardInfoListSchema>> =>
     create(ShardInfoListSchema, {
@@ -222,13 +234,23 @@ const AdminSnapshots: Readonly<{
       ...(record?.whenLastPicked === undefined
         ? {}
         : {
-            lastPicked: record.whenLastPicked,
-            whenLastPicked: record.whenLastPicked,
+            lastPicked: AdminSnapshots.copyTime(record.whenLastPicked),
+            whenLastPicked: AdminSnapshots.copyTime(record.whenLastPicked),
           }),
       messages,
       newStatus: record?.worker === undefined ? ShardStatus.NOT_PICKED : ShardStatus.PICKED,
       newMessagesCount: messages,
     };
+  },
+
+  /**
+   * Copies one stored timestamp into an Admin response.
+   *
+   * @param value Supplies the retained timestamp.
+   * @returns A detached timestamp.
+   */
+  copyTime(value: { seconds: bigint; nanos: number }) {
+    return create(TimestampSchema, { seconds: value.seconds, nanos: value.nanos });
   },
 });
 

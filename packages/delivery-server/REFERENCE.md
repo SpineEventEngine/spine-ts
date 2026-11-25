@@ -85,12 +85,16 @@ The JVM `InboxService.FindManyInShard` page RPC uses an exclusive timestamp
 bound. Reads are live and do not promise a snapshot across pages. Distinct
 received timestamps permit continued paging; a full page ending in tied times
 is reported as unsafe continuation.
-Automatic pickup takeover requires elapsed time
-strictly greater than `processingTimeoutMs`; manual expiration accepts elapsed
-time greater than or equal to the supplied interval. Release is not
-pickup-time-conditional, but the supplied worker must match the current owner;
-a stale worker cannot release a newer worker's session. This in-memory server
-stores neither attempt history nor a quarantine state.
+A session expires when elapsed time reaches its lifetime. Explicit inactivity
+release also includes sessions exactly at the requested age. For example, a
+request specifying 500 microseconds leaves a 499-microsecond session active.
+
+Ordinary renewal and release use the shard, worker, and session ID from the
+grant. A release from a previous pickup leaves the newer session active, even
+when both pickups used the same worker ID. The server records the pickup time
+and samples the clock again for a successful pickup reply, following JVM
+Delivery. The reported times can therefore differ slightly. The session ID
+identifies the pickup across those clock readings and subsequent renewals.
 
 The Admin `messages` count includes every stored inbox row for the shard.
 For example, after the worker acknowledges the only Command, Admin still shows

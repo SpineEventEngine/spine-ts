@@ -15,6 +15,8 @@
 import { create, toBinary } from "@bufbuild/protobuf";
 import {
   AnySchema,
+  type Duration,
+  DurationSchema,
   Int32ValueSchema,
   Int64ValueSchema,
   StringValueSchema,
@@ -141,6 +143,23 @@ const DeliveryValues = Object.freeze({
     if (!Number.isFinite(value) || value < minimum || value > maximum)
       throw new TypeError(`${name} is invalid.`);
     return value;
+  },
+
+  /**
+   * Checks a positive lifetime within Protobuf Duration bounds.
+   *
+   * @param value Supplies the lifetime to check.
+   * @returns Whether the lifetime is valid.
+   */
+  validLifetime(value: Duration): boolean {
+    return (
+      value.seconds >= 0n &&
+      value.seconds <= 315_576_000_000n &&
+      Number.isInteger(value.nanos) &&
+      value.nanos >= 0 &&
+      value.nanos < 1_000_000_000 &&
+      (value.seconds !== 0n || value.nanos !== 0)
+    );
   },
 });
 
@@ -702,21 +721,6 @@ type DeliveryShardCodecApi = Readonly<{
   ): RemoteShardSession;
 
   /**
-   * Validates an already-picked response.
-   *
-   * @param value Supplies the response fields.
-   * @param expectedShard Identifies the requested shard.
-   */
-  validatePicked(
-    value: {
-      shard?: { index: number; ofTotal: number } | undefined;
-      worker?: { nodeId?: { value: string } | undefined; value: string } | undefined;
-      whenPicked?: { seconds: bigint; nanos: number } | undefined;
-    },
-    expectedShard: ShardIndex,
-  ): void;
-
-  /**
    * Decodes an expired exclusive session.
    *
    * @param value Supplies the expired-session response.
@@ -874,10 +878,7 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
       value.whenPicked === undefined ||
       value.lifetime === undefined ||
       !value.sessionId.trim() ||
-      value.lifetime.seconds < 0n ||
-      value.lifetime.nanos < 0 ||
-      value.lifetime.nanos >= 1_000_000_000 ||
-      (value.lifetime.seconds === 0n && value.lifetime.nanos === 0)
+      !DeliveryValues.validLifetime(value.lifetime)
     )
       throw DeliveryRequestCodec.protocol();
     const shard = DeliveryShardCodec.decode(value.shard);
@@ -895,33 +896,8 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
       worker,
       whenPicked: DeliveryShardCodec.timestamp(value.whenPicked),
       sessionId: value.sessionId,
-      lifetime: value.lifetime,
+      lifetime: DeliveryValues.freeze(create(DurationSchema, value.lifetime)),
     });
-  },
-
-  /**
-   * Validates an already-picked response.
-   *
-   * @param value Supplies the response fields.
-   * @param expectedShard Identifies the requested shard.
-   */
-  validatePicked(
-    value: {
-      shard?: { index: number; ofTotal: number } | undefined;
-      worker?: { nodeId?: { value: string } | undefined; value: string } | undefined;
-      whenPicked?: { seconds: bigint; nanos: number } | undefined;
-    },
-    expectedShard: ShardIndex,
-  ): void {
-    if (value.worker === undefined || value.whenPicked === undefined)
-      throw DeliveryRequestCodec.protocol();
-    if (value.shard !== undefined) {
-      const shard = DeliveryShardCodec.decode(value.shard);
-      if (shard.index !== expectedShard.index || shard.ofTotal !== expectedShard.ofTotal)
-        throw DeliveryRequestCodec.protocol();
-    }
-    DeliveryShardCodec.decodeWorker(value.worker);
-    DeliveryShardCodec.date(value.whenPicked);
   },
 
   /**
@@ -978,7 +954,9 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
       value.seconds > 253_402_300_799n
     )
       throw DeliveryRequestCodec.protocol();
-    return create(TimestampSchema, { seconds: value.seconds, nanos: value.nanos });
+    return DeliveryValues.freeze(
+      create(TimestampSchema, { seconds: value.seconds, nanos: value.nanos }),
+    );
   },
 
   /**

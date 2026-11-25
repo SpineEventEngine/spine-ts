@@ -432,7 +432,14 @@ describe("DeliveryClient RPC and lifecycle", () => {
     const client = DeliveryClient.usingTransport(fake.transport);
     fake.fail(new ConnectError("invalid request: secret-payload", Code.InvalidArgument));
 
-    await expect(client.writeOne(domainMessage())).rejects.toBeInstanceOf(DeliveryProtocolError);
+    let rejection: unknown;
+    try {
+      await client.writeOne(domainMessage());
+    } catch (error) {
+      rejection = error;
+    }
+    expect(rejection).toMatchObject({ code: Code.InvalidArgument });
+    expect(String(rejection)).not.toContain("secret-payload");
     expect(fake.unary).toHaveBeenCalledTimes(1);
   });
 
@@ -570,7 +577,14 @@ describe("DeliveryClient RPC and lifecycle", () => {
     const client = DeliveryClient.usingTransport(fake.transport);
     fake.fail(new ConnectError("invalid batch: secret-payload", Code.InvalidArgument));
 
-    await expect(client.writeMany([domainMessage()])).rejects.toBeInstanceOf(DeliveryProtocolError);
+    let rejection: unknown;
+    try {
+      await client.writeMany([domainMessage()]);
+    } catch (error) {
+      rejection = error;
+    }
+    expect(rejection).toMatchObject({ code: Code.InvalidArgument });
+    expect(String(rejection)).not.toContain("secret-payload");
     expect(fake.unary).toHaveBeenCalledTimes(1);
   });
 

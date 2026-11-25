@@ -59,8 +59,8 @@ export interface DeliveryServerOptions {
 
   /**
    * Automatic stale-pickup timeout in seconds. The explicit option overrides
-   * `SHARD_PROCESSING_TIMEOUT`; the default is zero (disabled). Accepts
-   * non-negative integers through `2_147_483_647`.
+   * `SHARD_PROCESSING_TIMEOUT`; the default is 60. Accepts positive integers
+   * through `2_147_483_647`.
    */
   readonly processingTimeoutSeconds?: number;
 

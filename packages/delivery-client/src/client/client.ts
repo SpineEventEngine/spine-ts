@@ -19,6 +19,7 @@ import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-no
 
 import type { InboxMessage, InboxMessageId } from "@spine-event-engine/server";
 import { ShardIndex } from "@spine-event-engine/server";
+import { Time } from "@spine-event-engine/core/time";
 import {
   InboxService,
   AdminService,
@@ -474,12 +475,196 @@ export class DeliveryClient {
    * @param options Bounds or cancels the mutation.
    * @returns The complete managed outcome, including the handle on success.
    */
-  pickUpForDelivery(
+  async pickUpForDelivery(
     shardIndex: ShardIndex,
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions = {},
   ): Promise<DeliveryManagedPickupOutcome> {
-    return this.#pickUp(shardIndex, workerId, options, "MANAGED");
+    if (this.#closed) throw new Error("Delivery client is closed.");
+    if (options.signal?.aborted) throw options.signal.reason;
+    const timeoutMs = DeliveryRequestCodec.timeout(options.timeoutMs ?? 30_000);
+    const deadline = Time.monotonicTime() + timeoutMs;
+    const controller = new AbortController();
+    const abort = () => {
+      controller.abort(options.signal?.reason);
+    };
+    options.signal?.addEventListener("abort", abort, { once: true });
+    this.#activeReads.add(controller);
+    const timer = setTimeout(() => {
+      controller.abort(new Error("Managed pickup timed out."));
+    }, timeoutMs);
+    try {
+      return await this.#recoverManagedPickup(shardIndex, workerId, options, deadline, controller);
+    } finally {
+      clearTimeout(timer);
+      options.signal?.removeEventListener("abort", abort);
+      this.#activeReads.delete(controller);
+    }
+  }
+
+  /**
+   * Recovers one ambiguous managed pickup under its original deadline.
+   *
+   * @param shardIndex Identifies the unchanged requested shard.
+   * @param workerId Identifies the unchanged worker run.
+   * @param options Supplies caller operation settings.
+   * @param deadline Ends the total operation in monotonic milliseconds.
+   * @param controller Links caller, client closure, and deadline cancellation.
+   * @returns A definitive pickup result.
+   */
+  async #recoverManagedPickup(
+    shardIndex: ShardIndex,
+    workerId: DeliveryWorkerId,
+    options: DeliveryMutationOptions,
+    deadline: number,
+    controller: AbortController,
+  ): Promise<DeliveryManagedPickupOutcome> {
+    let unknown: DeliveryOutcomeUnknownError | undefined;
+    let ambiguousCount = 0;
+    for (;;) {
+      this.#checkPickupCancellation(controller, options.signal, unknown);
+      const remaining = this.#pickupRemaining(deadline, shardIndex, unknown);
+      const started = Time.monotonicTime();
+      try {
+        return await this.#attemptManaged(
+          shardIndex,
+          workerId,
+          options,
+          controller.signal,
+          remaining,
+        );
+      } catch (error) {
+        unknown = await this.#handleUnknownPickup(
+          error,
+          started,
+          deadline,
+          controller,
+          options.signal,
+          ++ambiguousCount,
+        );
+      }
+    }
+  }
+
+  /**
+   * Calculates remaining time or reports the last ambiguous pickup outcome.
+   *
+   * @param deadline Ends the total operation.
+   * @param shardIndex Identifies the requested shard in an initial timeout.
+   * @param unknown Supplies a previous ambiguous outcome, when present.
+   * @returns Remaining monotonic milliseconds.
+   */
+  #pickupRemaining(
+    deadline: number,
+    shardIndex: ShardIndex,
+    unknown: DeliveryOutcomeUnknownError | undefined,
+  ): number {
+    const remaining = deadline - Time.monotonicTime();
+    if (remaining > 0) return remaining;
+    throw unknown ?? new DeliveryOutcomeUnknownError("PICK_UP_FOR_DELIVERY", [shardIndex]);
+  }
+
+  /**
+   * Repeats the same worker and shard with the time left from the first call.
+   *
+   * @param shardIndex Identifies the unchanged shard.
+   * @param workerId Identifies the unchanged worker.
+   * @param options Supplies the original call settings.
+   * @param signal Cancels this attempt with the whole operation.
+   * @param remaining Bounds this attempt within the original deadline.
+   * @returns One definitive remote pickup result.
+   */
+  #attemptManaged(
+    shardIndex: ShardIndex,
+    workerId: DeliveryWorkerId,
+    options: DeliveryMutationOptions,
+    signal: AbortSignal,
+    remaining: number,
+  ): Promise<DeliveryManagedPickupOutcome> {
+    return this.#pickUp(
+      shardIndex,
+      workerId,
+      {
+        ...options,
+        signal,
+        timeoutMs: Math.max(1, Math.ceil(remaining)),
+      },
+      "MANAGED",
+    );
+  }
+
+  /**
+   * Paces one ambiguous pickup or reports its terminating cause.
+   *
+   * @param error Supplies the failed attempt's outcome.
+   * @param started Marks when that attempt began.
+   * @param deadline Ends the whole operation.
+   * @param controller Tracks whole operation cancellation.
+   * @param caller Tracks caller cancellation.
+   * @param count Counts ambiguous attempts.
+   * @returns The ambiguous outcome when recovery may continue.
+   */
+  async #handleUnknownPickup(
+    error: unknown,
+    started: number,
+    deadline: number,
+    controller: AbortController,
+    caller: AbortSignal | undefined,
+    count: number,
+  ): Promise<DeliveryOutcomeUnknownError> {
+    if (!(error instanceof DeliveryOutcomeUnknownError)) throw error;
+    this.#checkPickupCancellation(controller, caller, error);
+    const duration = Math.max(1, Math.ceil(Time.monotonicTime() - started));
+    try {
+      if (await this.#waitForPickupRecovery(deadline, controller.signal, count, duration))
+        throw error;
+    } catch (waitError) {
+      this.#checkPickupCancellation(controller, caller, error);
+      throw waitError;
+    }
+    return error;
+  }
+
+  /**
+   * Waits between uncertain pickups without crossing the original deadline.
+   *
+   * @param deadline Ends the total pickup operation in monotonic milliseconds.
+   * @param signal Cancels the wait when the operation stops.
+   * @param ambiguousCount Counts consecutive uncertain attempts.
+   * @param attemptDuration Measures the preceding attempt in milliseconds.
+   * @returns Whether the deadline prevents another attempt.
+   */
+  async #waitForPickupRecovery(
+    deadline: number,
+    signal: AbortSignal,
+    ambiguousCount: number,
+    attemptDuration: number,
+  ): Promise<boolean> {
+    const remaining = Math.max(0, deadline - Time.monotonicTime());
+    const base = Math.max(this.#retryBackoffMs, attemptDuration);
+    const delay = ambiguousCount === 1 ? 0 : base * 2 ** (ambiguousCount - 2);
+    const exhausted = delay >= remaining;
+    await DeliveryClient.#pause(exhausted ? remaining : delay, signal);
+    return exhausted;
+  }
+
+  /**
+   * Reports the first cause that ended a managed pickup operation.
+   *
+   * @param controller Tracks the linked operation cancellation.
+   * @param caller Tracks explicit caller cancellation.
+   * @param unknown Supplies the last ambiguous remote outcome.
+   */
+  #checkPickupCancellation(
+    controller: AbortController,
+    caller: AbortSignal | undefined,
+    unknown: DeliveryOutcomeUnknownError | undefined,
+  ): void {
+    if (!controller.signal.aborted) return;
+    if (caller?.aborted) throw caller.reason;
+    if (this.#closed) throw new Error("Delivery client is closed.");
+    if (unknown !== undefined) throw unknown;
+    throw controller.signal.reason;
   }
 
   /**
@@ -533,9 +718,12 @@ export class DeliveryClient {
           session: DeliveryShardCodec.decodePicked(result.value, shardIndex, workerId),
         });
       case "busy":
+        if (result.value.worker === undefined || result.value.whenPicked === undefined)
+          throw DeliveryRequestCodec.protocol();
         return Object.freeze({
           kind: "BUSY" as const,
-          worker: DeliveryShardCodec.decodeWorker(result.value),
+          worker: DeliveryShardCodec.decodeWorker(result.value.worker),
+          whenPicked: DeliveryShardCodec.timestamp(result.value.whenPicked),
         });
       case "noWork":
         return Object.freeze({ kind: "NO_WORK" as const });
@@ -732,9 +920,14 @@ export class DeliveryClient {
       return await invoke(controller.signal, timeoutMs);
     } catch (error) {
       if (error instanceof ConnectError) {
-        if (error.code === Code.InvalidArgument) throw DeliveryRequestCodec.protocol();
-        if (error.code === Code.Unimplemented || error.code === Code.FailedPrecondition)
-          throw error;
+        if (
+          error.code === Code.InvalidArgument ||
+          error.code === Code.Unauthenticated ||
+          error.code === Code.PermissionDenied ||
+          error.code === Code.Unimplemented ||
+          error.code === Code.FailedPrecondition
+        )
+          throw new ConnectError("Delivery server rejected the request.", error.code);
       }
       throw new DeliveryOutcomeUnknownError(operation, reconciliation);
     } finally {
@@ -743,20 +936,23 @@ export class DeliveryClient {
     }
   }
 
-  static #pause(delay: number, signal: AbortSignal): Promise<void> {
-    if (delay === 0) return Promise.resolve();
+  static #pause(delay: number, signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted)
+      return Promise.reject(
+        signal.reason instanceof Error ? signal.reason : new Error("Delivery read aborted."),
+      );
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
-        signal.removeEventListener("abort", abort);
+        signal?.removeEventListener("abort", abort);
         resolve();
       }, delay);
       const abort = () => {
         clearTimeout(timer);
         reject(
-          signal.reason instanceof Error ? signal.reason : new Error("Delivery read aborted."),
+          signal?.reason instanceof Error ? signal.reason : new Error("Delivery read aborted."),
         );
       };
-      signal.addEventListener("abort", abort, { once: true });
+      signal?.addEventListener("abort", abort, { once: true });
     });
   }
 
@@ -772,7 +968,7 @@ const deliveryClientObservations = new WeakMap<
 >();
 
 /**
- * Provides package-internal frozen-wire ownership probes without extending the public client API.
+ * Provides package-internal Admin observations without extending the public client API.
  */
 export const deliveryClientAccess: Readonly<{
   observeOnce: (

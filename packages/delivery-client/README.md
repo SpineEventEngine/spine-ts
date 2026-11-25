@@ -38,9 +38,10 @@ client.close();
 void shards;
 ```
 
-Read operations can use the configured bounded retry policy. Mutations never
-retry automatically: a lost mutation response means the remote outcome is
-unknown and must be reconciled before any later action.
+Read operations can use the configured retry policy. If a managed pickup reply
+is lost, `pickUpForDelivery()` retries with the same worker and run ID within
+the original deadline. For a lost inbox write reply, read the affected row to
+learn whether the write succeeded before deciding what to do next.
 Inbox receipts and `sinceWhen` page anchors use Protobuf `Timestamp` values,
 preserving seconds and nanoseconds. `readPage` calls the JVM
 `InboxService.FindManyInShard` RPC with an exclusive timestamp bound.
@@ -168,9 +169,7 @@ void delivery;
 
 ## ⚠️ Design for redelivery
 
-Read operations may use the configured bounded retry policy. Mutations do not
-retry automatically: if a response is lost, first read the named fact and
-decide what happened. A session renewal permits the worker to continue processing its shard.
+A session renewal permits the worker to continue processing its shard.
 If a connection fails after a handler saves its result but before the inbox row
 is acknowledged, another worker may invoke that handler again. Keep this case
 in mind when a handler calls an external service.

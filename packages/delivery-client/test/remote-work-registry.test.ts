@@ -20,13 +20,14 @@ import {
   ExpiredSessionSchema,
   ExpiredSessionsReleasedSchema,
   DeliveryShardPickupOutcomeSchema,
+  DeliveryShardBusySchema,
   DeliverySessionHandleSchema,
   DeliveryShardPickupSchema,
   OptionalInboxMessageSchema,
   ReleaseExpiredSessionsSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DeliveryClient,
   DeliveryOutcomeUnknownError,
@@ -93,6 +94,90 @@ describe("RemoteWorkRegistry", () => {
     );
   });
 
+  it("stops ambiguous pickup recovery at the original deadline", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport, { retryBackoffMs: 1_000 });
+    fake.fail(new Error("first pickup reply lost"));
+    fake.fail(new Error("recovery reply lost"));
+    const started = Date.now();
+    await expect(
+      client.pickUpForDelivery(
+        ShardIndex.single(),
+        { nodeId: "node", value: "worker" },
+        { timeoutMs: 10 },
+      ),
+    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(fake.unary).toHaveBeenCalledTimes(2);
+  });
+
+  it("ends managed pickup recovery promptly when the client closes during backoff", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport, { retryBackoffMs: 1_000 });
+    fake.fail(new Error("first reply lost"));
+    fake.fail(new Error("recovery reply lost"));
+    const pickup = client.pickUpForDelivery(ShardIndex.single(), {
+      nodeId: "node",
+      value: "worker",
+    });
+    await vi.waitFor(() => {
+      expect(fake.unary).toHaveBeenCalledTimes(2);
+    });
+    client.close();
+    await expect(pickup).rejects.toThrow("Delivery client is closed.");
+    expect(fake.unary).toHaveBeenCalledTimes(2);
+  });
+
+  it("ends managed pickup recovery when the caller aborts during backoff", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport, { retryBackoffMs: 1_000 });
+    const controller = new AbortController();
+    fake.fail(new Error("first reply lost"));
+    fake.fail(new Error("recovery reply lost"));
+    const pickup = client.pickUpForDelivery(
+      ShardIndex.single(),
+      { nodeId: "node", value: "worker" },
+      { signal: controller.signal },
+    );
+    await vi.waitFor(() => {
+      expect(fake.unary).toHaveBeenCalledTimes(2);
+    });
+    controller.abort(new Error("caller stopped"));
+    await expect(pickup).rejects.toThrow("caller stopped");
+    expect(fake.unary).toHaveBeenCalledTimes(2);
+  });
+
+  it("paces repeated immediate ambiguous replies within one deadline", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    for (let index = 0; index < 20; index++) fake.fail(new Error("reply lost"));
+    await expect(
+      client.pickUpForDelivery(
+        ShardIndex.single(),
+        { nodeId: "node", value: "worker" },
+        { timeoutMs: 30 },
+      ),
+    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    expect(fake.unary.mock.calls.length).toBeGreaterThan(1);
+    expect(fake.unary.mock.calls.length).toBeLessThan(10);
+  });
+
+  it.each([
+    Code.Unauthenticated,
+    Code.PermissionDenied,
+    Code.InvalidArgument,
+    Code.Unimplemented,
+    Code.FailedPrecondition,
+  ])("does not retry definitive managed pickup rejection %s", async (code) => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    fake.fail(new ConnectError("server detail", code));
+    await expect(
+      client.pickUpForDelivery(ShardIndex.single(), { nodeId: "node", value: "worker" }),
+    ).rejects.toMatchObject({ code });
+    expect(fake.unary).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects an incomplete worker before attempting remote ownership", async () => {
     const fake = transport();
     const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(fake.transport));
@@ -155,6 +240,40 @@ describe("RemoteWorkRegistry", () => {
     await expect(registry.validateOwnership(session)).resolves.toBe(session);
     await expect(registry.release(session)).resolves.toBe(true);
     expect(workers).toHaveLength(1);
+  });
+
+  it("makes release terminal while an earlier renewal response is delayed", async () => {
+    const fake = transport();
+    const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(fake.transport));
+    const shard = ShardIndex.single();
+    echoPickup(fake);
+    const session = await registry.pickUp(shard, workerId("node", "worker"));
+    if (session === undefined) throw new Error("Expected a managed session.");
+    const held = fake.replyAndHold(
+      create(DeliverySessionHandleSchema, {
+        shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+        worker: workerId("node", "worker"),
+        whenPicked: { seconds: 2n, nanos: 0 },
+        sessionId: "fixture-session",
+        lifetime: { seconds: 60n, nanos: 0 },
+      }),
+    );
+    fake.reply(create(EmptySchema));
+    const renewal = registry.validateOwnership(session);
+    await Promise.resolve();
+    const release = registry.release(session);
+    await expect(registry.validateOwnership(session)).resolves.toBeUndefined();
+    expect(fake.unary).toHaveBeenCalledTimes(2);
+    held.release();
+    await expect(renewal).resolves.toBeUndefined();
+    await expect(release).resolves.toBe(true);
+    await expect(registry.release(session)).resolves.toBe(false);
+    expect(fake.unary).toHaveBeenCalledTimes(3);
+    expect(fake.unary.mock.calls.map((call) => (call[0] as { name: string }).name)).toEqual([
+      "PickShardForDelivery",
+      "RenewShardSession",
+      "ReleaseShardSession",
+    ]);
   });
 
   it("fails an uncertain ownership probe closed without retaining a marker", async () => {
@@ -295,7 +414,10 @@ describe("RemoteWorkRegistry", () => {
       create(DeliveryShardPickupOutcomeSchema, {
         result: {
           case: "busy",
-          value: create(WorkerIdSchema, { nodeId: { value: "node-b" }, value: "worker-b" }),
+          value: create(DeliveryShardBusySchema, {
+            worker: create(WorkerIdSchema, { nodeId: { value: "node-b" }, value: "worker-b" }),
+            whenPicked: { seconds: 1n, nanos: 0 },
+          }),
         },
       }),
     );
@@ -305,7 +427,7 @@ describe("RemoteWorkRegistry", () => {
     await expect(client.pickUp(shard, worker)).rejects.toBeInstanceOf(DeliveryProtocolError);
     fake.reply(
       create(DeliveryShardPickupOutcomeSchema, {
-        result: { case: "busy", value: create(WorkerIdSchema) },
+        result: { case: "busy", value: create(DeliveryShardBusySchema) },
       }),
     );
     await expect(client.pickUp(shard, worker)).rejects.toBeInstanceOf(DeliveryProtocolError);
@@ -329,6 +451,54 @@ describe("RemoteWorkRegistry", () => {
     client.close();
     await expect(client.releaseExpired(1)).rejects.toThrow("Delivery client is closed.");
     expect(fake.unary).toHaveBeenCalledTimes(4);
+  });
+
+  it("rejects invalid session lifetimes and a renewal with another session ID", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
+    const worker = workerId("node", "worker");
+    const reply = (seconds: bigint, nanos: number, sessionId = "session") =>
+      create(DeliveryShardPickupOutcomeSchema, {
+        result: {
+          case: "pickedUp",
+          value: create(DeliverySessionHandleSchema, {
+            shard,
+            worker,
+            sessionId,
+            whenPicked: { seconds: 1n, nanos: 0 },
+            lifetime: { seconds, nanos },
+          }),
+        },
+      });
+    for (const [seconds, nanos] of [
+      [0n, 0],
+      [315_576_000_001n, 0],
+      [1n, 1_000_000_000],
+      [1n, 0.5],
+    ] as const) {
+      fake.reply(reply(seconds, nanos));
+      await expect(
+        client.pickUp(ShardIndex.single(), {
+          nodeId: "node",
+          value: "worker",
+        }),
+      ).rejects.toBeInstanceOf(DeliveryProtocolError);
+    }
+    fake.reply(reply(60n, 0));
+    const session = await client.pickUp(ShardIndex.single(), { nodeId: "node", value: "worker" });
+    if (session === undefined) throw new Error("Expected a typed session.");
+    expect(Object.isFrozen(session.lifetime)).toBe(true);
+    fake.reply(
+      create(DeliverySessionHandleSchema, {
+        shard,
+        worker,
+        sessionId: "another-session",
+        whenPicked: { seconds: 2n, nanos: 0 },
+        lifetime: { seconds: 60n, nanos: 0 },
+      }),
+    );
+    await expect(client.renew(session)).rejects.toBeInstanceOf(DeliveryProtocolError);
   });
 
   it("accepts response collections above the former artificial bound", async () => {

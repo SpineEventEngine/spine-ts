@@ -60,6 +60,11 @@ reconnects only within configured limits. A slow consumer can receive
 mutation with `shardSnapshot()` before a later action.
 
 `pickUpForDelivery()` requests a shard with pending work.
+If a managed pickup has an uncertain outcome, the client repeats it using the
+same worker and run ID within the original deadline. A grant, a busy shard, an
+empty shard, or a definitive error ends the attempt. Repeated transport failures
+increase the delay between tries. Closing the client or cancelling the call
+also ends a wait between requests.
 `pickUp()` also permits deliberately taking an empty shard.
 A successful TS pickup returns a session handle for one worker and shard.
 The handle carries a session ID and the lifetime set by the server. Keep that

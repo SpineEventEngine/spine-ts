@@ -55,17 +55,21 @@ export interface RemoteShardSession {
   readonly worker: DeliveryWorkerId;
 
   /**
-   * Records when the remote service granted the session.
+   * Reports full-precision pickup or renewal wall time. A pickup reply may
+   * sample after the server stores the session, so Admin can report an earlier
+   * time. This timestamp is advisory; `sessionId` identifies authority.
    */
   readonly whenPicked: Timestamp;
 
   /**
    * Identifies this pickup across renewals and excludes later pickups.
+   * A previously issued handle remains valid after a completed renewal of
+   * this same session.
    */
   readonly sessionId: string;
 
   /**
-   * Gives the server's session lifetime between successful renewals.
+   * Gives the positive server lifetime between successful renewals.
    */
   readonly lifetime: Duration;
 }
@@ -95,6 +99,11 @@ export type DeliveryManagedPickupOutcome =
        * Identifies the current worker.
        */
       readonly worker: DeliveryWorkerId;
+
+      /**
+       * Reports the retained pickup or renewal time without granting authority.
+       */
+      readonly whenPicked: Timestamp;
     }>
   | Readonly<{
       /**
@@ -125,12 +134,12 @@ export interface ReleasedShardSession {
   readonly worker: DeliveryWorkerId;
 
   /**
-   * Records the former pickup with full precision.
+   * Reports the former pickup with full precision.
    */
   readonly whenPicked: Timestamp;
 
   /**
-   * Records when the remote service released the inactive session.
+   * Reports when the remote service released the inactive session.
    */
   readonly whenReleased: Timestamp;
 }
@@ -152,7 +161,8 @@ export interface RemoteShardObservation {
   readonly status: "PICKED" | "NOT_PICKED";
 
   /**
-   * Records the most recent pickup when the server provides it.
+   * Reports the retained full-precision pickup or renewal wall time when known.
+   * This is an observation and does not grant or prove a live session.
    */
   readonly lastPicked?: Timestamp;
 

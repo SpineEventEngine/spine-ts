@@ -322,11 +322,18 @@ class RemoteSessionOwner {
   // prettier-ignore
 
   /**
-   * Frozen remote pickup produces non-renewable exclusive sessions.
+   * Maps local sessions to their latest confirmed remote handles.
    */
   readonly #sessions = new WeakMap<ExclusiveDeliveryWorkSession, RemoteShardSession>();
 
   readonly #sessionsByShard = new Map<string, Set<ExclusiveDeliveryWorkSession>>();
+
+  readonly #pendingRenewals = new WeakMap<
+    ExclusiveDeliveryWorkSession,
+    Promise<RemoteShardSession>
+  >();
+
+  readonly #terminal = new WeakSet<ExclusiveDeliveryWorkSession>();
 
   /**
    * Creates a registry backed by the supplied delivery client.
@@ -385,23 +392,20 @@ class RemoteSessionOwner {
     if (session.kind !== "EXCLUSIVE") return false;
     const remote = this.#sessions.get(session);
     if (remote === undefined) return false;
+    this.#terminal.add(session);
     const key = RemoteValues.shardKey(session.shard);
     this.#sessions.delete(session);
     this.#removeSession(key, session);
-    await this.client.release(remote, options);
+    const latest = await this.#pendingRenewals.get(session)?.catch(() => undefined);
+    await this.client.release(latest ?? remote, options);
     return true;
   }
 
   /**
-   * Validates that an exclusive remote session still owns its shard.
-   *
-   * An exact worker and pickup-time match retains the local session. A free
-   * shard accidentally acquired by the probe is released and invalidated, as
-   * is a session held by a different current owner. Unknown outcomes fail
-   * closed without storing quarantine or marker state.
+   * Validates the local handle by renewing the matching remote session.
    *
    * @param session Supplies the locally issued exclusive session.
-   * @param options Bounds or cancels the authoritative probe.
+   * @param options Bounds or cancels the renewal.
    * @returns The retained session, or `undefined` when validation fails.
    */
   async validateOwnership(
@@ -410,13 +414,21 @@ class RemoteSessionOwner {
   ): Promise<ExclusiveDeliveryWorkSession | undefined> {
     if (session.kind !== "EXCLUSIVE") return undefined;
     const remote = this.#sessions.get(session);
-    if (remote === undefined) return undefined;
+    if (remote === undefined || this.#terminal.has(session)) return undefined;
+    const previous = this.#pendingRenewals.get(session);
+    const renewal = (async () => {
+      const latest = previous === undefined ? remote : await previous;
+      if (this.#terminal.has(session)) return latest;
+      return this.client.renew(latest, options);
+    })();
+    this.#pendingRenewals.set(session, renewal);
     try {
-      const renewed = await this.client.renew(remote, options);
+      const renewed = await renewal;
+      if (this.#terminal.has(session)) return undefined;
       this.#sessions.set(session, renewed);
       return session;
     } catch (error) {
-      this.#invalidate(session);
+      if (!this.#terminal.has(session)) this.#invalidate(session);
       if (error instanceof ConnectError && error.code === Code.FailedPrecondition) return undefined;
       throw error;
     }
@@ -428,6 +440,7 @@ class RemoteSessionOwner {
    * @param session Supplies the session to invalidate.
    */
   #invalidate(session: ExclusiveDeliveryWorkSession): void {
+    this.#terminal.add(session);
     this.#sessions.delete(session);
     this.#removeSession(RemoteValues.shardKey(session.shard), session);
   }
@@ -533,7 +546,7 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
    * Validates current remote ownership before a guarded side effect.
    *
    * @param session Supplies the exclusive session to validate.
-   * @param options Bounds or cancels the authoritative probe.
+   * @param options Bounds or cancels the authoritative observation.
    * @returns The retained session, or `undefined` when validation fails.
    */
   validateOwnership(

@@ -117,6 +117,7 @@ export const DeliveryAssembly: Readonly<{
       () => Time.currentTime(),
       configuration.processingTimeoutMs ?? 60_000,
       onShardTransition,
+      () => Time.monotonicTime(),
     );
     return Object.freeze({
       inbox: InboxHandlers.create(state, admission, onStoredChange, onWorkChange),

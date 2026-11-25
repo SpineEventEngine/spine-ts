@@ -54,6 +54,23 @@ describe("typed Shard sessions", () => {
     core.close();
   });
 
+  it("reports a later pickup reply sample than the retained session sample", async () => {
+    let nanos = 0;
+    const core = InMemoryDelivery.create({
+      now: () => create(TimestampSchema, { seconds: 10n, nanos: nanos++ }),
+    });
+    const handle = picked(await core.managed.pickShardRaw(request, context));
+    const busy = await core.managed.pickShardRaw(
+      create(DeliveryShardPickupSchema, { shard, worker: rival }),
+      context,
+    );
+    expect(handle.whenPicked).toMatchObject({ nanos: 1 });
+    expect(busy.result.case).toBe("busy");
+    if (busy.result.case === "busy")
+      expect(busy.result.value.whenPicked).toMatchObject({ nanos: 0 });
+    core.close();
+  });
+
   it("renews a raw same-worker pickup but never renews managed through raw pickup", async () => {
     const core = InMemoryDelivery.create();
     const first = picked(await core.managed.pickShardRaw(request, context));
@@ -233,6 +250,72 @@ describe("typed Shard sessions", () => {
     );
     expect(outcome.shard).toHaveLength(2);
     expect(outcome.shard.map((value) => value.shard?.index)).toEqual([0, 1]);
+    core.close();
+  });
+
+  it("keeps a renewed revision when an earlier release enters the same admission batch", async () => {
+    const core = InMemoryDelivery.create();
+    const first = picked(await core.managed.pickShardRaw(request, context));
+    const renewal = core.managed.renewShardSession(first, context);
+    const staleRelease = core.managed.releaseShardSession(first, context);
+    const refreshed = await renewal;
+    await staleRelease;
+    expect(refreshed.sessionId).toBe(first.sessionId);
+    expect(
+      (
+        await core.managed.pickShardRaw(
+          create(DeliveryShardPickupSchema, {
+            shard,
+            worker: rival,
+          }),
+          context,
+        )
+      ).result.case,
+    ).toBe("busy");
+    await core.managed.releaseShardSession(first, context);
+    expect(
+      (
+        await core.managed.pickShardRaw(
+          create(DeliveryShardPickupSchema, {
+            shard,
+            worker: rival,
+          }),
+          context,
+        )
+      ).result.case,
+    ).toBe("pickedUp");
+    core.close();
+  });
+
+  it("rejects a renewal that entered after a release in the same admission batch", async () => {
+    const core = InMemoryDelivery.create();
+    const first = picked(await core.managed.pickShardRaw(request, context));
+    const release = core.managed.releaseShardSession(first, context);
+    const renewal = core.managed.renewShardSession(first, context);
+    await release;
+    await expect(renewal).rejects.toMatchObject({ code: Code.FailedPrecondition });
+    expect((await core.managed.pickShardRaw(request, context)).result.case).toBe("pickedUp");
+    core.close();
+  });
+
+  it("uses monotonic elapsed time when wall time rolls back during renewal", async () => {
+    let wall = create(TimestampSchema, { seconds: 10n, nanos: 0 });
+    let elapsed = 0;
+    const core = InMemoryDelivery.create({
+      processingTimeoutMs: 100,
+      now: () => wall,
+      monotonicNow: () => elapsed,
+    });
+    const first = picked(await core.managed.pickShardRaw(request, context));
+    elapsed = 90;
+    wall = create(TimestampSchema, { seconds: 5n, nanos: 0 });
+    const renewed = await core.managed.renewShardSession(first, context);
+    expect(renewed.whenPicked).toMatchObject({ seconds: 10n });
+    elapsed = 189;
+    const competing = create(DeliveryShardPickupSchema, { shard, worker: rival });
+    expect((await core.managed.pickShardRaw(competing, context)).result.case).toBe("busy");
+    elapsed = 190;
+    expect((await core.managed.pickShardRaw(competing, context)).result.case).toBe("pickedUp");
     core.close();
   });
 });

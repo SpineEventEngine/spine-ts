@@ -32,10 +32,12 @@ service ManagedShardService {
   // Picks up pending work or recovers the live session of the same worker and attempt.
   rpc PickShardForDelivery(DeliveryShardPickup) returns (DeliveryShardPickupOutcome);
 
-  // Extends only the live session named by the complete handle.
+  // Extends only the live session named by the complete handle. A previously issued
+  // handle for the same session ID remains valid after a completed renewal.
   rpc RenewShardSession(DeliverySessionHandle) returns (DeliverySessionHandle);
 
-  // Releases only the live session named by the complete handle.
+  // Releases only the live session named by the complete handle. A previously issued
+  // handle for the same session ID remains valid after a completed renewal.
   rpc ReleaseShardSession(DeliverySessionHandle) returns (google.protobuf.Empty);
 }
 
@@ -59,7 +61,9 @@ message DeliverySessionHandle {
   // Distinguishes this pickup from every later pickup and server process.
   string session_id = 3 [(required) = true];
 
-  // Records the latest successful pickup or renewal with nanosecond precision.
+  // Reports full-precision pickup or renewal wall time. A successful pickup samples again
+  // after recording the session, so this may be later than Admin's retained time.
+  // This timestamp is advisory; the session ID and server lease govern authority.
   google.protobuf.Timestamp when_picked = 4 [(required) = true];
 
   // Gives the interval after which a session without a renewal expires.
@@ -73,10 +77,19 @@ message DeliveryShardPickupOutcome {
     // Grants the shard or recovers the same worker's live session.
     DeliverySessionHandle picked_up = 1;
 
-    // Reports the worker currently holding the shard.
-    spine.server.delivery.WorkerId busy = 2;
+    // Reports the session currently holding the shard.
+    DeliveryShardBusy busy = 2;
 
     // Reports that the free shard contains no pending work.
     google.protobuf.Empty no_work = 3;
   }
+}
+
+// Describes the current holder of a busy shard without granting authority.
+message DeliveryShardBusy {
+  // Identifies the worker currently holding the shard.
+  spine.server.delivery.WorkerId worker = 1 [(required) = true];
+
+  // Reports the retained full-precision pickup or renewal wall time.
+  google.protobuf.Timestamp when_picked = 2 [(required) = true];
 }

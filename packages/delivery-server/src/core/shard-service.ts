@@ -18,6 +18,7 @@ import { DurationSchema, TimestampSchema, type Timestamp } from "@bufbuild/proto
 import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import {
   DeliverySessionHandleSchema,
+  DeliveryShardBusySchema,
   DeliveryShardPickupOutcomeSchema as PickupOutcomeSchema,
   ExpiredSessionSchema,
   ExpiredSessionsReleasedSchema,
@@ -25,13 +26,16 @@ import {
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 import type { ShardIndex, WorkerId } from "@spine-event-engine/proto/delivery";
+import { Time } from "@spine-event-engine/core/time";
 
 import { InMemoryDeliveryState, type ShardRecord } from "./in-memory-delivery-state.js";
 import { MAX_DELIVERY_RESPONSE_SHARDS, MAX_DELIVERY_WORKER_BYTES } from "./limits.js";
 import { MutationAdmission } from "./mutation-admission.js";
 import { DeliveryShards, DeliveryWorkers } from "./wire-values.js";
 
-/** Records fields required by every live raw or managed session. */
+/**
+ * Records fields required by every live raw or managed session.
+ */
 interface ActiveShardRecord extends ShardRecord {
   readonly worker: WorkerId;
   readonly whenLastPicked: Timestamp;
@@ -50,11 +54,15 @@ export class ShardSessionRuntime {
 
   readonly #now: () => Timestamp;
 
+  readonly #monotonicNow: () => number;
+
   readonly #lifetimeMs: number;
 
   readonly #onTransition: ((shard: ShardIndex) => void) | undefined;
 
   readonly #timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  readonly #leaseStarts = new Map<string, { id: string; started: number }>();
 
   #closed = false;
 
@@ -76,6 +84,7 @@ export class ShardSessionRuntime {
    * @param now Supplies a full-precision wall clock sample.
    * @param lifetimeMs Sets the positive session lifetime in milliseconds.
    * @param onTransition Publishes pickup and release changes.
+   * @param monotonicNow Measures elapsed lease time independently of wall time.
    */
   constructor(
     state: InMemoryDeliveryState,
@@ -83,12 +92,14 @@ export class ShardSessionRuntime {
     now: () => Timestamp,
     lifetimeMs: number,
     onTransition?: (shard: ShardIndex) => void,
+    monotonicNow: () => number = () => Time.monotonicTime(),
   ) {
-    if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs <= 0)
+    if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs <= 0 || lifetimeMs > 315_576_000_000_000)
       throw new RangeError("Delivery session lifetime is invalid.");
     this.#state = state;
     this.#admission = admission;
     this.#now = now;
+    this.#monotonicNow = monotonicNow;
     this.#lifetimeMs = lifetimeMs;
     this.#onTransition = onTransition;
     this.raw = this.#rawService();
@@ -135,15 +146,17 @@ export class ShardSessionRuntime {
         const worker = SessionValues.requireWorker(request.worker);
         const id = SessionValues.requireId(request.sessionId);
         this.#requireHandle(request);
-        return this.#admission.run(context.signal, () => this.#renew(shard, worker, id));
+        const revision = this.#state.session(shard)?.revision;
+        return this.#admission.run(context.signal, () => this.#renew(shard, worker, id, revision));
       },
       releaseShardSession: async (request, context) => {
         const shard = SessionValues.requireShard(request.shard);
         const worker = SessionValues.requireWorker(request.worker);
         const id = SessionValues.requireId(request.sessionId);
         this.#requireHandle(request);
+        const revision = this.#state.session(shard)?.revision;
         await this.#admission.run(context.signal, () => {
-          this.#releaseMatching(shard, worker, id);
+          this.#releaseMatching(shard, worker, id, revision);
         });
         return {};
       },
@@ -156,11 +169,13 @@ export class ShardSessionRuntime {
    * @param shard Identifies the requested shard.
    * @param worker Identifies the requesting worker.
    * @param id Identifies the session to renew.
+   * @param revision Captures the record revision before admission.
    * @returns The updated session handle.
    */
-  #renew(shard: ShardIndex, worker: WorkerId, id: string) {
+  #renew(shard: ShardIndex, worker: WorkerId, id: string, revision: number | undefined) {
     const current = this.#live(shard);
-    if (!SessionValues.matches(current, worker, id)) throw SessionValues.lost();
+    if (!SessionValues.matches(current, worker, id) || current.revision !== revision)
+      throw SessionValues.lost();
     const whenPicked = SessionValues.later(SessionValues.requireTime(current), this.#sample());
     this.#state.setSession(shard, worker, whenPicked, id, current.kind, current.revision + 1);
     this.#schedule(shard, id);
@@ -174,10 +189,17 @@ export class ShardSessionRuntime {
    * @param shard Identifies the requested shard.
    * @param worker Identifies the requesting worker.
    * @param id Identifies the session to release.
+   * @param revision Captures the record revision before admission.
    */
-  #releaseMatching(shard: ShardIndex, worker: WorkerId, id: string): void {
+  #releaseMatching(
+    shard: ShardIndex,
+    worker: WorkerId,
+    id: string,
+    revision: number | undefined,
+  ): void {
     const current = this.#live(shard);
-    if (SessionValues.matches(current, worker, id)) this.#release(shard);
+    if (SessionValues.matches(current, worker, id) && current.revision === revision)
+      this.#release(shard);
   }
 
   /**
@@ -188,6 +210,7 @@ export class ShardSessionRuntime {
     this.#closed = true;
     for (const timer of this.#timers.values()) clearTimeout(timer);
     this.#timers.clear();
+    this.#leaseStarts.clear();
   }
 
   /**
@@ -231,7 +254,13 @@ export class ShardSessionRuntime {
         return this.#picked(SessionValues.requireActive(this.#state.session(shard)));
       }
       return create(PickupOutcomeSchema, {
-        result: { case: "busy", value: DeliveryWorkers.copy(current.worker) },
+        result: {
+          case: "busy",
+          value: create(DeliveryShardBusySchema, {
+            worker: DeliveryWorkers.copy(current.worker),
+            whenPicked: SessionValues.copyTime(current.whenLastPicked),
+          }),
+        },
       });
     }
     if (kind === "MANAGED" && !this.#state.hasPending(shard))
@@ -275,15 +304,12 @@ export class ShardSessionRuntime {
   #live(shard: ShardIndex): ActiveShardRecord | undefined {
     const current = this.#state.session(shard);
     if (current === undefined) return undefined;
-    if (
-      SessionValues.nanoseconds(this.#sample()) -
-        SessionValues.nanoseconds(SessionValues.requireTime(current)) >=
-      BigInt(this.#lifetimeMs) * 1_000_000n
-    ) {
+    const active = SessionValues.requireActive(current);
+    if (this.#elapsed(shard, active.sessionId) >= this.#lifetimeMs) {
       this.#release(shard);
       return undefined;
     }
-    return SessionValues.requireActive(current);
+    return active;
   }
 
   /**
@@ -294,6 +320,7 @@ export class ShardSessionRuntime {
     const timer = this.#timers.get(key);
     if (timer !== undefined) clearTimeout(timer);
     this.#timers.delete(key);
+    this.#leaseStarts.delete(key);
     if (this.#state.release(shard) !== undefined) this.#onTransition?.(shard);
   }
 
@@ -329,30 +356,21 @@ export class ShardSessionRuntime {
   /**
    * Reschedules one expiry; long lifetimes use multiple Node timer intervals.
    */
-  #schedule(shard: ShardIndex, id: string): void {
+  #schedule(shard: ShardIndex, id: string, reset = true): void {
     const key = DeliveryShards.key(shard);
     const old = this.#timers.get(key);
     if (old !== undefined) clearTimeout(old);
-    const current = this.#state.session(shard);
-    if (current === undefined) return;
-    const remaining =
-      SessionValues.nanoseconds(SessionValues.requireTime(current)) +
-      BigInt(this.#lifetimeMs) * 1_000_000n -
-      SessionValues.nanoseconds(this.#sample());
-    const delay = Math.max(1, Math.min(Number(remaining / 1_000_000n), 2_147_483_647));
+    if (reset) this.#leaseStarts.set(key, { id, started: this.#clock() });
+    const remaining = this.#lifetimeMs - this.#elapsed(shard, id);
+    const delay = Math.max(1, Math.min(remaining, 2_147_483_647));
     const timer = setTimeout(() => {
       if (this.#closed) return;
       void this.#admission
         .runSystem(() => {
           const live = this.#state.session(shard);
           if (live?.sessionId !== id) return;
-          if (
-            SessionValues.nanoseconds(this.#sample()) -
-              SessionValues.nanoseconds(SessionValues.requireTime(live)) >=
-            BigInt(this.#lifetimeMs) * 1_000_000n
-          )
-            this.#release(shard);
-          else this.#schedule(shard, id);
+          if (this.#elapsed(shard, id) >= this.#lifetimeMs) this.#release(shard);
+          else this.#schedule(shard, id, false);
         })
         .catch(() => {
           // Terminal admission closure has already cleared all session timers.
@@ -360,6 +378,24 @@ export class ShardSessionRuntime {
     }, delay);
     timer.unref();
     this.#timers.set(key, timer);
+  }
+
+  /**
+   * Reads a finite monotonic elapsed time for one unchanged session.
+   */
+  #elapsed(shard: ShardIndex, id: string): number {
+    const lease = this.#leaseStarts.get(DeliveryShards.key(shard));
+    if (lease?.id !== id) throw new TypeError("Delivery lease clock is missing.");
+    return this.#clock() - lease.started;
+  }
+
+  /**
+   * Validates a monotonic clock sample.
+   */
+  #clock(): number {
+    const value = this.#monotonicNow();
+    if (!Number.isFinite(value)) throw new RangeError("Delivery monotonic clock is invalid.");
+    return value;
   }
 
   /**

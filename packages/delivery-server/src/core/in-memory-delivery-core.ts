@@ -45,6 +45,13 @@ export interface DeliveryCoreOptions {
   readonly now?: () => Timestamp;
 
   /**
+   * Returns monotonic milliseconds for deterministic lease-expiry tests.
+   *
+   * @returns An elapsed-time reading independent of wall-clock changes.
+   */
+  readonly monotonicNow?: () => number;
+
+  /**
    * Maximum retained records; integer from 1 through 2,147,483,647.
    */
   readonly maxRetainedMessages?: number;
@@ -98,7 +105,7 @@ export const InMemoryDelivery: Readonly<{
    *
    * @param options Configures state limits and stale pickup expiry.
    * @returns Provides the handlers without owning a listener or process lifecycle.
-   * @throws {RangeError} When the processing timeout is not a finite non-negative number.
+   * @throws {RangeError} When the processing timeout is not a positive safe integer.
    */
   create(options?: DeliveryCoreOptions): DeliveryCore;
 }> = Object.freeze({
@@ -109,7 +116,7 @@ export const InMemoryDelivery: Readonly<{
    *
    * @param options Configures state limits and stale pickup expiry.
    * @returns Provides the handlers without owning a listener or process lifecycle.
-   * @throws {RangeError} When the processing timeout is not a finite non-negative number.
+   * @throws {RangeError} When the processing timeout is not a positive safe integer.
    */
   create(options: DeliveryCoreOptions = {}): DeliveryCore {
     const timeout = options.processingTimeoutMs ?? 60_000;
@@ -118,7 +125,14 @@ export const InMemoryDelivery: Readonly<{
     const state = new InMemoryDeliveryState(options);
     const admission = new MutationAdmission();
     const now = options.now ?? (() => Time.currentTime());
-    const sessions = new ShardSessionRuntime(state, admission, now, timeout);
+    const sessions = new ShardSessionRuntime(
+      state,
+      admission,
+      now,
+      timeout,
+      undefined,
+      options.monotonicNow ?? (() => Time.monotonicTime()),
+    );
     return Object.freeze({
       inbox: InboxHandlers.create(state, admission),
       shards: sessions.raw,
