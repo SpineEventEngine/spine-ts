@@ -293,8 +293,7 @@ Restarting it can lose accepted pending Commands even when saved application
 business state survives in a separate store. A Gateway restart has a different
 effect: the browser reconnects, queries the current board, and then continues
 listening. That query does not recover Commands lost from the Delivery Inbox.
-See the separate [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers);
-a 10-second scan does not guarantee delivery or worker takeover within 10 seconds.
+See [session lifetime and work reminders](../../packages/delivery-server/REFERENCE.md#session-lifetime-and-work-reminders). The default 10-second reminder repeats a notice for work that remains free and pending; it does not promise delivery or worker takeover within 10 seconds.
 
 ### Build local images
 

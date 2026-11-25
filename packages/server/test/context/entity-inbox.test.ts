@@ -218,6 +218,7 @@ describe("LocalEntityInbox", () => {
       },
       read: (shard, options) => backing.inbox.read(shard, options),
       readMessage: (id, options) => backing.inbox.readMessage(id, options),
+      newestPending: (shard, options) => backing.inbox.newestPending(shard, options),
       markDelivered: (message, options) => backing.inbox.markDelivered(message, options),
       removeDuplicate: (message, options) => backing.inbox.removeDuplicate(message, options),
     };
@@ -493,6 +494,28 @@ describe("LocalEntityInbox", () => {
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toHaveLength(3);
+  });
+
+  it("passes the full persisted Entity row to a custom observer without local dispatch", async () => {
+    const delivery = new Delivery({
+      context: { name: "CustomTasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const observer = vi.fn();
+    const readiness = new DeliveryReadiness(undefined, delivery, undefined, false, observer);
+    const inbox = new LocalEntityInbox("CustomTasks", readiness);
+    const deliverTarget = vi.fn(() => Promise.resolve(undefined));
+    inbox.register({
+      targetTypeUrl: TaskSchema.typeName,
+      labels: ["HANDLE_COMMAND"],
+      deliver: deliverTarget,
+    });
+
+    const stored = await inbox.receive(delivery, taskCommandInput("custom"));
+    expect(observer).toHaveBeenCalledExactlyOnceWith(stored);
+    expect(stored).toMatchObject({ signalId: "command-custom", status: "TO_DELIVER" });
+    expect(deliverTarget).not.toHaveBeenCalled();
+    await delivery.close();
   });
 
   it("accepts a local shared Command after its Inbox write and wakes delivery", async () => {

@@ -21,8 +21,11 @@ import { ShardIndex } from "./shard-index.js";
  */
 export class DeliveryLoop {
   readonly #options: DeliveryLoopOptions;
+
   #stopped = false;
+
   #progress: DeliveryLoopProgress = empty();
+
   #running: Promise<DeliveryLoopRun> | undefined;
 
   /**
@@ -218,5 +221,5 @@ function empty(): DeliveryLoopProgress {
 }
 
 function map(status: DeliveryRun["status"]): DeliveryLoopStatus {
-  return status === "DRAINED" ? "IDLE" : status;
+  return status === "DRAINED" ? "IDLE" : status === "NO_WORK" ? "SKIPPED" : status;
 }

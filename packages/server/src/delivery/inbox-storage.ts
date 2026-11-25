@@ -124,6 +124,36 @@ export class InboxStorage {
   }
 
   /**
+   * Reads the last pending row by receive time, version, and message ID.
+   *
+   * @param shard Selects the shard to inspect.
+   * @returns The newest durable pending row, when present.
+   */
+  async newestPending(shard: ShardIndex): Promise<InboxMessage | undefined> {
+    const requested = Values.shard(shard);
+    const storage = this.#storage();
+    try {
+      const rows = await storage.queryEntries({
+        filters: [
+          { column: "shard_index", value: requested.index },
+          { column: "shard_total", value: requested.ofTotal },
+          { column: "status", value: Values.status("TO_DELIVER") },
+        ],
+        sort: [
+          { field: "when_received", direction: "desc" },
+          { field: "version", direction: "desc" },
+          { field: "message_id", direction: "desc" },
+        ],
+        limit: 1,
+      });
+      const row = rows[0];
+      return row === undefined ? undefined : InboxRecords.read(row.record, row.id);
+    } finally {
+      this.#finish();
+    }
+  }
+
+  /**
    * Reads one exact direct inbox row.
    *
    * @param id Identifies the message and shard.

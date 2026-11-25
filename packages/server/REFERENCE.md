@@ -1871,36 +1871,9 @@ while handler execution and row acknowledgement continue through Delivery. For a
 Agent, the handler and save finish before its Inbox row is acknowledged. A detached
 model Command may keep running after that acknowledgement.
 
-With remote Delivery and its environment supervisor, posting completes after the
-remote Inbox accepts the input and the shard notification is submitted. Processing
-may still be pending on another process. For example, importing an Event can return
-while another process holds its shard; the Projection update arrives after that
-process can dispatch the Event. Reception alone does not acknowledge delivery or prove that a handler ran.
+With remote Delivery, posting completes when the remote Inbox accepts the row. The Delivery server publishes available-shard notices to each built-in application observer, and every new or reconnected node discovers current pending work. Processing may still be pending on another process. A custom observer receives the complete persisted `InboxMessage` after a write or normal release and initiates work through its application mechanism. Callback failures are logged without reversing the write or starting fallback work. `Delivery.deliverMessagesFrom(shard)` starts or joins one managed attempt and returns `completed`, `busy`, `noWork`, or `stopped`. Distinct shards run concurrently by default; only built-in server notification mode accepts a positive `maxConcurrentDeliveries` limit. The server repeats an unclaimed available-shard notice after its configured reminder interval, 10 seconds by default.
 
-A rejected remote receive operation rejects posting. If a local notification
-observer fails after reception succeeds, the failure is logged and the existing
-notifications and safety scan can find the pending work. The environment selects
-this behavior from its installed supervision; contexts have no attachment step or
-completion switch. Supplying custom ports without a source does not install remote
-supervision. Explicit `Delivery.run()` still returns the actual run result,
-including `SKIPPED` when another process is handling the shard.
-For ordinary Entity Inbox work, post-handler output and transition validation
-failures reach the reception monitor. Pre-handler input and routing errors and
-storage failures remain outside that monitor. Agent work uses the same ordinary Inbox row and monitor path. A detached model
-handler failure is observed with its original Command identity.
-
-`DeliveryBuilder` constructs a controlled `Delivery`; `DeliverySupervisor`
-receives `{ source, delivery, onMessage }`, manages bounded shard notifications
-from that structural source, and must start after endpoints are ready and close
-before source client/storage. `DeliverySource` is not configured on
-`DeliveryBuilder`. The supervisor does not promise
-durable supervisor state, topology failover, exactly-once effects, or automatic
-retry of unknown remote mutations.
-
-Direct `DeliverySupervisor.close({ graceMs })` stops new admission and source
-activity. Its `graceMs` defaults to 30,000 ms and bounds active-work grace and
-release cleanup separately. After those waits, close may still await entered
-work that has not settled; it is not a hard total close deadline.
+The delivery-client `DeliveryBuilder.remote({ endpoint, notifications? })` produces an environment-installable remote facility. `DeliveryBuilder.local({ storageFactory, shardObserver })` configures shared application storage and a custom observer. An application-managed multi-process deployment must share its inbox, session registry, and Entity storage across replicas. The framework starts no remote work stream in custom mode.
 
 Each Inbox read is bounded to one page. That bound does not limit the total
 pending work: an active drain continues from the last row read until that scan
@@ -1937,15 +1910,7 @@ Managed repository delivery sends actual handler failures to the monitor while
 storage and delivery infrastructure errors propagate. A direct `onMessage` callback
 is treated as the endpoint. Handler effects and acknowledgement are separate,
 so a crash between them may redeliver.
-The framework adds no persisted attempts, quarantine, dead-letter, receipt, or
-marker policy. The supervisor rescans pending shards every 10 seconds by default;
-the stale-session threshold is separately 60 seconds.
-After a failed finite run, release-generated remote observations of that shard
-are held locally until the next periodic rescan, preventing an immediate
-self-triggered retry loop. Explicit notifications remain admissible. A newly
-enqueued remote row on that shard may wait for the next rescan; other shards
-continue, and other processes may each attempt the failed row before applying
-local suppression. This timing is not a delivery deadline.
+The framework adds no persisted attempts, quarantine, dead-letter, receipt, or marker policy. A failed finite run leaves the row pending. The Delivery server observes retained rows and repeats an unclaimed available-shard notice at its configured reminder interval; another application node may attempt the work. A custom observer can use its own queue recovery policy. Observation is advisory and does not provide exactly-once handler effects.
 
 `BoundedContext.close()` stops external admission, drains accepted framework
 work, and then closes buses, subscriptions, Stands, and repository bindings.
@@ -1969,9 +1934,8 @@ configuration does not authenticate requests or select a remote topology.
 
 `ServerEnvironmentDelivery` supplies an optional remote facility with `open()`,
 `inbox`, and `workRegistry` ports. Setup opens it once before creating the
-shared Delivery; failure closes acquired facilities. Its optional `source`
-supports remote shard snapshots and notifications through the environment's
-single supervisor. Local Delivery uses the environment's configured storage
+shared Delivery; failure closes acquired facilities. Its optional `source` streams available remote shards after application readiness.
+A local facility can supply a custom observer and application storage. Local Delivery uses the environment's configured storage
 factory for its shared Inbox and work registry; the default factory is in-memory.
 Contexts register recipients with the same Delivery and never close that shared
 facility individually. Environment shutdown stops intake, drains local admitted

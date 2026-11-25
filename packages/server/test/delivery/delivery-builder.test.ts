@@ -41,6 +41,28 @@ import { createMessage } from "./inbox-message-fixture.js";
 import { EnvironmentTests, EnvironmentType } from "../../src/server/environment.js";
 
 describe("DeliveryMonitor delivery", () => {
+  it("builds installable local ports with a full-row custom observer", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const shardObserver = { onMessage: vi.fn() };
+    const local = DeliveryBuilder.local({ storageFactory, shardObserver });
+    expect(local.storageFactory).toBe(storageFactory);
+    expect(local.local).toBe(true);
+    expect(local.notifications).toEqual({ kind: "custom", shardObserver });
+    expect(local.inbox.sessionKind).toBe(local.workRegistry.sessionKind);
+    await local.open();
+    await local.close();
+    expect(() => DeliveryBuilder.local({ storageFactory, shardObserver: {} } as never)).toThrow(
+      "shard observer",
+    );
+    expect(() =>
+      DeliveryBuilder.local({
+        storageFactory,
+        shardObserver,
+        maxConcurrentDeliveries: 2,
+      } as never),
+    ).toThrow("built-in");
+  });
+
   it("builds Delivery from explicit storage without a process environment", () => {
     EnvironmentTests.use(EnvironmentType.Production);
     try {
@@ -90,6 +112,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
+        newestPending: async () => undefined,
         markDelivered: async (value) => {
           acknowledgements += 1;
           return value;
@@ -312,6 +335,7 @@ describe("DeliveryMonitor delivery", () => {
       },
       read: async () => [],
       readMessage: async () => undefined,
+      newestPending: async () => undefined,
       markDelivered: async () => undefined,
       removeDuplicate: async () => true,
     };
@@ -359,6 +383,7 @@ describe("DeliveryMonitor delivery", () => {
           },
           read: async () => (reads++ === 0 ? [message("pending", "target", shard)] : []),
           readMessage: async () => undefined,
+          newestPending: async () => undefined,
           markDelivered: async (value) => value,
           removeDuplicate: async () => true,
         })
@@ -382,6 +407,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
+        newestPending: async () => undefined,
         markDelivered: async (value) => (acknowledgements++ === 0 ? undefined : value),
         removeDuplicate: async () => true,
       })
@@ -405,6 +431,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => [pending],
         readMessage: async () => undefined,
+        newestPending: async () => undefined,
         markDelivered: async (value) => value,
         removeDuplicate: async () => true,
       },
@@ -481,6 +508,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
+        newestPending: async () => undefined,
         markDelivered: async (value) => value,
         removeDuplicate: async () => true,
       },
@@ -515,6 +543,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? messages : []),
         readMessage: async () => undefined,
+        newestPending: async () => undefined,
         markDelivered: async (value) => {
           if (value.signalId === "first") throw new Error("acknowledgement failed");
           return value;
@@ -546,6 +575,7 @@ describe("DeliveryMonitor delivery", () => {
           return [pending];
         },
         readMessage: async () => undefined,
+        newestPending: async () => undefined,
         markDelivered: async () => {
           throw new Error("mark failed");
         },
@@ -570,6 +600,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => [message("pending", "target", shard)],
         readMessage: async () => undefined,
+        newestPending: async () => undefined,
         markDelivered: async () => {
           throw new Error("must not acknowledge");
         },
@@ -596,6 +627,7 @@ describe("DeliveryMonitor delivery", () => {
           },
           read: async () => [],
           readMessage: async () => undefined,
+          newestPending: async () => undefined,
           markDelivered: async () => undefined,
           removeDuplicate: async () => true,
         })

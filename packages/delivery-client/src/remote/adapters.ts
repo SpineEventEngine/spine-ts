@@ -114,6 +114,20 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
+   * Finds the last pending row in the server's complete shard delivery order.
+   *
+   * @param shard Selects the shard to inspect after normal release.
+   * @param options Bounds or cancels the remote read.
+   * @returns The newest pending row, when present.
+   */
+  newestPending(
+    shard: ShardIndex,
+    options?: DeliveryOperationOptions,
+  ): Promise<InboxMessage | undefined> {
+    return this.client.newestPending(shard, options);
+  }
+
+  /**
    * Reads a bounded page of messages from one shard.
    *
    * @param shardIndex Identifies the shard to read.
@@ -401,6 +415,26 @@ class RemoteSessionOwner {
     worker: WorkerId,
     options?: DeliveryOperationOptions,
   ): Promise<ExclusiveDeliveryWorkSession | undefined> {
+    const result = await this.pickUpForWork(shardIndex, worker, options);
+    return result.kind === "PICKED" ? result.session : undefined;
+  }
+
+  /**
+   * Returns a managed grant or the server's definitive refusal reason.
+   *
+   * @param shardIndex Selects the shard to acquire.
+   * @param worker Identifies this independent run.
+   * @param options Bounds or cancels the remote mutation.
+   * @returns The granted session, busy, or no-work result.
+   */
+  async pickUpForWork(
+    shardIndex: ShardIndex,
+    worker: WorkerId,
+    options?: DeliveryOperationOptions,
+  ): Promise<
+    | { readonly kind: "PICKED"; readonly session: ExclusiveDeliveryWorkSession }
+    | { readonly kind: "BUSY" | "NO_WORK" }
+  > {
     const operation = {
       ...(options?.signal === undefined ? {} : { signal: options.signal }),
       ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
@@ -411,7 +445,7 @@ class RemoteSessionOwner {
       RemoteValues.worker(worker),
       operation,
     );
-    if (pickup.kind !== "PICKED") return undefined;
+    if (pickup.kind !== "PICKED") return { kind: pickup.kind };
     const remote = pickup.session;
     const session = RemoteValues.freeze({
       kind: "EXCLUSIVE" as const,
@@ -424,7 +458,7 @@ class RemoteSessionOwner {
     const sessions = this.#sessionsByShard.get(key) ?? new Set<ExclusiveDeliveryWorkSession>();
     sessions.add(session);
     this.#sessionsByShard.set(key, sessions);
-    return session;
+    return { kind: "PICKED", session };
   }
 
   /**
@@ -655,6 +689,22 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
     options?: DeliveryOperationOptions,
   ): Promise<ExclusiveDeliveryWorkSession | undefined> {
     return this.#owner.pickUp(shardIndex, worker, options);
+  }
+
+  /**
+   * Returns the server's busy and no-work outcomes to managed callers.
+   *
+   * @param shardIndex Selects the shard to acquire.
+   * @param worker Identifies this independent run.
+   * @param options Bounds or cancels the remote operation.
+   * @returns A managed session, a busy shard, or a shard without pending work.
+   */
+  pickUpForWork(
+    shardIndex: ShardIndex,
+    worker: WorkerId,
+    options?: DeliveryOperationOptions,
+  ): ReturnType<RemoteSessionOwner["pickUpForWork"]> {
+    return this.#owner.pickUpForWork(shardIndex, worker, options);
   }
 
   /**

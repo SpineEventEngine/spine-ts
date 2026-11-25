@@ -18,7 +18,8 @@ import { TenantBoundary } from "@spine-event-engine/storage/provider";
 
 import { Delivery, type DeliveryEndpointMessage } from "../delivery/delivery.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
-import type { DeliverySource } from "../delivery/delivery-supervisor.js";
+import type { ApplicationWorkSource } from "../delivery/application-work-observer.js";
+import type { DeliveryNotifications } from "../server/server-environment.js";
 import { InboxTargets, type InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 
@@ -88,9 +89,24 @@ export interface EnvironmentDeliveryPorts {
   readonly workRegistry: DeliveryWorkRegistry;
 
   /**
-   * Supplies remote Admin recovery and notification observations when delivery is remote.
+   * Supplies built-in available-work observations when delivery is remote.
    */
-  readonly source?: DeliverySource;
+  readonly source?: ApplicationWorkSource;
+
+  /**
+   * Selects built-in or custom application notifications.
+   */
+  readonly notifications?: DeliveryNotifications;
+
+  /**
+   * Identifies the work endpoint for diagnostics.
+   */
+  readonly endpoint?: string;
+
+  /**
+   * Keeps application storage observations on the local readiness path.
+   */
+  readonly local?: true;
 }
 
 /**
@@ -101,9 +117,11 @@ export class DeliveryReadiness {
 
   readonly #onWake: ((shard: ShardIndex) => void) | undefined;
 
-  readonly #remoteSupervised: boolean;
+  readonly #remoteObserved: boolean;
 
   readonly #onReady: OnDeliveryReady;
+
+  readonly #onMessage: ((message: InboxMessage) => void) | undefined;
 
   readonly #active = new Set<Promise<void>>();
 
@@ -119,19 +137,22 @@ export class DeliveryReadiness {
    * Creates a readiness coordinator for one context and its shared environment Delivery.
    * @param onReady Observes standalone direct routes after persistence.
    * @param shared Shared environment Delivery when this context is assembled.
-   * @param onWake Wakes the environment's local or supervised shard run.
-   * @param remoteSupervised Whether setup installed a remote source and supervisor.
+   * @param onWake Wakes the environment's local or remote shard run.
+   * @param remoteObserved Whether setup installed a remote work observation.
+   * @param onMessage Notifies a configured custom observer after persistence.
    */
   constructor(
     onReady: OnDeliveryReady = () => undefined,
     shared?: Delivery,
     onWake?: (shard: ShardIndex) => void,
-    remoteSupervised = false,
+    remoteObserved = false,
+    onMessage?: (message: InboxMessage) => void,
   ) {
     this.#onReady = onReady;
     this.#shared = shared;
     this.#onWake = onWake;
-    this.#remoteSupervised = remoteSupervised;
+    this.#remoteObserved = remoteObserved;
+    this.#onMessage = onMessage;
   }
 
   /**
@@ -193,11 +214,16 @@ export class DeliveryReadiness {
   /**
    * Notifies shared Delivery after persistence or returns a standalone completion claim.
    * @param ready Route made eligible by the write, if a recipient is registered.
+   * @param message Supplies the persisted row for a custom observer.
    * @returns A completion claim for that write.
    */
-  claim(ready?: DeliveryReady): DeliveryHandoff {
+  claim(ready?: DeliveryReady, message?: InboxMessage): DeliveryHandoff {
     if (ready === undefined) return settledHandoff;
-    if (this.#remoteSupervised && this.#shared !== undefined) {
+    if (this.#onMessage !== undefined && message !== undefined) {
+      this.#onMessage(message);
+      return settledHandoff;
+    }
+    if (this.#remoteObserved && this.#shared !== undefined) {
       this.notify(ready);
       return settledHandoff;
     }

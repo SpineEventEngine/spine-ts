@@ -1,22 +1,21 @@
 import { Time } from "@spine-event-engine/core/time";
 
-import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { AnyPacker } from "@spine-event-engine/core";
+import { create } from "@bufbuild/protobuf";
+import { AnyPacker, Identifiers, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   DeliveryClient,
   RemoteInbox,
   RemoteWorkRegistry,
 } from "@spine-event-engine/delivery-client";
-import { CommandSchema } from "@spine-event-engine/proto";
+import { CommandContextSchema, CommandSchema } from "@spine-event-engine/proto";
+import { CreateProjectSchema } from "@spine-event-engine/server-test-fixtures/entity/project_commands_pb.js";
+import { ProjectStateSchema } from "@spine-event-engine/server-test-fixtures/entity/project_states_pb.js";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import process from "node:process";
-import {
-  DeliveryBuilder,
-  DeliverySupervisor,
-  ShardIndex,
-  UniformAcrossAllShards,
-} from "@spine-event-engine/server";
+import { ShardIndex, UniformAcrossAllShards } from "@spine-event-engine/server";
+import { Delivery as CoreDelivery } from "../../server/dist/delivery/delivery.js";
+import { deliveryControls } from "../../server/dist/delivery/delivery-builder.js";
+import { ApplicationWorkObserver } from "../../server/dist/delivery/application-work-observer.js";
 
 export function createMultiMachineApplication({ baseUrl, node }) {
   const client = DeliveryClient.connectTo(baseUrl, {
@@ -26,34 +25,31 @@ export function createMultiMachineApplication({ baseUrl, node }) {
   const inbox = new RemoteInbox(client);
   const registry = new RemoteWorkRegistry(client);
   const storageFactory = new InMemoryStorageFactory();
-  const delivery = new DeliveryBuilder()
-    .withInbox(inbox)
-    .withWorkRegistry(registry)
-    .withStorageFactory(storageFactory)
-    .withStrategy(UniformAcrossAllShards.singleShard())
-    .withNode(node)
-    .build();
-  let supervisor;
+  const core = new CoreDelivery({
+    context: { name: "MultiMachineDelivery", multitenant: false },
+    inbox,
+    workRegistry: registry,
+    storageFactory,
+    strategy: UniformAcrossAllShards.singleShard(),
+    node,
+  });
+  const delivery = deliveryControls.managed(core);
+  let observer;
   let directSession;
   let stallOnce = false;
 
   const send = (frame) => process.send?.(frame);
-  const supervisorFor = () =>
-    new DeliverySupervisor({
-      source: client,
-      delivery,
-      recoveryMs: 100,
-      staleMs: 1_000,
-      watchInitialBackoffMs: 50,
-      watchMaxBackoffMs: 200,
-      onMessage: async (message) => {
-        send({ type: "dispatched", signalId: message.signalId, node });
-        if (message.signalId === "stall" && stallOnce) {
-          stallOnce = false;
-          await new Promise(() => undefined);
-        }
-      },
-    });
+  core.setDispatcher(async (message) => {
+    send({ type: "dispatched", signalId: message.signalId, node });
+    if (message.signalId === "stall" && stallOnce) {
+      stallOnce = false;
+      await new Promise(() => undefined);
+    }
+  });
+  const observerFor = () => new ApplicationWorkObserver(
+    { observeAvailableShards: (options) => client.observeAvailableShards(options) },
+    delivery, baseUrl, undefined, undefined,
+  );
 
   return {
     async pickUp() {
@@ -67,28 +63,26 @@ export function createMultiMachineApplication({ baseUrl, node }) {
       return true;
     },
     async start() {
-      supervisor ??= supervisorFor();
-      await supervisor.start();
+      observer ??= observerFor();
+      await observer.start();
     },
     async replace() {
-      await supervisor?.close({ graceMs: 5_000 });
-      supervisor = supervisorFor();
-      await supervisor.start();
+      await observer?.close();
+      observer = observerFor();
+      await observer.start();
     },
     async write(signalId) {
       await inbox.receive({
         inboxId: {
-          targetId: AnyPacker.pack(
-            StringValueSchema,
-            create(StringValueSchema, { value: signalId }),
-          ),
-          targetTypeUrl: "type.spine.io/test.Target",
+          targetId: Identifiers.pack("string", signalId),
+          targetTypeUrl: TypeUrls.derive(ProjectStateSchema),
         },
         signalId,
-        signal: create(AnySchema, {
-          typeUrl: "type.spine.io/spine.core.Command",
-          value: toBinary(CommandSchema, create(CommandSchema)),
-        }),
+        signal: AnyPacker.pack(CommandSchema, SignalEnvelopes.command({
+          schema: CreateProjectSchema,
+          message: create(CreateProjectSchema, { id: signalId, name: signalId }),
+          context: create(CommandContextSchema),
+        })),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
         shard: ShardIndex.single(),
@@ -103,7 +97,8 @@ export function createMultiMachineApplication({ baseUrl, node }) {
       stallOnce = false;
     },
     async close() {
-      await supervisor?.close({ graceMs: 5_000 });
+      await observer?.close();
+      await core.close();
       client.close();
       await storageFactory.close();
     },

@@ -514,6 +514,7 @@ describe("Delivery direct worker", () => {
       },
       read: async () => [...rows],
       readMessage: async () => undefined,
+      newestPending: async () => undefined,
       markDelivered: async (row: DeliveryEndpointMessage) => {
         remove(rows, row);
         return { ...row, status: "DELIVERED" as const };
@@ -565,6 +566,7 @@ describe("Delivery direct worker", () => {
       },
       read: async () => pages.shift() ?? [],
       readMessage: async () => undefined,
+      newestPending: async () => undefined,
       markDelivered: async (row: DeliveryEndpointMessage) => ({
         ...row,
         status: "DELIVERED" as const,
@@ -1885,6 +1887,7 @@ function createDelivery(config: {
     },
     read: async (_shard, options) => config.read?.(options) ?? [...rows],
     readMessage: async () => undefined,
+    newestPending: async () => undefined,
     markDelivered: async (row) => {
       const snapshot = row;
       return config.mark?.(snapshot) ?? snapshot;

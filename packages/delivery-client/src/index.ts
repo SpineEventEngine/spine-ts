@@ -28,6 +28,7 @@ export {
 } from "./client/client.js";
 export { RemoteInbox, RemoteWorkRegistry } from "./remote/adapters.js";
 export { RemoteDelivery, type RemoteDeliveryConfig } from "./remote/remote-delivery.js";
+export { DeliveryBuilder } from "./remote/delivery-builder.js";
 
 export type {
   DeliveryClientOptions,

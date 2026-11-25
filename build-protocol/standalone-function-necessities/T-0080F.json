@@ -93,15 +93,6 @@
     "rule": "standalone-function",
     "file": "packages/server/src/delivery/delivery.ts",
     "kind": "function-declaration",
-    "identity": "safelyValue()#1",
-    "name": "safelyValue",
-    "disposition": "necessity",
-    "reason": "TypeScript callback boundary: safelyValue contains direct or promised monitor results using an explicit deterministic fallback."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/delivery.ts",
-    "kind": "function-declaration",
     "identity": "snapshot()#1",
     "name": "snapshot",
     "disposition": "necessity",

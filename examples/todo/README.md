@@ -118,8 +118,7 @@ The Datastore emulator holds data only while its container runs. The simple
 Delivery server also keeps its Inbox only in memory: restarting it can lose
 accepted pending Commands even if application business state survives in a
 separate store. Shared Delivery coordinates processes; it does not make that
-Inbox durable. See the separate [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers);
-the default 10-second scan is not a delivery or worker-takeover deadline.
+Inbox durable. See [session lifetime and work reminders](../../packages/delivery-server/REFERENCE.md#session-lifetime-and-work-reminders). The default 10-second reminder repeats a notice for work that remains free and pending; it does not promise delivery or worker takeover within 10 seconds.
 It observes the emulator's ready log, the Delivery server's exact
 `Delivery server listening at …` message, and the Coordinator ready message;
 if Delivery or the Coordinator exits before its message, the launcher reports

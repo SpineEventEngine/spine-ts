@@ -32,7 +32,7 @@ available. Shared Delivery is recommended for multiple application processes,
 but restarting this simple server can lose accepted pending Commands despite
 separately persisted business state. Gateway query recovery does not restore
 lost Inbox work. See [Delivery restart limits](../../../packages/delivery-server/README.md)
-and the separate [recovery timers](../../../packages/delivery-server/REFERENCE.md#recovery-timers).
+and [session lifetime and work reminders](../../../packages/delivery-server/REFERENCE.md#session-lifetime-and-work-reminders).
 
 For the smaller runnable development topology of exactly two identical
 applications and one Gateway, use

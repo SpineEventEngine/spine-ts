@@ -85,6 +85,18 @@ export interface DeliveryInbox {
   ): Promise<InboxMessage | undefined>;
 
   /**
+   * Finds the newest pending row in full delivery order for one shard.
+   *
+   * @param shard Selects the shard to inspect after normal release.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @returns The last pending row, or `undefined` when none remains.
+   */
+  newestPending(
+    shard: ShardIndex,
+    options?: DeliveryOperationOptions,
+  ): Promise<InboxMessage | undefined>;
+
+  /**
    * Marks one exact pending Inbox row delivered with a five-second deadline.
    *
    * @param message Supplies the expected pending row snapshot.
@@ -139,6 +151,23 @@ export interface DeliveryWorkRegistry {
    * Session fence kind this registry issues; ports supplied together must agree.
    */
   readonly sessionKind: DeliveryWorkSession["kind"];
+
+  /**
+   * Tries managed pickup and distinguishes a busy shard from an empty one.
+   *
+   * @param shard Selects the shard to acquire.
+   * @param worker Identifies this independent processing run.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @returns A granted session, a busy shard, or a shard without pending work.
+   */
+  pickUpForWork?(
+    shard: ShardIndex,
+    worker: WorkerId,
+    options?: DeliveryOperationOptions,
+  ): Promise<
+    | { readonly kind: "PICKED"; readonly session: DeliveryWorkSession }
+    | { readonly kind: "BUSY" | "NO_WORK" }
+  >;
 
   /**
    * Creates a distinct worker identity for one independent remote run.

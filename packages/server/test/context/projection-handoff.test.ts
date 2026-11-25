@@ -243,6 +243,37 @@ describe("LocalProjectionInbox", () => {
     ).resolves.toHaveLength(1);
   });
 
+  it("passes the full persisted Projection row to a custom observer", async () => {
+    const delivery = new Delivery({
+      context: { name: "CustomProjects", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const observer = vi.fn();
+    const readiness = new DeliveryReadiness(undefined, delivery, undefined, false, observer);
+    const inbox = new LocalProjectionInbox("CustomProjects", readiness);
+    const targetTypeUrl = TypeUrls.derive(ProjectOverviewStateSchema);
+    const deliverTarget = vi.fn(() => Promise.resolve());
+    inbox.register({ targetTypeUrl, deliver: deliverTarget });
+    const project = create(ProjectCreatedSchema, { id: "custom-project", name: "Custom" });
+    const event = SignalEnvelopes.event({
+      context: create(EventContextSchema),
+      schema: ProjectCreatedSchema,
+      message: project,
+    });
+
+    const stored = await inbox.receive(delivery, {
+      inboxId: { targetId: Identifiers.pack("string", project.id), targetTypeUrl },
+      signalId: event.id?.value ?? "",
+      signal: AnyPacker.pack(EventSchema, event),
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+    });
+    expect(observer).toHaveBeenCalledExactlyOnceWith(stored);
+    expect(stored.status).toBe("TO_DELIVER");
+    expect(deliverTarget).not.toHaveBeenCalled();
+    await delivery.close();
+  });
+
   it("accepts a local shared Event after its Projection Inbox write and wakes delivery", async () => {
     const delivery = new Delivery({
       context: { name: "Projects", multitenant: false },

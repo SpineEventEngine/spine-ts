@@ -54,10 +54,14 @@ export type DeliveryEndpointMessage = InboxMessage;
 /**
  * Dispatches one persisted Inbox message to an endpoint.
  *
- * @param message The message to dispatch.
+ * @param message Supplies the persisted row selected for dispatch.
+ * @param signal Optionally cancels this attempt.
  * @returns A promise that settles when endpoint dispatch completes.
  */
-export type OnDeliveryMessage = (message: DeliveryEndpointMessage) => void | Promise<void>;
+export type OnDeliveryMessage = (
+  message: DeliveryEndpointMessage,
+  signal?: AbortSignal,
+) => void | Promise<void>;
 
 interface DirectDrainInput {
   readonly onMessage: OnDeliveryMessage;
@@ -161,7 +165,7 @@ export interface DeliveryRun {
   /**
    * Identifies the terminal delivery outcome.
    */
-  readonly status: "DRAINED" | "SKIPPED" | "FAILED" | "STOPPED";
+  readonly status: "DRAINED" | "SKIPPED" | "NO_WORK" | "FAILED" | "STOPPED";
 
   /**
    * Counts messages considered for dispatch.
@@ -187,6 +191,16 @@ export interface DeliveryRun {
    * Lists ephemeral delivery failures.
    */
   readonly failures: readonly DeliveryFailure[];
+}
+
+/**
+ * Reports the definitive outcome of one managed shard attempt.
+ */
+export interface DeliveryAttempt {
+  /**
+   * Distinguishes completed work, a competing worker, no pending row, and a normal stop.
+   */
+  readonly status: "completed" | "busy" | "noWork" | "stopped";
 }
 
 /**
@@ -285,6 +299,10 @@ export class Delivery {
 
   readonly #activeRuns = new Set<ActiveDeliveryRun>();
 
+  readonly #managedAttempts = new Map<string, Promise<DeliveryAttempt>>();
+
+  #shardObserver: ((message: InboxMessage) => unknown) | undefined;
+
   readonly #directDrains = new Map<string, DeliveryDrain>();
 
   readonly #pendingDirectWake = new Set<string>();
@@ -314,6 +332,151 @@ export class Delivery {
   ): void {
     this.#dispatcher = onDispatch;
     this.#acceptDispatcher = onAccept;
+  }
+
+  /**
+   * Sets the application callback for a newly observed persisted row.
+   *
+   * @param observer Receives an original Inbox row after persistence or release.
+   */
+  setShardObserver(observer: ((message: InboxMessage) => unknown) | undefined): void {
+    this.#shardObserver = observer;
+  }
+
+  /**
+   * Returns the count of physical shard runs already admitted on this node.
+   *
+   * @internal
+   * @returns The number of distinct active shard runs.
+   */
+  activeShardCount(): number {
+    return this.#activeDirect.size;
+  }
+
+  /**
+   * Checks whether one shard already has a local physical run.
+   *
+   * @internal
+   * @param shard Selects the shard to check.
+   * @returns Whether a caller can join its current run.
+   */
+  shardActive(shard: ShardIndex): boolean {
+    return this.#activeDirect.has(shard.key());
+  }
+
+  /**
+   * Notifies the selected custom callback after an Inbox write commits.
+   *
+   * @param message Supplies the complete persisted row.
+   */
+  observePersisted(message: InboxMessage): void {
+    if (this.#closing || this.#shardObserver === undefined) return;
+    this.#observeCustom(this.#shardObserver, message);
+  }
+
+  /**
+   * Starts or joins one managed shard attempt using the installed handlers.
+   *
+   * @param shard Selects the shard to try.
+   * @param options Propagates cancellation or an operation deadline.
+   * @returns The actual completed, busy, empty, or stopped outcome.
+   */
+  deliverMessagesFrom(
+    shard: ShardIndex,
+    options: import("./delivery-ports.js").DeliveryOperationOptions = {},
+  ): Promise<DeliveryAttempt> {
+    if (this.#dispatcher === undefined)
+      return Promise.reject(new Error("Delivery handlers are not installed."));
+    if (this.#closing || this.#startupDraining)
+      return Promise.resolve(Object.freeze({ status: "stopped" as const }));
+    const key = shard.key();
+    const active = this.#managedAttempts.get(key);
+    if (active !== undefined) return active;
+    const attempt = this.#executeManaged(shard, options);
+    this.#managedAttempts.set(key, attempt);
+    void attempt
+      .finally(() => {
+        if (this.#managedAttempts.get(key) === attempt) this.#managedAttempts.delete(key);
+      })
+      .catch(() => undefined);
+    return attempt;
+  }
+
+  /**
+   * Completes one managed attempt and checks for late custom-observed work.
+   *
+   * @param shard Selects the admitted shard.
+   * @param options Cancels the admitted run on shutdown or caller cancellation.
+   * @returns Its terminal public outcome.
+   */
+  async #executeManaged(
+    shard: ShardIndex,
+    options: import("./delivery-ports.js").DeliveryOperationOptions,
+  ): Promise<DeliveryAttempt> {
+    const run = await this.#startShared(shard, {
+      ...this.#directOptions(options.signal),
+      managed: true,
+      operation: options,
+    });
+    this.#managedAttempts.delete(shard.key());
+    if ((run.status === "DRAINED" || run.status === "STOPPED") && !this.#closing)
+      await this.#observeAfterRelease(shard);
+    switch (run.status) {
+      case "DRAINED":
+        return Object.freeze({ status: "completed" });
+      case "SKIPPED":
+        return Object.freeze({ status: "busy" });
+      case "NO_WORK":
+        return Object.freeze({ status: "noWork" });
+      case "STOPPED":
+        return Object.freeze({ status: "stopped" });
+      default: {
+        const failure = run.failures[0]?.error;
+        throw failure instanceof Error
+          ? failure
+          : new Error("Delivery attempt failed.", { cause: failure });
+      }
+    }
+  }
+
+  /**
+   * Passes the newest late pending row to the configured custom observer.
+   *
+   * @param shard Selects the normally released shard.
+   */
+  async #observeAfterRelease(shard: ShardIndex): Promise<void> {
+    const observer = this.#shardObserver;
+    if (observer === undefined) return;
+    const pending = await this.inbox.newestPending(shard);
+    if (pending !== undefined && !this.#closing) this.observePersisted(pending);
+  }
+
+  /**
+   * Reports one custom callback failure without changing durable Inbox state.
+   *
+   * @param observer Receives the persisted row.
+   * @param message Supplies the original row.
+   */
+  #observeCustom(observer: (message: InboxMessage) => unknown, message: InboxMessage): void {
+    try {
+      Promise.resolve(observer(message)).catch((error: unknown) => {
+        this.#logObserverFailure(error);
+      });
+    } catch (error) {
+      this.#logObserverFailure(error);
+    }
+  }
+
+  /**
+   * Logs a failed custom observation once for its invocation.
+   *
+   * @param error Supplies the callback failure.
+   */
+  #logObserverFailure(error: unknown): void {
+    if (this.#logger === undefined) return;
+    emitServerError(this.#logger, "Delivery observer failed.", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
   }
 
   /**
@@ -685,14 +848,14 @@ export class Delivery {
   /**
    * Dispatches each selected direct row through its registered endpoint.
    */
-  #directOptions(): DeliveryDrainOptions {
+  #directOptions(signal?: AbortSignal): DeliveryDrainOptions {
     const request = (message: InboxMessage) =>
       this.#directPending.get(Delivery.#messageKey(message));
     return {
       onMessage: (message) => {
         const selected = request(message);
         return selected === undefined
-          ? this.#dispatcher?.(message)
+          ? this.#dispatcher?.(message, signal)
           : selected.input.onMessage(message);
       },
       acceptMessage: (message) => {
@@ -777,7 +940,11 @@ export class Delivery {
     const active: ActiveDeliveryRun = { completed: completion.promise, shared };
     this.#activeRuns.add(active);
     if (this.#startupDraining) this.#closingRuns?.push(active);
-    void this.#drainAdmitted(shard, options, active).then(completion.resolve, completion.reject);
+    void this.#drainAdmitted(shard, options, active).then((run) => {
+      if (options.managed && active.releaseFailure !== undefined)
+        completion.reject(active.releaseFailure);
+      else completion.resolve(run);
+    }, completion.reject);
     void active.completed.finally(() => this.#activeRuns.delete(active)).catch(() => undefined);
     return active.completed;
   }
@@ -798,12 +965,17 @@ export class Delivery {
     let session;
     try {
       const worker = this.shards.workerForRun?.(this.worker) ?? this.worker;
-      session = await this.shards.pickUp(shard, worker, options.operation);
+      if (options.managed && this.shards.pickUpForWork !== undefined) {
+        const pickup = await this.shards.pickUpForWork(shard, worker, options.operation);
+        if (pickup.kind === "NO_WORK") return result("NO_WORK");
+        session = pickup.kind === "PICKED" ? pickup.session : undefined;
+      } else {
+        if (options.managed && (await this.inbox.newestPending(shard)) === undefined)
+          return result("NO_WORK");
+        session = await this.shards.pickUp(shard, worker, options.operation);
+      }
     } catch (error) {
-      await safely(async () =>
-        (await this.#monitor.onShardPickUpFailure(new FailedPickUp(shard, error))).execute(),
-      );
-      return result("FAILED");
+      return this.#pickupFailed(shard, error, options.managed === true);
     }
     if (session === undefined) {
       await safely(async () =>
@@ -813,6 +985,25 @@ export class Delivery {
     }
     if (this.#shouldStop(options)) return this.#releaseStoppedSession(session, active);
     return this.#runSession(shard, options, session, active);
+  }
+
+  /**
+   * Reports an acquisition failure to the configured monitor.
+   *
+   * @param shard Identifies the refused shard.
+   * @param error Supplies the original acquisition error.
+   * @param managed Propagates the error to a managed caller.
+   * @returns A failed direct result, or rejection for managed delivery.
+   */
+  async #pickupFailed(shard: ShardIndex, error: unknown, managed: boolean): Promise<DeliveryRun> {
+    const report = async () =>
+      (await this.#monitor.onShardPickUpFailure(new FailedPickUp(shard, error))).execute();
+    if (managed) {
+      await report();
+      throw error;
+    }
+    await safely(report);
+    return result("FAILED");
   }
 
   /**
@@ -913,6 +1104,8 @@ class DeliveryDrain {
   #heartbeatActive = false;
 
   #ownershipLost = false;
+
+  #confirmedLost = false;
 
   #failureLimitReached = false;
 
@@ -1052,11 +1245,13 @@ class DeliveryDrain {
    * @returns Whether the session was released.
    */
   async #release(): Promise<boolean> {
+    if (this.#confirmedLost) {
+      await safely(() => this.#completeMonitoring());
+      return true;
+    }
     let released = false;
     try {
-      released = await this.#sessionOperation(() =>
-        this.input.shards.release(this.#current, this.input.options.operation),
-      );
+      released = await this.#sessionOperation(() => this.input.shards.release(this.#current));
     } catch (error) {
       this.#releaseFailure =
         error instanceof Error ? error : new Error("Shard release failed.", { cause: error });
@@ -1562,12 +1757,20 @@ class DeliveryDrain {
   async #validate(): Promise<boolean> {
     return this.#sessionOperation(async () => {
       if (this.#stopped || this.#ownershipLost) return false;
-      const current = await safelyValue(
-        () => this.input.shards.validateOwnership(this.#current, this.input.options.operation),
-        undefined,
-      );
+      let current: DeliveryWorkSession | undefined;
+      try {
+        current = await this.input.shards.validateOwnership(
+          this.#current,
+          this.input.options.operation,
+        );
+      } catch {
+        this.#ownershipLost = true;
+        this.stop();
+        return false;
+      }
       if (current === undefined) {
         this.#ownershipLost = true;
+        this.#confirmedLost = true;
         this.stop();
       } else this.#current = current;
       return current !== undefined;
@@ -1734,6 +1937,11 @@ export interface DeliveryDrainOptions {
    * Propagates cancellation through the drain.
    */
   readonly operation?: import("./delivery-ports.js").DeliveryOperationOptions;
+
+  /**
+   * Uses work-aware pickup and propagates infrastructure failures to the caller.
+   */
+  readonly managed?: boolean;
 }
 function workerId(node: string): WorkerId {
   return create(WorkerIdSchema, { nodeId: { value: node }, value: randomUUID() });
@@ -1785,21 +1993,6 @@ async function safelyBoolean(action: () => boolean | Promise<boolean>): Promise<
   }
 }
 
-/**
- * Returns an action result or a fallback when the action fails.
- *
- * @typeParam T Action result type.
- * @param action Supplies the action to run.
- * @param fallback Supplies the result to use after failure.
- * @returns The action result or fallback value.
- */
-async function safelyValue<T>(action: () => T | Promise<T>, fallback: T): Promise<T> {
-  try {
-    return await action();
-  } catch {
-    return fallback;
-  }
-}
 function isEndpointMessage(message: InboxMessage): boolean {
   return (
     message.label === "HANDLE_COMMAND" ||

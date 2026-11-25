@@ -27,6 +27,9 @@ import {
 } from "@spine-event-engine/proto/delivery-server";
 import { DeliveryClient, RemoteInbox, RemoteWorkRegistry } from "../src/index.js";
 import { domainMessage } from "./shared-fixtures.js";
+import { Delivery as CoreDelivery } from "../../server/src/delivery/delivery.js";
+import { deliveryControls } from "../../server/src/delivery/delivery-builder.js";
+import { ApplicationWorkObserver } from "../../server/src/delivery/application-work-observer.js";
 
 const servers: DeliveryServer[] = [];
 const clients: DeliveryClient[] = [];
@@ -37,6 +40,73 @@ afterEach(async () => {
 });
 
 describe("guarded framework delivery over gRPC", () => {
+  it("lets a new identical node discover free work while two peers are full", async () => {
+    const server = new DeliveryServer({ port: 0 });
+    servers.push(server);
+    await server.start();
+    const shards = [0, 1, 2].map((index) => new ShardIndex(index, 3));
+    const rows = shards.map((shard, index) => {
+      const source = domainMessage(`node-join-${String(index)}`);
+      return { ...source, shard, id: { ...source.id, shard } };
+    });
+    const writer = DeliveryClient.connectTo(server.baseUrl);
+    clients.push(writer);
+    for (const row of rows.slice(0, 2)) await writer.writeOne(row);
+    const paused = Promise.withResolvers<void>();
+    const seen = new Map<string, string[]>();
+    const runtimes = ["east", "west", "north"].map((node) => {
+      const client = DeliveryClient.connectTo(server.baseUrl);
+      clients.push(client);
+      const core = new CoreDelivery({
+        context: { name: "JoinedRemoteDelivery", multitenant: false },
+        storageFactory: {} as never,
+        inbox: new RemoteInbox(client),
+        workRegistry: new RemoteWorkRegistry(client),
+        strategy: { shardCount: 3, shardFor: () => shards[0]! },
+        node,
+      });
+      core.setDispatcher(async (message) => {
+        const delivered = seen.get(node) ?? [];
+        delivered.push(message.id.value);
+        seen.set(node, delivered);
+        if (node !== "north") await paused.promise;
+      });
+      const publicDelivery = deliveryControls.managed(core);
+      const observer = new ApplicationWorkObserver(
+        { observeAvailableShards: (options) => client.observeAvailableShards(options) },
+        publicDelivery,
+        server.baseUrl,
+        undefined,
+        1,
+      );
+      return { core, observer, publicDelivery };
+    });
+    const east = runtimes[0]!.publicDelivery.deliverMessagesFrom(shards[0]!);
+    const west = runtimes[1]!.publicDelivery.deliverMessagesFrom(shards[1]!);
+    try {
+      await vi.waitFor(() => {
+        expect((seen.get("east")?.length ?? 0) + (seen.get("west")?.length ?? 0)).toBe(2);
+      });
+      await Promise.all(runtimes.slice(0, 2).map(({ observer }) => observer.start()));
+      await writer.writeOne(rows[2]!);
+      const north = runtimes[2]!;
+      await north.observer.start();
+      await vi.waitFor(() => expect(seen.get("north")).toEqual(["node-join-2"]));
+      await vi.waitFor(async () =>
+        expect((await writer.findOne(rows[2]!.id))?.status).toBe("DELIVERED"),
+      );
+      expect(seen.get("east")?.length).toBe(1);
+      expect(seen.get("west")?.length).toBe(1);
+    } finally {
+      paused.resolve();
+      await Promise.allSettled([east, west]);
+      await Promise.all(runtimes.map(({ observer }) => observer.whenIdle()));
+      await Promise.all(runtimes.map(({ observer }) => observer.close()));
+      await Promise.all(runtimes.map(({ core }) => core.close()));
+    }
+    for (const row of rows) expect((await writer.findOne(row.id))?.status).toBe("DELIVERED");
+  });
+
   it("drains a pending Command through one managed session and guarded acknowledgement", async () => {
     const server = new DeliveryServer({ port: 0 });
     servers.push(server);

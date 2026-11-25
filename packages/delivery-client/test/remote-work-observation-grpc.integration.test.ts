@@ -13,6 +13,9 @@
  */
 
 import { DeliveryServer } from "@spine-event-engine/delivery-server";
+import { Identifiers, TypeUrls } from "@spine-event-engine/core";
+import { ProjectStateSchema } from "@spine-event-engine/server-test-fixtures/entity/project_states_pb.js";
+import { ShardIndex, UniformAcrossAllShards } from "@spine-event-engine/server";
 import { DeliveryClient, RemoteDelivery } from "../src/index.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
@@ -108,9 +111,17 @@ it("fences an expired blocked owner before its delayed commit can disturb a repl
     events.filter((event) => event.node === owner && event.signalId === "committed-first"),
   ).toHaveLength(0);
   expect(replacement.exitCode).toBeNull();
+  const reader = DeliveryClient.connectTo(server.baseUrl);
+  clients.push(reader);
+  await eventuallyAsync(async () => {
+    expect(await reader.newestPending(ShardIndex.single())).toBeUndefined();
+    expect((await reader.shardSnapshot())[0]?.status).toBe("NOT_PICKED");
+  });
+  expect(alpha.exitCode).toBeNull();
+  expect(beta.exitCode).toBeNull();
 }, 10_000);
 
-it("fans out one real Admin shard update through two remote ServerEnvironment assemblies", async () => {
+it("fans out one real work notice through two remote ServerEnvironment assemblies", async () => {
   const server = trackedServer();
   await server.start();
   const alpha = application(server.baseUrl, "alpha");
@@ -140,9 +151,118 @@ it("fans out one real Admin shard update through two remote ServerEnvironment as
   });
   expect(deliveries.filter((delivery) => delivery.signalId === "first")).toHaveLength(1);
   expect(deliveries.filter((delivery) => delivery.signalId === "during-drain")).toHaveLength(1);
+  const reader = DeliveryClient.connectTo(server.baseUrl);
+  clients.push(reader);
+  await eventuallyAsync(async () => {
+    expect(await reader.newestPending(ShardIndex.single())).toBeUndefined();
+    expect((await reader.shardSnapshot())[0]?.status).toBe("NOT_PICKED");
+  });
 });
 
-it("recovers work written immediately after a same-endpoint Admin restart through a complete snapshot", async () => {
+it("lets a third identical replica discover old free work before the reminder", async () => {
+  const server = trackedServer();
+  await server.start();
+  const settings = { DELIVERY_SHARDS: "3", DELIVERY_MAX_CONCURRENT: "1" };
+  const east = application(server.baseUrl, "east", settings);
+  const west = application(server.baseUrl, "west", settings);
+  const events: { readonly node: string; readonly signalId: string }[] = [];
+  for (const child of [east, west])
+    child.on("message", (frame: unknown) => {
+      if (isDispatch(frame)) events.push(frame);
+    });
+  await Promise.all([ready(east), ready(west)]);
+  await Promise.all([
+    command(east, { command: "block-first" }),
+    command(west, { command: "block-first" }),
+  ]);
+  const eastId = routedId("first-east", 0, 3);
+  const westId = routedId("first-west", 1, 3);
+  const northId = routedId("waiting-north", 2, 3);
+  await command(east, { command: "write", signalId: eastId, shardIndex: 0 });
+  await eventually(() => {
+    expect(events.filter((event) => event.signalId === `${eastId}-started`)).toHaveLength(1);
+  });
+  await command(west, { command: "write", signalId: westId, shardIndex: 1 });
+  await eventually(() => {
+    expect(events.filter((event) => event.signalId === `${westId}-started`)).toHaveLength(1);
+  });
+  expect(events.find((event) => event.signalId === `${eastId}-started`)?.node).not.toBe(
+    events.find((event) => event.signalId === `${westId}-started`)?.node,
+  );
+
+  await command(east, { command: "write", signalId: northId, shardIndex: 2 });
+  expect(events.filter((event) => event.signalId === northId)).toHaveLength(0);
+  const north = application(server.baseUrl, "north", settings);
+  north.on("message", (frame: unknown) => {
+    if (isDispatch(frame)) events.push(frame);
+  });
+  const joinedAt = Date.now();
+  await ready(north);
+  await eventually(() => {
+    const matching = events.filter((event) => event.signalId === northId);
+    expect(matching).toHaveLength(1);
+    expect(matching[0]).toMatchObject({ node: "north", signalId: northId });
+  });
+  expect(Date.now() - joinedAt).toBeLessThan(10_000);
+
+  await Promise.all([
+    command(east, { command: "release-first" }),
+    command(west, { command: "release-first" }),
+  ]);
+  const reader = DeliveryClient.connectTo(server.baseUrl);
+  clients.push(reader);
+  await eventuallyAsync(async () => {
+    for (let index = 0; index < 3; index += 1) {
+      expect(await reader.newestPending(new ShardIndex(index, 3))).toBeUndefined();
+    }
+    expect((await reader.shardSnapshot()).every((shard) => shard.status === "NOT_PICKED")).toBe(
+      true,
+    );
+  });
+}, 15_000);
+
+it("accepts a server reminder after a full-cap work notice was dropped", async () => {
+  const server = new DeliveryServer({ host: "127.0.0.1", port: 0, workReminderSeconds: 1 });
+  servers.push(server);
+  await server.start();
+  const child = application(server.baseUrl, "capped", {
+    DELIVERY_SHARDS: "2",
+    DELIVERY_MAX_CONCURRENT: "1",
+  });
+  const events: { readonly node: string; readonly signalId: string; readonly at: number }[] = [];
+  child.on("message", (frame: unknown) => {
+    if (isDispatch(frame)) events.push({ ...frame, at: Date.now() });
+  });
+  await ready(child);
+  await command(child, { command: "block-first" });
+  const first = routedId("first-held", 0, 2);
+  const second = routedId("reminder", 1, 2);
+  await command(child, { command: "write", signalId: first, shardIndex: 0 });
+  await eventually(() => {
+    expect(events.filter((event) => event.signalId === `${first}-started`)).toHaveLength(1);
+  });
+  await command(child, { command: "write", signalId: second, shardIndex: 1 });
+  await eventuallyAsync(async () => {
+    const evidence = await command(child, { command: "source-evidence" });
+    if (!isSourceEvidence(evidence) || evidence.notices < 2)
+      throw new Error("Initial available-shard notice was not read.");
+  });
+  expect(events.filter((event) => event.signalId === second)).toHaveLength(0);
+  await command(child, { command: "release-first" });
+  await eventually(() => {
+    expect(events.filter((event) => event.signalId === second)).toHaveLength(1);
+  });
+  const reader = DeliveryClient.connectTo(server.baseUrl);
+  clients.push(reader);
+  await eventuallyAsync(async () => {
+    expect(await reader.newestPending(new ShardIndex(1, 2))).toBeUndefined();
+    expect((await reader.shardSnapshot()).every((shard) => shard.status === "NOT_PICKED")).toBe(
+      true,
+    );
+  });
+}, 10_000);
+
+it("rediscovers work after reconnecting to the same endpoint", async () => {
   const server = trackedServer();
   await server.start();
   const endpoint = server.baseUrl;
@@ -167,14 +287,20 @@ it("recovers work written immediately after a same-endpoint Admin restart throug
   await eventually(() => {
     expect(deliveries.filter((delivery) => delivery.signalId === "after-restart")).toHaveLength(1);
   });
+  const reader = DeliveryClient.connectTo(endpoint);
+  clients.push(reader);
+  await eventuallyAsync(async () => {
+    expect(await reader.newestPending(ShardIndex.single())).toBeUndefined();
+    expect((await reader.shardSnapshot())[0]?.status).toBe("NOT_PICKED");
+  });
   expect(alpha.exitCode).toBeNull();
   expect(beta.exitCode).toBeNull();
 }, 15_000);
 
-it("recovers an overflowed tiny-buffer RemoteDelivery source through its environment supervisor", async () => {
+it("continues remote work after a reader pauses through several pending writes", async () => {
   const server = trackedServer();
   await server.start();
-  const alpha = application(server.baseUrl, "alpha", { DELIVERY_OBSERVATION_BUFFER: "1" });
+  const alpha = application(server.baseUrl, "alpha");
   const beta = application(server.baseUrl, "beta");
   const dispatched: { readonly node: string; readonly signalId: string }[] = [];
   for (const child of [alpha, beta])
@@ -204,13 +330,8 @@ it("recovers an overflowed tiny-buffer RemoteDelivery source through its environ
   await command(alpha, { command: "release-source" });
   await eventuallyAsync(async () => {
     const evidence = await command(alpha, { command: "source-evidence" });
-    if (
-      !isSourceEvidence(evidence) ||
-      evidence.failures < 1 ||
-      evidence.snapshots < 2 ||
-      evidence.watches < 2
-    )
-      throw new Error(`Tiny source did not recover: ${JSON.stringify(evidence)}`);
+    if (!isSourceEvidence(evidence) || evidence.watches < 1)
+      throw new Error(`Work stream did not start: ${JSON.stringify(evidence)}`);
   });
 
   await Promise.all([
@@ -222,6 +343,12 @@ it("recovers an overflowed tiny-buffer RemoteDelivery source through its environ
       expect(
         dispatched.filter((event) => event.signalId === `overflow-${String(index)}`),
       ).toHaveLength(1);
+  });
+  const reader = DeliveryClient.connectTo(server.baseUrl);
+  clients.push(reader);
+  await eventuallyAsync(async () => {
+    expect(await reader.newestPending(ShardIndex.single())).toBeUndefined();
+    expect((await reader.shardSnapshot())[0]?.status).toBe("NOT_PICKED");
   });
 }, 15_000);
 
@@ -247,6 +374,15 @@ function trackedServer(port = 0): DeliveryServer {
   return server;
 }
 
+function routedId(prefix: string, index: number, total: number): string {
+  const strategy = UniformAcrossAllShards.forNumber(total);
+  const type = TypeUrls.derive(ProjectStateSchema);
+  for (let suffix = 0; ; suffix += 1) {
+    const id = `${prefix}-${String(suffix)}`;
+    if (strategy.shardFor(Identifiers.pack("string", id), type).index === index) return id;
+  }
+}
+
 function application(
   baseUrl: string,
   node: string,
@@ -267,7 +403,7 @@ function ready(child: ChildProcess): Promise<void> {
 function command(
   child: ChildProcess,
   request:
-    | { readonly command: "write"; readonly signalId: string }
+    | { readonly command: "write"; readonly signalId: string; readonly shardIndex?: number }
     | {
         readonly command:
           "block-first" | "release-first" | "hold-source" | "release-source" | "source-evidence";
@@ -367,12 +503,12 @@ function isDispatch(value: unknown): value is { readonly node: string; readonly 
 
 function isSourceEvidence(
   value: unknown,
-): value is { readonly snapshots: number; readonly watches: number; readonly failures: number } {
+): value is { readonly watches: number; readonly failures: number; readonly notices: number } {
   return (
     isRecord(value) &&
-    typeof value.snapshots === "number" &&
     typeof value.watches === "number" &&
-    typeof value.failures === "number"
+    typeof value.failures === "number" &&
+    typeof value.notices === "number"
   );
 }
 

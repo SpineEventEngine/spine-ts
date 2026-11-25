@@ -23,10 +23,9 @@ Implementation sequence and decisions:
 - An application's nodes use the same configuration. A joining node must discover existing free work through its own subscription, even through a multi-process parent. A custom observer receives an inbox row after a successful write or after a normal run finds a late pending row. An exception during processing still releases the session. Distinguish lookup failure from callback failure.
 - Add child-process capacity settlement before enabling distributed writes. Reserve global capacity across slots, account for uncertain outcomes, and settle using a barrier ordered after the original mutation. Aggregate global results only when all required slots responded.
 
-The single-process observing endpoint and its low-level client are implemented. The indexed inbox and stored-row Admin reporting are implemented. Typed sessions, server expiry and same-run pickup recovery are implemented. Worker mutations now require the managed session and exact read row. Current milestone: framework/application observation. Pending milestones: child-process topology, combined verification and release review.
+The single-process observing endpoint and its low-level client are implemented. The indexed inbox and stored-row Admin reporting are implemented. Typed sessions, server expiry and same-run pickup recovery are implemented. Worker mutations now require the managed session and exact read row. The framework now uses server or custom observation. Current milestone: child-process topology. Combined verification and release review follow.
 
 Milestone 1 review corrections: queued work notices are removed when a shard becomes held or empty, and availability is checked again before sending. Closed or already-aborted streams end without registering a subscriber; shutdown detaches active abort listeners. The low-level client detaches its caller listener and active read immediately on abort, including while paused after a response. Tests use a packed To-do `CreateTask` Command and typed task target. Focused server and client observation tests, package typecheck, ESLint, TSDoc, and cleanup checks pass. Automatic session expiry remains in the managed-sessions milestone.
-
 
 ## Indexed storage and Admin
 
@@ -36,10 +35,8 @@ microseconds before indexing, and 20 and 17 after indexing. A regression test
 also verifies the read without a scan of the global message map.
 
 Admin replays 150 known shards with a concurrent write in a regression test.
-The old application supervisor still assumes the Admin count means pending
-work. Replace that scheduling path and exercise stream interruption directly
-in the two affected client scenarios before release.
-
+The application now uses a dedicated work stream. Its gRPC tests cover a
+disconnect and confirm that completed-only shards stay idle.
 
 ## Managed sessions
 
@@ -51,10 +48,8 @@ Protobuf timestamps. A separate successful-pickup sample follows JVM timing.
 
 Recovery uses the original run ID, deadline and cancellation. Tests cover lost
 pickup replies, release while renewal is in flight, explicit and automatic
-expiry, malformed handles and cancellation while waiting to retry. Worker-side
-renewal through a long-running handler and guarded writes remain part of the
-following milestone.
-
+expiry, malformed handles and cancellation while waiting to retry. Guarded worker operations and heartbeat tests cover processing that
+outlasts the original session.
 
 ## Guarded remote processing
 
@@ -68,3 +63,16 @@ An uncertain guarded operation identifies its row for inspection.
 A run uses a fresh worker UUID. If the configured node name and UUID together
 would exceed the existing wire limit, the client uses a stable digest of the
 node name on the wire. The application still uses its configured node name.
+
+## Application observation
+
+The built-in observer starts on each application node and uses the work
+stream. A three-process test holds two shards on two nodes configured for
+one delivery each. A third, identically configured node starts and picks up
+work that was already waiting, before the reminder. The default configuration
+allows simultaneous runs of different shards.
+
+An application can install a custom observer with either storage option. A
+normal pass releases the shard, then reads the newest pending row for the
+callback. Tests with PostgreSQL and MySQL cover a separate process writing
+immediately before and immediately after release.

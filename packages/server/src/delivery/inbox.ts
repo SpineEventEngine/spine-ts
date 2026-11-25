@@ -101,6 +101,16 @@ export class Inbox {
   }
 
   /**
+   * Reads the newest pending row in one shard after normal release.
+   *
+   * @param shard Selects the shard to inspect.
+   * @returns The last pending row in delivery order, when present.
+   */
+  newestPending(shard: ShardIndex): Promise<InboxMessage | undefined> {
+    return this.storage.newestPending(shard);
+  }
+
+  /**
    * Updates one pending message to delivered when its snapshot still matches.
    *
    * @param message Supplies the pending message snapshot.

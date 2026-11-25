@@ -22,54 +22,51 @@ import {
   UniformAcrossAllShards,
 } from "../../src/index.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../../src/delivery/delivery-ports.js";
+import { deliveryControls, type Delivery } from "../../src/delivery/delivery-builder.js";
+import type { DeliveryControlledRun } from "../../src/delivery/delivery-run-control.js";
 import type { InboxMessage } from "../../src/delivery/inbox.js";
-import { DeliveryRunControl } from "../../src/delivery/delivery-run-control.js";
 
-describe("DeliveryRunControl", () => {
+describe("controlled delivery runs", () => {
   it("does not admit a run after its control signal is aborted", async () => {
     const controller = new AbortController();
     controller.abort(new Error("stop"));
     let calls = 0;
-    const control = new DeliveryRunControl(
-      controlledDelivery(() => {
-        calls += 1;
-        return Promise.resolve({ status: "COMPLETED", pages: [] });
-      }),
-    );
+    const control = controlledDelivery(() => {
+      calls += 1;
+      return Promise.resolve({ status: "COMPLETED", pages: [] });
+    });
 
     await expect(
-      control.run({
+      controlledRun(control, {
         shard: new ShardIndex(0, 1),
         onMessage: () => Promise.resolve(),
         signal: controller.signal,
       }),
-    ).rejects.toThrow("stop");
+    ).resolves.toMatchObject({ status: "STOPPED" });
     expect(calls).toBe(0);
   });
 
-  it("normalizes a non-Error abort reason", async () => {
+  it("stops before admission for a non-Error abort reason", async () => {
     const controller = new AbortController();
     controller.abort("stop");
-    const control = new DeliveryRunControl(
-      controlledDelivery(() => Promise.resolve({ status: "COMPLETED", pages: [] })),
-    );
+    const control = controlledDelivery(() => Promise.resolve({ status: "COMPLETED", pages: [] }));
 
     await expect(
-      control.run({
+      controlledRun(control, {
         shard: ShardIndex.single(),
         onMessage: () => Promise.resolve(),
         signal: controller.signal,
       }),
-    ).rejects.toThrow("Delivery run was aborted.");
+    ).resolves.toMatchObject({ status: "STOPPED" });
   });
 
-  it("does not settle an aborted controlled caller before the underlying run settles", async () => {
+  it("waits for an admitted run to settle after its caller aborts", async () => {
     const controller = new AbortController();
     const settled = Promise.withResolvers<{ status: "COMPLETED"; pages: never[] }>();
     const inbox = new RunnerInbox(() => settled.promise);
-    const control = new DeliveryRunControl(controlledDelivery(() => settled.promise, inbox));
+    const control = controlledDelivery(() => settled.promise, inbox);
 
-    const running = control.run({
+    const running = controlledRun(control, {
       shard: new ShardIndex(0, 1),
       onMessage: () => Promise.resolve(),
       signal: controller.signal,
@@ -84,16 +81,16 @@ describe("DeliveryRunControl", () => {
     await Promise.resolve();
     expect(completed).toBe(false);
     settled.resolve({ status: "COMPLETED", pages: [] });
-    await expect(running).rejects.toThrow("stop");
+    await expect(running).resolves.toMatchObject({ status: "COMPLETED" });
   });
 
   it("contains an abort until an underlying rejection settles", async () => {
     const controller = new AbortController();
     const settled = Promise.withResolvers<{ status: "COMPLETED"; pages: never[] }>();
     const inbox = new RunnerInbox(() => settled.promise);
-    const control = new DeliveryRunControl(controlledDelivery(() => settled.promise, inbox));
+    const control = controlledDelivery(() => settled.promise, inbox);
 
-    const running = control.run({
+    const running = controlledRun(control, {
       shard: new ShardIndex(0, 1),
       onMessage: () => Promise.resolve(),
       signal: controller.signal,
@@ -106,6 +103,12 @@ describe("DeliveryRunControl", () => {
     await expect(running).rejects.toThrow("late endpoint failure");
   });
 });
+
+function controlledRun(delivery: Delivery, options: DeliveryControlledRun) {
+  const run = deliveryControls.runner(delivery);
+  if (run === undefined) throw new Error("Expected a configured delivery runner.");
+  return run(options);
+}
 
 function controlledDelivery(
   run: (options: DeliveryRunOptions) => Promise<unknown>,
@@ -141,6 +144,10 @@ class RunnerInbox implements DeliveryInbox {
   }
 
   readMessage(): Promise<undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  newestPending(): Promise<undefined> {
     return Promise.resolve(undefined);
   }
 

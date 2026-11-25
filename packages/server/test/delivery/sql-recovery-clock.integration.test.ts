@@ -29,8 +29,7 @@ import { createConnection } from "mysql2/promise";
 import { describe, expect, it } from "vitest";
 
 import { TaskListIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
-import { DeliveryBuilder } from "../../src/delivery/delivery-builder.js";
-import { DeliverySupervisor } from "../../src/delivery/delivery-supervisor.js";
+import { Delivery as CoreDelivery } from "../../src/delivery/delivery.js";
 import { Inbox } from "../../src/delivery/inbox.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
@@ -61,126 +60,36 @@ if (rootUrl === undefined)
     "Select a SQL Inbox provider and its task database URL for recovery-clock tests.",
   );
 
-describe("live SQL DeliverySupervisor recovery clock", () => {
-  it.each([
-    { name: "default", recoveryMs: undefined, earliestMs: 8_000, deadlineMs: 14_000 },
-    { name: "override", recoveryMs: 80, earliestMs: 0, deadlineMs: 3_000 },
-  ])(
-    "finds a missed $name notification by reading the durable Inbox",
-    async (scenario) => {
-      await withSqlInbox(async ({ context, database, factory, inbox }) => {
-        const shard = ShardIndex.single();
-        const message = createMessage(randomUUID(), randomUUID(), 1n, new Date());
-        const staleAges: number[] = [];
-        const snapshots: number[] = [];
-        const delivered: string[] = [];
-        const delivery = new DeliveryBuilder()
-          .withContext(context)
-          .withStorageFactory(factory)
-          .withInbox(inbox)
-          .withNode(`node-${randomUUID()}`)
-          .build();
-        const supervisor = new DeliverySupervisor({
-          source: {
-            releaseExpired: (age) => {
-              staleAges.push(age);
-              return Promise.resolve([]);
-            },
-            shardSnapshot: async () => {
-              snapshots.push(Date.now());
-              const pending = await inbox.read(shard, { statuses: ["TO_DELIVER"] });
-              return pending.length === 0
-                ? []
-                : [{ shard, status: "NOT_PICKED" as const, messages: pending.length }];
-            },
-            observeShardUpdates: (options) => silentUpdates(options?.signal),
-          },
-          delivery,
-          onMessage: (received) => {
-            delivered.push(received.signalId);
-            return Promise.resolve();
-          },
-          ...(scenario.recoveryMs === undefined ? {} : { recoveryMs: scenario.recoveryMs }),
-        });
-        try {
-          await supervisor.start();
-          expect(snapshots).toHaveLength(1);
-          expect(staleAges).toEqual([60_000]);
-          const writtenAt = Date.now();
-          await inbox.storage.write(message);
-          expect((await inbox.readMessage(message.id))?.status).toBe("TO_DELIVER");
-          await waitFor(() => delivered.length === 1, scenario.deadlineMs);
-          const elapsedMs = Date.now() - writtenAt;
-          expect(elapsedMs).toBeGreaterThanOrEqual(scenario.earliestMs);
-          expect(delivered).toEqual([message.signalId]);
-          expect(snapshots.length).toBeGreaterThanOrEqual(2);
-          expect(staleAges.every((age) => age === 60_000)).toBe(true);
-          await supervisor.whenIdle();
-          expect(await inbox.readMessage(message.id)).toBeUndefined();
-          const facts = {
-            database,
-            provider,
-            mode: scenario.name,
-            elapsedMs,
-            snapshots: snapshots.length,
-            staleAges,
-          };
-          process.stdout.write(`RECOVERY_CLOCK ${JSON.stringify(facts)}\n`);
-        } finally {
-          await supervisor.close({ graceMs: 1_000 });
-        }
-      });
-    },
-    20_000,
-  );
-
+describe("live SQL custom post-release observation", () => {
   it.each(["before", "after"] as const)(
-    "recovers a separate-process write $phase the final shard release",
+    "rediscovers a separate-process write $phase the final shard release",
     async (phase) => {
       await withSqlInbox(async (fixture) => {
-        const { context, database, databaseUrl, factory, inbox, inboxTable, sessionTable } =
-          fixture;
+        const { context, databaseUrl, factory, inbox, inboxTable, sessionTable } = fixture;
         const shard = ShardIndex.single();
         const first = createMessage(randomUUID(), randomUUID(), 1n, new Date());
         await inbox.storage.write(first);
-        const gate = new ReleaseGateRegistry(
-          new ShardedWorkRegistry({ context, storageFactory: factory }),
-          phase,
-        );
-        let hidePending = true;
-        let snapshots = 0;
+        const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
+        const gate = new ReleaseGateRegistry(registry, phase);
         const delivered: string[] = [];
-        const delivery = new DeliveryBuilder()
-          .withContext(context)
-          .withStorageFactory(factory)
-          .withInbox(inbox)
-          .withWorkRegistry(gate)
-          .withNode(`node-${randomUUID()}`)
-          .build();
-        const supervisor = new DeliverySupervisor({
-          source: {
-            releaseExpired: () => Promise.resolve([]),
-            shardSnapshot: async () => {
-              snapshots++;
-              const pending = await inbox.read(shard, { statuses: ["TO_DELIVER"] });
-              return pending.length === 0 || (snapshots > 1 && hidePending)
-                ? []
-                : [{ shard, status: "NOT_PICKED" as const, messages: pending.length }];
-            },
-            observeShardUpdates: (options) => silentUpdates(options?.signal),
-          },
-          delivery,
-          onMessage: (message) => {
-            delivered.push(message.signalId);
-            return Promise.resolve();
-          },
-          recoveryMs: 80,
+        const observed: string[] = [];
+        const delivery = new CoreDelivery({
+          context,
+          storageFactory: factory,
+          inbox,
+          workRegistry: gate,
+        });
+        delivery.setDispatcher((message) => {
+          delivered.push(message.signalId);
+        });
+        delivery.setShardObserver((message) => {
+          observed.push(message.signalId);
+          void delivery.deliverMessagesFrom(message.shard);
         });
         try {
-          await supervisor.start();
+          const firstRun = delivery.deliverMessagesFrom(shard);
           await awaitGate(gate.entered.promise);
           if (phase === "after") await awaitGate(gate.delegated.promise);
-          expect(gate.delegatedCount).toBe(phase === "before" ? 0 : 1);
           const signalId = randomUUID();
           const writer = await execFileAsync(
             process.execPath,
@@ -213,7 +122,6 @@ describe("live SQL DeliverySupervisor recovery clock", () => {
           };
           expect(write).toMatchObject({ outcome: "WRITTEN", signalId });
           expect(write.pid).not.toBe(process.pid);
-          expect(write.eventHex.length).toBeGreaterThan(0);
           expect(write.pickup).toBe(phase === "before" ? "BLOCKED" : "NOT_ATTEMPTED");
           const pending = await inbox.readMessage({ value: write.id, shard });
           expect(pending?.status).toBe("TO_DELIVER");
@@ -221,28 +129,16 @@ describe("live SQL DeliverySupervisor recovery clock", () => {
           if (event === undefined) throw new Error("Cross-process Inbox Event is missing.");
           expect(Buffer.from(toBinary(EventSchema, event)).toString("hex")).toBe(write.eventHex);
           expect(delivered).toEqual([first.signalId]);
-          hidePending = false;
           gate.resume.resolve(undefined);
-          await awaitGate(gate.delegated.promise);
-          expect(gate.releasedResult).toBe(true);
+          await firstRun;
           await waitFor(() => delivered.length === 2, 3_000);
-          await supervisor.whenIdle();
+          expect(observed).toEqual([signalId]);
           expect(delivered).toEqual([first.signalId, signalId]);
-          expect(await inbox.readMessage({ value: write.id, shard })).toBeUndefined();
-          const facts = {
-            database,
-            phase,
-            writerPid: write.pid,
-            writerPickup: write.pickup,
-            delegatedRelease: gate.releasedResult,
-            inboxId: write.id,
-            signalId,
-            snapshots,
-          };
-          process.stdout.write(`RECOVERY_RELEASE ${JSON.stringify(facts)}\n`);
+          expect(gate.releasedResult).toBe(true);
         } finally {
           gate.resume.resolve(undefined);
-          await supervisor.close({ graceMs: 1_000 });
+          await delivery.close();
+          await registry.close();
         }
       });
     },
@@ -365,21 +261,6 @@ async function connect(url: string, postgres: boolean): Promise<SqlClient> {
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   return client;
-}
-
-function silentUpdates(signal?: AbortSignal): AsyncIterable<never> {
-  return {
-    [Symbol.asyncIterator]: () => ({
-      next: () =>
-        new Promise<IteratorResult<never>>((resolve) => {
-          const finish = () => {
-            resolve({ done: true, value: undefined });
-          };
-          if (signal?.aborted) finish();
-          else signal?.addEventListener("abort", finish, { once: true });
-        }),
-    }),
-  };
 }
 
 async function waitFor(predicate: () => boolean, deadlineMs: number): Promise<void> {

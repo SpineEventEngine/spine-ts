@@ -90,8 +90,7 @@ setting. Both retain the existing default of 100.
 Managed close drains Delivery, cancels subscription relays while child listeners
 remain reachable, and then completes child close. Failed cleanup remains
 observable and retryable. Private IPC acknowledgement and process reaping have
-separate bounded graces. Direct `DeliverySupervisor.close({ graceMs })` retains
-its active-work and release-cleanup bounds; these are Delivery policies.
+separate bounded graces. Delivery observation stops before the shared Delivery facility closes, and active runs finish through the ordinary server drain.
 
 The reference includes entry points for `@spine-event-engine/client-web`,
 `@spine-event-engine/client-node`, `@spine-event-engine/delivery-client`, and
@@ -690,7 +689,7 @@ catch-up, read-side indexing, subscriptions, system events, or aggregate
 repository caching.
 Durable-delivery exports include the `Delivery` interface created by the builder,
 `DeliveryBuilder`, `DeliveryEndpointMessage`, `DeliveryMonitor`,
-`DeliveryResult`, `DeliveryRunOptions`, `DeliveryStrategy`, `DeliverySupervisor`,
+`DeliveryResult`, `DeliveryRunOptions`, `DeliveryStrategy`, `DeliveryAttempt`,
 `UniformAcrossAllShards`, `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`,
 `InboxMessage`, `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
 `InboxReadContinuation`, `InboxReadOptions`, `InboxWriteResult`, `InboxStorage`,
@@ -720,16 +719,9 @@ can recover its unexpired session;
 a different worker is excluded until it expires, and a previous worker cannot
 release a newer session. `DeliveryMonitor` marks failed reception delivered by
 default and continues independent targets; a custom monitor may choose an
-immediate repeat of failed processing. The supervisor
-rescans pending shards every 10 seconds by default, independently of its
-60-second stale-session threshold and the configurable Delivery server
-session lifetime, which defaults to 60 seconds. See [recovery timers](../../packages/delivery-server/REFERENCE.md#session-lifetime-and-work-reminders)
-for the separate responsibilities and limits. After a failed run,
-release-generated remote observations of that shard are held locally until the next periodic rescan. Explicit notifications remain
-admissible; newly enqueued remote work on the failed shard may wait for the
-rescan, while other shards continue. Other processes can each make a failed
-attempt before applying their local suppression. The interval is not a
-per-message delivery deadline.
+immediate repeat of failed processing. The Delivery server streams free shards with pending rows to each connected application node. Each node scans current work on connection and reconnection, so a new replica can discover an old row without an Admin update. The configured server repeats an unclaimed notice after 10 seconds by default. Each node starts distinct shards concurrently unless built-in server notification mode sets `maxConcurrentDeliveries`. A custom observer receives the full persisted row after a write or normal release and decides how to initiate work; it does not open the server work stream.
+
+`DeliveryBuilder.remote({ endpoint })` from `@spine-event-engine/delivery-client` creates an environment-installable remote facility. Its `notifications` option selects `{ kind: "delivery-server", maxConcurrentDeliveries?: number }` or `{ kind: "custom", shardObserver }`. `DeliveryBuilder.local({ storageFactory, shardObserver })` selects application storage and a custom observer. Configure each replica the same way and supply shared inbox, registry, and Entity storage for local multi-process work. The observer's `onMessage(message)` receives the full persisted `InboxMessage`. A failed observer callback is logged once and does not reverse the write. `Delivery.deliverMessagesFrom(shard)` returns `completed`, `busy`, `noWork`, or `stopped`; simultaneous calls for the same shard join one attempt.
 
 `DeliveryMonitor` handles Entity handler failures and post-handler output or
 transition validation failures, including Agent reception. Delivery acknowledges
@@ -745,11 +737,9 @@ protects concurrent workers, not
 endpoint effects. Therefore a
 lost acknowledgement can redeliver after a handler runs, and downstream effects
 must be idempotent. The delivery model has no persisted attempt history,
-exhaustion, claims, quarantine, receipts, markers, backoff, dead-letter storage,
-or scheduler state beyond the configured in-process recovery timer.
+exhaustion, claims, quarantine, receipts, markers, or dead-letter storage.
 The package does not expose a raw worker callback API; framework delivery
-uses the framework's validated endpoints. Delivery operations check that the
-worker still holds the shard, rather than renewing it on a timer around callbacks.
+uses the framework's validated endpoints. Managed remote delivery renews its session during long callbacks and fences each acknowledgement and cleanup mutation.
 `InboxReadOptions.limit` remains the page-size control for a single ordered
 inbox read and must be positive and at most `1000`.
 `InboxReadContinuation` names the stable row key used to read the next ordered
@@ -763,9 +753,7 @@ this storage boundary internally for process-manager command rows,
 process-manager event reaction rows, and live projection subscriber rows. This
 implementation does not add retry schedulers, persistent attempt history,
 conveyor/station abstractions, generic repository delivery, projection catch-up
-through Inbox storage, or production read-side catch-up workers. A
-`DeliverySupervisor` repeatedly invokes finite drains, including over a remote
-delivery topology, without turning delivery failures into persisted retry jobs.
+through Inbox storage, or production read-side catch-up workers. The application observer invokes finite drains without turning failures into persisted retry jobs.
 Event import and aggregate importers are removed from the active plan by
 upstream ADR 0001 D1. Aggregate
 `@React` handlers are ordinary generated reactor handlers with

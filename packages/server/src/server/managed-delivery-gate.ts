@@ -14,7 +14,7 @@
 
 /**
  * Defers managed-child delivery startup until the parent activates the replica.
- * An already active process can start a replacement environment's supervisor.
+ * An already active process can start a replacement environment's work observer.
  * @internal
  */
 export class ManagedDeliveryGate {
@@ -38,8 +38,8 @@ export class ManagedDeliveryGate {
   }
 
   /**
-   * Starts the supplied supervisor after activation, coalescing managed-child calls.
-   * @param start Starts the current environment's retained supervisor.
+   * Starts the supplied work observer after activation, coalescing managed-child calls.
+   * @param start Starts the current environment's retained work observer.
    * @returns Startup when activated.
    */
   start(start: () => Promise<void>): Promise<void> {
@@ -52,8 +52,8 @@ export class ManagedDeliveryGate {
   }
 
   /**
-   * Activates deferred supervisor startup after parent activation.
-   * @returns Completion of supervisor startup after parent activation.
+   * Activates deferred work observation after parent activation.
+   * @returns Completion of work observation startup after parent activation.
    */
   activate(): Promise<void> {
     this.#activated = true;

@@ -38,7 +38,7 @@ import {
   TopicSchema,
 } from "@spine-event-engine/proto/client";
 import { EventSchema, UserIdSchema } from "@spine-event-engine/proto";
-import { RemoteDelivery } from "@spine-event-engine/delivery-client";
+import { DeliveryBuilder } from "@spine-event-engine/delivery-client";
 import { DeliveryServer } from "@spine-event-engine/delivery-server";
 import {
   Application,
@@ -218,7 +218,7 @@ try {
     .build();
   if (deliveryMode === "shared-memory") {
     deliveryServer = await new DeliveryServer({ port: 0 }).start();
-    remoteDelivery = RemoteDelivery.connectTo({ endpoint: deliveryServer.baseUrl });
+    remoteDelivery = DeliveryBuilder.remote({ endpoint: deliveryServer.baseUrl });
   }
   const environment = ServerEnvironment.newBuilder()
     .under(EnvironmentType.Local, (setting) =>

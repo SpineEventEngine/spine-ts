@@ -43,7 +43,6 @@ import {
   type Delivery as PublicDelivery,
 } from "../../src/delivery/delivery-builder.js";
 import { Delivery as CoreDelivery } from "../../src/delivery/delivery.js";
-import { DeliverySupervisor } from "../../src/delivery/delivery-supervisor.js";
 import { IntegrationBroker } from "../../src/integration/integration-broker.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { createMessage } from "../delivery/inbox-message-fixture.js";
@@ -1030,8 +1029,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     }
   });
 
-  it("uses the configured remote Admin source for supervisor recovery and observation", async () => {
-    let snapshots = 0;
+  it("starts the configured remote work stream without waiting for an idle response", async () => {
     let observations = 0;
     const inbox = {
       sessionKind: "EXCLUSIVE" as const,
@@ -1051,20 +1049,24 @@ describe("ServerEnvironment delivery lifecycle", () => {
       inbox,
       workRegistry,
       source: {
-        shardSnapshot: () => {
-          snapshots += 1;
-          return Promise.resolve([]);
-        },
-        observeShardUpdates: () => {
+        observeAvailableShards: async function* ({ signal }: { signal?: AbortSignal } = {}) {
           observations += 1;
-          return { [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => undefined) }) };
+          await new Promise<void>((resolve) => {
+            signal?.addEventListener(
+              "abort",
+              () => {
+                resolve();
+              },
+              { once: true },
+            );
+          });
+          yield* [];
         },
-        releaseExpired: () => Promise.resolve([]),
       },
     });
 
     await serverEnvironmentAccess.setup(environment);
-    expect(snapshots).toBe(0);
+    expect(observations).toBe(0);
     serverStatusRegistry();
     const context = await buildContext(
       BoundedContext.singleTenant("RemoteSourceRecipient")
@@ -1073,52 +1075,138 @@ describe("ServerEnvironment delivery lifecycle", () => {
       environment,
     );
     try {
-      await waitFor(() => snapshots > 0 && observations > 0);
+      await waitFor(() => observations > 0);
     } finally {
       await context.close();
       await environment.close();
     }
 
-    expect(snapshots).toBeGreaterThan(0);
-    expect(observations).toBeGreaterThan(0);
+    expect(observations).toBe(1);
   });
 
-  it("reports a post-reception notification failure without reversing the pending row", async () => {
+  it("logs one custom observer failure without reversing the persisted row", async () => {
     const portsFactory = new InMemoryStorageFactory();
     const ports = new CoreDelivery({
       context: { name: "NotificationFixture", multitenant: false },
       storageFactory: portsFactory,
     });
-    const warnings = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    vi.spyOn(DeliverySupervisor.prototype, "notify").mockImplementation(() => {
-      throw new Error("notification failed after reception");
-    });
+    const errors: string[] = [];
+    const logger = {
+      child: vi.fn(),
+      withMetadata: () => ({ error: (message: string) => errors.push(message) }),
+      error: (message: string) => errors.push(message),
+    };
+    logger.child.mockReturnValue(logger);
+    const observer = {
+      onMessage: () => {
+        throw new Error("custom observer failed");
+      },
+    };
     const remoteFacility: ServerEnvironmentDelivery = {
       open: () => undefined,
       close: () => ports.close(),
       inbox: ports.inbox,
       workRegistry: ports.shards,
-      source: {
-        shardSnapshot: () => Promise.resolve([]),
-        observeShardUpdates: () => ({
-          [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => undefined) }),
-        }),
-        releaseExpired: () => Promise.resolve([]),
-      },
+      notifications: { kind: "custom", shardObserver: observer },
     };
-    const environment = environmentWith(EnvironmentType.Local, { delivery: remoteFacility });
+    const environment = environmentWith(EnvironmentType.Local, {
+      delivery: remoteFacility,
+      logger: logger as never,
+    });
 
     await serverEnvironmentAccess.setup(environment);
-    await ports.inbox.receive(createMessage("notify-failed", "signal", 1n));
-
-    expect(() => {
-      serverEnvironmentAccess.notifyDelivery(environment, ShardIndex.single());
-    }).not.toThrow();
+    const received = await ports.inbox.receive(createMessage("notify-failed", "signal", 1n));
+    serverEnvironmentAccess.coreDelivery(environment).observePersisted(received.message);
     await expect(
       environment.delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([{ signalId: "signal" }]);
-    expect(warnings).toHaveBeenCalledOnce();
+    expect(errors).toEqual(["Delivery observer failed."]);
     await environment.close();
+  });
+
+  it("installs local builder storage and preserves custom-only observation", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const shardObserver = { onMessage: vi.fn() };
+    const environment = environmentWith(EnvironmentType.Local, {
+      delivery: DeliveryBuilder.local({ storageFactory, shardObserver }),
+    });
+
+    await serverEnvironmentAccess.setup(environment);
+    expect(environment.storageFactory).toBe(storageFactory);
+    expect(serverEnvironmentAccess.remoteObserved(environment)).toBe(false);
+    const row = await environment.delivery.inbox.receive(
+      createMessage("local-observer", "signal", 1n),
+    );
+    serverEnvironmentAccess.coreDelivery(environment).observePersisted(row.message);
+    expect(shardObserver.onMessage).toHaveBeenCalledWith(row.message);
+    await environment.close();
+  });
+
+  it("rejects a local delivery factory that differs from application storage", () => {
+    const deliveryFactory = new InMemoryStorageFactory();
+    const applicationFactory = new InMemoryStorageFactory();
+    const delivery = DeliveryBuilder.local({
+      storageFactory: deliveryFactory,
+      shardObserver: { onMessage: () => undefined },
+    });
+    expect(() =>
+      environmentWith(EnvironmentType.Local, {
+        delivery,
+        storageFactory: applicationFactory,
+      }),
+    ).toThrow("same storage factory");
+    const matching = environmentWith(EnvironmentType.Local, {
+      delivery,
+      storageFactory: deliveryFactory,
+    });
+    expect(matching.storageFactory).toBe(deliveryFactory);
+  });
+
+  it("rejects the retired top-level observer input in every delivery mode", () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const observer = { onMessage: () => undefined };
+    const local = DeliveryBuilder.local({ storageFactory, shardObserver: observer });
+    const ports = new CoreDelivery({
+      context: { name: "ConflictingModes", multitenant: false },
+      storageFactory,
+    });
+    const builtIn: ServerEnvironmentDelivery = {
+      open: () => undefined,
+      close: () => ports.close(),
+      inbox: ports.inbox,
+      workRegistry: ports.shards,
+      source: {
+        async *observeAvailableShards() {
+          await Promise.resolve();
+          yield ShardIndex.single();
+        },
+      },
+      notifications: { kind: "delivery-server" },
+    };
+    const custom: ServerEnvironmentDelivery = {
+      ...builtIn,
+      notifications: { kind: "custom", shardObserver: observer },
+    };
+    for (const delivery of [undefined, local, builtIn, custom]) {
+      expect(() =>
+        environmentWith(EnvironmentType.Local, {
+          delivery,
+          shardObserver: observer,
+        } as never),
+      ).toThrow("DeliveryBuilder.local");
+    }
+    for (const notifications of [
+      null,
+      { kind: "unknown", shardObserver: observer },
+      { kind: "delivery-server", shardObserver: observer },
+      { kind: "custom", shardObserver: observer, maxConcurrentDeliveries: 2 },
+    ]) {
+      expect(() =>
+        environmentWith(EnvironmentType.Local, {
+          delivery: { ...builtIn, notifications } as never,
+        }),
+      ).toThrow();
+    }
   });
 
   it("closes delivery and storage in the approved order", async () => {

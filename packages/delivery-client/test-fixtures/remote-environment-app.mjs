@@ -12,31 +12,37 @@ import {
   EnvironmentType,
   ServerEnvironment,
   ShardIndex,
+  UniformAcrossAllShards,
 } from "@spine-event-engine/server";
 import { commitFenced } from "../../server/test-fixtures/internal.mjs";
 import process from "node:process";
 
 const endpoint = process.env.DELIVERY_SERVER_URL;
 const node = process.env.DELIVERY_NODE;
-const observationBufferSize = Number(process.env.DELIVERY_OBSERVATION_BUFFER ?? "100");
 if (endpoint === undefined || node === undefined || process.send === undefined) process.exit(1);
+const shardCount = Number(process.env.DELIVERY_SHARDS ?? "1");
+const maxConcurrentDeliveries =
+  process.env.DELIVERY_MAX_CONCURRENT === undefined
+    ? undefined
+    : Number(process.env.DELIVERY_MAX_CONCURRENT);
 
 const delivery = RemoteDelivery.connectTo({
   endpoint,
-  clientOptions: { observationBufferSize, observationReconnects: 0 },
+  clientOptions: { observationReconnects: 0 },
+  notifications: {
+    kind: "delivery-server",
+    ...(maxConcurrentDeliveries === undefined ? {} : { maxConcurrentDeliveries }),
+  },
 });
-const sourceEvidence = { snapshots: 0, watches: 0, failures: 0 };
+const sourceEvidence = { watches: 0, failures: 0, notices: 0 };
 let holdSource = false;
 let releaseSource = Promise.withResolvers();
 const source = {
-  async shardSnapshot(options) {
-    sourceEvidence.snapshots += 1;
-    return delivery.source.shardSnapshot(options);
-  },
-  async *observeShardUpdates(options) {
+  async *observeAvailableShards(options) {
     sourceEvidence.watches += 1;
     try {
-      for await (const update of delivery.source.observeShardUpdates(options)) {
+      for await (const update of delivery.source.observeAvailableShards(options)) {
+        sourceEvidence.notices += 1;
         if (holdSource) await releaseSource.promise;
         yield update;
       }
@@ -45,7 +51,6 @@ const source = {
       throw error;
     }
   },
-  releaseExpired: (inactivityMs, options) => delivery.source.releaseExpired(inactivityMs, options),
 };
 const environment = ServerEnvironment.newBuilder()
   .under(EnvironmentType.Local, (setting) =>
@@ -60,7 +65,10 @@ const environment = ServerEnvironment.newBuilder()
           return delivery.workRegistry;
         },
         source,
+        endpoint,
+        notifications: delivery.notifications,
       },
+      deliveryStrategy: UniformAcrossAllShards.forNumber(shardCount),
     }),
   )
   .build();
@@ -69,10 +77,14 @@ let releaseFirst = Promise.withResolvers();
 const contextBuilder = createManagedProjectContext({
   onCreateProject: async (command) => {
     const signalId = command.id;
-    if (signalId === "first" && holdFirst) {
-      process.send({ type: "dispatched", node, signalId: "first-started" });
+    if ((signalId === "first" || signalId.startsWith("first-")) && holdFirst) {
+      process.send({ type: "dispatched", node, signalId: `${signalId}-started` });
       await releaseFirst.promise;
-      process.send({ type: "dispatched", node, signalId: "resumed-first" });
+      process.send({
+        type: "dispatched",
+        node,
+        signalId: signalId === "first" ? "resumed-first" : `${signalId}-resumed`,
+      });
     }
     try {
       await commitFenced({}, () => {
@@ -125,7 +137,7 @@ process.on("message", async (frame) => {
       signal: AnyPacker.pack(CommandSchema, signal),
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
-      shard: ShardIndex.single(),
+      shard: new ShardIndex(frame.shardIndex ?? 0, shardCount),
       whenReceived: Time.currentTime(),
       version: 1n,
     });
@@ -169,7 +181,11 @@ function isWrite(frame) {
     frame !== null &&
     frame.command === "write" &&
     typeof frame.id === "string" &&
-    typeof frame.signalId === "string"
+    typeof frame.signalId === "string" &&
+    (frame.shardIndex === undefined ||
+      (Number.isSafeInteger(frame.shardIndex) &&
+        frame.shardIndex >= 0 &&
+        frame.shardIndex < shardCount))
   );
 }
 

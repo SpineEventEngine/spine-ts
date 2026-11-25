@@ -193,7 +193,10 @@ export class LocalProjectionInbox implements ProjectionInbox {
       this.#endpoints.get(message.inboxId.targetTypeUrl) ?? [],
     );
     await this.#readiness
-      .claim(endpoint === undefined ? undefined : InboxHandoff.ready(endpoint, deliveryTenantId))
+      .claim(
+        endpoint === undefined ? undefined : InboxHandoff.ready(endpoint, deliveryTenantId),
+        message,
+      )
       .complete(() =>
         this.#isAcknowledged(message)
           ? Promise.resolve()

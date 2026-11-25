@@ -21,7 +21,7 @@ import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { create, equals, toBinary } from "@bufbuild/protobuf";
 import { AnyPacker, StringifierRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
-import { RemoteDelivery } from "@spine-event-engine/delivery-client";
+import { DeliveryClient, RemoteDelivery } from "@spine-event-engine/delivery-client";
 import {
   Application,
   ActorContextSchema,
@@ -323,20 +323,25 @@ async function inspectDelivery() {
       }
     }),
   );
-  const observations =
-    delivery === undefined
-      ? undefined
-      : await delivery.source
-          .shardSnapshot()
-          .then((updates) =>
-            updates.map((update) => ({
-              shard: update.shard.key(),
-              status: update.status,
-              messages: update.messages,
-            })),
-          )
-          .catch((error) => ({ error: String(error) }));
+  const observations = await snapshotAdminForDiagnostics(settings.deliveryEndpoint);
   return { shards, observations };
+}
+
+async function snapshotAdminForDiagnostics(endpoint) {
+  if (endpoint === undefined) return undefined;
+  const reader = DeliveryClient.connectTo(endpoint);
+  try {
+    const updates = await reader.shardSnapshot();
+    return updates.map((update) => ({
+      shard: update.shard.key(),
+      status: update.status,
+      messages: update.messages,
+    }));
+  } catch (error) {
+    return { error: String(error) };
+  } finally {
+    reader.close();
+  }
 }
 
 async function close() {

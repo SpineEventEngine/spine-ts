@@ -687,19 +687,11 @@ Application; use the same mapping in processes sharing delivery
 storage. See [receiver-specific shard policies](../packages/server/REFERENCE.md#receiver-specific-shard-policies)
 for a complete example using the Orders Projections.
 
-All Bounded Contexts use the Delivery configured in `ServerEnvironment`. With
-local Delivery, posting waits for Inbox reception and scheduling. Delivery
-acknowledges an Agent input after its handler and save finish. A returned model Command can
-continue running afterward. With remote Delivery and its
-environment supervisor, posting returns after the remote Inbox accepts the signal
-and the notification is submitted. Processing may happen afterward on another
-application process. For example, a successful Command submission can precede the
-Projection update that your UI is waiting for; use a query or subscription to
-observe that update.
+All Bounded Contexts use the Delivery configured in `ServerEnvironment`. With local Delivery, posting waits for Inbox reception and scheduling. Delivery acknowledges an Agent input after its handler and save finish; a returned model Command can continue running afterward. With remote Delivery, posting returns after the remote Inbox accepts the signal. Processing may happen afterward on another application process. The built-in work stream notifies every connected node about free shards with pending rows and scans current work when a node connects or reconnects. It can remain idle without delaying startup.
 
-A failed Inbox write rejects the posting call. A notification failure after a
-successful write is logged, and ordinary delivery can find the pending signal
-through its existing notifications and safety scan.
+Use `DeliveryBuilder.remote({ endpoint })` from `@spine-event-engine/delivery-client` as the environment's `delivery` for built-in work observation. Set `notifications: { kind: "delivery-server", maxConcurrentDeliveries: 2 }` if each node should run at most two distinct shards at once. With no configured limit, distinct shards run concurrently. For an application queue, use `notifications: { kind: "custom", shardObserver }`. The observer receives the complete persisted Inbox row through `onMessage(message)` and initiates delivery through the application's queue consumer. It opens no built-in work stream. `DeliveryBuilder.local({ storageFactory, shardObserver })` configures the same observer with application-managed storage. Processes using local storage must share the Inbox, shard registry, and Entity storage for exclusive processing and durable state.
+
+A failed Inbox write rejects the posting call. A custom observer failure after a successful write is logged once and does not reverse the stored row or start fallback processing. After a normal run releases its shard, the framework checks the newest pending row and calls the custom observer again if one remains. The application supplies any queue recovery policy.
 
 Durable delivery stores pending and delivered Inbox rows. A shard lease prevents
 concurrent delivery, but a handler effect and the delivered transition are not

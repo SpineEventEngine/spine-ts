@@ -755,6 +755,7 @@ describe("Delivery fencing", () => {
         receive: () => Promise.reject(new Error("not used")),
         read: () => Promise.resolve([]),
         readMessage: () => Promise.resolve(undefined),
+        newestPending: () => Promise.resolve(undefined),
         markDelivered: () => Promise.resolve(undefined),
         removeDuplicate: () => Promise.resolve(true),
       },
@@ -793,6 +794,7 @@ describe("Delivery fencing", () => {
         receive: () => Promise.reject(new Error("not used")),
         read: () => Promise.resolve([]),
         readMessage: () => Promise.resolve(undefined),
+        newestPending: () => Promise.resolve(undefined),
         markDelivered: () => Promise.resolve(undefined),
         removeDuplicate: () => Promise.resolve(true),
       },
@@ -848,6 +850,7 @@ function agentDelivery(
         Promise.resolve(messages.filter((message) => !acknowledged.has(message.id.value))),
       readMessage: (id) =>
         Promise.resolve(messages.find((message) => message.id.value === id.value)),
+      newestPending: () => Promise.resolve(undefined),
       markDelivered: (message) => {
         onMark(message);
         return Promise.resolve(message);

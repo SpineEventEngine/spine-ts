@@ -141,31 +141,23 @@ client.close();
 void delivery;
 ```
 
-For server assembly, pass one `RemoteDelivery` to the environment instead of
-manually wiring adapters. Each attached environment gets a bounded Admin
-snapshot and later shard-update hints; after a stream loss or bounded-buffer
-overflow it takes a fresh snapshot before resuming updates. Inbox rows and the
-exclusive shard session remain authoritative, so notifications are best-effort
-wake-ups. `open()` runs before the first attachment/listener admission. A
-failed bounded readiness check closes its fresh client and can be retried.
+For server assembly, install a remote facility in `ServerEnvironment`. The built-in mode opens `ShardObservingService.ObserveAll` after the application is ready. The stream can stay silent when no shard is available; startup does not wait for its first notice. A new or reconnected node receives a scan of currently free shards with pending rows. The server repeats an unclaimed notice after its configured interval, 10 seconds by default. A further write does not postpone that reminder. Admin snapshots remain available for diagnostics, but Admin updates do not initiate application delivery.
 
-When identically configured application nodes share a Delivery server, every
-node observes and attempts each reported shard. The remote registry admits one
-owner for a shard at a time; updates are only hints recovered through a bounded
-snapshot, and the facility makes no ordering promise across different shards.
-The winning owner repeats finite Inbox drains until no deliverable rows remain,
-including rows that arrive while a drain is active, before it releases the
-shard. A pre-commit ownership probe fences known stale owners, but it is not a
-linearizable distributed transaction with Entity storage.
-
-<!-- docs-snippet-path: packages/delivery-client/src/remote/remote-delivery.ts -->
+<!-- docs-snippet-path: packages/delivery-client/src/remote/delivery-builder.ts -->
 
 ```ts
-import { RemoteDelivery } from "@spine-event-engine/delivery-client";
+import { DeliveryBuilder } from "@spine-event-engine/delivery-client";
 
-const delivery = RemoteDelivery.connectTo({ endpoint: "https://delivery.example.test" });
+const delivery = DeliveryBuilder.remote({
+  endpoint: "https://delivery.example.test",
+  notifications: { kind: "delivery-server", maxConcurrentDeliveries: 2 },
+});
 void delivery;
 ```
+
+With no `maxConcurrentDeliveries`, this node can run distinct shards in parallel. Two calls to `environment.delivery.deliverMessagesFrom(shard)` for the same shard join one local attempt and receive its result. Other nodes can try the same shard, but only one current server session can handle it. Notices are advisory: a node can miss one during a disconnect, and reconnect discovery or the server reminder can offer the work again. The Inbox row and session determine whether processing may proceed.
+
+For an application queue, select `notifications: { kind: "custom", shardObserver }`. The observer's `onMessage(message)` receives the complete persisted Inbox row after a write or normal release and may publish its shard to the queue. In this mode the framework opens no `ObserveAll` stream and schedules no fallback attempt if the callback fails. Its queue consumer calls `environment.delivery.deliverMessagesFrom(shard)`. For shared application storage, `DeliveryBuilder.local({ storageFactory, shardObserver })` supplies the same hook; use one shared factory for application and delivery records. A failed observer callback is logged without reversing the write. The application decides how to recover missed queue notifications.
 
 ## ⚠️ Design for redelivery
 

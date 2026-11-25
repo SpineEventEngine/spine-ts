@@ -75,14 +75,14 @@ describe("MessageBoard deployment entrypoints", () => {
       expect(source).toContain("MessageBoardDeployment.logger(");
     }
     expect(deployment).not.toContain("ServerEnvironment.when(");
-    expect(deployment).toContain("RemoteDelivery.connectTo");
+    expect(deployment).toContain("DeliveryBuilder.remote");
     expect(deployment).not.toContain('"SPINE_IPC_DIRECTORY"');
   });
 
   it("connects production MessageBoard processes to the configured delivery server", () => {
     const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
 
-    expect(deployment).toContain("RemoteDelivery.connectTo");
+    expect(deployment).toContain("DeliveryBuilder.remote");
     expect(deployment).toContain('"DELIVERY_SERVER_URL"');
     expect(deployment).not.toContain("DeliveryQuarantine");
   });

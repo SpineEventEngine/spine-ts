@@ -389,6 +389,7 @@ export class LocalEntityInbox implements EntityInbox {
       message: written.message,
       handoff: this.#readiness.claim(
         endpoint === undefined ? undefined : InboxHandoff.ready(endpoint, deliveryTenantId),
+        written.message,
       ),
     };
   }

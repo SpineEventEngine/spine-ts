@@ -124,31 +124,15 @@ deadline until another drain visits it.
 
 ## Remote delivery in an environment
 
-`RemoteDelivery.connectTo({ endpoint, clientOptions? })` creates one lazy
-`ServerEnvironmentDelivery`. Its `open()` creates one client plus one remote
-inbox and work registry, then completes the client's bounded `shardSnapshot()`
-readiness call before publishing those generic ports and its Admin source.
-Every attached environment supervisor takes bounded snapshots, consumes later
-updates as wake-up hints, and takes a fresh snapshot after a watch failure or
-bounded observation overflow before consuming updates again. Durable Inbox rows
-and exclusive shard pickup remain authoritative. Concurrent opens share an
-attempt. A failed attempt closes only its client, and a later open creates a
-fresh client.
+`DeliveryBuilder.remote({ endpoint, clientOptions?, notifications? })` creates an unopened `ServerEnvironmentDelivery`. `RemoteDelivery.connectTo()` provides the same remote facility. `open()` constructs the client, Inbox adapter, and work registry before publishing them. It does not ask Admin for a readiness snapshot; an idle work stream cannot delay application startup. Concurrent opens share an attempt. A closed facility cannot reopen.
 
-Every identically configured node observes and attempts every reported shard.
-The remote registry admits exactly one current owner per shard; notifications
-are best-effort hints and snapshot recovery is the convergent source after a
-stream break or bounded overflow. The winning owner repeats finite drains until
-no deliverable Inbox row remains, including rows arriving during an active
-drain, before release. There is no ordering guarantee across shards. The
-immediate pre-commit ownership probe fences a detected stale owner, but cannot
-make remote ownership and Entity storage one linearizable distributed
-transaction.
+Built-in notifications open `ShardObservingService.ObserveAll` after endpoints are ready. Every connected application node receives current free shards with pending rows when it connects or reconnects. A disconnected reader reopens with the established increasing reconnect delay, starting at 100 milliseconds and rising to 30 seconds; an unsupported method ends that reader with the original gRPC status. The server repeats an available shard after its configured reminder interval, 10 seconds by default, while it remains free and unclaimed. A write to a busy shard is observed after release or expiry. Admin snapshots and updates report state for administration; they do not trigger application work.
 
-Environment shutdown closes the client's HTTP/2 session. Concurrent/repeated
-close calls share work; a failed phase is the only phase retried. This adds no
-health route, provider selector, worker, or
-delivery-server mode.
+By default, distinct shards can run simultaneously on one node. Built-in mode alone accepts a positive `maxConcurrentDeliveries`; the node reserves a place before pickup and drops excess notices. The server's later reminder can offer a still-free shard again. Two local calls for the same shard join one in-flight attempt and share its result. Another node may compete for the shard, while the Delivery server grants one live session. The result of `deliverMessagesFrom(shard)` is `completed`, `busy`, `noWork`, or `stopped`; an unrecovered read, processing, release, or post-release lookup error rejects the call. A stream notice is advisory, and only the retained row and current session permit processing.
+
+For a custom queue, select `notifications: { kind: "custom", shardObserver }`. The callback receives the full persisted `InboxMessage` after a write or normal release. This mode opens no `ObserveAll` stream and starts no fallback delivery when the callback fails. A queue consumer calls `environment.delivery.deliverMessagesFrom(shard)`, and the application supplies its missed-notification recovery. `DeliveryBuilder.local({ storageFactory, shardObserver })` uses shared application storage with the same callback. The environment rejects a second, different storage factory so Entity and delivery records use the intended shared facility.
+
+Environment shutdown cancels the work reader, waits for admitted runs, and closes the client HTTP/2 session. A failure in a close phase remains retryable. A handler effect and Inbox acknowledgement remain separate operations; a lost acknowledgement may cause redelivery after session expiry. Guarded acknowledgements and cleanup require the same live session and exact row snapshot, while a current Entity write can still finish after another worker takes over.
 
 Retained rows in the current page or recent-delivery cache suppress the same
 signal ID at the same typed Inbox target until `keep_until`. Remote pagination

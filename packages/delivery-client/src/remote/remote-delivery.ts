@@ -12,9 +12,13 @@
  * the License.
  */
 
-import { type ServerEnvironmentDelivery, type DeliverySource } from "@spine-event-engine/server";
+import {
+  type ServerEnvironmentDelivery,
+  type DeliveryNotifications,
+  type ApplicationWorkSource,
+} from "@spine-event-engine/server";
 
-import { DeliveryClient, deliveryClientAccess } from "../client/client.js";
+import { DeliveryClient } from "../client/client.js";
 import type { DeliveryClientOptions } from "../client/types.js";
 import { RemoteInbox, RemoteWorkRegistry } from "./adapters.js";
 
@@ -33,28 +37,73 @@ export interface RemoteDeliveryConfig {
    * Optionally configures bounded client operations.
    */
   readonly clientOptions?: DeliveryClientOptions;
+
+  /**
+   * Selects built-in server notices or a custom row observer.
+   */
+  readonly notifications?: DeliveryNotifications;
 }
 
 /**
  * Opens and closes one remote delivery facility for a server environment.
  *
- * Opening creates a fresh client and remote adapters, verifies the bounded
- * Admin snapshot, then publishes them. Failed opening closes only that attempt
- * and can be retried.
+ * Opening creates a fresh client and remote adapters. The work stream starts
+ * after application readiness and can remain idle without delaying startup.
  */
 export class RemoteDelivery implements ServerEnvironmentDelivery {
   readonly #endpoint: string;
+
   readonly #options: DeliveryClientOptions;
+
+  /**
+   * Selects server notices or an application observer.
+   */
+  readonly notifications: DeliveryNotifications;
+
   #bundle: RemoteDeliveryBundle | undefined;
+
   #client: DeliveryClient | undefined;
+
   #opening: Promise<void> | undefined;
+
   #closing: Promise<void> | undefined;
+
   #closed = false;
+
   #clientClosed = false;
 
+  /**
+   * Validates one remote delivery configuration.
+   *
+   * @param config Supplies the endpoint and observer selection.
+   */
   private constructor(config: RemoteDeliveryConfig) {
+    const supplied = config.notifications as unknown;
+    if (
+      supplied !== undefined &&
+      (typeof supplied !== "object" ||
+        supplied === null ||
+        !["delivery-server", "custom"].includes((supplied as { kind?: unknown }).kind as string))
+    )
+      throw new TypeError("Delivery notification kind must be delivery-server or custom.");
     this.#endpoint = config.endpoint;
     this.#options = config.clientOptions ?? {};
+    this.notifications = config.notifications ?? { kind: "delivery-server" };
+    if (this.notifications.kind === "delivery-server") {
+      if ("shardObserver" in this.notifications)
+        throw new TypeError("shardObserver requires custom delivery notifications.");
+      const count = this.notifications.maxConcurrentDeliveries;
+      if (count !== undefined && (!Number.isSafeInteger(count) || count <= 0))
+        throw new TypeError("maxConcurrentDeliveries must be a positive safe integer.");
+    } else {
+      if ("maxConcurrentDeliveries" in this.notifications)
+        throw new TypeError("maxConcurrentDeliveries applies only to built-in delivery notices.");
+      const custom = this.notifications as Partial<
+        Extract<DeliveryNotifications, { kind: "custom" }>
+      >;
+      if (typeof custom.shardObserver?.onMessage !== "function")
+        throw new TypeError("Custom delivery notifications require a shard observer.");
+    }
   }
 
   /**
@@ -70,7 +119,7 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
   /**
    * Opens the remote facility once, sharing concurrent callers.
    *
-   * @returns A promise that settles after bounded Admin readiness succeeds.
+   * @returns A promise that settles after adapters are available.
    */
   open(): Promise<void> {
     if (this.#closed) return Promise.reject(new Error("Remote delivery is closed."));
@@ -104,13 +153,22 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
   }
 
   /**
-   * Returns the ready Admin source used by environment delivery supervisors.
+   * Returns available-work observations for the built-in selection.
    *
-   * @returns The source that supplies bounded snapshots and one-attempt shard updates.
+   * @returns A fresh work stream for each connection.
    */
-  get source(): DeliverySource {
+  get source(): ApplicationWorkSource {
     if (this.#bundle === undefined) throw new Error("Remote delivery is not open.");
     return this.#bundle.source;
+  }
+
+  /**
+   * Returns the configured delivery endpoint for work-stream diagnostics.
+   *
+   * @returns The endpoint supplied at construction.
+   */
+  get endpoint(): string {
+    return this.#endpoint;
   }
 
   /**
@@ -133,44 +191,14 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
     this.#client = client;
     const inbox = new RemoteInbox(client);
     const workRegistry = new RemoteWorkRegistry(client);
-    try {
-      await client.shardSnapshot();
-      if (this.#closed) throw new Error("Remote delivery is closed.");
-      this.#bundle = {
-        client,
-        inbox,
-        workRegistry,
-        source: {
-          shardSnapshot: async (options) => {
-            const snapshot = await client.shardSnapshot(options);
-            for (const observation of snapshot) workRegistry.reconcile(observation);
-            return snapshot;
-          },
-          observeShardUpdates: (options) =>
-            RemoteDelivery.#reconcileUpdates(
-              workRegistry,
-              deliveryClientAccess.observeOnce(client, options),
-            ),
-          releaseExpired: (inactivityMs, options) => client.releaseExpired(inactivityMs, options),
-        },
-      };
-    } catch (error) {
-      if (!this.#closed) {
-        client.close();
-        if (this.#client === client) this.#client = undefined;
-      }
-      throw error;
-    }
-  }
-
-  static async *#reconcileUpdates(
-    registry: RemoteWorkRegistry,
-    updates: AsyncIterable<Awaited<ReturnType<DeliveryClient["shardSnapshot"]>>[number]>,
-  ): AsyncIterable<Awaited<ReturnType<DeliveryClient["shardSnapshot"]>>[number]> {
-    for await (const observation of updates) {
-      registry.reconcile(observation);
-      yield observation;
-    }
+    if (this.#closed) throw new Error("Remote delivery is closed.");
+    this.#bundle = {
+      client,
+      inbox,
+      workRegistry,
+      source: { observeAvailableShards: (options) => client.observeAvailableShards(options) },
+    };
+    await Promise.resolve();
   }
 
   async #close(): Promise<void> {
@@ -200,5 +228,5 @@ interface RemoteDeliveryBundle {
   readonly client: DeliveryClient;
   readonly inbox: RemoteInbox;
   readonly workRegistry: RemoteWorkRegistry;
-  readonly source: DeliverySource;
+  readonly source: ApplicationWorkSource;
 }

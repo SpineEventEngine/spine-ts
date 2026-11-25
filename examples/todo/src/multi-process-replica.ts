@@ -18,7 +18,7 @@
 
 import { Datastore } from "@google-cloud/datastore";
 import { TypeRegistry } from "@spine-event-engine/core";
-import { RemoteDelivery } from "@spine-event-engine/delivery-client";
+import { DeliveryBuilder } from "@spine-event-engine/delivery-client";
 import {
   Application,
   EnvironmentType,
@@ -68,7 +68,7 @@ export async function createTodoReplica(
   const storageFactory = DatastoreStorageFactory.newBuilder()
     .setClient(new Datastore({ projectId: settings.projectId }))
     .build();
-  const delivery = RemoteDelivery.connectTo({ endpoint: settings.deliveryServerUrl });
+  const delivery = DeliveryBuilder.remote({ endpoint: settings.deliveryServerUrl });
   const deliveryStrategy = UniformAcrossAllShards.forNumber(settings.deliveryShardCount);
   const environment = ServerEnvironment.newBuilder()
     .under(EnvironmentType.Production, (setting) => {

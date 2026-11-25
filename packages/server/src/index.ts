@@ -101,7 +101,10 @@ export {
   type ServerEnvironmentCloseable,
   type ServerEnvironmentDelivery,
   type ServerEnvironmentSettings,
+  type DeliveryNotifications,
+  type DeliveryShardObserver,
 } from "./server/server-environment.js";
+export type { ApplicationWorkSource } from "./delivery/application-work-observer.js";
 
 export { CommandBus } from "./bus/command-bus.js";
 export { AppQueryHandler, type AppQueryContext } from "./handler/app-query-handler.js";
@@ -117,12 +120,13 @@ export type { EventDispatcher } from "./bus/event-dispatcher.js";
 export { DeliveryStorageCorruptionError } from "./delivery/delivery-storage-error.js";
 export type {
   DeliveryInbox,
+  DeliveryOperationOptions,
   DeliveryWorkRegistry,
   DeliveryWorkSession,
   ExclusiveDeliveryWorkSession,
   LeasedDeliveryWorkSession,
 } from "./delivery/delivery-ports.js";
-export { type DeliveryEndpointMessage } from "./delivery/delivery.js";
+export { type DeliveryAttempt, type DeliveryEndpointMessage } from "./delivery/delivery.js";
 export {
   DeliveryBuilder,
   DeliveryMonitor,
@@ -130,6 +134,8 @@ export {
   type DeliveryResult,
   type DeliveryRunOptions,
   type DeliveryStrategy,
+  type LocalDeliveryConfig,
+  LocalDeliveryFacility,
   UniformAcrossAllShards,
 } from "./delivery/delivery-builder.js";
 export {
@@ -141,15 +147,6 @@ export {
   type PickUpAction,
   type ReceptionAction,
 } from "./delivery/delivery-monitor.js";
-export {
-  DeliverySupervisor,
-  DeliveryShutdownTimeoutError,
-  type DeliveryOperationOptions,
-  type DeliveryShardUpdate,
-  type DeliverySource,
-  type DeliverySupervisorOptions,
-  type DeliverySupervisorCloseOptions,
-} from "./delivery/delivery-supervisor.js";
 export {
   Inbox,
   type DeliveryLabel,

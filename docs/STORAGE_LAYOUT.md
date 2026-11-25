@@ -1783,20 +1783,21 @@ follows covers this example's declared application query and enabled framework
 features; arbitrary additional application queries cannot be predicted from the
 Entity schema alone.
 
-| Query                                                                | Required composite properties, in order                                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Ticket: priority equality, when_opened ascending                     | `priority`, `when_opened`                                                        |
-| Ticket state history: Entity/version backward page or retention trim | `entity_id`, `version DESC`, `created DESC`                                      |
-| Ticket state history: state at a time                                | `entity_id`, `created DESC`, `version DESC`                                      |
-| Ticket state history: truncate by time                               | `created`, `version`                                                             |
-| Ticket diagnostic Event history: backward page                       | `entity_id`, `version DESC`, `created DESC`                                      |
-| Ticket diagnostic Event history: truncate by time                    | `created`, `version`                                                             |
-| Inbox shard read without statuses                                    | `shard_index`, `shard_total`, `when_received`, `version`, `message_id`           |
-| Inbox shard read with statuses                                       | `shard_index`, `shard_total`, `status`, `when_received`, `version`, `message_id` |
-| Pending subscription expiry                                          | `status`, `when_activation_expires`                                              |
-| Full Agent history                                                   | `scope_digest`, `order_key`                                                      |
-| Agent history category                                               | `scope_digest`, `category`, `order_key`                                          |
-| Agent conversation history                                           | `scope_digest`, `conversation_digest`, `order_key`                               |
+| Query                                                                | Required composite properties, in order                                                         |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Ticket: priority equality, when_opened ascending                     | `priority`, `when_opened`                                                                       |
+| Ticket state history: Entity/version backward page or retention trim | `entity_id`, `version DESC`, `created DESC`                                                     |
+| Ticket state history: state at a time                                | `entity_id`, `created DESC`, `version DESC`                                                     |
+| Ticket state history: truncate by time                               | `created`, `version`                                                                            |
+| Ticket diagnostic Event history: backward page                       | `entity_id`, `version DESC`, `created DESC`                                                     |
+| Ticket diagnostic Event history: truncate by time                    | `created`, `version`                                                                            |
+| Inbox shard read without statuses                                    | `shard_index`, `shard_total`, `when_received`, `version`, `message_id`                          |
+| Inbox shard read with statuses                                       | `shard_index`, `shard_total`, `status`, `when_received`, `version`, `message_id`                |
+| Newest pending Inbox row                                             | `shard_index`, `shard_total`, `status`, `when_received DESC`, `version DESC`, `message_id DESC` |
+| Pending subscription expiry                                          | `status`, `when_activation_expires`                                                             |
+| Full Agent history                                                   | `scope_digest`, `order_key`                                                                     |
+| Agent history category                                               | `scope_digest`, `category`, `order_key`                                                         |
+| Agent conversation history                                           | `scope_digest`, `conversation_digest`, `order_key`                                              |
 
 The key is the final tie-breaker; `__key__` is implicit in these index definitions.
 Ascending is the default direction. The Agent `order_key` encoding makes an
@@ -1896,6 +1897,19 @@ indexes:
       - name: when_received
       - name: version
       - name: message_id
+
+  # Newest pending Inbox row after a normal shard release.
+  - kind: spine.server.delivery.InboxMessage
+    properties:
+      - name: shard_index
+      - name: shard_total
+      - name: status
+      - name: when_received
+        direction: desc
+      - name: version
+        direction: desc
+      - name: message_id
+        direction: desc
 
   # Pending-subscription activation expiry cleanup.
   - kind: spine.client.SubscriptionRecord
@@ -3655,20 +3669,21 @@ follows covers this example's declared application query and enabled framework
 features; arbitrary additional application queries cannot be predicted from the
 Entity schema alone.
 
-| Query                                                                | Required composite properties, in order                                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Ticket: priority equality, when_opened ascending                     | `priority`, `when_opened`                                                        |
-| Ticket state history: Entity/version backward page or retention trim | `entity_id`, `version DESC`, `created DESC`                                      |
-| Ticket state history: state at a time                                | `entity_id`, `created DESC`, `version DESC`                                      |
-| Ticket state history: truncate by time                               | `created`, `version`                                                             |
-| Ticket diagnostic Event history: backward page                       | `entity_id`, `version DESC`, `created DESC`                                      |
-| Ticket diagnostic Event history: truncate by time                    | `created`, `version`                                                             |
-| Inbox shard read without statuses                                    | `shard_index`, `shard_total`, `when_received`, `version`, `message_id`           |
-| Inbox shard read with statuses                                       | `shard_index`, `shard_total`, `status`, `when_received`, `version`, `message_id` |
-| Pending subscription expiry                                          | `status`, `when_activation_expires`                                              |
-| Full Agent history                                                   | `scope_digest`, `order_key`                                                      |
-| Agent history category                                               | `scope_digest`, `category`, `order_key`                                          |
-| Agent conversation history                                           | `scope_digest`, `conversation_digest`, `order_key`                               |
+| Query                                                                | Required composite properties, in order                                                         |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Ticket: priority equality, when_opened ascending                     | `priority`, `when_opened`                                                                       |
+| Ticket state history: Entity/version backward page or retention trim | `entity_id`, `version DESC`, `created DESC`                                                     |
+| Ticket state history: state at a time                                | `entity_id`, `created DESC`, `version DESC`                                                     |
+| Ticket state history: truncate by time                               | `created`, `version`                                                                            |
+| Ticket diagnostic Event history: backward page                       | `entity_id`, `version DESC`, `created DESC`                                                     |
+| Ticket diagnostic Event history: truncate by time                    | `created`, `version`                                                                            |
+| Inbox shard read without statuses                                    | `shard_index`, `shard_total`, `when_received`, `version`, `message_id`                          |
+| Inbox shard read with statuses                                       | `shard_index`, `shard_total`, `status`, `when_received`, `version`, `message_id`                |
+| Newest pending Inbox row                                             | `shard_index`, `shard_total`, `status`, `when_received DESC`, `version DESC`, `message_id DESC` |
+| Pending subscription expiry                                          | `status`, `when_activation_expires`                                                             |
+| Full Agent history                                                   | `scope_digest`, `order_key`                                                                     |
+| Agent history category                                               | `scope_digest`, `category`, `order_key`                                                         |
+| Agent conversation history                                           | `scope_digest`, `conversation_digest`, `order_key`                                              |
 
 The key is the final tie-breaker; `__key__` is implicit in these index definitions.
 Ascending is the default direction. The Agent `order_key` encoding makes an
@@ -3768,6 +3783,19 @@ indexes:
       - name: when_received
       - name: version
       - name: message_id
+
+  # Newest pending Inbox row after a normal shard release.
+  - kind: spine.server.delivery.InboxMessage
+    properties:
+      - name: shard_index
+      - name: shard_total
+      - name: status
+      - name: when_received
+        direction: desc
+      - name: version
+        direction: desc
+      - name: message_id
+        direction: desc
 
   # Pending-subscription activation expiry cleanup.
   - kind: spine.client.SubscriptionRecord
@@ -5143,8 +5171,7 @@ monitoring, and recovered Delivery can invoke handlers.
 
 Thus the 15-family inventory describes every physical family this fully used
 example eventually needs, not 15 tables synchronously created by one build call.
-A remote-source supervisor can touch Delivery earlier during completed-context
-recovery; the hosting application should still exercise all enabled facilities
+A built-in work observer can touch Delivery earlier after a remote notice; the hosting application should still exercise all enabled facilities
 before exposing traffic.
 
 | Operation                                                          | Effect                                                                                                                                |

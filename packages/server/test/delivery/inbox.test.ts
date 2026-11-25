@@ -29,6 +29,24 @@ import { InboxMessageError, ShardIndex } from "../../src/index.js";
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Inbox", () => {
+  it("finds the newest pending row by full receive time, version, and ID", async () => {
+    const inbox = open("NewestPendingOrder");
+    const time = create(TimestampSchema, { seconds: 10n, nanos: 777 });
+    const rows = [
+      { ...createMessage("older", "older", 9n), whenReceived: time },
+      { ...createMessage("alpha", "alpha", 10n), whenReceived: time },
+      { ...createMessage("zeta", "zeta", 10n), whenReceived: time },
+    ];
+    for (const row of rows) await inbox.storage.write(row);
+    expect((await inbox.newestPending(ShardIndex.single()))?.id.value).toBe("zeta");
+    await inbox.markDelivered(rows[2]!);
+    expect((await inbox.newestPending(ShardIndex.single()))?.id.value).toBe("alpha");
+    await inbox.removeDuplicate(rows[1]!);
+    expect((await inbox.newestPending(ShardIndex.single()))?.id.value).toBe("older");
+    await inbox.removeDuplicate(rows[0]!);
+    expect(await inbox.newestPending(ShardIndex.single())).toBeUndefined();
+  });
+
   it("stores a new pending receipt without a completion deadline", async () => {
     const inbox = open("PendingWithoutDeadline");
     const received = await inbox.receive(input(createMessage("pending-deadline", "signal", 1n)));

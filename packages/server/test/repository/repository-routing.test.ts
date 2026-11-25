@@ -2261,6 +2261,25 @@ class SplitRouteProcessManager extends ProcessManager<string, typeof ProjectQueu
   }
 }
 
+const idleWorkSource: NonNullable<ServerEnvironmentDelivery["source"]> = {
+  async *observeAvailableShards({ signal } = {}) {
+    await new Promise<void>((resolve) => {
+      if (signal?.aborted) {
+        resolve();
+        return;
+      }
+      signal?.addEventListener(
+        "abort",
+        () => {
+          resolve();
+        },
+        { once: true },
+      );
+    });
+    yield* [];
+  },
+};
+
 describe("repository signal routing", () => {
   it("rejects class-aware routes attached to a different Entity constructor", () => {
     const wrongCommand = CommandRouting.create(InjectedProjectAggregate).route(
@@ -10237,13 +10256,7 @@ describe("repository signal routing", () => {
       close: () => sourceDelivery.close(),
       inbox: sourceDelivery.inbox,
       workRegistry: heldRegistry,
-      source: {
-        shardSnapshot: () => Promise.resolve([]),
-        observeShardUpdates: () => ({
-          [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => undefined) }),
-        }),
-        releaseExpired: () => Promise.resolve([]),
-      },
+      source: idleWorkSource,
     };
     setup.settings = {
       storageFactory: factory,
@@ -10371,13 +10384,7 @@ describe("repository signal routing", () => {
       close: () => remote.close(),
       inbox: remotePort,
       workRegistry: heldRegistry,
-      source: {
-        shardSnapshot: () => Promise.resolve([]),
-        observeShardUpdates: () => ({
-          [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => undefined) }),
-        }),
-        releaseExpired: () => Promise.resolve([]),
-      },
+      source: idleWorkSource,
     };
     setup.settings = {
       storageFactory: localFactory,
@@ -11814,7 +11821,7 @@ describe("repository signal routing", () => {
     );
   });
 
-  it("drains a supervised Process Manager Event before its held same-shard Command", async () => {
+  it("drains a noticed Process Manager Event before its held same-shard Command", async () => {
     const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
@@ -11822,17 +11829,46 @@ describe("repository signal routing", () => {
       context: { name: "SupervisedPmSource", multitenant: false },
       storageFactory: factory,
     });
+    const notice = Promise.withResolvers<ShardIndex>();
     const remoteFacility: ServerEnvironmentDelivery = {
       open: () => undefined,
       close: () => borrowed.close(),
       inbox: borrowed.inbox,
       workRegistry: borrowed.shards,
       source: {
-        shardSnapshot: () => Promise.resolve([]),
-        observeShardUpdates: () => ({
-          [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => undefined) }),
-        }),
-        releaseExpired: () => Promise.resolve([]),
+        async *observeAvailableShards({ signal } = {}) {
+          const announced = await Promise.race([
+            notice.promise,
+            new Promise<undefined>((resolve) => {
+              if (signal?.aborted) {
+                resolve(undefined);
+                return;
+              }
+              signal?.addEventListener(
+                "abort",
+                () => {
+                  resolve(undefined);
+                },
+                { once: true },
+              );
+            }),
+          ]);
+          if (announced === undefined) return;
+          yield announced;
+          await new Promise<void>((resolve) => {
+            if (signal?.aborted) {
+              resolve();
+              return;
+            }
+            signal?.addEventListener(
+              "abort",
+              () => {
+                resolve();
+              },
+              { once: true },
+            );
+          });
+        },
       },
     };
     setup.settings = {
@@ -11867,6 +11903,7 @@ describe("repository signal routing", () => {
     );
     try {
       await context.eventBus().post(createProjectCreated("supervised-pm-event", "supervised-pm"));
+      notice.resolve(ShardIndex.single());
       await entered.promise;
       const rows = await borrowed.inbox.read(ShardIndex.single(), {
         statuses: ["DELIVERED"],

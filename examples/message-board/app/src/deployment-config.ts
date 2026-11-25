@@ -17,7 +17,7 @@
  * the Message Board application, Gateway, combined, and managed entrypoints.
  */
 
-import { RemoteDelivery } from "@spine-event-engine/delivery-client";
+import { DeliveryBuilder } from "@spine-event-engine/delivery-client";
 import type { StorageFactory } from "@spine-event-engine/storage";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import type { Datastore } from "@google-cloud/datastore";
@@ -293,7 +293,7 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     logger?: ILogLayer,
   ): ManagedServerFacilities {
     const storageFactory = MessageBoardDeployment.storage(client);
-    const delivery = RemoteDelivery.connectTo({
+    const delivery = DeliveryBuilder.remote({
       endpoint: DeploymentValues.url(DeploymentValues.required(environment, "DELIVERY_SERVER_URL")),
     });
     return { storageFactory, delivery, ...(logger === undefined ? {} : { logger }) };
