@@ -47,6 +47,11 @@ export interface DeliveryConfiguration extends DeliveryStateLimits {
    * Holds the automatic Shard processing timeout in milliseconds.
    */
   readonly processingTimeoutMs: number;
+
+  /**
+   * Interval between notices while work remains free and pending.
+   */
+  readonly reminderIntervalMs: number;
 }
 
 /**
@@ -117,32 +122,8 @@ export const DeliveryConfig: Readonly<{
           MAX_DELIVERY_LIMIT,
           "processing timeout",
         ) * 1_000,
-      ...DeliveryLimits.resolve({
-        maxRetainedMessages: DeliveryConfig.number(
-          options.maxRetainedMessages,
-          "MAX_RETAINED_MESSAGES",
-          DEFAULT_DELIVERY_STATE_LIMITS.maxRetainedMessages,
-          1,
-          MAX_DELIVERY_LIMIT,
-          "retained message limit",
-        ),
-        maxRetainedBytes: DeliveryConfig.number(
-          options.maxRetainedBytes,
-          "MAX_RETAINED_BYTES",
-          DEFAULT_DELIVERY_STATE_LIMITS.maxRetainedBytes,
-          1,
-          MAX_DELIVERY_LIMIT,
-          "retained byte limit",
-        ),
-        maxTrackedShards: DeliveryConfig.number(
-          options.maxTrackedShards,
-          "MAX_TRACKED_SHARDS",
-          DEFAULT_DELIVERY_STATE_LIMITS.maxTrackedShards,
-          1,
-          MAX_DELIVERY_RESPONSE_SHARDS,
-          "tracked shard limit",
-        ),
-      }),
+      reminderIntervalMs: DeliveryConfigSupport.reminderInterval(options),
+      ...DeliveryConfigSupport.retention(options),
     });
   },
   number: (
@@ -166,5 +147,64 @@ export const DeliveryConfig: Readonly<{
     const number = Number(value);
     if (!Number.isSafeInteger(number)) throw new RangeError(`Delivery server ${name} is invalid.`);
     return number;
+  },
+});
+
+/**
+ * Resolves supporting delivery server configuration values.
+ */
+const DeliveryConfigSupport = Object.freeze({
+  /**
+   * Resolves existing retained-state limits.
+   *
+   * @param options Supplies explicit limit overrides.
+   * @returns Validated retained-state limits.
+   */
+  retention(options: DeliveryServerOptions): DeliveryStateLimits {
+    return DeliveryLimits.resolve({
+      maxRetainedMessages: DeliveryConfig.number(
+        options.maxRetainedMessages,
+        "MAX_RETAINED_MESSAGES",
+        DEFAULT_DELIVERY_STATE_LIMITS.maxRetainedMessages,
+        1,
+        MAX_DELIVERY_LIMIT,
+        "retained message limit",
+      ),
+      maxRetainedBytes: DeliveryConfig.number(
+        options.maxRetainedBytes,
+        "MAX_RETAINED_BYTES",
+        DEFAULT_DELIVERY_STATE_LIMITS.maxRetainedBytes,
+        1,
+        MAX_DELIVERY_LIMIT,
+        "retained byte limit",
+      ),
+      maxTrackedShards: DeliveryConfig.number(
+        options.maxTrackedShards,
+        "MAX_TRACKED_SHARDS",
+        DEFAULT_DELIVERY_STATE_LIMITS.maxTrackedShards,
+        1,
+        MAX_DELIVERY_RESPONSE_SHARDS,
+        "tracked shard limit",
+      ),
+    });
+  },
+
+  /**
+   * Resolves the work-reminder interval without a feature-specific cap.
+   *
+   * @param options Supplies the explicit seconds override.
+   * @returns The positive interval in safe integer milliseconds.
+   */
+  reminderInterval(options: DeliveryServerOptions): number {
+    return (
+      DeliveryConfig.number(
+        options.workReminderSeconds,
+        "WORK_REMINDER_SECONDS",
+        10,
+        1,
+        Math.floor(Number.MAX_SAFE_INTEGER / 1_000),
+        "work reminder interval",
+      ) * 1_000
+    );
   },
 });

@@ -22,6 +22,7 @@ import {
   AdminService,
   Health,
   InboxService,
+  ShardObservingService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 import { HealthHandlers } from "../health/health-service.js";
@@ -61,6 +62,12 @@ export interface DeliveryServerOptions {
    * non-negative integers through `2_147_483_647`.
    */
   readonly processingTimeoutSeconds?: number;
+
+  /**
+   * Seconds between notices while a shard remains free with pending work.
+   * Overrides `WORK_REMINDER_SECONDS`; defaults to 10 seconds.
+   */
+  readonly workReminderSeconds?: number;
 
   /**
    * Maximum retained Inbox records. The explicit option overrides
@@ -221,6 +228,7 @@ export class DeliveryServer {
       },
       closeAdmin: () => {
         this.#assembly?.closeAdmin();
+        this.#assembly?.closeObserving();
       },
       closeNetwork: async () => {
         try {
@@ -248,6 +256,7 @@ export class DeliveryServer {
         routes: (router) => {
           router.service(InboxService, core.inbox);
           router.service(ShardService, core.shards);
+          router.service(ShardObservingService, core.observing);
           router.service(AdminService, core.admin);
           router.service(
             Health,

@@ -2,6 +2,25 @@
 
 Navigation: [README](README.md)
 
+## D-0129. Work notifications and shard pickup
+
+Accepted on 25 November 2026.
+
+Application instances run the same handlers and delivery configuration. Each
+instance using server notifications opens its own work stream. For example, a
+new instance can hear about a Command already waiting in shard 4, even if it
+starts after the Command was written. Each instance decides whether to request
+pickup. The server grants a session to one worker for that shard.
+
+Admin reports stored inbox rows. An acknowledged Command can still be stored
+while its duplicate-detection window runs, so a count of one can mean zero
+Commands waiting. Application work notifications use the pending rows and
+current session. Their contract is defined by `ShardObservingService.ObserveAll`.
+
+The [shard delivery task](tasks/shard-delivery-correctness-and-performance/TASK.md)
+records the session, storage, notification and process-routing decisions and the
+acceptance criteria.
+
 ## D-0128: Query registered contexts without changing tenants
 
 Status: Accepted; implementation in progress, 28 September 2026.

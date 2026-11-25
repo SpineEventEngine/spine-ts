@@ -233,7 +233,11 @@
       "upstreamPath": "grpc-api/src/main/proto/spine/delivery/message_delivery.proto",
       "sourceUrl": "https://github.com/SpineEventEngine/delivery-server/blob/21f2901f393e552208b97166f4eaeb942f9f5172/grpc-api/src/main/proto/spine/delivery/message_delivery.proto",
       "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/delivery-server/21f2901f393e552208b97166f4eaeb942f9f5172/grpc-api/src/main/proto/spine/delivery/message_delivery.proto",
-      "sha256": "d0cb65740a46f967fee9e2bfd384c867c0e79ba9a7da41b46c45cd720ca2125f"
+      "sha256": "d0cb65740a46f967fee9e2bfd384c867c0e79ba9a7da41b46c45cd720ca2125f",
+      "localAdaptation": {
+        "kind": "delivery-observation",
+        "sha256": "aeaa73decdb5f2c30916ea4a8da5c1d21c4ffcbaab902c805cdd5cda224ecc13"
+      }
     },
     {
       "localPath": "packages/proto/proto/spine/delivery/pick_up_outcome.proto",

@@ -38,6 +38,53 @@ export const queryServiceAdaptation = Object.freeze({
 });
 
 /**
+ * The TS delivery work-observation service added to the pinned server contract.
+ */
+export const deliveryObservationAdaptation = Object.freeze({
+  path: "packages/proto/proto/spine/delivery/message_delivery.proto",
+  kind: "delivery-observation",
+  before: "// A query to read `InboxMessage`s.",
+  after: [
+    "// Reports delivery work to application instances.",
+    "service ShardObservingService {",
+    "",
+    "    // Reports each free shard with a pending TO_DELIVER row when a subscriber connects " +
+      "and as availability changes.",
+    "    // Each subscriber receives its own notices, including when other subscribers " +
+      "are already connected.",
+    "    // The server registers the subscriber before discovering existing work, so concurrent writes are not lost.",
+    "    // A shard held by a worker or containing only completed rows is omitted; " +
+      "an idle stream stays open and silent.",
+    "    // While work remains free and unclaimed, the server repeats its notice after the configured interval,",
+    "    // which defaults to 10 seconds. Further writes do not postpone an already scheduled reminder.",
+    "    // Pickup or removal of the last pending row stops reminders. Release or session expiry rechecks the",
+    "    // shard and reports it immediately if pending work remains. A reconnect starts a new discovery scan.",
+    "    // Each notice is advisory: it grants no session, and a later pickup can find the shard busy or empty.",
+    "    rpc ObserveAll(google.protobuf.Empty) returns (stream ShardedWorkAvailable);",
+    "}",
+    "",
+    "// Identifies one shard where an application worker can try to pick up pending work.",
+    "message ShardedWorkAvailable {",
+    "",
+    "    // Identifies the free shard that had pending work when the server checked.",
+    "    spine.server.delivery.ShardIndex shard = 1 [(required) = true];",
+    "}",
+    "",
+    "// A query to read `InboxMessage`s.",
+  ].join("\n"),
+});
+
+/**
+ * Documents the inherited optional Inbox message field in the TS copy.
+ */
+export const deliveryObservationMessageField = Object.freeze({
+  before: "    spine.server.delivery.InboxMessage message = 1;",
+  after:
+    "    // The found Inbox message, or absent when no message matched the request.\n" +
+    "    spine.server.delivery.InboxMessage message = 1;",
+});
+
+/**
  * Restores upstream bytes from the exact approved TargetFilters delta.
  *
  * @param source Manifest entry with optional local adaptation.
@@ -46,7 +93,11 @@ export const queryServiceAdaptation = Object.freeze({
  */
 export function restoreUpstreamSource(source, contents) {
   if (source.localAdaptation === undefined) return contents;
-  const adaptation = [targetFiltersAdaptation, queryServiceAdaptation].find(
+  const adaptation = [
+    targetFiltersAdaptation,
+    queryServiceAdaptation,
+    deliveryObservationAdaptation,
+  ].find(
     (candidate) =>
       source.localPath === candidate.path && source.localAdaptation.kind === candidate.kind,
   );
@@ -57,7 +108,9 @@ export function restoreUpstreamSource(source, contents) {
   const edits =
     adaptation === targetFiltersAdaptation
       ? [targetFiltersAdaptation]
-      : [queryServiceAdaptation.method, queryServiceAdaptation.imports];
+      : adaptation === queryServiceAdaptation
+        ? [queryServiceAdaptation.method, queryServiceAdaptation.imports]
+        : [deliveryObservationAdaptation, deliveryObservationMessageField];
   for (const { before, after } of edits) {
     if (text.split(after).length !== 2) {
       throw new Error(`${adaptation.kind} adaptation must occur exactly once`);
@@ -211,7 +264,7 @@ function validateSource(source, repoRoot, protoRoot, seenLocalPaths, failures) {
     (adaptation === null ||
       typeof adaptation !== "object" ||
       Array.isArray(adaptation) ||
-      ![targetFiltersAdaptation, queryServiceAdaptation].some(
+      ![targetFiltersAdaptation, queryServiceAdaptation, deliveryObservationAdaptation].some(
         (candidate) => localPath === candidate.path && adaptation.kind === candidate.kind,
       ) ||
       !/^[0-9a-f]{64}$/.test(adaptation.sha256) ||

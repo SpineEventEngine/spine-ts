@@ -23,6 +23,7 @@ import {
   InboxService,
   AdminService,
   ShardService,
+  ShardObservingService,
   PageOfMessagesSchema,
   ReadMessagesSinceTimeSchema as ReadSinceTimeSchema,
   OptionalInboxMessageSchema,
@@ -87,6 +88,8 @@ export class DeliveryClient {
 
   readonly #admin: ReturnType<typeof createClient<typeof AdminService>>;
 
+  readonly #observing: ReturnType<typeof createClient<typeof ShardObservingService>>;
+
   readonly #pageSize: number;
 
   readonly #readRetries: number;
@@ -132,6 +135,7 @@ export class DeliveryClient {
     this.#inbox = createClient(InboxService, transport);
     this.#shards = createClient(ShardService, transport);
     this.#admin = createClient(AdminService, transport);
+    this.#observing = createClient(ShardObservingService, transport);
     this.#onCloseOwnedTransport = onCloseOwnedTransport;
     deliveryClientProbes.set(this, (shardIndex, workerId, options) =>
       this.#probePickUp(shardIndex, workerId, options),
@@ -213,6 +217,39 @@ export class DeliveryClient {
    */
   observeShardUpdates(options: DeliveryFindOneOptions = {}): DeliveryShardObservationStream {
     return this.#observeShardUpdates(options, this.#observationReconnects);
+  }
+
+  /**
+   * Streams advisory free-shard notices from one server connection.
+   *
+   * An idle stream stays open without a first response. Reopening this method
+   * starts a fresh server discovery scan. The caller controls reconnection.
+   *
+   * @param options Supplies cancellation for the stream lifetime.
+   * @returns Validated shard indexes that a worker may try to pick up.
+   */
+  async *observeAvailableShards(
+    options: Pick<DeliveryFindOneOptions, "signal"> = {},
+  ): AsyncIterable<ShardIndex> {
+    if (this.#closed) throw new Error("Delivery client is closed.");
+    if (options.signal?.aborted) throw options.signal.reason;
+    const controller = new AbortController();
+    const abort = () => controller.abort(options.signal?.reason);
+    options.signal?.addEventListener("abort", abort, { once: true });
+    this.#activeReads.add(controller);
+    try {
+      for await (const notice of this.#observing.observeAll(
+        create(EmptySchema),
+        DeliveryRequestCodec.callOptions(controller.signal),
+      )) {
+        if (notice.shard === undefined) throw DeliveryRequestCodec.protocol();
+        yield DeliveryShardCodec.decode(notice.shard);
+      }
+    } finally {
+      options.signal?.removeEventListener("abort", abort);
+      this.#activeReads.delete(controller);
+      controller.abort();
+    }
   }
 
   #observeShardUpdates(

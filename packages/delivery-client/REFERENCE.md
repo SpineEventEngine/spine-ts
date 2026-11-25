@@ -41,6 +41,13 @@ also preserve that timestamp.
 
 ## Observation and topology
 
+`observeAvailableShards({ signal })` opens one call to
+`ShardObservingService.ObserveAll`. Each item identifies a free shard with
+pending work. The server may send that index again while the work is waiting.
+Idle streams have no first-response deadline. To stop reading, abort the signal
+or close the client. If the connection fails, the caller receives the gRPC
+error. Opening another call discovers current work again.
+
 `observeShardUpdates()` requires one acknowledgement, has a bounded queue, and
 reconnects only within configured limits. A slow consumer can receive
 `ShardObservationOverflowError`; an unrecoverable stream ends with

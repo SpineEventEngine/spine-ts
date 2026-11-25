@@ -63,6 +63,28 @@ service ShardService {
     rpc ReleaseSessions(ReleaseExpiredSessions) returns (ExpiredSessionsReleased);
 }
 
+// Reports delivery work to application instances.
+service ShardObservingService {
+
+    // Reports each free shard with a pending TO_DELIVER row when a subscriber connects and as availability changes.
+    // Each subscriber receives its own notices, including when other subscribers are already connected.
+    // The server registers the subscriber before discovering existing work, so concurrent writes are not lost.
+    // A shard held by a worker or containing only completed rows is omitted; an idle stream stays open and silent.
+    // While work remains free and unclaimed, the server repeats its notice after the configured interval,
+    // which defaults to 10 seconds. Further writes do not postpone an already scheduled reminder.
+    // Pickup or removal of the last pending row stops reminders. Release or session expiry rechecks the
+    // shard and reports it immediately if pending work remains. A reconnect starts a new discovery scan.
+    // Each notice is advisory: it grants no session, and a later pickup can find the shard busy or empty.
+    rpc ObserveAll(google.protobuf.Empty) returns (stream ShardedWorkAvailable);
+}
+
+// Identifies one shard where an application worker can try to pick up pending work.
+message ShardedWorkAvailable {
+
+    // Identifies the free shard that had pending work when the server checked.
+    spine.server.delivery.ShardIndex shard = 1 [(required) = true];
+}
+
 // A query to read `InboxMessage`s.
 message ReadMessagesSinceTime {
 
@@ -86,5 +108,6 @@ message PageOfMessages {
 // An optional `InboxMessage` that may or may not have been found in the `InboxStorage`.
 message OptionalInboxMessage {
 
+    // The found Inbox message, or absent when no message matched the request.
     spine.server.delivery.InboxMessage message = 1;
 }

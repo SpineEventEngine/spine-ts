@@ -12,15 +12,16 @@ This reference describes the public in-memory Delivery server API. Read the
 ## Public entry points
 
 `InMemoryDelivery.create(options)` returns `DeliveryCore` with Connect handler
-implementations `inbox`, `inboxRead`, and `shards`. It does not open a listener or install
-Admin/health handlers. The caller registers these handlers and provides the
-network lifecycle.
+implementations `inbox` and `shards`. The caller registers these handlers and
+provides the network lifecycle. For a listener with work observation, Admin,
+and health, start a `DeliveryServer`.
 
 `DeliveryServer` is the standalone lifecycle owner. Its constructor validates
 and resolves configuration exactly once. `start()` is idempotent and concurrent
 calls share one promise. `baseUrl` is available only after successful startup.
 `close()` is idempotent, terminal, and shares one promise; it stops service,
-rejects unadmitted work, completes Admin streams, and closes listener sessions.
+rejects unadmitted work, ends Admin and work streams, cancels work reminders,
+and closes listener sessions.
 Neither a failed start nor a closed instance can be restarted.
 
 The CLI `spine-delivery-server` starts that same server and closes it once on
@@ -46,6 +47,16 @@ payloads no larger than 1 MiB, and request/response bodies no larger than 4
 MiB. Capacity is finite: an operation that would exceed retained messages,
 bytes, or shards fails atomically with `RESOURCE_EXHAUSTED`; it is not partially
 accepted or silently shortened.
+
+## Work reminder interval
+
+`workReminderSeconds` configures the interval before the server repeats a
+notice for a free shard that still contains pending rows. The executable reads
+`WORK_REMINDER_SECONDS`. The default is ten seconds.
+
+For example, setting it to 30 gives workers thirty seconds before the server
+sends a reminder for the same unclaimed shard. A new subscriber still receives
+that shard during initial discovery. Taking the shard stops its reminders.
 
 ## Recovery timers
 

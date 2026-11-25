@@ -59,10 +59,33 @@ try {
 }
 ```
 
-## 👀 Observe shards
+## Shards with pending work
 
-Use a snapshot to establish current facts and an observation stream for later
-hints. Cancel the stream when it is no longer needed.
+Open `observeAvailableShards()` to receive a shard index whenever the Delivery
+server has a free shard with pending work. A newly connected client also learns
+about work already waiting. An idle call can stay silent indefinitely.
+
+<!-- docs-snippet-path: packages/delivery-client/src/client/client.ts -->
+
+```ts
+import { DeliveryClient } from "@spine-event-engine/delivery-client";
+
+declare const client: DeliveryClient;
+declare const shutdown: AbortSignal;
+
+for await (const shard of client.observeAvailableShards({ signal: shutdown })) {
+  console.log("Work is waiting in shard", shard.index, "of", shard.ofTotal);
+}
+```
+
+This low-level call opens one stream. Starting a fresh call after a disconnect
+discovers the free shards again. Several clients can receive the same index, so
+a worker must still request pickup before processing a row.
+
+## 👀 Shard state for Admin
+
+For an Admin view, use a snapshot to read current shard state and an Admin
+observation stream for later state changes. Cancel the stream when it is no longer needed.
 
 <!-- docs-snippet-path: packages/delivery-client/src/client/client.ts -->
 

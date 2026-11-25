@@ -49,6 +49,7 @@ then defaults.
 | Listener port     | `PORT`                     | `8484`      |
 | Inbound size      | `MAX_INBOUND_MESSAGE_SIZE` | 4 MiB       |
 | Pickup timeout    | `SHARD_PROCESSING_TIMEOUT` | disabled    |
+| Work reminder     | `WORK_REMINDER_SECONDS`    | 10 seconds  |
 | Retained messages | `MAX_RETAINED_MESSAGES`    | 10,000      |
 | Retained bytes    | `MAX_RETAINED_BYTES`       | 32 MiB      |
 | Tracked shards    | `MAX_TRACKED_SHARDS`       | 1,000       |
@@ -56,9 +57,8 @@ then defaults.
 ## 🧩 Embed the handlers
 
 Use `InMemoryDelivery.create()` when an application provides the Connect router and
-listener itself. `DeliveryCore.inbox`, `.inboxRead`, and `.shards` are the public
-Connect handler implementations; register all three before creating the transport. The
-application still manages the network listener and its lifecycle.
+listener itself. Register `DeliveryCore.inbox` and `.shards` on the router as
+shown below. The application manages the network listener and its lifecycle.
 
 An embedded consumer must declare and install direct dependencies on
 `@spine-event-engine/delivery-server`, `@connectrpc/connect`, and
@@ -91,10 +91,30 @@ zero, which disables timeout-based takeover during shard pickup. The application
 supervisor can still release stale sessions. Its recovery scan and
 stale-session threshold are separate [recovery timers](REFERENCE.md#recovery-timers).
 
-The standalone listener exposes Inbox, Shard, Admin, and gRPC health services.
+The standalone listener exposes Inbox, Shard, Shard Observing, Admin, and gRPC health services.
 It binds only to the loopback address by default. An explicit non-loopback host
 is a caller-selected trusted-network deployment and should not be exposed
 directly to the public Internet.
+
+## Work notifications
+
+An application instance can open `ShardObservingService.ObserveAll` on the same
+gRPC endpoint as the inbox. Each response identifies a free shard containing at
+least one row with status `TO_DELIVER`. Every subscribed instance can receive
+the same shard index. The application requests pickup before reading the rows
+and running a handler.
+
+Suppose shard 4 of 16 already contains a Command when a second application
+instance connects. The server reports shard 4 on that new connection immediately.
+When all shards are empty or being processed, the call stays open and silent.
+
+If neither instance takes shard 4, the server sends the index again after the
+configured reminder interval, ten seconds by default. Set `workReminderSeconds`
+when constructing the server or set `WORK_REMINDER_SECONDS` for the executable. For example, if the first
+notice went out at 12:00:00, a second Command written to that shard at 12:00:03
+leaves the reminder due at 12:00:10. Pickup stops the reminders. If the worker
+releases shard 4 with a Command still waiting, the server reports it again.
+A reconnect starts with the shards available at that time.
 
 ## ⚠️ In-memory means temporary
 
