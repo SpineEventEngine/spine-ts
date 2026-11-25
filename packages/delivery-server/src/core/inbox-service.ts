@@ -56,25 +56,28 @@ export const InboxHandlers: Readonly<{
    *
    * @param state Stores Inbox messages served by the handlers.
    * @param admission Controls write admission and cancellation.
-   * @param onMessageTransition Observes pending deliverable-message count transitions.
+   * @param onStoredChange Observes changes to retained rows for Admin.
+   * @param onWorkChange Observes changes affecting pending work availability.
    * @returns The Inbox service implementation.
    */
   create: (
     state: InMemoryDeliveryState,
     admission: MutationAdmission,
-    onMessageTransition?: (shard: ShardIndex, delta: 1 | -1) => void,
+    onStoredChange?: (shard: ShardIndex) => void,
+    onWorkChange?: (shard: ShardIndex) => void,
   ) => ServiceImpl<typeof InboxService>;
 }> = Object.freeze({
   create: (
     state: InMemoryDeliveryState,
     admission: MutationAdmission,
-    onMessageTransition?: (shard: ShardIndex, delta: 1 | -1) => void,
+    onStoredChange?: (shard: ShardIndex) => void,
+    onWorkChange?: (shard: ShardIndex) => void,
   ): ServiceImpl<typeof InboxService> =>
     Object.freeze({
-      writeOne: InboxOperations.writeOne(state, admission, onMessageTransition),
-      writeMany: InboxOperations.writeMany(state, admission, onMessageTransition),
-      removeOne: InboxOperations.removeOne(state, admission, onMessageTransition),
-      removeMany: InboxOperations.removeMany(state, admission, onMessageTransition),
+      writeOne: InboxOperations.writeOne(state, admission, onStoredChange, onWorkChange),
+      writeMany: InboxOperations.writeMany(state, admission, onStoredChange, onWorkChange),
+      removeOne: InboxOperations.removeOne(state, admission, onStoredChange, onWorkChange),
+      removeMany: InboxOperations.removeMany(state, admission, onStoredChange, onWorkChange),
       findOne: InboxOperations.findOne(state),
       findManyInShard: InboxOperations.findManyInShard(state),
       newestMessageToDeliver: InboxOperations.newestMessageToDeliver(state),
@@ -86,16 +89,17 @@ const InboxOperations = {
     (
       state: InMemoryDeliveryState,
       admission: MutationAdmission,
-      onMessageTransition?: (shard: ShardIndex, delta: 1 | -1) => void,
+      onStoredChange?: (shard: ShardIndex) => void,
+      onWorkChange?: (shard: ShardIndex) => void,
     ): ServiceImpl<typeof InboxService>["writeOne"] =>
     async (request, context) => {
       const message = InboxMessages.required(request.message);
       await admission.run(context.signal, () => {
         const prior = state.messages.get(DeliveryMessages.key(message.message));
         state.putAll([message]);
-        const delta = InboxTransitions.delta(prior, message.message);
-        if (delta !== 0)
-          onMessageTransition?.(InboxShards.required(message.message.id?.index), delta);
+        const shard = InboxShards.required(message.message.id?.index);
+        onStoredChange?.(shard);
+        if (InboxTransitions.affectsWork(prior, message.message)) onWorkChange?.(shard);
       });
       return {};
     },
@@ -103,7 +107,8 @@ const InboxOperations = {
     (
       state: InMemoryDeliveryState,
       admission: MutationAdmission,
-      onMessageTransition?: (shard: ShardIndex, delta: 1 | -1) => void,
+      onStoredChange?: (shard: ShardIndex) => void,
+      onWorkChange?: (shard: ShardIndex) => void,
     ): ServiceImpl<typeof InboxService>["writeMany"] =>
     async (request, context) => {
       const shard = InboxShards.required(request.shard);
@@ -118,11 +123,13 @@ const InboxOperations = {
         for (const message of messages) final.set(DeliveryMessages.key(message.message), message);
         const prior = new Map([...final.entries()].map(([key]) => [key, state.messages.get(key)]));
         state.putAll(messages);
-        for (const [key, message] of final) {
-          const delta = InboxTransitions.delta(prior.get(key), message.message);
-          if (delta !== 0)
-            onMessageTransition?.(InboxShards.required(message.message.id?.index), delta);
-        }
+        onStoredChange?.(shard);
+        if (
+          [...final].some(([key, message]) =>
+            InboxTransitions.affectsWork(prior.get(key), message.message),
+          )
+        )
+          onWorkChange?.(shard);
       });
       return {};
     },
@@ -130,14 +137,18 @@ const InboxOperations = {
     (
       state: InMemoryDeliveryState,
       admission: MutationAdmission,
-      onMessageTransition?: (shard: ShardIndex, delta: 1 | -1) => void,
+      onStoredChange?: (shard: ShardIndex) => void,
+      onWorkChange?: (shard: ShardIndex) => void,
     ): ServiceImpl<typeof InboxService>["removeOne"] =>
     async (request, context) => {
       const message = InboxMessages.required(request.message);
       await admission.run(context.signal, () => {
         const prior = state.messages.get(DeliveryMessages.key(message.message));
-        if (state.delete(message.message) && prior?.status === InboxMessageStatus.TO_DELIVER)
-          onMessageTransition?.(InboxShards.required(message.message.id?.index), -1);
+        if (state.delete(message.message)) {
+          const shard = InboxShards.required(message.message.id?.index);
+          onStoredChange?.(shard);
+          if (prior?.status === InboxMessageStatus.TO_DELIVER) onWorkChange?.(shard);
+        }
       });
       return {};
     },
@@ -145,7 +156,8 @@ const InboxOperations = {
     (
       state: InMemoryDeliveryState,
       admission: MutationAdmission,
-      onMessageTransition?: (shard: ShardIndex, delta: 1 | -1) => void,
+      onStoredChange?: (shard: ShardIndex) => void,
+      onWorkChange?: (shard: ShardIndex) => void,
     ): ServiceImpl<typeof InboxService>["removeMany"] =>
     async (request, context) => {
       const shard = InboxShards.required(request.shard);
@@ -156,11 +168,17 @@ const InboxOperations = {
         shard,
       );
       await admission.run(context.signal, () => {
+        let changed = false;
+        let pendingChanged = false;
         for (const message of messages) {
           const prior = state.messages.get(DeliveryMessages.key(message.message));
-          if (state.delete(message.message) && prior?.status === InboxMessageStatus.TO_DELIVER)
-            onMessageTransition?.(InboxShards.required(message.message.id?.index), -1);
+          if (state.delete(message.message)) {
+            changed = true;
+            if (prior?.status === InboxMessageStatus.TO_DELIVER) pendingChanged = true;
+          }
         }
+        if (changed) onStoredChange?.(shard);
+        if (pendingChanged) onWorkChange?.(shard);
       });
       return {};
     },
@@ -184,19 +202,7 @@ const InboxOperations = {
         throw InboxResponses.invalid("Delivery page size must be between 1 and 1000.");
       if (request.sinceWhen !== undefined && !InboxTime.valid(request.sinceWhen))
         throw InboxResponses.invalid("Delivery page timestamp is invalid.");
-      const message = [...state.messages.values()]
-        .filter(
-          (value) =>
-            value.id?.index !== undefined &&
-            DeliveryShards.key(value.id.index) === DeliveryShards.key(shard),
-        )
-        .filter(
-          (value) =>
-            request.sinceWhen === undefined || InboxTime.compare(value, request.sinceWhen) > 0,
-        )
-        .sort(InboxMessages.compare)
-        .slice(0, request.pageSize)
-        .map(DeliveryMessages.copy);
+      const message = state.page(shard, request.sinceWhen, request.pageSize);
       return InboxResponses.bounded(
         PageOfMessagesSchema,
         { message },
@@ -206,19 +212,10 @@ const InboxOperations = {
   newestMessageToDeliver:
     (state: InMemoryDeliveryState): ServiceImpl<typeof InboxService>["newestMessageToDeliver"] =>
     (shard) => {
-      const key = DeliveryShards.key(InboxShards.required(shard));
-      const newest = [...state.messages.values()]
-        .filter(
-          (value) =>
-            value.id?.index !== undefined &&
-            DeliveryShards.key(value.id.index) === key &&
-            value.status === InboxMessageStatus.TO_DELIVER,
-        )
-        .sort(InboxMessages.compare)
-        .at(-1);
+      const newest = state.newestPending(InboxShards.required(shard));
       return InboxResponses.bounded(
         OptionalInboxMessageSchema,
-        newest === undefined ? {} : { message: DeliveryMessages.copy(newest) },
+        newest === undefined ? {} : { message: newest },
       );
     },
 };
@@ -261,15 +258,6 @@ const InboxMessages: Readonly<{
    * @returns Nothing when the length is valid.
    */
   requiredBatchLength: (length: number) => void;
-
-  /**
-   * Compares Inbox messages by receive time, version, and UUID.
-   *
-   * @param left Holds the first Inbox message.
-   * @param right Holds the second Inbox message.
-   * @returns A sort-order comparison result.
-   */
-  compare: (left: InboxMessage, right: InboxMessage) => number;
 
   /**
    * Validates an Inbox payload.
@@ -325,13 +313,6 @@ const InboxMessages: Readonly<{
   requiredBatchLength: (length: number): void => {
     if (length < 1 || length > MAX_DELIVERY_BATCH_MESSAGES)
       throw InboxResponses.invalid("Delivery message batch is invalid.");
-  },
-  compare: (left: InboxMessage, right: InboxMessage): number => {
-    const received = InboxTime.compare(left, right.whenReceived);
-    if (received !== 0) return received;
-    const version = left.version - right.version;
-    if (version !== 0) return version;
-    return InboxIds.compare(left.id?.uuid ?? "", right.id?.uuid ?? "");
   },
   validPayload: (message: InboxMessage): boolean => {
     const payload = message.payload;
@@ -420,18 +401,6 @@ const InboxTime: Readonly<{
    * @returns Whether the timestamp is within protobuf bounds.
    */
   valid: (value: { readonly seconds: bigint; readonly nanos: number }) => boolean;
-
-  /**
-   * Compares a message receive time to a timestamp.
-   *
-   * @param left Holds the Inbox message.
-   * @param right Holds the comparison timestamp.
-   * @returns A sort-order comparison result.
-   */
-  compare: (
-    left: InboxMessage,
-    right: { readonly seconds: bigint; readonly nanos: number } | undefined,
-  ) => number;
 }> = Object.freeze({
   valid: (value: { readonly seconds: bigint; readonly nanos: number }): boolean =>
     value.seconds >= -62_135_596_800n &&
@@ -439,47 +408,23 @@ const InboxTime: Readonly<{
     Number.isInteger(value.nanos) &&
     value.nanos >= 0 &&
     value.nanos < 1_000_000_000,
-  compare: (
-    left: InboxMessage,
-    right: { readonly seconds: bigint; readonly nanos: number } | undefined,
-  ): number => {
-    if (right === undefined || left.whenReceived === undefined)
-      throw new TypeError("Delivery message receive time is missing.");
-    if (left.whenReceived.seconds !== right.seconds)
-      return left.whenReceived.seconds < right.seconds ? -1 : 1;
-    return left.whenReceived.nanos - right.nanos;
-  },
 });
 
 /**
- * Compares IDs by unsigned UTF-8 bytes without locale-dependent collation.
- */
-const InboxIds = Object.freeze({
-  /**
-   * Compares two message IDs.
-   * @param left The first ID.
-   * @param right The second ID.
-   * @returns The bytewise ordering.
-   */
-  compare(left: string, right: string): number {
-    return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
-  },
-});
-
-/**
- * Computes a pending-message count delta from an Inbox status transition.
+ * Identifies Inbox writes that can change pending-work availability.
  */
 const InboxTransitions = Object.freeze({
   /**
-   * Returns the change in pending-message count for one row transition.
+   * Checks whether a row write affects pending work.
    * @param prior The previous row, if present.
    * @param next The next row.
-   * @returns The pending-message count delta.
+   * @returns Whether work availability may have changed.
    */
-  delta(prior: InboxMessage | undefined, next: InboxMessage): 1 | -1 | 0 {
-    const wasPending = prior?.status === InboxMessageStatus.TO_DELIVER;
-    const isPending = next.status === InboxMessageStatus.TO_DELIVER;
-    return isPending === wasPending ? 0 : isPending ? 1 : -1;
+  affectsWork(prior: InboxMessage | undefined, next: InboxMessage): boolean {
+    return (
+      prior?.status === InboxMessageStatus.TO_DELIVER ||
+      next.status === InboxMessageStatus.TO_DELIVER
+    );
   },
 });
 

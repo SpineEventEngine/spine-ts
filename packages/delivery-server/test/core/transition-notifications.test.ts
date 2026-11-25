@@ -24,7 +24,6 @@ import {
   WriteMessageSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
-  InboxMessageSchema,
   InboxMessageStatus,
   ShardIndexSchema,
   WorkerIdSchema,
@@ -34,20 +33,12 @@ import { InMemoryDeliveryState } from "../../src/core/in-memory-delivery-state.j
 import { InboxHandlers } from "../../src/core/inbox-service.js";
 import { MutationAdmission } from "../../src/core/mutation-admission.js";
 import { ShardHandlers } from "../../src/core/shard-service.js";
+import { domainMessage } from "./domain-message.js";
 
 const context = { signal: new AbortController().signal } as never;
 const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
 const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
-const message = (uuid: string) =>
-  create(InboxMessageSchema, {
-    id: { uuid, index: shard },
-    signalId: { value: "signal" },
-    inboxId: { entityId: { id: { typeUrl: "example.Entity" } }, typeUrl: "example.State" },
-    payload: { case: "command", value: {} },
-    label: 1,
-    whenReceived: { seconds: 0n, nanos: 0 },
-    status: InboxMessageStatus.TO_DELIVER,
-  });
+const message = (uuid: string) => domainMessage(uuid, shard);
 
 describe("Shard transition notifications", () => {
   it("notifies initial pickup, stale takeover, explicit release, and expired release in admission order", async () => {
@@ -94,12 +85,18 @@ describe("Shard transition notifications", () => {
 });
 
 describe("Inbox transition notifications", () => {
-  it("notifies actual insert/remove transitions in batch input order but suppresses no-ops", async () => {
-    const transitions: number[] = [];
+  it("separates stored-row and pending-work transitions per committed batch", async () => {
+    const stored: number[] = [];
+    const work: number[] = [];
     const inbox = InboxHandlers.create(
       new InMemoryDeliveryState(),
       new MutationAdmission(),
-      (value) => transitions.push(value.index),
+      (value) => {
+        stored.push(value.index);
+      },
+      (value) => {
+        work.push(value.index);
+      },
     );
     await inbox.writeMany(
       create(WriteMessagesSchema, { shard, message: [message("a"), message("b"), message("a")] }),
@@ -108,6 +105,13 @@ describe("Inbox transition notifications", () => {
     await inbox.writeOne(create(WriteMessageSchema, { message: message("a") }), context);
     await inbox.removeOne(create(RemoveMessageSchema, { message: message("a") }), context);
     await inbox.removeOne(create(RemoveMessageSchema, { message: message("a") }), context);
-    expect(transitions).toEqual([0, 0, 0]);
+    await inbox.writeOne(
+      create(WriteMessageSchema, {
+        message: domainMessage("done", shard, 0, 0, InboxMessageStatus.DELIVERED),
+      }),
+      context,
+    );
+    expect(stored).toEqual([0, 0, 0, 0]);
+    expect(work).toEqual([0, 0, 0]);
   });
 });

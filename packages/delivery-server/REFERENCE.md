@@ -96,8 +96,18 @@ pickup-time-conditional, but the supplied worker must match the current owner;
 a stale worker cannot release a newer worker's session. This in-memory server
 stores neither attempt history nor a quarantine state.
 
-Admin observation acknowledges first and then streams updates through a bounded
-queue. Health `Check` reports registered names while the listener serves;
+The Admin `messages` count includes every stored inbox row for the shard.
+For example, after the worker acknowledges the only Command, Admin still shows
+one row. The work stream stays silent because that row is already delivered.
+When the framework removes the retained row during a later drain, the stored
+count falls to zero.
+
+An Admin subscription sends its acknowledgement, the current state of known
+shards, and subsequent changes. Changes within 25 milliseconds can be combined
+for the same shard. Changes to a different shard have their own interval.
+Removing the final row from a free shard sends its empty state to the dashboard.
+
+Health `Check` reports registered names while the listener serves;
 unknown names are `NOT_SERVING`. Health `Watch` is not implemented.
 
 ## Security and topology limits

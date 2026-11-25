@@ -15,18 +15,19 @@
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code } from "@connectrpc/connect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ShardIndexSchema } from "@spine-event-engine/proto/delivery";
 
 import { AdminPublisher } from "../../src/admin/admin-service.js";
 import { InMemoryDeliveryState } from "../../src/core/in-memory-delivery-state.js";
+import { domainMessage, encodedBytes } from "../core/domain-message.js";
 
 const context = { signal: new AbortController().signal } as never;
 const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
 
 describe("Admin publisher", () => {
-  it("drops changes before the acknowledgement and publishes complete later observations", async () => {
+  it("publishes one complete state per shard and suppresses repeated identical states", async () => {
     const publisher = AdminPublisher.create(new InMemoryDeliveryState());
     const stream = publisher.service
       .subscribeToShardUpdates(create(EmptySchema), context)
@@ -41,8 +42,11 @@ describe("Admin publisher", () => {
       value: { value: { case: "update", value: { index: shard, newMessagesCount: 0 } } },
     });
     publisher.publish(shard);
-    await expect(stream.next()).resolves.toMatchObject({
-      value: { value: { case: "update", value: { index: shard } } },
+    const next = stream.next();
+    const other = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    publisher.publish(other);
+    await expect(next).resolves.toMatchObject({
+      value: { value: { case: "update", value: { index: other } } },
     });
     await requireReturn(stream)(undefined);
   });
@@ -72,7 +76,7 @@ describe("Admin publisher", () => {
     await expect(waiting).resolves.toMatchObject({ done: true });
   });
 
-  it("rejects the 101st pending update with the stable resource error", async () => {
+  it("rejects the 101st distinct pending shard update with the stable resource error", async () => {
     const publisher = AdminPublisher.create(new InMemoryDeliveryState());
     const stream = publisher.service
       .subscribeToShardUpdates(create(EmptySchema), context)
@@ -80,7 +84,8 @@ describe("Admin publisher", () => {
     await stream.next();
     const delivered = stream.next();
     await Promise.resolve();
-    for (let index = 0; index < 102; index++) publisher.publish(shard);
+    for (let index = 0; index < 102; index++)
+      publisher.publish(create(ShardIndexSchema, { index, ofTotal: 102 }));
     await expect(delivered).resolves.toMatchObject({ done: false });
     await expect(stream.next()).rejects.toMatchObject({
       code: Code.ResourceExhausted,
@@ -91,19 +96,18 @@ describe("Admin publisher", () => {
     expect(publisher.subscriberCount).toBe(0);
   });
 
-  it("maintains exact message counts without scanning canonical messages", () => {
+  it("reads exact stored counts without scanning canonical messages", () => {
     const state = new InMemoryDeliveryState();
     const publisher = AdminPublisher.create(state);
-    publisher.recordMessageTransition(shard, 1);
-    publisher.recordMessageTransition(shard, 1);
-    publisher.recordMessageTransition(shard, -1);
+    const one = domainMessage("one", shard);
+    state.putAll([{ message: one, bytes: encodedBytes(one) }]);
+    const values = vi.spyOn(state.messages, "values").mockImplementation(() => {
+      throw new Error("global Inbox scan");
+    });
     expect(publisher.service.getShardInfo(create(EmptySchema), context)).toMatchObject({
       shards: [{ index: shard, status: 2, messages: 1 }],
     });
-    const invalid = AdminPublisher.create(new InMemoryDeliveryState());
-    expect(() => {
-      invalid.recordMessageTransition(shard, -1);
-    }).toThrow("Delivery shard message count is invalid.");
+    values.mockRestore();
   });
 
   it("removes an iterator returned by its caller", async () => {

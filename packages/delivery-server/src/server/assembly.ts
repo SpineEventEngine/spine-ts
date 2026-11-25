@@ -94,8 +94,10 @@ export const DeliveryAssembly: Readonly<{
     const admission = new MutationAdmission();
     const admin = AdminPublisher.create(state);
     const observing = ShardObserving.create(state, configuration.reminderIntervalMs ?? 10_000);
-    const onMessageTransition = (shard: ShardIndex, delta: 1 | -1) => {
-      admin.recordMessageTransition(shard, delta);
+    const onStoredChange = (shard: ShardIndex) => {
+      admin.publish(shard);
+    };
+    const onWorkChange = (shard: ShardIndex) => {
       observing.changed(shard);
     };
     const onShardTransition = (shard: ShardIndex) => {
@@ -103,7 +105,7 @@ export const DeliveryAssembly: Readonly<{
       observing.changed(shard);
     };
     return Object.freeze({
-      inbox: InboxHandlers.create(state, admission, onMessageTransition),
+      inbox: InboxHandlers.create(state, admission, onStoredChange, onWorkChange),
       shards: ShardHandlers.create(
         state,
         admission,

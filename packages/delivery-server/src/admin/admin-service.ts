@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import {
   AdminService,
@@ -53,14 +53,6 @@ export interface AdminPublisherHandle {
   publish(shard: ShardIndex): void;
 
   /**
-   * Records a pending Inbox message-count transition.
-   *
-   * @param shard Identifies the changed shard.
-   * @param delta Supplies the pending count change from insertion, removal, or status transition.
-   */
-  recordMessageTransition(shard: ShardIndex, delta: 1 | -1): void;
-
-  /**
    * Closes all active administrative subscriptions.
    */
   close(): void;
@@ -82,68 +74,97 @@ export const AdminPublisher: Readonly<{
 }> = Object.freeze({
   create: (state: InMemoryDeliveryState): AdminPublisherHandle => {
     const subscribers = new Set<Subscriber>();
-    const messageCounts = new Map<string, { readonly shard: ShardIndex; count: number }>();
     const update = (shard: ShardIndex): SubscriptionResponse =>
       create(SubscriptionResponseSchema, {
         value: {
           case: "update",
-          value: create(
-            ShardInfoUpdateSchema,
-            AdminSnapshots.observation(state, messageCounts, shard),
-          ),
+          value: create(ShardInfoUpdateSchema, AdminSnapshots.observation(state, shard)),
         },
       });
     return {
       get subscriberCount() {
         return subscribers.size;
       },
-      service: {
-        getShardInfo: () => AdminSnapshots.snapshot(state, messageCounts),
-        async *subscribeToShardUpdates(_request, context) {
-          const subscriber = new Subscriber(() => {
-            subscribers.delete(subscriber);
-          });
-          const onAbort = () => {
-            subscriber.cancel();
-          };
-          context.signal.addEventListener("abort", onAbort, { once: true });
-          try {
-            yield create(SubscriptionResponseSchema, { value: { case: "created", value: true } });
-            if (context.signal.aborted) return;
-            subscribers.add(subscriber);
-            for (;;) {
-              const next = await subscriber.next();
-              if (next === undefined) return;
-              yield next;
-            }
-          } finally {
-            context.signal.removeEventListener("abort", onAbort);
-            subscribers.delete(subscriber);
-            subscriber.close();
-          }
-        },
-      },
+      service: AdminSubscriptions.create(state, subscribers, update),
       publish(shard) {
-        const frame = update(shard);
-        for (const subscriber of subscribers) subscriber.push(frame);
-      },
-      recordMessageTransition(shard, delta) {
-        const key = DeliveryShards.key(shard);
-        const current = messageCounts.get(key);
-        const count = (current?.count ?? 0) + delta;
-        if (count < 0) throw new TypeError("Delivery shard message count is invalid.");
-        if (count === 0) messageCounts.delete(key);
-        else if (current === undefined)
-          messageCounts.set(key, { shard: DeliveryShards.copy(shard), count });
-        else current.count = count;
-        const frame = update(shard);
-        for (const subscriber of subscribers) subscriber.push(frame);
+        for (const subscriber of subscribers) subscriber.offer(shard);
       },
       close() {
         for (const subscriber of subscribers) subscriber.close();
         subscribers.clear();
       },
     };
+  },
+});
+
+/**
+ * Constructs the Admin stream handlers around shared state and subscribers.
+ */
+const AdminSubscriptions = Object.freeze({
+  /**
+   * Creates Admin RPC handlers with an initial replay outside the live buffer.
+   *
+   * @param state Supplies current shard state.
+   * @param subscribers Tracks active streams.
+   * @param update Reads the latest full shard observation.
+   * @returns The Admin service handlers.
+   */
+  create(
+    state: InMemoryDeliveryState,
+    subscribers: Set<Subscriber>,
+    update: (shard: ShardIndex) => SubscriptionResponse,
+  ): ServiceImpl<typeof AdminService> {
+    return {
+      getShardInfo: () => AdminSnapshots.snapshot(state),
+      subscribeToShardUpdates: (_request, context) =>
+        AdminStreams.observe(state, subscribers, update, context),
+    };
+  },
+});
+
+/**
+ * Runs one Admin stream with replay followed by live updates.
+ */
+const AdminStreams = Object.freeze({
+  /**
+   * Reads initial known shards and later live updates for one subscriber.
+   *
+   * @param state Supplies current shard state.
+   * @param subscribers Tracks active streams.
+   * @param update Reads the latest full shard observation.
+   * @param context Supplies cancellation for the stream.
+   * @returns The acknowledgement followed by shard updates.
+   */
+  async *observe(
+    state: InMemoryDeliveryState,
+    subscribers: Set<Subscriber>,
+    update: (shard: ShardIndex) => SubscriptionResponse,
+    context: Parameters<ServiceImpl<typeof AdminService>["subscribeToShardUpdates"]>[1],
+  ): AsyncIterable<SubscriptionResponse> {
+    const subscriber = new Subscriber(update, () => {
+      subscribers.delete(subscriber);
+    });
+    const onAbort = subscriber.cancel.bind(subscriber);
+    context.signal.addEventListener("abort", onAbort, { once: true });
+    try {
+      subscribers.add(subscriber);
+      const replay = [...state.knownShards()];
+      subscriber.setReplay(replay);
+      yield create(SubscriptionResponseSchema, { value: { case: "created", value: true } });
+      if (context.signal.aborted) return;
+      for (const shard of replay) {
+        const frame = subscriber.replay(shard);
+        if (frame !== undefined) yield frame;
+      }
+      for (;;) {
+        const next = await subscriber.next();
+        if (next === undefined) return;
+        yield next;
+      }
+    } finally {
+      context.signal.removeEventListener("abort", onAbort);
+      subscriber.close();
+    }
   },
 });
 
@@ -156,17 +177,13 @@ const AdminSnapshots: Readonly<{
   /**
    * Produces a bounded deterministic shard snapshot.
    */
-  snapshot: (
-    state: InMemoryDeliveryState,
-    messageCounts: ReadonlyMap<string, { readonly shard: ShardIndex; readonly count: number }>,
-  ) => ReturnType<typeof create<typeof ShardInfoListSchema>>;
+  snapshot: (state: InMemoryDeliveryState) => ReturnType<typeof create<typeof ShardInfoListSchema>>;
 
   /**
    * Produces one shard observation.
    */
   observation: (
     state: InMemoryDeliveryState,
-    messageCounts: ReadonlyMap<string, { readonly count: number }>,
     shard: ShardIndex,
   ) => {
     readonly index: ShardIndex;
@@ -179,38 +196,21 @@ const AdminSnapshots: Readonly<{
   };
 
   /**
-   * Lists every observed shard in deterministic order.
-   */
-  shards: (
-    state: InMemoryDeliveryState,
-    messageCounts: ReadonlyMap<string, { readonly shard: ShardIndex }>,
-  ) => Iterable<ShardIndex>;
-
-  /**
    * Converts milliseconds to a protobuf timestamp.
    */
   timestamp: (milliseconds: number) => { readonly seconds: bigint; readonly nanos: number };
 }> = Object.freeze({
-  snapshot: (
-    state: InMemoryDeliveryState,
-    messageCounts: ReadonlyMap<string, { readonly shard: ShardIndex; readonly count: number }>,
-  ): ReturnType<typeof create<typeof ShardInfoListSchema>> =>
+  snapshot: (state: InMemoryDeliveryState): ReturnType<typeof create<typeof ShardInfoListSchema>> =>
     create(ShardInfoListSchema, {
-      shards: [...AdminSnapshots.shards(state, messageCounts)]
+      shards: [...state.knownShards()]
         .slice(0, MAX_DELIVERY_RESPONSE_SHARDS)
-        .map((shard) =>
-          create(ShardInfoSchema, AdminSnapshots.observation(state, messageCounts, shard)),
-        ),
+        .map((shard) => create(ShardInfoSchema, AdminSnapshots.observation(state, shard))),
     }),
 
-  observation: (
-    state: InMemoryDeliveryState,
-    messageCounts: ReadonlyMap<string, { readonly count: number }>,
-    shard: ShardIndex,
-  ) => {
+  observation: (state: InMemoryDeliveryState, shard: ShardIndex) => {
     const key = DeliveryShards.key(shard);
     const record = state.shards.get(key);
-    const messages = messageCounts.get(key)?.count ?? 0;
+    const messages = state.storedCount(shard);
     return {
       index: shard,
       status: record?.worker === undefined ? ShardStatus.NOT_PICKED : ShardStatus.PICKED,
@@ -226,41 +226,137 @@ const AdminSnapshots: Readonly<{
     };
   },
 
-  shards: function* (
-    state: InMemoryDeliveryState,
-    messageCounts: ReadonlyMap<string, { readonly shard: ShardIndex }>,
-  ): Iterable<ShardIndex> {
-    const all = new Map<string, ShardIndex>();
-    for (const [key, record] of state.shards) all.set(key, record.shard);
-    for (const [key, record] of messageCounts) all.set(key, record.shard);
-    yield* [...all.values()].sort(
-      (left, right) => left.ofTotal - right.ofTotal || left.index - right.index,
-    );
-  },
-
   timestamp: (milliseconds: number): { readonly seconds: bigint; readonly nanos: number } => {
     const seconds = Math.floor(milliseconds / 1_000);
     return { seconds: BigInt(seconds), nanos: (milliseconds - seconds * 1_000) * 1_000_000 };
   },
 });
 
+/**
+ * Tracks one shard's per-subscriber update interval.
+ */
+interface ShardCooldown {
+  readonly shard: ShardIndex;
+  timer?: ReturnType<typeof setTimeout>;
+  dirty: boolean;
+  readonly empty: boolean;
+}
+
+/**
+ * Buffers one Admin stream and coalesces changes independently per shard.
+ */
 class Subscriber {
   #frames: SubscriptionResponse[] = [];
+
   #waiter:
     | {
         readonly resolve: (value: SubscriptionResponse | undefined) => void;
         readonly reject: (error: Error) => void;
       }
     | undefined;
+
   #error: Error | undefined;
+
   #closed = false;
+
+  readonly #replayPending = new Set<string>();
+
+  readonly #cooldowns = new Map<string, ShardCooldown>();
+
+  readonly #lastState = new Map<string, string>();
+
+  readonly #update: (shard: ShardIndex) => SubscriptionResponse;
+
   readonly #onClose: () => void;
 
-  constructor(onClose: () => void) {
+  /**
+   * Creates one independently throttled subscriber.
+   *
+   * @param update Reads the latest full state of a shard.
+   * @param onClose Removes the subscriber from the publisher.
+   */
+  constructor(update: (shard: ShardIndex) => SubscriptionResponse, onClose: () => void) {
+    this.#update = update;
     this.#onClose = onClose;
   }
 
-  push(frame: SubscriptionResponse): void {
+  /**
+   * Records shards that will be replayed outside the live frame buffer.
+   *
+   * @param shards Supplies the initial known shards.
+   */
+  setReplay(shards: readonly ShardIndex[]): void {
+    for (const shard of shards) this.#replayPending.add(DeliveryShards.key(shard));
+  }
+
+  /**
+   * Reads the latest state of one replay shard without using the live buffer.
+   *
+   * @param shard Identifies the initial shard.
+   * @returns Its current update unless already closed or unchanged.
+   */
+  replay(shard: ShardIndex): SubscriptionResponse | undefined {
+    this.#replayPending.delete(DeliveryShards.key(shard));
+    return this.#record(shard);
+  }
+
+  /**
+   * Updates the stream with a shard state immediately or after its cooldown.
+   *
+   * @param shard Identifies the changed shard.
+   */
+  offer(shard: ShardIndex): void {
+    if (this.#closed) return;
+    const key = DeliveryShards.key(shard);
+    if (this.#replayPending.has(key)) return;
+    const frame = this.#record(shard);
+    if (frame !== undefined) this.#push(frame);
+  }
+
+  /**
+   * Reads and records the latest state when this shard can send another frame.
+   *
+   * @param shard Identifies the shard.
+   * @returns The new frame, or undefined during cooldown or for an identical state.
+   */
+  #record(shard: ShardIndex): SubscriptionResponse | undefined {
+    if (this.#closed) return undefined;
+    const key = DeliveryShards.key(shard);
+    const cooldown = this.#cooldowns.get(key);
+    if (cooldown !== undefined) {
+      cooldown.dirty = true;
+      return undefined;
+    }
+    const frame = this.#update(shard);
+    const signature = Buffer.from(toBinary(SubscriptionResponseSchema, frame)).toString("base64");
+    if (this.#lastState.get(key) === signature) return undefined;
+    this.#lastState.set(key, signature);
+    const empty =
+      frame.value.case === "update" &&
+      frame.value.value.newMessagesCount === 0 &&
+      frame.value.value.newStatus === ShardStatus.NOT_PICKED;
+    const entry: ShardCooldown = {
+      shard: DeliveryShards.copy(shard),
+      dirty: false,
+      empty,
+    };
+    const timer = setTimeout(() => {
+      this.#cooldowns.delete(key);
+      if (entry.dirty) this.offer(entry.shard);
+      else if (entry.empty) this.#lastState.delete(key);
+    }, 25);
+    entry.timer = timer;
+    timer.unref();
+    this.#cooldowns.set(key, entry);
+    return frame;
+  }
+
+  /**
+   * Adds a frame to the buffer or hands it to a waiting reader.
+   *
+   * @param frame Supplies the Admin response.
+   */
+  #push(frame: SubscriptionResponse): void {
     if (this.#closed) return;
     if (this.#waiter !== undefined) {
       const waiter = this.#waiter;
@@ -276,28 +372,52 @@ class Subscriber {
     }
     this.#frames.push(frame);
   }
+
+  /**
+   * Reads the next Admin response.
+   *
+   * @returns The next frame or undefined after close.
+   */
   next(): Promise<SubscriptionResponse | undefined> {
     if (this.#error !== undefined) return Promise.reject(this.#error);
     const frame = this.#frames.shift();
     if (frame !== undefined) return Promise.resolve(frame);
+    if (this.#closed) return Promise.resolve(undefined);
     return new Promise((resolve, reject) => {
       this.#waiter = { resolve, reject };
     });
   }
+
+  /**
+   * Clears the stream normally.
+   */
   close(): void {
     this.#terminate(undefined);
   }
 
+  /**
+   * Clears the stream after caller cancellation.
+   */
   cancel(): void {
     this.#terminate(
       new ConnectError("Delivery shard update subscription canceled.", Code.Canceled),
     );
   }
 
+  /**
+   * Clears queued frames, timers, and the waiting reader.
+   *
+   * @param error Reports a terminal stream error when present.
+   */
   #terminate(error: Error | undefined): void {
     if (this.#closed) return;
     this.#closed = true;
     this.#frames = [];
+    for (const entry of this.#cooldowns.values())
+      if (entry.timer !== undefined) clearTimeout(entry.timer);
+    this.#cooldowns.clear();
+    this.#lastState.clear();
+    this.#replayPending.clear();
     this.#error = error;
     if (error === undefined) this.#waiter?.resolve(undefined);
     else this.#waiter?.reject(error);

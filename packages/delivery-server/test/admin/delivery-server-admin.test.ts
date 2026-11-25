@@ -28,15 +28,10 @@ import {
   WriteMessageSchema,
   type SubscriptionResponse,
 } from "@spine-event-engine/proto/delivery-server";
-import {
-  InboxMessageSchema,
-  InboxMessageStatus,
-  ShardIndexSchema,
-  WorkerIdSchema,
-  type ShardIndex,
-} from "@spine-event-engine/proto/delivery";
+import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 
 import { DeliveryServer } from "../../src/index.js";
+import { domainMessage as message } from "../core/domain-message.js";
 
 describe("DeliveryServer Admin", () => {
   it("serves an empty deterministic shard snapshot", async () => {
@@ -80,6 +75,12 @@ describe("DeliveryServer Admin", () => {
       const iterator = admin.subscribeToShardUpdates(create(EmptySchema))[Symbol.asyncIterator]();
       await expect(iterator.next()).resolves.toMatchObject({
         value: { value: { case: "created", value: true } },
+      });
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { value: { case: "update", value: { index: first, newMessagesCount: 1 } } },
+      });
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { value: { case: "update", value: { index: second, newMessagesCount: 1 } } },
       });
       const inserted = iterator.next();
       await inbox.writeOne(create(WriteMessageSchema, { message: message("third", second) }));
@@ -130,6 +131,8 @@ describe("DeliveryServer Admin", () => {
         .subscribeToShardUpdates(create(EmptySchema), { signal: abort.signal })
         [Symbol.asyncIterator]();
       await aborted.next();
+      await aborted.next();
+      await aborted.next();
       const waiting = aborted.next();
       abort.abort();
       await expect(waiting).rejects.toMatchObject({ code: Code.Canceled });
@@ -139,15 +142,3 @@ describe("DeliveryServer Admin", () => {
     }
   });
 });
-
-function message(uuid: string, shard: ShardIndex) {
-  return create(InboxMessageSchema, {
-    id: { uuid, index: shard },
-    signalId: { value: "signal" },
-    inboxId: { entityId: { id: { typeUrl: "example.Entity" } }, typeUrl: "example.State" },
-    payload: { case: "command", value: {} },
-    label: 1,
-    whenReceived: { seconds: 0n, nanos: 0 },
-    status: InboxMessageStatus.TO_DELIVER,
-  });
-}

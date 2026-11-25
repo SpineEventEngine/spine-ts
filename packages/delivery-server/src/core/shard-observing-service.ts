@@ -20,7 +20,6 @@ import {
   type ShardedWorkAvailable,
 } from "@spine-event-engine/proto/delivery-server";
 import type { ShardIndex } from "@spine-event-engine/proto/delivery";
-import { InboxMessageStatus } from "@spine-event-engine/proto/delivery";
 
 import type { InMemoryDeliveryState } from "./in-memory-delivery-state.js";
 import { DeliveryShards } from "./wire-values.js";
@@ -112,15 +111,8 @@ class WorkPublisher implements ShardObservingHandle {
       context.signal.addEventListener("abort", detach, { once: true });
       this.#subscribers.set(subscriber, detach);
       try {
-        for (const message of this.state.messages.values()) {
-          const shard = message.id?.index;
-          if (
-            message.status === InboxMessageStatus.TO_DELIVER &&
-            shard !== undefined &&
-            this.#available(shard)
-          )
-            subscriber.push(this.#notice(shard));
-        }
+        for (const shard of this.state.pendingShards())
+          if (this.#available(shard)) subscriber.push(this.#notice(shard));
         for await (const notice of subscriber)
           if (notice.shard !== undefined && this.#available(notice.shard)) yield notice;
       } finally {

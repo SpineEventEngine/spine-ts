@@ -27,14 +27,13 @@ import {
   type ShardInfoList,
 } from "@spine-event-engine/proto/delivery-server";
 import {
-  InboxMessageSchema,
   InboxMessageStatus,
   ShardIndexSchema,
   WorkerIdSchema,
-  type ShardIndex,
 } from "@spine-event-engine/proto/delivery";
 
 import { DeliveryAssembly } from "../../src/server/assembly.js";
+import { domainMessage as message } from "../core/domain-message.js";
 
 const context = { signal: new AbortController().signal } as never;
 const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
@@ -69,7 +68,7 @@ describe("delivery assembly Admin projection", () => {
     expect(snapshot.shards).toHaveLength(1);
   });
 
-  it("discards a real mutation before ACK eligibility and publishes the later complete count", async () => {
+  it("replays the current shard after ACK and later publishes its changed stored count", async () => {
     const assembly = DeliveryAssembly.create();
     const only = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
     const iterator = assembly.admin
@@ -82,6 +81,9 @@ describe("delivery assembly Admin projection", () => {
     );
     await expect(iterator.next()).resolves.toMatchObject({
       value: { value: { case: "created", value: true } },
+    });
+    await expect(iterator.next()).resolves.toMatchObject({
+      value: { value: { case: "update", value: { index: only, newMessagesCount: 1 } } },
     });
     const later = iterator.next();
     await assembly.inbox.writeOne(
@@ -103,7 +105,7 @@ describe("delivery assembly Admin projection", () => {
     await iterator.return?.();
   });
 
-  it("removes retained delivered upserts from the pending Admin count", async () => {
+  it("counts retained delivered upserts in Admin", async () => {
     const assembly = DeliveryAssembly.create();
     const only = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
     const pending = message("retained", only);
@@ -118,10 +120,12 @@ describe("delivery assembly Admin projection", () => {
       }),
       context,
     );
-    expect(assembly.admin.getShardInfo(create(EmptySchema), context)).toMatchObject({ shards: [] });
+    expect(assembly.admin.getShardInfo(create(EmptySchema), context)).toMatchObject({
+      shards: [{ index: only, messages: 1 }],
+    });
   });
 
-  it("coalesces repeated writeMany identities to their final pending status", async () => {
+  it("counts the final stored identity once after repeated writeMany entries", async () => {
     const assembly = DeliveryAssembly.create();
     const only = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
     const pending = message("batch-retained", only);
@@ -139,18 +143,8 @@ describe("delivery assembly Admin projection", () => {
       }),
       context,
     );
-    expect(assembly.admin.getShardInfo(create(EmptySchema), context)).toMatchObject({ shards: [] });
+    expect(assembly.admin.getShardInfo(create(EmptySchema), context)).toMatchObject({
+      shards: [{ index: only, messages: 1 }],
+    });
   });
 });
-
-function message(uuid: string, shard: ShardIndex) {
-  return create(InboxMessageSchema, {
-    id: { uuid, index: shard },
-    signalId: { value: "signal" },
-    inboxId: { entityId: { id: { typeUrl: "example.Entity" } }, typeUrl: "example.State" },
-    payload: { case: "command", value: {} },
-    label: 1,
-    whenReceived: { seconds: 0n, nanos: 0 },
-    status: InboxMessageStatus.TO_DELIVER,
-  });
-}

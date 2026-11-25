@@ -48,6 +48,11 @@ Idle streams have no first-response deadline. To stop reading, abort the signal
 or close the client. If the connection fails, the caller receives the gRPC
 error. Opening another call discovers current work again.
 
+On the TS server, an Admin snapshot and Admin updates report how many inbox
+rows the server stores in each shard. This includes completed rows retained
+for duplicate detection. To see whether a worker can try to pick up work, use
+`observeAvailableShards()`.
+
 `observeShardUpdates()` requires one acknowledgement, has a bounded queue, and
 reconnects only within configured limits. A slow consumer can receive
 `ShardObservationOverflowError`; an unrecoverable stream ends with
