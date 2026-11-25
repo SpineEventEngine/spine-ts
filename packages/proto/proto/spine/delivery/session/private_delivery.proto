@@ -1,0 +1,105 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.delivery.session;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+import "spine/options.proto";
+
+option java_multiple_files = true;
+option (type_url_prefix) = "type.spine.io";
+
+// Coordinates retained capacity between homogeneous delivery child processes.
+// This service is served only on the parent's authenticated private listener.
+service PrivateCapacityService {
+  // Reserves possible positive growth for one child mutation before it commits.
+  rpc Reserve(CapacityReservation) returns (google.protobuf.Empty);
+
+  // Replaces the reservation with exact committed usage after the child mutation.
+  rpc Report(CapacityReport) returns (google.protobuf.Empty);
+
+  // Releases a reservation when the child did not commit the mutation.
+  rpc Cancel(CapacityTicket) returns (google.protobuf.Empty);
+
+  // Publishes autonomous expiry usage without waiting for another public call.
+  rpc ReportUsage(CapacitySnapshot) returns (google.protobuf.Empty);
+}
+
+// Retires an uncertain mutation on an authenticated child listener.
+service PrivateChildService {
+  // Waits for the named mutation to finish, or prevents it from starting later.
+  rpc Barrier(CapacityTicket) returns (google.protobuf.Empty);
+}
+
+// Identifies one mutation within a fixed child slot and process generation.
+message CapacityTicket {
+  // Identifies the child slot assigned by the parent.
+  uint64 slot = 1;
+
+  // Identifies the child process generation to reject stale reports.
+  string generation = 2 [(required) = true];
+
+  // Orders capacity-changing mutations in one child slot.
+  uint64 sequence = 3;
+}
+
+// Counts retained resources without imposing an additional limit.
+message CapacityUsage {
+  // Counts retained Inbox rows, including completed rows.
+  uint64 rows = 1;
+
+  // Counts canonical encoded bytes retained by Inbox rows.
+  uint64 bytes = 2;
+
+  // Counts shards retained by rows or pickup sessions.
+  uint64 shards = 3;
+}
+
+// Requests headroom before the child applies a capacity-changing mutation.
+message CapacityReservation {
+  // Correlates the reservation with the child mutation and later report.
+  CapacityTicket ticket = 1 [(required) = true];
+
+  // Holds only the possible positive growth of that mutation.
+  CapacityUsage growth = 2 [(required) = true];
+}
+
+// Reconciles one mutation with the child's exact usage after it settles.
+message CapacityReport {
+  // Correlates the report with its earlier reservation.
+  CapacityTicket ticket = 1 [(required) = true];
+
+  // Counts the child's committed resources after the mutation.
+  CapacityUsage usage = 2 [(required) = true];
+
+  // Orders this report against expiry and earlier mutation reports.
+  google.protobuf.UInt64Value revision = 3 [(required) = true];
+}
+
+// Reports an autonomous child state change in its admission order.
+message CapacitySnapshot {
+  // Identifies the fixed child slot.
+  uint64 slot = 1;
+
+  // Rejects reports from a replaced child process.
+  string generation = 2 [(required) = true];
+
+  // Orders this state after earlier changes in the same child process.
+  google.protobuf.UInt64Value revision = 3 [(required) = true];
+
+  // Counts exact resources retained after the state change.
+  CapacityUsage usage = 4 [(required) = true];
+}

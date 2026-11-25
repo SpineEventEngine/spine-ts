@@ -48,6 +48,7 @@
     "spine/delivery/pick_up_outcome.proto",
     "spine/delivery/rejections.proto",
     "spine/delivery/session/managed_sessions.proto",
+    "spine/delivery/session/private_delivery.proto",
     "spine/deployment/node_discovery.proto",
     "spine/net/email_address.proto",
     "spine/net/internet_domain.proto",
@@ -117,6 +118,7 @@
     "spine/delivery/pick_up_outcome.proto": "generated/spine/delivery/pick_up_outcome_pb.js",
     "spine/delivery/rejections.proto": "generated/spine/delivery/rejections_pb.js",
     "spine/delivery/session/managed_sessions.proto": "generated/spine/delivery/session/managed_sessions_pb.js",
+    "spine/delivery/session/private_delivery.proto": "generated/spine/delivery/session/private_delivery_pb.js",
     "spine/deployment/node_discovery.proto": "generated/spine/deployment/node_discovery_pb.js",
     "spine/net/email_address.proto": "generated/spine/net/email_address_pb.js",
     "spine/net/internet_domain.proto": "generated/spine/net/internet_domain_pb.js",
@@ -142,5 +144,5 @@
   },
   "dependencies": [],
   "moduleExport": "spineProtoModule",
-  "generationId": "8e43db01-6974-4785-a2f9-3a9d34c1d14f"
+  "generationId": "9cc663eb-aaa4-44ff-b066-4c0bfc7adff2"
 }

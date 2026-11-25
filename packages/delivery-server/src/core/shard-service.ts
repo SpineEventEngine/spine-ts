@@ -61,6 +61,8 @@ export class ShardSessionRuntime {
 
   readonly #onTransition: ((shard: ShardIndex) => void) | undefined;
 
+  readonly #onAutonomousExpiry: (() => void) | undefined;
+
   readonly #timers = new Map<string, ReturnType<typeof setTimeout>>();
 
   readonly #leaseStarts = new Map<string, { id: string; started: number }>();
@@ -86,6 +88,7 @@ export class ShardSessionRuntime {
    * @param lifetimeMs Sets the positive session lifetime in milliseconds.
    * @param onTransition Publishes pickup and release changes.
    * @param monotonicNow Measures elapsed lease time independently of wall time.
+   * @param onAutonomousExpiry Reports retained usage after a timer releases a session.
    */
   constructor(
     state: InMemoryDeliveryState,
@@ -94,6 +97,7 @@ export class ShardSessionRuntime {
     lifetimeMs: number,
     onTransition?: (shard: ShardIndex) => void,
     monotonicNow: () => number = () => Time.monotonicTime(),
+    onAutonomousExpiry?: () => void,
   ) {
     if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs <= 0 || lifetimeMs > 315_576_000_000_000)
       throw new RangeError("Delivery session lifetime is invalid.");
@@ -103,6 +107,7 @@ export class ShardSessionRuntime {
     this.#monotonicNow = monotonicNow;
     this.#lifetimeMs = lifetimeMs;
     this.#onTransition = onTransition;
+    this.#onAutonomousExpiry = onAutonomousExpiry;
     this.raw = this.#rawService();
     this.managed = this.#managedService();
   }
@@ -387,8 +392,10 @@ export class ShardSessionRuntime {
         .runSystem(() => {
           const live = this.#state.session(shard);
           if (live?.sessionId !== id) return;
-          if (this.#elapsed(shard, id) >= this.#lifetimeMs) this.#release(shard);
-          else this.#schedule(shard, id, false);
+          if (this.#elapsed(shard, id) >= this.#lifetimeMs) {
+            this.#release(shard);
+            this.#onAutonomousExpiry?.();
+          } else this.#schedule(shard, id, false);
         })
         .catch(() => {
           // Terminal admission closure has already cleared all session timers.

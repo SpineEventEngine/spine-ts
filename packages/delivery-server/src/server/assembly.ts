@@ -25,7 +25,10 @@ import {
 } from "@spine-event-engine/proto/delivery-server";
 
 import { AdminPublisher } from "../admin/admin-service.js";
-import { InMemoryDeliveryState } from "../core/in-memory-delivery-state.js";
+import {
+  InMemoryDeliveryState,
+  type DeliveryResourceUsage,
+} from "../core/in-memory-delivery-state.js";
 import { InboxHandlers } from "../core/inbox-service.js";
 import { GuardedInboxRuntime } from "../core/guarded-inbox-service.js";
 import { MutationAdmission } from "../core/mutation-admission.js";
@@ -39,6 +42,11 @@ import type { DeliveryConfiguration } from "./config.js";
  */
 export interface DeliveryAssembly {
   // prettier-ignore
+
+  /**
+   * Provides the canonical retained state for private child capacity accounting.
+   */
+  readonly state: InMemoryDeliveryState;
 
   /**
    * Provides Inbox handlers backed by the shared delivery state.
@@ -127,6 +135,7 @@ export const DeliveryAssembly: Readonly<{
       onWorkChange,
     );
     return Object.freeze({
+      state,
       inbox: InboxHandlers.create(state, admission, onStoredChange, onWorkChange),
       shards: sessions.raw,
       managed: sessions.managed,
@@ -171,6 +180,7 @@ const DeliverySessionAssembly = Object.freeze({
       configuration.processingTimeoutMs ?? 60_000,
       onShardTransition,
       () => Time.monotonicTime(),
+      () => configuration.onAutonomousExpiry?.(state.usageSnapshot()),
     );
     const guarded = new GuardedInboxRuntime(
       state,
@@ -196,7 +206,15 @@ type DeliveryAssemblyConfiguration = Partial<
     | "maxRetainedBytes"
     | "maxTrackedShards"
   >
->;
+> & {
+  /**
+   * Reports exact usage and revision when a session expires without a caller request.
+   */
+  readonly onAutonomousExpiry?: (snapshot: {
+    readonly revision: bigint;
+    readonly usage: DeliveryResourceUsage;
+  }) => void;
+};
 
 /**
  * Default settings for listener-free assembly tests and callers.

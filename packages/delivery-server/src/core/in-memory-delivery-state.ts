@@ -73,6 +73,26 @@ interface ShardBucket {
 }
 
 /**
+ * Counts canonical resources retained by one delivery child.
+ */
+export interface DeliveryResourceUsage {
+  /**
+   * Counts retained Inbox records.
+   */
+  readonly rows: number;
+
+  /**
+   * Counts encoded bytes retained by Inbox records.
+   */
+  readonly bytes: number;
+
+  /**
+   * Counts shards retained by records or sessions.
+   */
+  readonly shards: number;
+}
+
+/**
  * Package-private canonical detached state; a new instance deliberately starts empty.
  */
 export class InMemoryDeliveryState {
@@ -100,6 +120,8 @@ export class InMemoryDeliveryState {
 
   #retainedBytes = 0;
 
+  #revision = 0n;
+
   /**
    * Creates empty state.
    *
@@ -107,6 +129,64 @@ export class InMemoryDeliveryState {
    */
   constructor(limits: Partial<DeliveryStateLimits> = {}) {
     this.#limits = DeliveryLimits.resolve(limits);
+  }
+
+  /**
+   * Returns exact retained resources without copying unrelated shards.
+   *
+   * @returns The current row, encoded-byte, and tracked-shard totals.
+   */
+  usage(): DeliveryResourceUsage {
+    return {
+      rows: this.messages.size,
+      bytes: this.#retainedBytes,
+      shards: this.#trackedKeys.size,
+    };
+  }
+
+  /**
+   * Captures exact usage and its state transition order together.
+   *
+   * @returns A snapshot for generation-fenced global capacity reports.
+   */
+  usageSnapshot(): { readonly revision: bigint; readonly usage: DeliveryResourceUsage } {
+    return { revision: this.#revision, usage: this.usage() };
+  }
+
+  /**
+   * Checks whether rows or a session currently retain one full shard identity.
+   *
+   * @param shard Identifies the shard to inspect.
+   * @returns Whether it consumes tracked-shard capacity.
+   */
+  tracks(shard: ShardIndex): boolean {
+    return this.#trackedKeys.has(DeliveryShards.key(shard));
+  }
+
+  /**
+   * Calculates a batch's final resource totals using its last write for each ID.
+   *
+   * @param candidates Supplies validated encoded rows.
+   * @returns The exact totals if the batch commits.
+   */
+  projectedUsage(
+    candidates: readonly { readonly message: InboxMessage; readonly bytes: number }[],
+  ): DeliveryResourceUsage {
+    const final = new Map<string, { readonly message: InboxMessage; readonly bytes: number }>();
+    for (const candidate of candidates)
+      final.set(DeliveryMessages.key(candidate.message), candidate);
+    let rows = this.messages.size;
+    let bytes = this.#retainedBytes;
+    const newlyTracked = new Set<string>();
+    for (const [key, candidate] of final) {
+      const prior = this.messages.get(key);
+      if (prior === undefined) rows++;
+      else bytes -= this.#messageBytes.get(key) ?? 0;
+      bytes += candidate.bytes;
+      const shard = DeliveryShards.key(this.#requiredShard(candidate.message));
+      if (!this.#trackedKeys.has(shard)) newlyTracked.add(shard);
+    }
+    return { rows, bytes, shards: this.#trackedKeys.size + newlyTracked.size };
   }
 
   /**
@@ -129,6 +209,7 @@ export class InMemoryDeliveryState {
       final.set(key, candidate);
     }
     for (const [key, candidate] of final) this.#replace(key, candidate.message, candidate.bytes);
+    if (final.size > 0) this.#revision++;
     return inserted;
   }
 
@@ -148,6 +229,7 @@ export class InMemoryDeliveryState {
     this.#messageBytes.delete(key);
     this.#removeFromBucket(current);
     this.#pruneBucket(DeliveryShards.key(this.#requiredShard(current)));
+    this.#revision++;
     return true;
   }
 
@@ -290,6 +372,7 @@ export class InMemoryDeliveryState {
       revision,
     });
     this.#trackedKeys.add(DeliveryShards.key(shard));
+    this.#revision++;
   }
 
   /**
@@ -312,30 +395,18 @@ export class InMemoryDeliveryState {
       this.shards.delete(key);
       this.#trackedKeys.delete(key);
     }
+    this.#revision++;
     return record;
   }
 
   #ensureCapacity(
     candidates: readonly { readonly message: InboxMessage; readonly bytes: number }[],
   ): void {
-    const final = new Map<string, { readonly message: InboxMessage; readonly bytes: number }>();
-    for (const candidate of candidates)
-      final.set(DeliveryMessages.key(candidate.message), candidate);
-    let count = this.messages.size;
-    let bytes = this.#retainedBytes;
-    const newlyTracked = new Set<string>();
-    for (const [key, candidate] of final) {
-      const prior = this.messages.get(key);
-      if (prior === undefined) count++;
-      else bytes -= this.#messageBytes.get(key) ?? 0;
-      bytes += candidate.bytes;
-      const shard = DeliveryShards.key(this.#requiredShard(candidate.message));
-      if (!this.#trackedKeys.has(shard)) newlyTracked.add(shard);
-    }
+    const { rows, bytes, shards } = this.projectedUsage(candidates);
     if (
-      count > this.#limits.maxRetainedMessages ||
+      rows > this.#limits.maxRetainedMessages ||
       bytes > this.#limits.maxRetainedBytes ||
-      this.#trackedKeys.size + newlyTracked.size > this.#limits.maxTrackedShards
+      shards > this.#limits.maxTrackedShards
     ) {
       throw new ConnectError("Delivery retained-state capacity is full.", Code.ResourceExhausted);
     }

@@ -503,6 +503,10 @@
       "sha256": "5b449910bfe0df3529ec50add969b0aec5f56ea191038bec826dd7d0071007a8"
     },
     {
+      "localPath": "packages/proto/proto/spine/delivery/session/private_delivery.proto",
+      "sha256": "e4d7923151d06e0a25e75746d10cfb3c73b2cb8942742b0511a45ceb8e20dc73"
+    },
+    {
       "localPath": "packages/proto/proto/spine/deployment/node_discovery.proto",
       "sha256": "7c300d215a1757c17b7bd1a89cebb4825df28a58fcc119f2aa6d5535d7520073"
     },

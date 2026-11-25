@@ -15,7 +15,7 @@
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code } from "@connectrpc/connect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DeliveryShardPickupSchema,
   WriteMessageSchema,
@@ -26,6 +26,7 @@ import {
 import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 
 import { InMemoryDelivery } from "../../src/index.js";
+import { DeliveryAssembly } from "../../src/server/assembly.js";
 import { domainMessage, encodedBytes } from "./domain-message.js";
 import { pickedHandle } from "../session-fixtures.js";
 
@@ -36,6 +37,29 @@ const rival = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run-2"
 const request = create(DeliveryShardPickupSchema, { shard, worker });
 
 describe("typed Shard sessions", () => {
+  it("reports autonomous release of an otherwise empty tracked shard", async () => {
+    vi.useFakeTimers();
+    try {
+      const expired = vi.fn();
+      const assembly = DeliveryAssembly.create({
+        processingTimeoutMs: 10,
+        onAutonomousExpiry: expired,
+      });
+      pickedHandle(await assembly.managed.pickShardRaw(request, context));
+      expect(assembly.state.usage().shards).toBe(1);
+      await vi.advanceTimersByTimeAsync(11);
+      expect(expired).toHaveBeenCalledOnce();
+      expect(expired).toHaveBeenCalledWith({
+        revision: 2n,
+        usage: { rows: 0, bytes: 0, shards: 0 },
+      });
+      expect(assembly.state.usage().shards).toBe(0);
+      assembly.closeSessions();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("returns no work for a free empty managed shard but grants a raw handle", async () => {
     const core = InMemoryDelivery.create();
     expect((await core.managed.pickShardForDelivery(request, context)).result?.case).toBe("noWork");
