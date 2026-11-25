@@ -52,7 +52,7 @@ describe("guarded framework delivery over gRPC", () => {
     const writer = DeliveryClient.connectTo(server.baseUrl);
     clients.push(writer);
     for (const row of rows.slice(0, 2)) await writer.writeOne(row);
-    const paused = Promise.withResolvers<void>();
+    const paused = Promise.withResolvers<undefined>();
     const seen = new Map<string, string[]>();
     const runtimes = ["east", "west", "north"].map((node) => {
       const client = DeliveryClient.connectTo(server.baseUrl);
@@ -62,7 +62,7 @@ describe("guarded framework delivery over gRPC", () => {
         storageFactory: {} as never,
         inbox: new RemoteInbox(client),
         workRegistry: new RemoteWorkRegistry(client),
-        strategy: { shardCount: 3, shardFor: () => shards[0]! },
+        strategy: { shardCount: 3, shardFor: () => required(shards[0], "first shard") },
         node,
       });
       core.setDispatcher(async (message) => {
@@ -81,24 +81,31 @@ describe("guarded framework delivery over gRPC", () => {
       );
       return { core, observer, publicDelivery };
     });
-    const east = runtimes[0]!.publicDelivery.deliverMessagesFrom(shards[0]!);
-    const west = runtimes[1]!.publicDelivery.deliverMessagesFrom(shards[1]!);
+    const east = required(runtimes[0], "east runtime").publicDelivery.deliverMessagesFrom(
+      required(shards[0], "first shard"),
+    );
+    const west = required(runtimes[1], "west runtime").publicDelivery.deliverMessagesFrom(
+      required(shards[1], "second shard"),
+    );
     try {
       await vi.waitFor(() => {
         expect((seen.get("east")?.length ?? 0) + (seen.get("west")?.length ?? 0)).toBe(2);
       });
       await Promise.all(runtimes.slice(0, 2).map(({ observer }) => observer.start()));
-      await writer.writeOne(rows[2]!);
-      const north = runtimes[2]!;
+      const thirdRow = required(rows[2], "third row");
+      await writer.writeOne(thirdRow);
+      const north = required(runtimes[2], "north runtime");
       await north.observer.start();
-      await vi.waitFor(() => expect(seen.get("north")).toEqual(["node-join-2"]));
-      await vi.waitFor(async () =>
-        expect((await writer.findOne(rows[2]!.id))?.status).toBe("DELIVERED"),
-      );
+      await vi.waitFor(() => {
+        expect(seen.get("north")).toEqual(["node-join-2"]);
+      });
+      await vi.waitFor(async () => {
+        expect((await writer.findOne(thirdRow.id))?.status).toBe("DELIVERED");
+      });
       expect(seen.get("east")?.length).toBe(1);
       expect(seen.get("west")?.length).toBe(1);
     } finally {
-      paused.resolve();
+      paused.resolve(undefined);
       await Promise.allSettled([east, west]);
       await Promise.all(runtimes.map(({ observer }) => observer.whenIdle()));
       await Promise.all(runtimes.map(({ observer }) => observer.close()));
@@ -264,4 +271,16 @@ function remoteDelivery(client: DeliveryClient, name: string) {
     .withInbox(new RemoteInbox(client))
     .withWorkRegistry(new RemoteWorkRegistry(client))
     .build();
+}
+
+/**
+ * Requires an indexed fixture created for this test scenario.
+ *
+ * @param value Supplies the indexed fixture.
+ * @param name Identifies the missing fixture in a failure.
+ * @returns The required fixture.
+ */
+function required<T>(value: T | undefined, name: string): T {
+  if (value === undefined) throw new Error(`Missing ${name}.`);
+  return value;
 }

@@ -1,6 +1,6 @@
 # Spine TS Project Completion Plan
 
-Current implementation: [Shard delivery correctness and performance](tasks/shard-delivery-correctness-and-performance/TASK.md). Implement the approved TS delivery design on its dedicated worktree.
+The [shard delivery changes](tasks/shard-delivery-correctness-and-performance/TASK.md) are implemented on the dedicated feature branch. Integration into official master requires a pull request.
 
 Previous implementation: [Agent model Commands and asynchronous handlers](tasks/agent-model-commands/TASK.md)
 on `delivery-agent-analysis`, based on official master `987a687d1`.

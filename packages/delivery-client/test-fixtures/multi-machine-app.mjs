@@ -46,10 +46,14 @@ export function createMultiMachineApplication({ baseUrl, node }) {
       await new Promise(() => undefined);
     }
   });
-  const observerFor = () => new ApplicationWorkObserver(
-    { observeAvailableShards: (options) => client.observeAvailableShards(options) },
-    delivery, baseUrl, undefined, undefined,
-  );
+  const observerFor = () =>
+    new ApplicationWorkObserver(
+      { observeAvailableShards: (options) => client.observeAvailableShards(options) },
+      delivery,
+      baseUrl,
+      undefined,
+      undefined,
+    );
 
   return {
     async pickUp() {
@@ -78,11 +82,14 @@ export function createMultiMachineApplication({ baseUrl, node }) {
           targetTypeUrl: TypeUrls.derive(ProjectStateSchema),
         },
         signalId,
-        signal: AnyPacker.pack(CommandSchema, SignalEnvelopes.command({
-          schema: CreateProjectSchema,
-          message: create(CreateProjectSchema, { id: signalId, name: signalId }),
-          context: create(CommandContextSchema),
-        })),
+        signal: AnyPacker.pack(
+          CommandSchema,
+          SignalEnvelopes.command({
+            schema: CreateProjectSchema,
+            message: create(CreateProjectSchema, { id: signalId, name: signalId }),
+            context: create(CommandContextSchema),
+          }),
+        ),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
         shard: ShardIndex.single(),

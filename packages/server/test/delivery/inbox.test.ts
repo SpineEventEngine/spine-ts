@@ -39,11 +39,11 @@ describe("Inbox", () => {
     ];
     for (const row of rows) await inbox.storage.write(row);
     expect((await inbox.newestPending(ShardIndex.single()))?.id.value).toBe("zeta");
-    await inbox.markDelivered(rows[2]!);
+    await inbox.markDelivered(required(rows[2], "newest row"));
     expect((await inbox.newestPending(ShardIndex.single()))?.id.value).toBe("alpha");
-    await inbox.removeDuplicate(rows[1]!);
+    await inbox.removeDuplicate(required(rows[1], "middle row"));
     expect((await inbox.newestPending(ShardIndex.single()))?.id.value).toBe("older");
-    await inbox.removeDuplicate(rows[0]!);
+    await inbox.removeDuplicate(required(rows[0], "oldest row"));
     expect(await inbox.newestPending(ShardIndex.single())).toBeUndefined();
   });
 

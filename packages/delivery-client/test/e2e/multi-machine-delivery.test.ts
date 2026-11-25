@@ -198,7 +198,9 @@ describe("TS-to-TS multi-machine delivery", () => {
       expect(updates.slice(1).every(update)).toBe(true);
       expect(adminUpdates.some((frame) => summary(frame).startsWith("PICKED/"))).toBe(true);
       expect(adminUpdates.some((frame) => summary(frame).startsWith("NOT_PICKED/"))).toBe(true);
-      expect(adminUpdates.every((frame) => sameShard(adminUpdates[0]!, frame))).toBe(true);
+      const initialAdminUpdate = adminUpdates[0];
+      if (initialAdminUpdate === undefined) throw new Error("Admin shard update is missing.");
+      expect(adminUpdates.every((frame) => sameShard(initialAdminUpdate, frame))).toBe(true);
       await eventuallyAsync(async () => {
         const snapshot = await admin.getShardInfo(create(EmptySchema));
         expect(snapshot.shards.every((shard) => shard.status === ShardStatus.NOT_PICKED)).toBe(

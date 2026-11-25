@@ -12,6 +12,9 @@
  * the License.
  */
 
+import process from "node:process";
+import { setInterval } from "node:timers";
+
 process.on("message", () => {
   process.send?.({ kind: "failed" });
 });
