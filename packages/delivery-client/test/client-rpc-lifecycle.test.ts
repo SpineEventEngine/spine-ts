@@ -238,6 +238,39 @@ describe("DeliveryClient RPC and lifecycle", () => {
     ).toThrow();
   });
 
+  it("returns the last transport failure after all configured safe-read attempts", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport, {
+      readRetries: 1,
+      retryBackoffMs: 0,
+    });
+    const failure = new ConnectError("still unavailable", Code.Unavailable);
+    fake.fail(new ConnectError("first unavailable", Code.Unavailable));
+    fake.fail(failure);
+    await expect(
+      client.findOne({ value: "retry-exhausted", shard: ShardIndex.single() }),
+    ).rejects.toBe(failure);
+    expect(fake.unary).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry a read failure after caller cancellation reaches the transport", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport, { readRetries: 3 });
+    const caller = new AbortController();
+    const failure = new ConnectError("request cancelled in transit", Code.Canceled);
+    fake.unary.mockImplementationOnce(() => {
+      caller.abort(new Error("caller stopped"));
+      throw failure;
+    });
+    await expect(
+      client.findOne(
+        { value: "cancelled-read", shard: ShardIndex.single() },
+        { signal: caller.signal },
+      ),
+    ).rejects.toBe(failure);
+    expect(fake.unary).toHaveBeenCalledOnce();
+  });
+
   it("does not retry local validation or protocol decoding", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport, { readRetries: 5 });

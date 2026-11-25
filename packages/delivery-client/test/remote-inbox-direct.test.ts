@@ -17,6 +17,7 @@ import { ShardIndex } from "@spine-event-engine/server";
 import { create } from "@bufbuild/protobuf";
 import { DurationSchema, TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
+import { Time } from "@spine-event-engine/core/time";
 
 import { DeliveryPagingError, DeliveryProtocolError } from "../src/client/types.js";
 import type { DeliveryClient } from "../src/client/client.js";
@@ -28,6 +29,7 @@ class Client {
   readonly writeOne = vi.fn<DeliveryClient["writeOne"]>();
   readonly removeOne = vi.fn<DeliveryClient["removeOne"]>();
   readonly findOne = vi.fn<DeliveryClient["findOne"]>();
+  readonly newestPending = vi.fn<DeliveryClient["newestPending"]>();
   readonly readPage = vi.fn<DeliveryClient["readPage"]>();
   readonly acknowledgeGuarded = vi.fn<DeliveryClient["acknowledgeGuarded"]>();
   readonly removeDuplicateGuarded = vi.fn<DeliveryClient["removeDuplicateGuarded"]>();
@@ -76,6 +78,84 @@ function read(message: ReturnType<typeof domainMessage>) {
 }
 
 describe("RemoteInbox direct behavior", () => {
+  it("keeps a definitive no-work pickup distinct from a granted session", async () => {
+    const client = new Client();
+    const registry = new RemoteWorkRegistry(client as never);
+    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run" });
+    client.pickUpForDelivery.mockResolvedValue({ kind: "NO_WORK" });
+    await expect(registry.pickUpForWork(ShardIndex.single(), worker)).resolves.toEqual({
+      kind: "NO_WORK",
+    });
+    await expect(registry.pickUp(ShardIndex.single(), worker)).resolves.toBeUndefined();
+    expect(client.pickUpForDelivery).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns the server's newest pending row without changing its exact shard identity", async () => {
+    const client = new Client();
+    const inbox = new RemoteInbox(client as never);
+    const shard = ShardIndex.single();
+    const row = read(domainMessage("newest-pending"));
+    client.newestPending.mockResolvedValue(row);
+    await expect(inbox.newestPending(shard)).resolves.toBe(row);
+    expect(client.newestPending).toHaveBeenCalledExactlyOnceWith(shard, undefined);
+  });
+
+  it("refuses an excluded full page with an unsafe tied-time continuation", async () => {
+    const client = new Client();
+    const inbox = new RemoteInbox(client as never);
+    const whenReceived = create(TimestampSchema, { seconds: 2n, nanos: 42 });
+    const first = { ...domainMessage("tie-a"), status: "DELIVERED" as const, whenReceived };
+    const second = { ...domainMessage("tie-b"), status: "DELIVERED" as const, whenReceived };
+    client.readPage.mockResolvedValueOnce([first, second]);
+    await expect(
+      inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).rejects.toBeInstanceOf(DeliveryPagingError);
+    expect(client.readPage).toHaveBeenCalledOnce();
+  });
+
+  it("refuses an exclusive continuation before Protobuf's earliest timestamp", async () => {
+    const client = new Client();
+    const inbox = new RemoteInbox(client as never);
+    await expect(
+      inbox.read(ShardIndex.single(), {
+        after: {
+          messageId: "first",
+          whenReceived: create(TimestampSchema, { seconds: -62_135_596_800n, nanos: 0 }),
+          version: 1n,
+        },
+      }),
+    ).rejects.toBeInstanceOf(DeliveryPagingError);
+    expect(client.readPage).not.toHaveBeenCalled();
+  });
+
+  it("stops a filtered multi-page read when the total deadline expires between pages", async () => {
+    let now = 0;
+    const previous = Time.setProvider({
+      currentTime: () => create(TimestampSchema),
+      monotonicTime: () => now,
+    });
+    try {
+      const client = new Client();
+      const inbox = new RemoteInbox(client as never);
+      const first = { ...domainMessage("early"), status: "DELIVERED" as const };
+      const second = {
+        ...domainMessage("later"),
+        status: "DELIVERED" as const,
+        whenReceived: create(TimestampSchema, { seconds: 2n }),
+      };
+      client.readPage.mockImplementationOnce(() => {
+        now = 30_001;
+        return Promise.resolve([first, second]);
+      });
+      await expect(
+        inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"], timeoutMs: 30_000 }),
+      ).rejects.toThrow("Delivery Inbox read timed out.");
+      expect(client.readPage).toHaveBeenCalledOnce();
+    } finally {
+      Time.setProvider(previous);
+    }
+  });
+
   it("receives a pending message without a supplied completion deadline", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
@@ -361,6 +441,8 @@ describe("RemoteInbox direct behavior", () => {
       { ...valid, messages: 1.5 },
       { ...valid, lastPicked: {} },
       { ...valid, lastPicked: new Date(Number.NaN) },
+      { ...valid, lastPicked: create(TimestampSchema, { seconds: 1n, nanos: -1 }) },
+      { ...valid, lastPicked: create(TimestampSchema, { seconds: 1n, nanos: 1_000_000_000 }) },
     ]) {
       expect(() => {
         registry.reconcile(observation as never);

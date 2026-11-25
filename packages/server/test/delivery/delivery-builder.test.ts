@@ -230,6 +230,18 @@ describe("DeliveryMonitor delivery", () => {
     ).toThrow("must match");
   });
 
+  it("rejects conflicting node and worker identities in direct Delivery construction", () => {
+    expect(
+      () =>
+        new CoreDelivery({
+          context: { name: "WorkerNodeMismatch", multitenant: false },
+          storageFactory: new InMemoryStorageFactory(),
+          node: "node-a",
+          worker: create(WorkerIdSchema, { nodeId: { value: "node-b" }, value: "run" }),
+        }),
+    ).toThrow("Delivery worker node must match");
+  });
+
   it.each([
     [create(AnySchema), "type.example/Task", "Delivery target ID must be a non-default Any."],
     [Identifiers.pack("string", "task-1"), "", "Delivery target type must be a non-empty string."],

@@ -13,8 +13,9 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { EmptySchema } from "@bufbuild/protobuf/wkt";
+import { EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type Transport } from "@connectrpc/connect";
+import { Time } from "@spine-event-engine/core/time";
 import { ShardIndex } from "@spine-event-engine/server";
 import {
   ExpiredSessionSchema,
@@ -38,6 +39,22 @@ import { deliveryClientAccess } from "../src/client/client.js";
 import { echoPickup, message, transport } from "./shared-fixtures.js";
 
 describe("RemoteWorkRegistry", () => {
+  it("rejects a managed pickup cancelled before dispatch and a pickup after client close", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    const worker = { nodeId: "node", value: "run" };
+    const caller = new AbortController();
+    caller.abort(new Error("pickup cancelled"));
+    await expect(
+      client.pickUpForDelivery(ShardIndex.single(), worker, { signal: caller.signal }),
+    ).rejects.toThrow("pickup cancelled");
+    client.close();
+    await expect(client.pickUpForDelivery(ShardIndex.single(), worker)).rejects.toThrow(
+      "Delivery client is closed.",
+    );
+    expect(fake.unary).not.toHaveBeenCalled();
+  });
+
   it("keeps a full UUID per run within the existing UTF-8 worker boundary", () => {
     const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(transport().transport));
     for (const length of [92, 93, 100, 127]) {
@@ -70,6 +87,9 @@ describe("RemoteWorkRegistry", () => {
     await expect(
       registry.release({ kind: "LEASED", shard: ShardIndex.single() } as never),
     ).resolves.toBe(false);
+    expect(
+      registry.renewalIntervalMs({ kind: "LEASED", shard: ShardIndex.single() } as never),
+    ).toBeUndefined();
     await expect(registry.release({ kind: "EXCLUSIVE", shard: ShardIndex.single() })).resolves.toBe(
       false,
     );
@@ -87,6 +107,81 @@ describe("RemoteWorkRegistry", () => {
     await expect(sibling.validateOwnership(session)).resolves.toBeUndefined();
     await expect(sibling.release(session)).resolves.toBe(false);
     await expect(owner.release(session)).resolves.toBe(true);
+  });
+
+  it("invalidates a retained session only after an Admin free-shard observation", async () => {
+    const fake = transport();
+    const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(fake.transport));
+    const shard = ShardIndex.single();
+    echoPickup(fake);
+    const session = await registry.pickUp(shard, workerId("node", "worker"));
+    if (session === undefined) throw new Error("Expected the managed session.");
+    expect(registry.renewalIntervalMs(session)).toBe(20_000);
+    registry.reconcile({ shard, status: "PICKED", messages: 1 });
+    expect(registry.renewalIntervalMs(session)).toBe(20_000);
+    registry.reconcile({ shard, status: "NOT_PICKED", messages: 1 });
+    expect(registry.renewalIntervalMs(session)).toBeUndefined();
+    await expect(registry.validateOwnership(session)).resolves.toBeUndefined();
+    await expect(registry.release(session)).resolves.toBe(false);
+    expect(fake.unary).toHaveBeenCalledOnce();
+  });
+
+  it("refuses renewal after the last confirmed server lifetime elapses", async () => {
+    let now = 0;
+    const previous = Time.setProvider({
+      currentTime: () => create(TimestampSchema),
+      monotonicTime: () => now,
+    });
+    try {
+      const fake = transport();
+      const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(fake.transport));
+      echoPickup(fake);
+      const session = await registry.pickUp(ShardIndex.single(), workerId("node", "worker"));
+      if (session === undefined) throw new Error("Expected the managed session.");
+      now = 60_000;
+      await expect(registry.validateOwnership(session)).resolves.toBeUndefined();
+      expect(registry.renewalIntervalMs(session)).toBeUndefined();
+      await expect(registry.release(session)).resolves.toBe(false);
+      expect(fake.unary).toHaveBeenCalledOnce();
+    } finally {
+      Time.setProvider(previous);
+    }
+  });
+
+  it("does not revive a renewal whose reply arrives after its known-live deadline", async () => {
+    let now = 0;
+    const previous = Time.setProvider({
+      currentTime: () => create(TimestampSchema),
+      monotonicTime: () => now,
+    });
+    try {
+      const fake = transport();
+      const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(fake.transport));
+      const shard = ShardIndex.single();
+      const worker = workerId("node", "worker");
+      echoPickup(fake);
+      const session = await registry.pickUp(shard, worker);
+      if (session === undefined) throw new Error("Expected the managed session.");
+      const held = fake.replyAndHold(
+        create(DeliverySessionHandleSchema, {
+          shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+          worker,
+          whenPicked: { seconds: 2n, nanos: 0 },
+          sessionId: "fixture-session",
+          lifetime: { seconds: 60n, nanos: 0 },
+        }),
+      );
+      const renewal = registry.validateOwnership(session);
+      await Promise.resolve();
+      now = 60_000;
+      held.release();
+      await expect(renewal).resolves.toBeUndefined();
+      expect(registry.renewalIntervalMs(session)).toBeUndefined();
+      await expect(registry.release(session)).resolves.toBe(false);
+      expect(fake.unary).toHaveBeenCalledTimes(2);
+    } finally {
+      Time.setProvider(previous);
+    }
   });
 
   it("forwards both operation bounds when acquiring a remote shard", async () => {

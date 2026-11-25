@@ -18,6 +18,7 @@ import { Code } from "@connectrpc/connect";
 import { describe, expect, it } from "vitest";
 import {
   DeliveryShardPickupSchema,
+  type GuardedInboxRequest,
   GuardedInboxRequestSchema,
   RemoveMessageSchema,
   WriteMessageSchema,
@@ -30,6 +31,7 @@ import {
   WorkerIdSchema,
 } from "@spine-event-engine/proto/delivery";
 import { InMemoryDelivery } from "../../src/index.js";
+import { DeliveryAssembly } from "../../src/server/assembly.js";
 import { domainMessage } from "./domain-message.js";
 import { pickedHandle } from "../session-fixtures.js";
 
@@ -60,6 +62,52 @@ async function acquire(
 }
 
 describe("guarded Inbox mutations", () => {
+  it("reserves bytes only for an acknowledgement that can change the stored row", async () => {
+    const delivery = DeliveryAssembly.create({});
+    const when = create(TimestampSchema, { seconds: 10n, nanos: 123 });
+    const row = domainMessage("capacity-for-ack", shard);
+    try {
+      await delivery.inbox.writeOne(create(WriteMessageSchema, { message: row }), context);
+      const session = pickedHandle(
+        await delivery.managed.pickShardForDelivery(
+          create(DeliveryShardPickupSchema, { shard, worker }),
+          context,
+        ),
+      );
+      const projection = (request: GuardedInboxRequest) =>
+        delivery.guardedRuntime.projectedAcknowledgement(request, when);
+      const valid = create(GuardedInboxRequestSchema, { session, expected: row });
+      expect(() => projection(create(GuardedInboxRequestSchema, { expected: row }))).toThrow(
+        "Managed session handle is required",
+      );
+      const elsewhere = domainMessage(
+        "capacity-for-ack",
+        create(ShardIndexSchema, { index: 0, ofTotal: 2 }),
+      );
+      expect(() =>
+        projection(create(GuardedInboxRequestSchema, { session, expected: elsewhere })),
+      ).toThrow("Inbox row shard differs from session");
+
+      const original = delivery.state.usage();
+      const replaced = clone(InboxMessageSchema, row);
+      replaced.version++;
+      expect(
+        projection(create(GuardedInboxRequestSchema, { session, expected: replaced })),
+      ).toEqual(original);
+      const expectedUsage = projection(valid);
+      expect(expectedUsage.bytes).toBeGreaterThan(original.bytes);
+      expect(delivery.state.usage()).toEqual(original);
+      await delivery.guardedRuntime.acknowledgeAt(valid, new AbortController().signal, when);
+      expect(delivery.state.usage()).toEqual(expectedUsage);
+      expect(projection(valid)).toEqual(expectedUsage);
+    } finally {
+      delivery.closeAdmission();
+      delivery.closeSessions();
+      delivery.closeObserving();
+      delivery.closeAdmin();
+    }
+  });
+
   it("rejects a missing handle and a row from another shard before changing storage", async () => {
     const core = InMemoryDelivery.create();
     const expected = domainMessage("authorized", shard);

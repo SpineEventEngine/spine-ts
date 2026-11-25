@@ -13,6 +13,8 @@
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
+import { create } from "@bufbuild/protobuf";
+import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it, vi } from "vitest";
 
@@ -105,6 +107,83 @@ function row(id: string, shard: ShardIndex) {
 }
 
 describe("ApplicationWorkObserver", () => {
+  it("reports missing handlers, empty work, busy work, and terminal managed admission", async () => {
+    const { core, inbox } = delivery();
+    const shard = new ShardIndex(0, 2);
+    await expect(core.deliverMessagesFrom(shard)).rejects.toThrow("handlers are not installed");
+    core.setDispatcher(() => undefined);
+    await expect(core.deliverMessagesFrom(shard)).resolves.toEqual({ status: "noWork" });
+    await inbox.storage.write(row("busy-managed", shard));
+    const other = await core.shards.pickUp(
+      shard,
+      create(WorkerIdSchema, { nodeId: { value: "other-node" }, value: "other-worker" }),
+    );
+    if (other === undefined) throw new Error("Expected the other worker's shard session.");
+    await expect(core.deliverMessagesFrom(shard)).resolves.toEqual({ status: "busy" });
+    await core.shards.release(other);
+    core.beginClose();
+    await expect(core.deliverMessagesFrom(shard)).resolves.toEqual({ status: "stopped" });
+    await core.close();
+  });
+
+  it("contains a custom observer rejection without reversing persistence", async () => {
+    const { core, inbox } = delivery();
+    const shard = new ShardIndex(0, 2);
+    const stored = row("non-error-observer", shard);
+    await inbox.storage.write(stored);
+    core.setShardObserver(() => Promise.reject(new Error("observer refused")));
+    core.observePersisted(stored);
+    await Promise.resolve();
+    await expect(inbox.storage.readMessage(stored.id)).resolves.toMatchObject({
+      id: { value: "non-error-observer" },
+    });
+    await core.close();
+    core.observePersisted(stored);
+  });
+
+  it("stops a managed attempt before pickup when its caller has already cancelled", async () => {
+    const { core, inbox } = delivery();
+    const shard = new ShardIndex(0, 2);
+    await inbox.storage.write(row("cancelled-before-pickup", shard));
+    const dispatched = vi.fn();
+    core.setDispatcher(dispatched);
+    const caller = new AbortController();
+    caller.abort(new Error("caller stopped"));
+    await expect(core.deliverMessagesFrom(shard, { signal: caller.signal })).resolves.toEqual({
+      status: "stopped",
+    });
+    expect(dispatched).not.toHaveBeenCalled();
+    core.beginStartupDrain();
+    await expect(core.deliverMessagesFrom(shard)).resolves.toEqual({ status: "stopped" });
+    await core.close();
+  });
+
+  it("maps a controlled busy shard separately from a later completed run", async () => {
+    const { core, inbox } = delivery();
+    const shard = new ShardIndex(0, 2);
+    await inbox.storage.write(row("controlled-outcomes", shard));
+    const other = await core.shards.pickUp(
+      shard,
+      create(WorkerIdSchema, { nodeId: { value: "other-node" }, value: "other-worker" }),
+    );
+    if (other === undefined) throw new Error("Expected the competing shard session.");
+    const signal = new AbortController().signal;
+    await expect(
+      core.runControlled({ shard, signal, onMessage: () => undefined }),
+    ).resolves.toEqual({ status: "SKIPPED" });
+    await core.shards.release(other);
+    const handled = vi.fn();
+    await expect(
+      core.runControlled({
+        shard,
+        signal,
+        onMessage: handled,
+      }),
+    ).resolves.toEqual({ status: "COMPLETED" });
+    expect(handled).toHaveBeenCalledOnce();
+    await core.close();
+  });
+
   it("rejects an invalid explicit concurrency bound and a start after close", async () => {
     const source = new Notices();
     for (const invalid of [0, -1, 1.5, Number.NaN]) {

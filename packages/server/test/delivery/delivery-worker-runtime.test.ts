@@ -21,6 +21,41 @@ import { deliveryWorkerAccess, DeliveryWorker } from "../../src/delivery/deliver
 import { ShardIndex } from "../../src/index.js";
 
 describe("DeliveryWorker", () => {
+  it("runs only selected eligible shards and resets eligibility for a new obligation", async () => {
+    const first = new ShardIndex(0, 2);
+    const second = new ShardIndex(1, 2);
+    const worker = new DeliveryWorker({
+      delivery: delivery(),
+      shards: [first, second],
+      onMessage: () => undefined,
+    });
+    const obligation = Object.freeze({});
+    const selected = await deliveryWorkerAccess.start(worker, obligation, [second]);
+    expect(selected.shards).toMatchObject([{ shard: second, status: "fulfilled" }]);
+    expect((await deliveryWorkerAccess.start(worker, obligation, [second])).shards).toEqual([]);
+    const fresh = await deliveryWorkerAccess.start(worker, Object.freeze({}));
+    expect(fresh.shards.map(({ shard }) => shard)).toEqual([first, second]);
+    worker.stop();
+    await deliveryWorkerAccess.retire(worker);
+    expect(() => deliveryWorkerAccess.start(worker, Object.freeze({}))).toThrow(
+      "permanently retired",
+    );
+  });
+
+  it("rejects another internal start while its current shard run is pending", async () => {
+    const worker = new DeliveryWorker({
+      delivery: delivery(),
+      shards: [ShardIndex.single()],
+      onMessage: () => undefined,
+    });
+    const obligation = Object.freeze({});
+    const started = deliveryWorkerAccess.start(worker, obligation);
+    expect(() => deliveryWorkerAccess.start(worker, obligation)).toThrow("already running");
+    await started;
+    worker.stop();
+    await deliveryWorkerAccess.retire(worker);
+  });
+
   it("starts configured shards and reports ordered terminal results", async () => {
     const worker = new DeliveryWorker({
       delivery: delivery(),

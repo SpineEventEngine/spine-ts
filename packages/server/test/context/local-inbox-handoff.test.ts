@@ -15,6 +15,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { create } from "@bufbuild/protobuf";
 import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { TaskIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
@@ -26,9 +27,212 @@ import {
 import { Delivery } from "../../src/delivery/delivery.js";
 import type { InboxMessage } from "../../src/delivery/inbox.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
+import { createMessage } from "../delivery/inbox-message-fixture.js";
 import { tenant } from "../tenant-fixture.js";
 
 describe("DeliveryReadiness", () => {
+  it("ignores notifications after closure and routes local wakes to the selected Delivery", async () => {
+    const delivery = new Delivery({
+      context: { name: "LocalReadiness", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const wake = vi.spyOn(Delivery.prototype, "wake").mockImplementation(() => undefined);
+    const readiness = new DeliveryReadiness();
+    expect(readiness.route(delivery)).toBe(delivery);
+    readiness.notify(ready());
+    expect(wake).toHaveBeenCalledExactlyOnceWith(ShardIndex.single());
+    readiness.notify(ready("another-tenant"));
+    expect(wake).toHaveBeenCalledOnce();
+    await readiness.close();
+    readiness.notify(ready());
+    expect(wake).toHaveBeenCalledOnce();
+    wake.mockRestore();
+  });
+
+  it("passes a full persisted row to a custom observer without starting a direct drain", async () => {
+    const onMessage = vi.fn();
+    const onDrain = vi.fn().mockResolvedValue(undefined);
+    const readiness = new DeliveryReadiness(undefined, undefined, undefined, false, onMessage);
+    const row = createMessage("observed-row", "observed-event", 1n);
+    await readiness.claim(ready(), row).complete(onDrain);
+    expect(onMessage).toHaveBeenCalledExactlyOnceWith(row);
+    expect(onDrain).not.toHaveBeenCalled();
+    await readiness.close();
+  });
+
+  it("coalesces a direct claim and allows an unstarted claim to be abandoned", async () => {
+    const readiness = new DeliveryReadiness();
+    const onDrain = vi.fn().mockResolvedValue(undefined);
+    const handoff = readiness.claim(ready());
+    const first = handoff.complete(onDrain);
+    expect(handoff.complete(onDrain)).toBe(first);
+    handoff.abandon();
+    await first;
+    expect(onDrain).toHaveBeenCalledOnce();
+
+    const abandoned = readiness.claim(ready());
+    abandoned.abandon();
+    abandoned.abandon();
+    await abandoned.complete(onDrain);
+    expect(onDrain).toHaveBeenCalledOnce();
+    await readiness.close();
+  });
+
+  it("propagates a synchronous direct drain failure and finishes its claim", async () => {
+    const readiness = new DeliveryReadiness();
+    const failure = new Error("direct admission failed");
+    const completion = readiness.claim(ready()).complete(() => {
+      throw failure;
+    });
+    await expect(completion).rejects.toBe(failure);
+    await expect(readiness.drain()).resolves.toBe(false);
+    await readiness.close();
+  });
+
+  it("coalesces the same persisted handoff and clears only its completed entry", async () => {
+    const handoffs = new Map<string, Promise<InboxMessage>>();
+    const released = Promise.withResolvers<InboxMessage>();
+    const row = createMessage("coalesced", "event-coalesced", 1n);
+    const onHandoff = vi.fn(() => released.promise);
+    const first = InboxHandoff.coordinate({ handoffs, key: "row", onHandoff });
+    const second = InboxHandoff.coordinate({ handoffs, key: "row", onHandoff });
+    expect(onHandoff).toHaveBeenCalledOnce();
+    released.resolve(row);
+    await expect(Promise.all([first, second])).resolves.toEqual([row, row]);
+    expect(handoffs.size).toBe(0);
+
+    const newer = Promise.resolve(row);
+    const older = Promise.withResolvers<InboxMessage>();
+    const overlapping = InboxHandoff.coordinate({
+      handoffs,
+      key: "row",
+      onHandoff: () => older.promise,
+    });
+    handoffs.set("row", newer);
+    older.resolve(row);
+    await overlapping;
+    expect(handoffs.get("row")).toBe(newer);
+  });
+
+  it("retries deferred and unresolved local outcomes before acknowledging the exact row", async () => {
+    const row = createMessage("retried", "event-retried", 1n);
+    const drainMessage = vi
+      .fn()
+      .mockResolvedValueOnce({ acknowledged: false, outcome: { kind: "deferred" } })
+      .mockResolvedValueOnce({ acknowledged: false, outcome: { kind: "unresolved" } })
+      .mockResolvedValueOnce({ acknowledged: true, outcome: { kind: "acknowledged" } });
+    const delivery = { drainMessage } as unknown as Delivery;
+    await InboxHandoff.runDrain({
+      delivery,
+      received: row,
+      node: "Tasks",
+      onDispatch: () => undefined,
+      deliveryFailureMessage: "delivery failed",
+      skippedMessage: "skipped",
+      unfinishedMessage: "unfinished",
+    });
+    expect(drainMessage).toHaveBeenCalledTimes(3);
+  });
+
+  it("accepts a delivered readback after an unresolved local result", async () => {
+    const row = createMessage("delivered-readback", "event-readback", 1n);
+    const readMessage = vi.fn().mockResolvedValue({ ...row, status: "DELIVERED" });
+    const delivery = {
+      drainMessage: vi.fn().mockResolvedValue({
+        acknowledged: false,
+        outcome: {
+          kind: "unresolved",
+          run: {
+            status: "STOPPED",
+            processed: 1,
+            accepted: 1,
+            delivered: 0,
+            failed: 0,
+            failures: [],
+          },
+        },
+      }),
+      inbox: { readMessage },
+    } as unknown as Delivery;
+    await InboxHandoff.runDrain({
+      delivery,
+      received: row,
+      node: "Tasks",
+      onDispatch: () => undefined,
+      deliveryFailureMessage: "delivery failed",
+      skippedMessage: "skipped",
+      unfinishedMessage: "unfinished",
+    });
+    expect(readMessage).toHaveBeenCalledWith(row.id);
+  });
+
+  it("uses the shared Delivery wake when no custom wake callback was installed", async () => {
+    const shared = new Delivery({
+      context: { name: "SharedReadiness", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const wake = vi.spyOn(Delivery.prototype, "wake").mockImplementation(() => undefined);
+    try {
+      const readiness = new DeliveryReadiness(undefined, shared);
+      readiness.notify(ready());
+      expect(wake).toHaveBeenCalledExactlyOnceWith(ShardIndex.single());
+      await readiness.close();
+      await shared.close();
+    } finally {
+      wake.mockRestore();
+    }
+  });
+
+  it.each(["throws", "rejects"])(
+    "keeps an admitted local claim complete when a standalone observer %s",
+    async (failureMode) => {
+      const observer = vi.fn(() => {
+        if (failureMode === "throws") throw new Error("observer threw");
+        return Promise.reject(new Error("observer rejected"));
+      });
+      const readiness = new DeliveryReadiness(observer);
+      const onDrain = vi.fn().mockResolvedValue(undefined);
+      await expect(readiness.claim(ready()).complete(onDrain)).resolves.toBeUndefined();
+      expect(observer).toHaveBeenCalledOnce();
+      expect(onDrain).toHaveBeenCalledOnce();
+      await readiness.close();
+    },
+  );
+
+  it.each(["skipped", "idle"])(
+    "reports an unresolved %s direct run without claiming a delivery",
+    async (status) => {
+      const row = createMessage(`unresolved-${status}`, `event-${status}`, 1n);
+      const run = {
+        status: status === "skipped" ? "SKIPPED" : "DRAINED",
+        processed: 0,
+        accepted: 0,
+        delivered: 0,
+        failed: 0,
+        failures: [],
+      };
+      const drainMessage = vi.fn().mockResolvedValue({ acknowledged: false, run });
+      const readMessage = vi.fn().mockResolvedValue(row);
+      const delivery = {
+        drainMessage,
+        inbox: { readMessage },
+      } as unknown as Delivery;
+      await expect(
+        InboxHandoff.runDrain({
+          delivery,
+          received: row,
+          node: "Tasks",
+          onDispatch: () => undefined,
+          deliveryFailureMessage: "delivery failed",
+          skippedMessage: "skipped",
+          unfinishedMessage: "unfinished",
+        }),
+      ).rejects.toThrow(status === "skipped" ? "skipped" : "unfinished");
+      expect(readMessage).toHaveBeenCalledWith(row.id);
+      expect(drainMessage).toHaveBeenCalledOnce();
+    },
+  );
+
   it("completes a supervised remote handoff after notification without draining", async () => {
     const sharedWake = vi.fn();
     const shared = { wake: sharedWake } as unknown as Delivery;

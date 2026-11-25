@@ -1200,6 +1200,12 @@ describe("ServerEnvironment delivery lifecycle", () => {
       { kind: "unknown", shardObserver: observer },
       { kind: "delivery-server", shardObserver: observer },
       { kind: "custom", shardObserver: observer, maxConcurrentDeliveries: 2 },
+      { kind: "custom" },
+      { kind: "delivery-server", maxConcurrentDeliveries: 0 },
+      { kind: "delivery-server", maxConcurrentDeliveries: -1 },
+      { kind: "delivery-server", maxConcurrentDeliveries: 1.5 },
+      { kind: "delivery-server", maxConcurrentDeliveries: Number.MAX_SAFE_INTEGER + 1 },
+      { kind: "delivery-server", maxConcurrentDeliveries: "2" },
     ]) {
       expect(() =>
         environmentWith(EnvironmentType.Local, {
@@ -1219,6 +1225,33 @@ describe("ServerEnvironment delivery lifecycle", () => {
     await environment.close();
 
     expect(events).toEqual(["delivery", "storage"]);
+  });
+
+  it("opens default Delivery when a configured facility supplies close only", async () => {
+    const closed = vi.fn();
+    const environment = environmentWith(EnvironmentType.Local, {
+      delivery: { close: closed },
+    });
+    await serverEnvironmentAccess.setup(environment);
+    expect(environment.delivery.inbox).toBeDefined();
+    await environment.close();
+    expect(closed).toHaveBeenCalledOnce();
+  });
+
+  it("refuses readiness and cleanup calls before environment setup or failure", async () => {
+    const environment = environmentWith(EnvironmentType.Local, {});
+    expect(serverEnvironmentAccess.hasStartupFailure(environment)).toBe(false);
+    await expect(serverEnvironmentAccess.awaitSetup(environment)).rejects.toThrow(
+      "Application setup must finish",
+    );
+    await expect(serverEnvironmentAccess.awaitStartupFailure(environment)).rejects.toThrow(
+      "No startup failure was recorded",
+    );
+    await expect(serverEnvironmentAccess.retryStartupCleanup(environment)).rejects.toThrow(
+      "no failed startup cleanup",
+    );
+    await expect(serverEnvironmentAccess.whenDeliveryIdle(environment)).resolves.toBeUndefined();
+    await environment.close();
   });
 
   it("retries only unfinished environment close phases after partial failure", async () => {

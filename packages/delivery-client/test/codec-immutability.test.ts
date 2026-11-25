@@ -185,6 +185,8 @@ describe("delivery codec and immutable snapshots", () => {
     await expect(client.acknowledgeGuarded(pickup.session, expected)).rejects.toBeInstanceOf(
       DeliveryProtocolError,
     );
+    fake.reply(create(GuardedInboxResultSchema, { matched: false }));
+    await expect(client.acknowledgeGuarded(pickup.session, expected)).resolves.toBeUndefined();
     fake.reply(create(GuardedInboxResultSchema, { matched: true, message: completed }));
     await expect(client.removeDuplicateGuarded(pickup.session, expected)).rejects.toBeInstanceOf(
       DeliveryProtocolError,
