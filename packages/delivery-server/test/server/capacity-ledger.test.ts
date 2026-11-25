@@ -26,6 +26,58 @@ const ticket = (slot: number, generation: string, sequence: number) => ({
 });
 
 describe("global child capacity", () => {
+  it("rejects invalid reservations and unreserved reports before changing usage", () => {
+    const ledger = new CapacityLedger(limits);
+    ledger.replace(0, "first");
+    const id = ticket(0, "first", 1);
+    for (const { operation, code } of [
+      {
+        operation: () => {
+          ledger.reserve(id, { rows: 1, bytes: 1, shards: 1 }, -1n);
+        },
+        code: Code.InvalidArgument,
+      },
+      {
+        operation: () => {
+          ledger.reserve({ ...id, sequence: 0n }, { rows: 1, bytes: 1, shards: 1 });
+        },
+        code: Code.InvalidArgument,
+      },
+      {
+        operation: () => {
+          ledger.reserve(id, { rows: Number.MAX_SAFE_INTEGER + 1, bytes: 1, shards: 1 });
+        },
+        code: Code.InvalidArgument,
+      },
+      {
+        operation: () => {
+          ledger.report(id, zero, -1n);
+        },
+        code: Code.InvalidArgument,
+      },
+      {
+        operation: () => {
+          ledger.report(id, zero, 1n);
+        },
+        code: Code.FailedPrecondition,
+      },
+    ]) {
+      expect(operation).toThrow(expect.objectContaining({ code }));
+    }
+    expect(ledger.usage()).toEqual(zero);
+  });
+
+  it("rejects a conflicting replay of the same reservation phase", () => {
+    const ledger = new CapacityLedger(limits);
+    ledger.replace(0, "first");
+    const id = ticket(0, "first", 1);
+    ledger.reserve(id, { rows: 1, bytes: 20, shards: 1 });
+    expect(() => {
+      ledger.reserve(id, { rows: 1, bytes: 21, shards: 1 });
+    }).toThrow(expect.objectContaining({ code: Code.FailedPrecondition }));
+    expect(ledger.usage()).toEqual({ rows: 1, bytes: 20, shards: 1 });
+  });
+
   it("adjusts one correlated ticket without letting an old phase restore its charge", () => {
     const ledger = new CapacityLedger({ ...limits, maxRetainedBytes: 71 });
     ledger.replace(0, "first");

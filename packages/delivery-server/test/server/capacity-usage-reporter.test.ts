@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Code, ConnectError } from "@connectrpc/connect";
 import { describe, expect, it, vi } from "vitest";
 
 import { CapacityUsageReporter } from "../../src/server/capacity-usage-reporter.js";
@@ -19,6 +20,47 @@ import { CapacityUsageReporter } from "../../src/server/capacity-usage-reporter.
 const zero = { rows: 0, bytes: 0, shards: 0 };
 
 describe("autonomous child usage reporting", () => {
+  it("sends the newest detached snapshot after an earlier report completes", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const sent: { revision: bigint; rows: number }[] = [];
+    const reporter = new CapacityUsageReporter(async (snapshot) => {
+      sent.push({ revision: snapshot.revision, rows: snapshot.usage.rows });
+      if (snapshot.revision === 1n) {
+        entered.resolve(undefined);
+        await release.promise;
+      }
+    });
+    const mutable = { rows: 1, bytes: 10, shards: 1 };
+    const first = reporter.publish({ revision: 1n, usage: mutable });
+    await entered.promise;
+    mutable.rows = 99;
+    const second = reporter.publish({ revision: 2n, usage: zero });
+    const older = reporter.publish({ revision: 1n, usage: mutable });
+    release.resolve(undefined);
+    await Promise.all([first, second, older]);
+    expect(sent).toEqual([
+      { revision: 1n, rows: 1 },
+      { revision: 2n, rows: 0 },
+    ]);
+    reporter.close();
+  });
+
+  it.each([
+    Code.InvalidArgument,
+    Code.FailedPrecondition,
+    Code.Unauthenticated,
+    Code.PermissionDenied,
+    Code.Unimplemented,
+  ])("stops autonomous retries on definitive parent rejection %s", async (code) => {
+    const send = vi.fn(() => Promise.reject(new ConnectError("refused", code)));
+    const reporter = new CapacityUsageReporter(send);
+    await expect(reporter.publish({ revision: 1n, usage: zero })).rejects.toMatchObject({ code });
+    expect(send).toHaveBeenCalledOnce();
+    reporter.close();
+    await expect(reporter.publish({ revision: 2n, usage: zero })).rejects.toThrow("closed");
+  });
+
   it("retries an unacknowledged expiry and sends the latest state", async () => {
     const reported: bigint[] = [];
     let attempts = 0;

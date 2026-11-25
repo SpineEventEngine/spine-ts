@@ -131,6 +131,10 @@ describe("private delivery child", () => {
         code: Code.Unauthenticated,
       });
       await expect(
+        client.writeOne({ message: row }, { headers: { authorization: "Bearer parent-child" } }),
+      ).rejects.toMatchObject({ code: Code.InvalidArgument });
+      expect(ledger.usage()).toEqual({ rows: 0, bytes: 0, shards: 0 });
+      await expect(
         client.writeOne(
           { message: row },
           {
@@ -152,6 +156,18 @@ describe("private delivery child", () => {
       await expect(
         control.barrier({ slot: 0n, generation: "first", sequence: 2n }),
       ).rejects.toMatchObject({ code: Code.Unauthenticated });
+      await expect(
+        control.barrier(
+          { slot: 0n, generation: "first", sequence: 0n },
+          { headers: { authorization: "Bearer parent-child" } },
+        ),
+      ).rejects.toMatchObject({ code: Code.InvalidArgument });
+      await expect(
+        control.barrier(
+          { slot: 0n, generation: "older", sequence: 2n },
+          { headers: { authorization: "Bearer parent-child" } },
+        ),
+      ).rejects.toMatchObject({ code: Code.FailedPrecondition });
       await control.barrier(
         { slot: 0n, generation: "first", sequence: 2n },
         {

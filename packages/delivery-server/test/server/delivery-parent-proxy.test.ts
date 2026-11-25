@@ -24,6 +24,7 @@ import {
   InboxService,
   ManagedShardService,
   ReleaseExpiredSessionsSchema,
+  ShardedWorkAvailableSchema,
   ShardObservingService,
   ShardService,
   SubscriptionResponseSchema,
@@ -45,6 +46,256 @@ import { DeliveryParentProxy } from "../../src/server/delivery-parent-proxy.js";
 import { DeliveryStreamFanIn } from "../../src/server/delivery-stream-fan-in.js";
 
 describe("multi-process public Delivery endpoint", () => {
+  it("rejects a private Admin stream that never acknowledged subscription", async () => {
+    const pool = new DeliveryChildPool(1, DeliveryConfig.resolve({ port: 0 }));
+    await pool.start();
+    const invalid = create(SubscriptionResponseSchema);
+    const merge = new DeliveryStreamFanIn(
+      pool,
+      "admin",
+      () =>
+        (async function* () {
+          yield await Promise.resolve(invalid);
+        })(),
+      (frame) => frame.value.case === "created",
+    );
+    const reader = merge
+      .observe(new AbortController().signal, new AbortController().signal, invalid)
+      [Symbol.asyncIterator]();
+    try {
+      await expect(reader.next()).rejects.toMatchObject({ code: Code.DataLoss });
+    } finally {
+      await reader.return?.().catch(() => undefined);
+      await pool.close();
+    }
+  });
+
+  it("fails the global Admin ACK when a child ends just after its private ACK", async () => {
+    const pool = new DeliveryChildPool(2, DeliveryConfig.resolve({ port: 0 }));
+    await pool.start();
+    const hold = Promise.withResolvers<undefined>();
+    const ack = create(SubscriptionResponseSchema, { value: { case: "created", value: true } });
+    const merge = new DeliveryStreamFanIn(
+      pool,
+      "admin",
+      (endpoint) =>
+        (async function* () {
+          if (endpoint.slot === 1) await hold.promise;
+          yield ack;
+        })(),
+      (frame) => frame.value.case === "created",
+    );
+    const reader = merge
+      .observe(new AbortController().signal, new AbortController().signal, ack)
+      [Symbol.asyncIterator]();
+    try {
+      await expect(reader.next()).rejects.toMatchObject({ code: Code.Unavailable });
+    } finally {
+      hold.resolve(undefined);
+      await reader.return?.().catch(() => undefined);
+      await pool.close();
+    }
+  });
+
+  it("cancels an Admin subscriber while a private child has not acknowledged", async () => {
+    const pool = new DeliveryChildPool(1, DeliveryConfig.resolve({ port: 0 }));
+    await pool.start();
+    const entered = Promise.withResolvers<undefined>();
+    const caller = new AbortController();
+    const ack = create(SubscriptionResponseSchema, { value: { case: "created", value: true } });
+    const merge = new DeliveryStreamFanIn(pool, "admin", (_endpoint, signal) =>
+      (async function* () {
+        entered.resolve(undefined);
+        await new Promise<void>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolve();
+            },
+            { once: true },
+          );
+        });
+        yield ack;
+      })(),
+    );
+    const reader = merge
+      .observe(caller.signal, new AbortController().signal, ack)
+      [Symbol.asyncIterator]();
+    try {
+      const pending = reader.next();
+      await entered.promise;
+      caller.abort();
+      await expect(pending).rejects.toMatchObject({ code: Code.Canceled });
+    } finally {
+      caller.abort();
+      await reader.return?.().catch(() => undefined);
+      await pool.close();
+    }
+  });
+
+  it("does not open private Admin streams for a pre-aborted public subscriber", async () => {
+    const pool = new DeliveryChildPool(1, DeliveryConfig.resolve({ port: 0 }));
+    await pool.start();
+    const open = vi.fn(() =>
+      (async function* () {
+        yield await Promise.resolve(create(SubscriptionResponseSchema));
+      })(),
+    );
+    const merge = new DeliveryStreamFanIn(pool, "admin", open);
+    const caller = new AbortController();
+    caller.abort();
+    try {
+      const reader = merge
+        .observe(caller.signal, new AbortController().signal)
+        [Symbol.asyncIterator]();
+      await expect(reader.next()).resolves.toMatchObject({ done: true });
+      expect(open).not.toHaveBeenCalled();
+    } finally {
+      await pool.close();
+    }
+  });
+
+  it("fails global Admin while a missing slot leaves healthy work notices available", async () => {
+    const pool = new DeliveryChildPool(2, DeliveryConfig.resolve({ port: 0 }));
+    await pool.start();
+    const endpoint = pool.endpoint.bind(pool);
+    const missing = vi.spyOn(pool, "endpoint").mockImplementation((slot) => {
+      if (slot === 0) throw new ConnectError("slot unavailable", Code.Unavailable);
+      return endpoint(slot);
+    });
+    const ack = create(SubscriptionResponseSchema, { value: { case: "created", value: true } });
+    const admin = new DeliveryStreamFanIn(
+      pool,
+      "admin",
+      () =>
+        (async function* () {
+          yield await Promise.resolve(ack);
+        })(),
+      (frame) => frame.value.case === "created",
+    );
+    const adminReader = admin
+      .observe(new AbortController().signal, new AbortController().signal, ack)
+      [Symbol.asyncIterator]();
+    const notice = create(ShardedWorkAvailableSchema, {
+      shard: create(ShardIndexSchema, { index: 1, ofTotal: 2 }),
+    });
+    const work = new DeliveryStreamFanIn(pool, "work", () =>
+      (async function* () {
+        yield await Promise.resolve(notice);
+      })(),
+    );
+    const caller = new AbortController();
+    const workReader = work
+      .observe(caller.signal, new AbortController().signal)
+      [Symbol.asyncIterator]();
+    try {
+      await expect(adminReader.next()).rejects.toMatchObject({ code: Code.Unavailable });
+      expect((await nextFrame(workReader)).shard?.index).toBe(1);
+    } finally {
+      caller.abort();
+      await adminReader.return?.().catch(() => undefined);
+      await workReader.return?.();
+      missing.mockRestore();
+      await pool.close();
+    }
+  });
+
+  it("rediscovers work after private EOF and detaches a paused public reader on abort", async () => {
+    const pool = new DeliveryChildPool(1, DeliveryConfig.resolve({ port: 0 }));
+    await pool.start();
+    const notice = create(ShardedWorkAvailableSchema, {
+      shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+    });
+    let opens = 0;
+    let detached = false;
+    const merge = new DeliveryStreamFanIn(pool, "work", (_endpoint, signal) =>
+      (async function* () {
+        opens++;
+        try {
+          yield notice;
+          if (opens > 1)
+            await new Promise<void>((resolve) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+        } finally {
+          if (opens > 1) detached = true;
+        }
+      })(),
+    );
+    const caller = new AbortController();
+    const reader = merge
+      .observe(caller.signal, new AbortController().signal)
+      [Symbol.asyncIterator]();
+    try {
+      expect((await nextFrame(reader)).shard?.index).toBe(0);
+      expect((await nextFrame(reader)).shard?.index).toBe(0);
+      expect(opens).toBe(2);
+      caller.abort();
+      await vi.waitFor(() => {
+        expect(detached).toBe(true);
+      });
+    } finally {
+      caller.abort();
+      await reader.return?.();
+      await pool.close();
+    }
+  });
+
+  it("rejects a read and an already committed write from a retired generation", async () => {
+    const pool = new DeliveryChildPool(2, DeliveryConfig.resolve({ port: 0 }));
+    await pool.start();
+    const proxy = new DeliveryParentProxy(pool);
+    const shard = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
+    const row = domainMessage("generation-reply", shard);
+    if (row.id === undefined) throw new Error("Inbox fixture identity is missing.");
+    const id = row.id;
+    const context = { signal: new AbortController().signal, timeoutMs: () => undefined } as never;
+    try {
+      const writeFence = vi.spyOn(pool, "current").mockImplementationOnce(() => false);
+      await expect(
+        proxy.inbox().writeOne(create(WriteMessageSchema, { message: row }), context),
+      ).rejects.toMatchObject({ code: Code.Unavailable });
+      writeFence.mockRestore();
+      await vi.waitFor(async () => {
+        expect((await proxy.inbox().findOne(id, context)).message?.id?.uuid).toBe(id.uuid);
+      });
+      const readFence = vi.spyOn(pool, "current").mockImplementationOnce(() => false);
+      await expect(proxy.inbox().findOne(id, context)).rejects.toMatchObject({
+        code: Code.Unavailable,
+      });
+      readFence.mockRestore();
+    } finally {
+      proxy.close();
+      await pool.close();
+    }
+  });
+
+  it("rejects an elapsed read deadline before forwarding it to a child", async () => {
+    const pool = new DeliveryChildPool(2, DeliveryConfig.resolve({ port: 0 }));
+    await pool.start();
+    const proxy = new DeliveryParentProxy(pool);
+    const shard = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    const row = domainMessage("expired-read", shard);
+    if (row.id === undefined) throw new Error("Inbox fixture identity is missing.");
+    try {
+      await expect(
+        proxy.inbox().findOne(row.id, {
+          signal: new AbortController().signal,
+          timeoutMs: () => 0,
+        } as never),
+      ).rejects.toMatchObject({ code: Code.DeadlineExceeded });
+    } finally {
+      proxy.close();
+      await pool.close();
+    }
+  });
+
   it("routes positive inbox, managed, guarded, and global release calls across slots", async () => {
     const server = new DeliveryServer({ host: "127.0.0.1", port: 0, processCount: 2 });
     await server.start();

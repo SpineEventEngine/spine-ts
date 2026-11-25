@@ -78,6 +78,37 @@ describe("private capacity listener", () => {
           { headers: { authorization: "Bearer child-secret" } },
         ),
       ).rejects.toMatchObject({ code: Code.InvalidArgument });
+      await expect(
+        client.report(
+          { ticket, revision: 1n },
+          { headers: { authorization: "Bearer child-secret" } },
+        ),
+      ).rejects.toMatchObject({ code: Code.InvalidArgument });
+      await expect(
+        client.cancel(
+          { ...ticket, generation: "stale" },
+          { headers: { authorization: "Bearer child-secret" } },
+        ),
+      ).rejects.toMatchObject({ code: Code.FailedPrecondition });
+      await expect(
+        client.reportUsage(
+          {
+            slot: 0n,
+            generation: "stale",
+            revision: 2n,
+            usage: { rows: 0n, bytes: 0n, shards: 0n },
+          },
+          { headers: { authorization: "Bearer child-secret" } },
+        ),
+      ).rejects.toMatchObject({ code: Code.FailedPrecondition });
+      for (const snapshot of [
+        { slot: 0n, generation: "first", revision: 2n },
+        { slot: 0n, generation: "first", usage: { rows: 0n, bytes: 0n, shards: 0n } },
+      ]) {
+        await expect(
+          client.reportUsage(snapshot, { headers: { authorization: "Bearer child-secret" } }),
+        ).rejects.toMatchObject({ code: Code.InvalidArgument });
+      }
       await client.report(
         {
           ticket,

@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { Code } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { describe, expect, it, vi } from "vitest";
 
 import { CapacityLedger } from "../../src/server/capacity-ledger.js";
@@ -28,6 +28,238 @@ const ticket = (slot: number, generation: string, sequence: number) => ({
 });
 
 describe("per-child mutation admission", () => {
+  it("rejects pre-aborted and closed admissions without reserving capacity", async () => {
+    const reserve = vi.fn(() => Promise.resolve());
+    const gate = new CapacityMutationGate({
+      reserve,
+      report: () => Promise.resolve(),
+      cancel: () => Promise.resolve(),
+    });
+    const caller = new AbortController();
+    caller.abort(new Error("caller stopped"));
+    await expect(
+      gate.run(
+        ticket(0, "first", 1),
+        () => growth,
+        () => Promise.resolve(),
+        () => ({ usage: zero, revision: 0n }),
+        caller.signal,
+      ),
+    ).rejects.toThrow("caller stopped");
+    gate.close();
+    await expect(
+      gate.run(
+        ticket(0, "first", 1),
+        () => growth,
+        () => Promise.resolve(),
+        () => ({ usage: zero, revision: 0n }),
+      ),
+    ).rejects.toMatchObject({ code: Code.FailedPrecondition });
+    expect(reserve).not.toHaveBeenCalled();
+  });
+
+  it("shares an active ticket's result without repeating its mutation", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const operation = vi.fn(async () => {
+      entered.resolve(undefined);
+      await release.promise;
+      return "committed";
+    });
+    const gate = new CapacityMutationGate({
+      reserve: () => Promise.resolve(),
+      report: () => Promise.resolve(),
+      cancel: () => Promise.resolve(),
+    });
+    const id = ticket(0, "first", 1);
+    const first = gate.run(
+      id,
+      () => growth,
+      operation,
+      () => ({ usage: growth, revision: 1n }),
+    );
+    await entered.promise;
+    const repeated = gate.run(
+      id,
+      () => zero,
+      () => Promise.resolve("different"),
+      () => ({ usage: zero, revision: 0n }),
+    );
+    expect(repeated).toBe(first);
+    release.resolve(undefined);
+    await expect(repeated).resolves.toBe("committed");
+    expect(operation).toHaveBeenCalledOnce();
+  });
+
+  it.each(["caller", "child"])(
+    "keeps committed accounting through caller abort and stops on child close: %s",
+    async (stop) => {
+      const reported = Promise.withResolvers<undefined>();
+      const release = Promise.withResolvers<undefined>();
+      const gate = new CapacityMutationGate({
+        reserve: () => Promise.resolve(),
+        report: () => {
+          reported.resolve(undefined);
+          return release.promise;
+        },
+        cancel: () => Promise.resolve(),
+      });
+      const caller = new AbortController();
+      const operation = vi.fn(() => Promise.resolve("committed"));
+      const running = gate.run(
+        ticket(0, "first", 1),
+        () => growth,
+        operation,
+        () => ({ usage: growth, revision: 1n }),
+        caller.signal,
+      );
+      await reported.promise;
+      if (stop === "caller") {
+        caller.abort(new Error("caller stopped"));
+        release.resolve(undefined);
+        await expect(running).resolves.toBe("committed");
+      } else {
+        const rejected = expect(running).rejects.toThrow();
+        gate.close();
+        await rejected;
+      }
+      expect(operation).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    Code.ResourceExhausted,
+    Code.InvalidArgument,
+    Code.FailedPrecondition,
+    Code.Unauthenticated,
+    Code.PermissionDenied,
+    Code.Unimplemented,
+  ])("stops on definitive parent reserve rejection %s", async (code) => {
+    const operation = vi.fn(() => Promise.resolve());
+    const cancel = vi.fn(() => Promise.resolve());
+    const report = vi.fn(() => Promise.resolve());
+    const reserve = vi.fn(() => Promise.reject(new ConnectError("refused", code)));
+    const gate = new CapacityMutationGate({ reserve, report, cancel });
+    await expect(
+      gate.run(
+        ticket(0, "first", 1),
+        () => growth,
+        operation,
+        () => ({ usage: zero, revision: 0n }),
+      ),
+    ).rejects.toMatchObject({ code });
+    expect(reserve).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(report).not.toHaveBeenCalled();
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  it("retries an ambiguous usage report and preserves a committed handler error", async () => {
+    const handlerError = new Error("handler rejected");
+    const report = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new ConnectError("reply lost", Code.Unavailable))
+      .mockResolvedValue(undefined);
+    const gate = new CapacityMutationGate({
+      reserve: () => Promise.resolve(),
+      report,
+      cancel: () => Promise.resolve(),
+    });
+    await expect(
+      gate.run(
+        ticket(0, "first", 1),
+        () => growth,
+        () => Promise.reject(handlerError),
+        () => ({ usage: growth, revision: 1n }),
+      ),
+    ).rejects.toBe(handlerError);
+    expect(report).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries an ambiguous cancellation before retiring an aborted reservation", async () => {
+    const reserved = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const cancel = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new ConnectError("cancel reply lost", Code.Unavailable))
+      .mockResolvedValue(undefined);
+    const operation = vi.fn(() => Promise.resolve());
+    const gate = new CapacityMutationGate({
+      reserve: async () => {
+        reserved.resolve(undefined);
+        await release.promise;
+      },
+      report: () => Promise.resolve(),
+      cancel,
+    });
+    const controller = new AbortController();
+    const running = gate.run(
+      ticket(0, "first", 1),
+      () => growth,
+      operation,
+      () => ({ usage: zero, revision: 0n }),
+      controller.signal,
+    );
+    const rejected = expect(running).rejects.toThrow("caller stopped");
+    await reserved.promise;
+    controller.abort(new Error("caller stopped"));
+    release.resolve(undefined);
+    await rejected;
+    expect(cancel).toHaveBeenCalledTimes(2);
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  it("retires an out-of-order barrier without skipping an earlier queued mutation", async () => {
+    const applied: number[] = [];
+    const gate = new CapacityMutationGate({
+      reserve: () => Promise.resolve(),
+      report: () => Promise.resolve(),
+      cancel: () => Promise.resolve(),
+    });
+    await gate.barrier(ticket(0, "first", 2));
+    const third = gate.run(
+      ticket(0, "first", 3),
+      () => zero,
+      () => {
+        applied.push(3);
+        return Promise.resolve();
+      },
+      () => ({ usage: zero, revision: 0n }),
+    );
+    const first = gate.run(
+      ticket(0, "first", 1),
+      () => zero,
+      () => {
+        applied.push(1);
+        return Promise.resolve();
+      },
+      () => ({ usage: zero, revision: 0n }),
+    );
+    await Promise.all([first, third]);
+    expect(applied).toEqual([1, 3]);
+  });
+
+  it.each([ticket(-1, "first", 1), ticket(0, "", 1), ticket(0, "first", 0)])(
+    "rejects an invalid private mutation ticket before capacity admission",
+    async (invalid) => {
+      const reserve = vi.fn(() => Promise.resolve());
+      const gate = new CapacityMutationGate({
+        reserve,
+        report: () => Promise.resolve(),
+        cancel: () => Promise.resolve(),
+      });
+      await expect(
+        gate.run(
+          invalid,
+          () => growth,
+          () => Promise.resolve(),
+          () => ({ usage: zero, revision: 0n }),
+        ),
+      ).rejects.toMatchObject({ code: Code.InvalidArgument });
+      expect(reserve).not.toHaveBeenCalled();
+    },
+  );
+
   it("refreshes exact growth after a delayed reservation before applying a mutation", async () => {
     const ledger = new CapacityLedger({ ...limits, maxRetainedBytes: 71 });
     ledger.replace(0, "first");

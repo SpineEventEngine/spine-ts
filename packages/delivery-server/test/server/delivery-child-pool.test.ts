@@ -26,6 +26,33 @@ import { DeliveryChildPool } from "../../src/server/delivery-child-pool.js";
 import { DeliveryConfig } from "../../src/server/config.js";
 
 describe("forked delivery children", () => {
+  it("rejects an invalid fixed process count and a start after terminal close", async () => {
+    const configuration = DeliveryConfig.resolve({ port: 0 });
+    for (const count of [0, -1, 1.5]) {
+      expect(() => new DeliveryChildPool(count, configuration)).toThrow(
+        "Delivery child process count is invalid.",
+      );
+    }
+    const pool = new DeliveryChildPool(1, configuration);
+    expect(() => pool.endpoint(0)).toThrow("unavailable");
+    await pool.close();
+    await expect(pool.start()).rejects.toThrow("closed");
+  });
+
+  it("refuses a ticket from an earlier process generation", async () => {
+    const pool = new DeliveryChildPool(1, DeliveryConfig.resolve({ port: 0 }));
+    await pool.start();
+    try {
+      const selected = pool.endpoint(0);
+      expect(() => pool.ticket(0, { ...selected, generation: "retired" })).toThrow(
+        "generation changed",
+      );
+      expect(pool.ticket(0, selected).sequence).toBe(1n);
+    } finally {
+      await pool.close();
+    }
+  });
+
   it("reaps a delayed startup-failed child during shutdown", async () => {
     let failed: ChildProcess | undefined;
     let attempts = 0;
