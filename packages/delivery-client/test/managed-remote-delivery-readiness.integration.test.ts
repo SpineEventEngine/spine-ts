@@ -21,16 +21,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { create } from "@bufbuild/protobuf";
-import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
 import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
-  AdminService,
   InboxService,
   ShardService,
   ManagedShardService,
   GuardedInboxService,
+  ShardObservingService,
+  AdminService,
 } from "@spine-event-engine/proto/delivery-server";
 import { SignalMetadata } from "@spine-event-engine/server";
 import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
@@ -56,10 +56,10 @@ const childPath = fileURLToPath(
 
 afterEach(async () => {
   // Release either real Delivery gate before asking the managed parent to shut
-  // down: a replacement can still be opening its initial snapshot.
+  // down: a replacement can still be opening its initial work stream.
   for (const delivery of deliveries) {
     delivery.release();
-    delivery.releaseSnapshot();
+    delivery.releaseWorkStream();
   }
   await Promise.all([...handlerGates].map((gate) => gate.release()));
   const exits = [...children].map(async (child) => {
@@ -169,7 +169,7 @@ function projectStateId(update: SubscriptionUpdate): string | undefined {
   return AnyPacker.unpack(state.value, ProjectOverviewStateSchema).id;
 }
 
-it("RED-28 holds a replacement outside managed admission until its remote snapshot opens", async () => {
+it("RED-28 admits a replacement while its remote work stream is silent", async () => {
   const delivery = await new GatedDeliveryListener().start();
   deliveries.add(delivery);
   const handlerGate = await HandlerGate.create();
@@ -209,16 +209,15 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
   const removed = members.find((member) => member.pid !== owner);
   if (removed === undefined) throw new Error("Managed fixture did not report an initial replica.");
   await bounded(subscriptions.cancel(subscription), "initial subscription cancellation");
-  delivery.armSnapshot();
-  const admin = createClient(AdminService, createGrpcTransport({ baseUrl: delivery.baseUrl }));
-  await bounded(admin.getShardInfo(create(EmptySchema)), "survivor snapshot while gate armed");
+  delivery.armWorkStream();
   await handlerGate.markReplacement();
   process.kill(removed.pid, "SIGKILL");
   await expect.poll(() => currentMembers(child, "retired")).toHaveLength(1);
-  const whileSnapshotHeld = await currentMembers(child, "retired-confirmed");
-  expect(whileSnapshotHeld).toHaveLength(1);
-  expect(whileSnapshotHeld[0]?.pid).not.toBe(removed.pid);
-  await delivery.snapshotEntered;
+  const whileWorkStreamHeld = await currentMembers(child, "retired-confirmed");
+  expect(whileWorkStreamHeld).toHaveLength(1);
+  expect(whileWorkStreamHeld[0]?.pid).not.toBe(removed.pid);
+  await delivery.workStreamEntered;
+  await expect.poll(() => currentMembers(child, "replacement"), { timeout: 2_000 }).toHaveLength(2);
 
   const survivorSubscription = await bounded(
     subscriptions.subscribe(projectOverviewTopic()),
@@ -242,8 +241,7 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
   const survivor = await bounded(nextUpdate, "survivor update");
   if (survivor.done) throw new Error("Survivor Project update was missing.");
   expect(projectStateId(survivor.value)).toBe("t0209-survivor-project");
-  delivery.releaseSnapshot();
-  await expect.poll(() => currentMembers(child, "replacement"), { timeout: 2_000 }).toHaveLength(2);
+  delivery.releaseWorkStream();
 
   const afterRejoin = survivorIterator.next();
   void afterRejoin.catch(() => undefined);
@@ -406,15 +404,15 @@ function createProjectCommand(_commandId = "t0209-create", projectId = "t0209-pr
 
 /**
  * A fixture-local Delivery listener assembled from the production RPC handlers.
- * It gates one real initial snapshot while keeping normal remote Delivery
+ * It gates one real initial work stream while keeping normal remote Delivery
  * traffic on the production service implementation.
  */
 class GatedDeliveryListener {
   readonly #assembly = DeliveryAssembly.create();
   readonly #sessions = new Set<http2.ServerHttp2Session>();
-  readonly #snapshotEntered = deferred<undefined>();
-  readonly #snapshotReleased = deferred<undefined>();
-  #snapshotArmed = false;
+  readonly #workStreamEntered = deferred<undefined>();
+  readonly #workStreamReleased = deferred<undefined>();
+  #workStreamArmed = false;
   #server: http2.Http2Server | undefined;
   #replacementServer: http2.Http2Server | undefined;
   #port: number | undefined;
@@ -431,20 +429,20 @@ class GatedDeliveryListener {
     return `http://127.0.0.1:${String(this.#replacementPort)}`;
   }
 
-  get snapshotEntered(): Promise<undefined> {
-    return this.#snapshotEntered.promise;
+  get workStreamEntered(): Promise<undefined> {
+    return this.#workStreamEntered.promise;
   }
 
-  armSnapshot(): void {
-    this.#snapshotArmed = true;
+  armWorkStream(): void {
+    this.#workStreamArmed = true;
   }
 
   release(): void {
     // The handler gate owns active work. Delivery has no work gate to release.
   }
 
-  releaseSnapshot(): void {
-    this.#snapshotReleased.resolve(undefined);
+  releaseWorkStream(): void {
+    this.#workStreamReleased.resolve(undefined);
   }
 
   async start(): Promise<this> {
@@ -455,7 +453,7 @@ class GatedDeliveryListener {
     return this;
   }
 
-  #createServer(gateSnapshot: boolean): http2.Http2Server {
+  #createServer(gateWorkStream: boolean): http2.Http2Server {
     const server = http2.createServer(
       connectNodeAdapter({
         routes: (router) => {
@@ -463,15 +461,20 @@ class GatedDeliveryListener {
           router.service(ShardService, this.#assembly.shards);
           router.service(ManagedShardService, this.#assembly.managed);
           router.service(GuardedInboxService, this.#assembly.guarded);
-          router.service(AdminService, {
-            ...this.#assembly.admin,
-            getShardInfo: async (request, context) => {
-              if (gateSnapshot && this.#snapshotArmed) {
-                this.#snapshotArmed = false;
-                this.#snapshotEntered.resolve(undefined);
-                await this.#snapshotReleased.promise;
+          router.service(AdminService, this.#assembly.admin);
+          router.service(ShardObservingService, {
+            observeAll: (request, context) => {
+              const stream = this.#assembly.observing.observeAll(request, context);
+              const gated = gateWorkStream && this.#workStreamArmed;
+              if (gated) {
+                this.#workStreamArmed = false;
+                this.#workStreamEntered.resolve(undefined);
               }
-              return this.#assembly.admin.getShardInfo(request, context);
+              const released = this.#workStreamReleased.promise;
+              return (async function* () {
+                if (gated) await released;
+                yield* stream;
+              })();
             },
           });
         },
@@ -486,9 +489,10 @@ class GatedDeliveryListener {
 
   async close(): Promise<void> {
     this.release();
-    this.releaseSnapshot();
+    this.releaseWorkStream();
     this.#assembly.closeAdmission();
     this.#assembly.closeAdmin();
+    this.#assembly.closeObserving();
     this.#assembly.closeSessions();
     for (const session of this.#sessions) session.close();
     const server = this.#server;
