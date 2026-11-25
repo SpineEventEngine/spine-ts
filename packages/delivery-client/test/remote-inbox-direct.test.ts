@@ -15,12 +15,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { ShardIndex } from "@spine-event-engine/server";
 import { create } from "@bufbuild/protobuf";
-import { TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { Time } from "@spine-event-engine/core/time";
+import { DurationSchema, TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 
 import { DeliveryPagingError, DeliveryProtocolError } from "../src/client/types.js";
 import type { DeliveryClient } from "../src/client/client.js";
 import { RemoteInbox, RemoteWorkRegistry } from "../src/remote/adapters.js";
+import { DeliveryMessageCodec } from "../src/wire/codec.js";
 import { domainMessage } from "./shared-fixtures.js";
 
 class Client {
@@ -28,10 +29,53 @@ class Client {
   readonly removeOne = vi.fn<DeliveryClient["removeOne"]>();
   readonly findOne = vi.fn<DeliveryClient["findOne"]>();
   readonly readPage = vi.fn<DeliveryClient["readPage"]>();
+  readonly acknowledgeGuarded = vi.fn<DeliveryClient["acknowledgeGuarded"]>();
+  readonly removeDuplicateGuarded = vi.fn<DeliveryClient["removeDuplicateGuarded"]>();
+  readonly removeDeliveredGuarded = vi.fn<DeliveryClient["removeDeliveredGuarded"]>();
+  readonly pickUpForDelivery = vi.fn<DeliveryClient["pickUpForDelivery"]>((shard, worker) =>
+    Promise.resolve({
+      kind: "PICKED" as const,
+      session: Object.freeze({
+        kind: "EXCLUSIVE" as const,
+        shard,
+        worker,
+        whenPicked: create(TimestampSchema, { seconds: 1n }),
+        sessionId: "fixture-session",
+        lifetime: create(DurationSchema, { seconds: 60n }),
+      }),
+    }),
+  );
   readonly pickUp = vi.fn(() =>
     Promise.resolve({ worker: { nodeId: "node", value: "worker" }, whenPicked: new Date(0) }),
   );
   pageSize = 2;
+}
+
+/**
+ * Creates matching remote adapters and one managed local session.
+ *
+ * @param client Supplies the recording client.
+ * @returns The Inbox adapter and acquired session.
+ */
+async function guarded(client: Client) {
+  const inbox = new RemoteInbox(client as never);
+  const registry = new RemoteWorkRegistry(client as never);
+  const session = await registry.pickUp(
+    ShardIndex.single(),
+    create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run" }),
+  );
+  if (session === undefined) throw new Error("Expected a managed session.");
+  return { inbox, session };
+}
+
+/**
+ * Recreates the detached result of a remote Inbox read.
+ *
+ * @param message Supplies the authored row.
+ * @returns A domain row with its exact wire snapshot retained.
+ */
+function read(message: ReturnType<typeof domainMessage>) {
+  return DeliveryMessageCodec.decode(DeliveryMessageCodec.encode(message), message.shard);
 }
 
 describe("RemoteInbox direct behavior", () => {
@@ -46,31 +90,27 @@ describe("RemoteInbox direct behavior", () => {
     expect(client.writeOne.mock.calls[0]?.[0].keepUntil).toBeUndefined();
   });
 
-  it("sets the remote completion deadline from the application clock and preserves it on retry", async () => {
+  it("uses the server completion and exact read snapshot on retry", async () => {
     const client = new Client();
-    const inbox = new RemoteInbox(client as never);
-    const pending = domainMessage("completed");
-    let now = 120_000;
-    const previous = Time.setProvider({
-      currentTime: () => timestampFromDate(new Date(now)),
+    const { inbox, session } = await guarded(client);
+    const pending = read(domainMessage("completed"));
+    const completedWire = DeliveryMessageCodec.encode({
+      ...pending,
+      status: "DELIVERED",
+      keepUntil: new Date(125_000),
     });
-    try {
-      client.findOne.mockResolvedValueOnce(pending);
-      const completed = await inbox.markDelivered(pending);
-      if (completed === undefined) throw new Error("Expected remote completion.");
-      expect(completed.keepUntil).toEqual(new Date(125_000));
-      expect(client.writeOne.mock.calls[0]?.[0].keepUntil).toEqual(new Date(125_000));
+    client.acknowledgeGuarded.mockResolvedValue(completedWire);
 
-      now = 130_000;
-      client.findOne.mockResolvedValueOnce(completed);
-      expect(await inbox.markDelivered(pending)).toEqual(completed);
-      expect(client.writeOne).toHaveBeenCalledTimes(1);
-
-      client.findOne.mockResolvedValueOnce({ ...completed, signalId: "other" });
-      await expect(inbox.markDelivered(pending)).resolves.toBeUndefined();
-    } finally {
-      Time.setProvider(previous);
-    }
+    const first = await inbox.markDelivered(pending, undefined, session);
+    const second = await inbox.markDelivered(pending, undefined, session);
+    expect(first?.keepUntil).toEqual(new Date(125_000));
+    expect(second).toEqual(first);
+    expect(client.acknowledgeGuarded).toHaveBeenCalledTimes(2);
+    expect(client.acknowledgeGuarded.mock.calls[0]?.[1]).toEqual(
+      DeliveryMessageCodec.readWire(pending),
+    );
+    expect(client.writeOne).not.toHaveBeenCalled();
+    expect(client.findOne).not.toHaveBeenCalled();
   });
 
   it("returns complete tied-time pages without requiring another timestamp page", async () => {
@@ -165,35 +205,32 @@ describe("RemoteInbox direct behavior", () => {
     await expect(inbox.readMessage(first.id)).resolves.toBe(first);
   });
 
-  it("persists only an exact authoritative pending row as delivered", async () => {
+  it("returns a stale-row result without a raw write", async () => {
     const client = new Client();
-    const inbox = new RemoteInbox(client as never);
-    const pending = domainMessage("pending");
+    const { inbox, session } = await guarded(client);
+    const pending = read(domainMessage("pending"));
+    client.acknowledgeGuarded.mockResolvedValue(undefined);
 
-    client.findOne
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce({ ...pending, status: "DELIVERED" });
-    await expect(inbox.markDelivered(pending)).resolves.toBeUndefined();
-    await expect(inbox.markDelivered(pending)).resolves.toMatchObject({ status: "DELIVERED" });
-    client.findOne.mockResolvedValueOnce(pending);
-    client.writeOne.mockRejectedValueOnce(new Error("lost"));
-    await expect(inbox.markDelivered(pending)).rejects.toThrow("lost");
-    expect(client.writeOne).toHaveBeenCalledWith(
-      expect.objectContaining({ id: pending.id, status: "DELIVERED" }),
-      undefined,
-    );
+    await expect(inbox.markDelivered(pending, undefined, session)).resolves.toBeUndefined();
+    expect(client.acknowledgeGuarded).toHaveBeenCalledOnce();
+    expect(client.writeOne).not.toHaveBeenCalled();
   });
 
-  it("returns an exact already delivered acknowledgement idempotently", async () => {
+  it("accepts an idempotent completed result from the guarded service", async () => {
     const client = new Client();
-    const inbox = new RemoteInbox(client as never);
-    const pending = domainMessage("pending");
-    const delivered = { ...pending, status: "DELIVERED" as const };
+    const { inbox, session } = await guarded(client);
+    const pending = read(domainMessage("pending"));
+    client.acknowledgeGuarded.mockResolvedValue(
+      DeliveryMessageCodec.encode({
+        ...pending,
+        status: "DELIVERED",
+        keepUntil: new Date(5_000),
+      }),
+    );
 
-    client.findOne.mockResolvedValueOnce(delivered);
-    await expect(inbox.markDelivered(pending)).resolves.toMatchObject({
-      id: pending.id,
+    await expect(inbox.markDelivered(pending, undefined, session)).resolves.toMatchObject({
       status: "DELIVERED",
+      keepUntil: new Date(5_000),
     });
     expect(client.writeOne).not.toHaveBeenCalled();
   });
@@ -253,65 +290,68 @@ describe("RemoteInbox direct behavior", () => {
     expect(client.readPage).toHaveBeenCalledTimes(1);
   });
 
-  it("fences changed authoritative rows and returns an immutable delivered acknowledgement", async () => {
+  it("passes the exact read row to guarded acknowledgement", async () => {
     const client = new Client();
-    const inbox = new RemoteInbox(client as never);
-    const pending = domainMessage("pending");
-    const { signal: _signal, ...withoutSignal } = pending;
-    void _signal;
-    for (const current of [
-      { ...pending, id: { ...pending.id, value: "other" } },
-      { ...pending, signalId: "other" },
-      withoutSignal,
-    ]) {
-      client.findOne.mockResolvedValueOnce(current);
-      await expect(inbox.markDelivered(pending)).resolves.toBeUndefined();
-    }
-    client.findOne.mockResolvedValueOnce(pending);
-    const delivered = await inbox.markDelivered(pending, { timeoutMs: 50 });
-    expect(delivered).toMatchObject({ id: pending.id, status: "DELIVERED" });
+    const { inbox, session } = await guarded(client);
+    const pending = read(domainMessage("pending"));
+    client.acknowledgeGuarded.mockResolvedValue(
+      DeliveryMessageCodec.encode({
+        ...pending,
+        status: "DELIVERED",
+        keepUntil: new Date(5_000),
+      }),
+    );
+
+    const delivered = await inbox.markDelivered(pending, { timeoutMs: 50 }, session);
     expect(Object.isFrozen(delivered)).toBe(true);
-    expect(client.writeOne).toHaveBeenCalledWith(
-      expect.objectContaining({ id: pending.id, status: "DELIVERED" }),
+    expect(client.acknowledgeGuarded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "fixture-session",
+      }),
+      DeliveryMessageCodec.readWire(pending),
       { timeoutMs: 50 },
     );
-  });
-
-  it("removes a pending duplicate by ID without acknowledging it", async () => {
-    const client = new Client();
-    const inbox = new RemoteInbox(client as never);
-    const duplicate = domainMessage("duplicate");
-
-    await expect(inbox.removeDuplicate(duplicate)).resolves.toBe(true);
-    expect(client.removeOne).toHaveBeenCalledWith(duplicate, undefined);
-    expect(client.findOne).not.toHaveBeenCalled();
-    expect(client.writeOne).not.toHaveBeenCalled();
-  });
-
-  it("sends one removal by ID without reading a mutable row", async () => {
-    const client = new Client();
-    const inbox = new RemoteInbox(client as never);
-    const duplicate = domainMessage("duplicate");
-    await expect(inbox.removeDuplicate(duplicate)).resolves.toBe(true);
-    expect(client.removeOne).toHaveBeenCalledOnce();
     expect(client.findOne).not.toHaveBeenCalled();
   });
 
-  it("retains delivered rows until their finite expiration", async () => {
+  it("removes a pending duplicate only through its guarded RPC", async () => {
+    const client = new Client();
+    const { inbox, session } = await guarded(client);
+    const duplicate = read(domainMessage("duplicate"));
+    client.removeDuplicateGuarded.mockResolvedValue(true);
+
+    await expect(inbox.removeDuplicate(duplicate, undefined, session)).resolves.toBe(true);
+    expect(client.removeDuplicateGuarded).toHaveBeenCalledWith(
+      expect.anything(),
+      DeliveryMessageCodec.readWire(duplicate),
+      undefined,
+    );
+    expect(client.removeOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unbound worker session before dispatch", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
-    const retained = {
+    const duplicate = read(domainMessage("duplicate"));
+    await expect(inbox.removeDuplicate(duplicate)).rejects.toBeInstanceOf(DeliveryProtocolError);
+    expect(client.removeDuplicateGuarded).not.toHaveBeenCalled();
+    expect(client.removeOne).not.toHaveBeenCalled();
+  });
+
+  it("delegates delivered-row eligibility to the guarded server", async () => {
+    const client = new Client();
+    const { inbox, session } = await guarded(client);
+    const retained = read({
       ...domainMessage("retained"),
-      status: "DELIVERED" as const,
+      status: "DELIVERED",
       keepUntil: new Date(Date.now() + 60_000),
-    };
-    const expired = { ...retained, keepUntil: new Date(Date.now() - 1) };
+    });
+    client.removeDeliveredGuarded.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
 
-    await expect(inbox.removeDelivered(retained)).resolves.toBe(false);
-    await expect(inbox.removeDelivered(expired)).resolves.toBe(true);
-    expect(client.removeOne).toHaveBeenCalledWith(expired, undefined);
-
-    await expect(inbox.removeDelivered(expired)).resolves.toBe(true);
+    await expect(inbox.removeDelivered(retained, undefined, session)).resolves.toBe(false);
+    await expect(inbox.removeDelivered(retained, undefined, session)).resolves.toBe(true);
+    expect(client.removeDeliveredGuarded).toHaveBeenCalledTimes(2);
+    expect(client.removeOne).not.toHaveBeenCalled();
   });
 
   it("rejects malformed shard observations before they can change remote ownership", () => {

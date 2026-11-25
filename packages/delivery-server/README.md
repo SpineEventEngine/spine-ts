@@ -57,8 +57,8 @@ then defaults.
 ## 🧩 Embed the handlers
 
 Use `InMemoryDelivery.create()` when an application provides the Connect router and
-listener itself. Register the inbox, shard, and managed-session handlers on the router as
-shown below. The application manages the network listener and its lifecycle.
+listener itself. Register the inbox, guarded worker mutations, shard, and managed-session
+handlers on the router as shown below. The application manages the network listener and its lifecycle.
 
 An embedded consumer must declare and install direct dependencies on
 `@spine-event-engine/delivery-server`, `@connectrpc/connect`, and
@@ -72,6 +72,7 @@ delivery server's transitive dependencies.
 import { createRouterTransport } from "@connectrpc/connect";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
 import {
+  GuardedInboxService,
   InboxService,
   ManagedShardService,
   ShardService,
@@ -85,6 +86,7 @@ const delivery = InMemoryDelivery.create({
 });
 const transport = createRouterTransport((router) => {
   router.service(InboxService, delivery.inbox);
+  router.service(GuardedInboxService, delivery.guarded);
   router.service(ShardService, delivery.shards);
   router.service(ManagedShardService, delivery.managed);
 });

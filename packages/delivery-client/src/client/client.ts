@@ -25,6 +25,10 @@ import {
   AdminService,
   ShardService,
   ManagedShardService,
+  GuardedInboxService,
+  GuardedInboxRequestSchema,
+  GuardedInboxResultSchema,
+  type GuardedInboxResult,
   DeliveryShardPickupSchema,
   DeliveryShardPickupOutcomeSchema as PickupOutcomeSchema,
   type DeliveryShardPickupOutcome,
@@ -43,6 +47,7 @@ import {
   WriteMessagesSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import { InboxMessageIdSchema, ShardIndexSchema } from "@spine-event-engine/proto/delivery";
+import type { InboxMessage as WireInboxMessage } from "@spine-event-engine/proto/delivery";
 import {
   DeliveryOutcomeUnknownError,
   MAX_DELIVERY_RPC_BYTES,
@@ -94,6 +99,8 @@ export class DeliveryClient {
 
   readonly #managed: ReturnType<typeof createClient<typeof ManagedShardService>>;
 
+  readonly #guarded: ReturnType<typeof createClient<typeof GuardedInboxService>>;
+
   readonly #admin: ReturnType<typeof createClient<typeof AdminService>>;
 
   readonly #observing: ReturnType<typeof createClient<typeof ShardObservingService>>;
@@ -143,6 +150,7 @@ export class DeliveryClient {
     this.#inbox = createClient(InboxService, transport);
     this.#shards = createClient(ShardService, transport);
     this.#managed = createClient(ManagedShardService, transport);
+    this.#guarded = createClient(GuardedInboxService, transport);
     this.#admin = createClient(AdminService, transport);
     this.#observing = createClient(ShardObservingService, transport);
     this.#onCloseOwnedTransport = onCloseOwnedTransport;
@@ -779,6 +787,111 @@ export class DeliveryClient {
           DeliveryRequestCodec.callOptions(signal, timeoutMs),
         ),
     );
+  }
+
+  /**
+   * Completes an exact read row while its managed session remains current.
+   *
+   * @param session Supplies the managed session handle.
+   * @param expected Supplies the original wire row from a remote read.
+   * @param options Bounds or cancels the guarded mutation.
+   * @returns The stored completion, or `undefined` for a stale row.
+   */
+  async acknowledgeGuarded(
+    session: RemoteShardSession,
+    expected: WireInboxMessage,
+    options: DeliveryMutationOptions = {},
+  ): Promise<WireInboxMessage | undefined> {
+    const result = await this.#guardedMutation(
+      "ACKNOWLEDGE",
+      session,
+      expected,
+      options,
+      (request, call) => this.#guarded.acknowledge(request, call),
+    );
+    if (!result.matched) return undefined;
+    if (result.message === undefined) throw DeliveryRequestCodec.protocol();
+    return DeliveryMessageCodec.copyWire(result.message);
+  }
+
+  /**
+   * Removes an exact pending duplicate under its managed session.
+   *
+   * @param session Supplies the managed session handle.
+   * @param expected Supplies the original wire row.
+   * @param options Bounds or cancels the guarded mutation.
+   * @returns Whether the row matched or was already absent.
+   */
+  removeDuplicateGuarded(
+    session: RemoteShardSession,
+    expected: WireInboxMessage,
+    options: DeliveryMutationOptions = {},
+  ): Promise<boolean> {
+    return this.#guardedMutation(
+      "REMOVE_DUPLICATE_GUARDED",
+      session,
+      expected,
+      options,
+      (request, call) => this.#guarded.removePendingDuplicate(request, call),
+    ).then((result) => result.matched);
+  }
+
+  /**
+   * Removes an exact expired completion under its managed session.
+   *
+   * @param session Supplies the managed session handle.
+   * @param expected Supplies the original wire row.
+   * @param options Bounds or cancels the guarded mutation.
+   * @returns Whether the row matched or was already absent.
+   */
+  removeDeliveredGuarded(
+    session: RemoteShardSession,
+    expected: WireInboxMessage,
+    options: DeliveryMutationOptions = {},
+  ): Promise<boolean> {
+    return this.#guardedMutation(
+      "REMOVE_DELIVERED_GUARDED",
+      session,
+      expected,
+      options,
+      (request, call) => this.#guarded.removeExpiredDelivered(request, call),
+    ).then((result) => result.matched);
+  }
+
+  /**
+   * Sends one row and session atomically to the guarded Inbox service.
+   *
+   * @param operation Names the mutation for uncertain-outcome reporting.
+   * @param session Supplies the managed session handle.
+   * @param expected Supplies the exact read row.
+   * @param options Bounds or cancels the request.
+   * @param invoke Calls the selected guarded method.
+   * @returns The validated guarded result.
+   */
+  async #guardedMutation(
+    operation: DeliveryOutcomeUnknownError["operation"],
+    session: RemoteShardSession,
+    expected: WireInboxMessage,
+    options: DeliveryMutationOptions,
+    invoke: (
+      request: ReturnType<typeof create<typeof GuardedInboxRequestSchema>>,
+      call: ReturnType<typeof DeliveryRequestCodec.callOptions>,
+    ) => Promise<GuardedInboxResult>,
+  ): Promise<GuardedInboxResult> {
+    const request = create(GuardedInboxRequestSchema, {
+      session: this.#encodeSession(session),
+      expected: DeliveryMessageCodec.copyWire(expected),
+    });
+    DeliveryRequestCodec.requestBytes(GuardedInboxRequestSchema, request);
+    const result = await this.#mutation(
+      operation,
+      [DeliveryShardCodec.snapshot(session.shard)],
+      options,
+      (signal, timeoutMs) => invoke(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
+    );
+    DeliveryRequestCodec.responseBytes(GuardedInboxResultSchema, result);
+    if (!result.matched && result.message !== undefined) throw DeliveryRequestCodec.protocol();
+    return result;
   }
 
   /**

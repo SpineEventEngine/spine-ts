@@ -18,6 +18,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   InboxService,
   ManagedShardService,
+  GuardedInboxService,
   ShardService,
   type DeliveryShardPickupOutcome,
 } from "@spine-event-engine/proto/delivery-server";
@@ -32,11 +33,13 @@ import { RemoteInbox } from "../src/remote/adapters.js";
 import { domainMessage } from "./shared-fixtures.js";
 
 describe("in-memory delivery core response loss", () => {
-  it("persists an application-clock completion through the existing Inbox gRPC service", async () => {
+  it("persists an application-clock completion through the guarded Inbox service", async () => {
     const core = InMemoryDelivery.create();
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
+        router.service(ManagedShardService, core.managed);
+        router.service(GuardedInboxService, core.guarded);
       }),
     );
     const inbox = new RemoteInbox(client);
@@ -48,13 +51,19 @@ describe("in-memory delivery core response loss", () => {
     try {
       const received = await inbox.receive(pending);
       expect((await client.findOne(received.message.id))?.keepUntil).toBeUndefined();
-
-      const completed = await inbox.markDelivered(received.message);
+      const registry = new RemoteWorkRegistry(client);
+      const session = await registry.pickUp(
+        ShardIndex.single(),
+        create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run" }),
+      );
+      const read = await client.findOne(received.message.id);
+      if (session === undefined || read === undefined) throw new Error("Expected a live read.");
+      const completed = await inbox.markDelivered(read, undefined, session);
       expect(completed?.keepUntil).toEqual(new Date(125_000));
       expect((await client.findOne(received.message.id))?.keepUntil).toEqual(new Date(125_000));
 
       now = 130_000;
-      expect(await inbox.markDelivered(received.message)).toEqual(completed);
+      expect(await inbox.markDelivered(read, undefined, session)).toEqual(completed);
       expect((await client.findOne(received.message.id))?.keepUntil).toEqual(new Date(125_000));
     } finally {
       Time.setProvider(previous);
@@ -66,6 +75,8 @@ describe("in-memory delivery core response loss", () => {
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
+        router.service(ManagedShardService, core.managed);
+        router.service(GuardedInboxService, core.guarded);
       }),
     );
     const inbox = new RemoteInbox(client);
@@ -80,21 +91,15 @@ describe("in-memory delivery core response loss", () => {
     };
 
     await client.writeOne(retained);
-    await expect(inbox.markDelivered(retained)).resolves.toMatchObject({ status: "DELIVERED" });
+    await client.writeOne({ ...retained, status: "DELIVERED" });
     await client.writeOne(duplicate);
     const shard = ShardIndex.single();
-    const session = { kind: "EXCLUSIVE" as const, shard };
     const onMessage = vi.fn();
     const delivery = new DeliveryBuilder()
       .withContext({ name: "RemoteRetainedDuplicate", multitenant: false })
       .withStorageFactory({} as never)
       .withInbox(inbox)
-      .withWorkRegistry({
-        sessionKind: "EXCLUSIVE",
-        pickUp: () => Promise.resolve(session),
-        validateOwnership: () => Promise.resolve(session),
-        release: () => Promise.resolve(true),
-      })
+      .withWorkRegistry(new RemoteWorkRegistry(client))
       .build();
 
     await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
@@ -107,6 +112,8 @@ describe("in-memory delivery core response loss", () => {
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
+        router.service(ManagedShardService, core.managed);
+        router.service(GuardedInboxService, core.guarded);
       }),
     );
     const inbox = new RemoteInbox(client);
@@ -119,18 +126,12 @@ describe("in-memory delivery core response loss", () => {
     await client.writeOne(pending);
     expect((await client.findOne(expired.id))?.keepUntil?.getTime()).toBeLessThan(Date.now());
     const shard = ShardIndex.single();
-    const session = { kind: "EXCLUSIVE" as const, shard };
     const onMessage = vi.fn();
     const delivery = new DeliveryBuilder()
       .withContext({ name: "RemoteExpiredRetained", multitenant: false })
       .withStorageFactory({} as never)
       .withInbox(inbox)
-      .withWorkRegistry({
-        sessionKind: "EXCLUSIVE",
-        pickUp: () => Promise.resolve(session),
-        validateOwnership: () => Promise.resolve(session),
-        release: () => Promise.resolve(true),
-      })
+      .withWorkRegistry(new RemoteWorkRegistry(client))
       .build();
 
     await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
@@ -143,6 +144,8 @@ describe("in-memory delivery core response loss", () => {
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
+        router.service(ManagedShardService, core.managed);
+        router.service(GuardedInboxService, core.guarded);
       }),
     );
     const inbox = new RemoteInbox(client);
@@ -166,7 +169,6 @@ describe("in-memory delivery core response loss", () => {
     await client.writeOne({ ...expired, status: "DELIVERED" });
     await client.writeOne(later);
     const shard = ShardIndex.single();
-    const session = { kind: "EXCLUSIVE" as const, shard };
     const onMessage = vi.fn((message: InboxMessage) => {
       void message;
     });
@@ -174,12 +176,7 @@ describe("in-memory delivery core response loss", () => {
       .withContext({ name: "RemovedRemoteCursor", multitenant: false })
       .withStorageFactory({} as never)
       .withInbox(inbox)
-      .withWorkRegistry({
-        sessionKind: "EXCLUSIVE",
-        pickUp: () => Promise.resolve(session),
-        validateOwnership: () => Promise.resolve(session),
-        release: () => Promise.resolve(true),
-      })
+      .withWorkRegistry(new RemoteWorkRegistry(client))
       .withPageSize(2)
       .build();
 
@@ -193,6 +190,8 @@ describe("in-memory delivery core response loss", () => {
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
+        router.service(ManagedShardService, core.managed);
+        router.service(GuardedInboxService, core.guarded);
       }),
     );
     const inbox = new RemoteInbox(client);
@@ -210,7 +209,7 @@ describe("in-memory delivery core response loss", () => {
         keepUntil: new Date(Date.now() - 60_000),
       };
       await client.writeOne(expired);
-      await inbox.markDelivered(expired);
+      await client.writeOne({ ...expired, status: "DELIVERED" });
     }
     const later = {
       ...domainMessage("after-removed-page"),
@@ -219,7 +218,6 @@ describe("in-memory delivery core response loss", () => {
     };
     await client.writeOne(later);
     const shard = ShardIndex.single();
-    const session = { kind: "EXCLUSIVE" as const, shard };
     const onMessage = vi.fn((message: InboxMessage) => {
       void message;
     });
@@ -227,12 +225,7 @@ describe("in-memory delivery core response loss", () => {
       .withContext({ name: "AllRemovedRemotePage", multitenant: false })
       .withStorageFactory({} as never)
       .withInbox(inbox)
-      .withWorkRegistry({
-        sessionKind: "EXCLUSIVE",
-        pickUp: () => Promise.resolve(session),
-        validateOwnership: () => Promise.resolve(session),
-        release: () => Promise.resolve(true),
-      })
+      .withWorkRegistry(new RemoteWorkRegistry(client))
       .withPageSize(2)
       .build();
 
@@ -248,6 +241,8 @@ describe("in-memory delivery core response loss", () => {
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
+        router.service(ManagedShardService, core.managed);
+        router.service(GuardedInboxService, core.guarded);
       }),
     );
     const inbox = new RemoteInbox(client);
@@ -259,7 +254,7 @@ describe("in-memory delivery core response loss", () => {
         keepUntil: new Date(Date.now() - 60_000),
       };
       await client.writeOne(expired);
-      await inbox.markDelivered(expired);
+      await client.writeOne({ ...expired, status: "DELIVERED" });
     }
     const later = {
       ...domainMessage("after-initial-removal"),
@@ -268,7 +263,6 @@ describe("in-memory delivery core response loss", () => {
     };
     await client.writeOne(later);
     const shard = ShardIndex.single();
-    const session = { kind: "EXCLUSIVE" as const, shard };
     const onMessage = vi.fn((message: InboxMessage) => {
       void message;
     });
@@ -276,12 +270,7 @@ describe("in-memory delivery core response loss", () => {
       .withContext({ name: "InitialRemovedRemotePage", multitenant: false })
       .withStorageFactory({} as never)
       .withInbox(inbox)
-      .withWorkRegistry({
-        sessionKind: "EXCLUSIVE",
-        pickUp: () => Promise.resolve(session),
-        validateOwnership: () => Promise.resolve(session),
-        release: () => Promise.resolve(true),
-      })
+      .withWorkRegistry(new RemoteWorkRegistry(client))
       .withPageSize(2)
       .build();
 
@@ -296,6 +285,8 @@ describe("in-memory delivery core response loss", () => {
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
+        router.service(ManagedShardService, core.managed);
+        router.service(GuardedInboxService, core.guarded);
       }),
     );
     const inbox = new RemoteInbox(client);
@@ -318,7 +309,6 @@ describe("in-memory delivery core response loss", () => {
     await client.writeOne(duplicate);
     await client.writeOne(later);
     const shard = ShardIndex.single();
-    const session = { kind: "EXCLUSIVE" as const, shard };
     const onMessage = vi.fn((message: InboxMessage) => {
       void message;
     });
@@ -326,12 +316,7 @@ describe("in-memory delivery core response loss", () => {
       .withContext({ name: "DuplicateRemoteCursor", multitenant: false })
       .withStorageFactory({} as never)
       .withInbox(inbox)
-      .withWorkRegistry({
-        sessionKind: "EXCLUSIVE",
-        pickUp: () => Promise.resolve(session),
-        validateOwnership: () => Promise.resolve(session),
-        release: () => Promise.resolve(true),
-      })
+      .withWorkRegistry(new RemoteWorkRegistry(client))
       .withPageSize(2)
       .build();
 
@@ -348,26 +333,42 @@ describe("in-memory delivery core response loss", () => {
     const normal = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
+        router.service(ManagedShardService, core.managed);
+        router.service(GuardedInboxService, core.guarded);
       }),
     );
     const pending = domainMessage("lost-delivered");
     await normal.writeOne(pending);
-    const lost = new RemoteInbox(
-      DeliveryClient.usingTransport(
-        createRouterTransport((router) => {
-          router.service(InboxService, {
-            ...core.inbox,
-            writeOne: async (request, context) => {
-              await core.inbox.writeOne(request, context);
-              throw new ConnectError("lost", Code.Unavailable);
-            },
-          });
-        }),
-      ),
+    let acknowledgements = 0;
+    const lostClient = DeliveryClient.usingTransport(
+      createRouterTransport((router) => {
+        router.service(InboxService, core.inbox);
+        router.service(ManagedShardService, core.managed);
+        router.service(GuardedInboxService, {
+          ...core.guarded,
+          acknowledge: async (request, context) => {
+            acknowledgements += 1;
+            const result = await core.guarded.acknowledge(request, context);
+            if (acknowledgements === 1) throw new ConnectError("lost", Code.Unavailable);
+            return result;
+          },
+        });
+      }),
     );
-
-    await expect(lost.markDelivered(pending)).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
-    await expect(lost.markDelivered(pending)).resolves.toMatchObject({ status: "DELIVERED" });
+    const registry = new RemoteWorkRegistry(lostClient);
+    const session = await registry.pickUp(
+      ShardIndex.single(),
+      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run" }),
+    );
+    const read = await lostClient.findOne(pending.id);
+    if (session === undefined || read === undefined) throw new Error("Expected a live read.");
+    const lost = new RemoteInbox(lostClient);
+    await expect(lost.markDelivered(read, undefined, session)).rejects.toBeInstanceOf(
+      DeliveryOutcomeUnknownError,
+    );
+    await expect(lost.markDelivered(read, undefined, session)).resolves.toMatchObject({
+      status: "DELIVERED",
+    });
   });
 
   it("makes a committed write reconcilable after its response is lost", async () => {

@@ -276,7 +276,10 @@ export class DeliveryOutcomeUnknownError extends Error {
     | "PICK_UP_FOR_DELIVERY"
     | "RENEW_SHARD"
     | "RELEASE_SHARD"
-    | "RELEASE_EXPIRED";
+    | "RELEASE_EXPIRED"
+    | "ACKNOWLEDGE"
+    | "REMOVE_DUPLICATE_GUARDED"
+    | "REMOVE_DELIVERED_GUARDED";
 
   /**
    * Identifies the observation required to reconcile the mutation outcome.
@@ -297,38 +300,81 @@ export class DeliveryOutcomeUnknownError extends Error {
     operation: DeliveryOutcomeUnknownError["operation"],
     reconciliation: readonly string[] | readonly ShardIndex[] | "ALL_SHARDS",
   ) {
-    super(
-      operation === "WRITE_ONE" || operation === "WRITE_MANY"
-        ? "Delivery write outcome is unknown."
-        : operation === "REMOVE_ONE" || operation === "REMOVE_MANY"
-          ? "Delivery removal outcome is unknown."
-          : "Delivery shard operation outcome is unknown.",
-    );
+    super(DeliveryOutcomeValues.message(operation));
     this.name = "DeliveryOutcomeUnknownError";
     this.operation = operation;
-    if (typeof reconciliation === "string")
-      this.reconciliation = Object.freeze({ kind: "OBSERVE_SHARD", scope: reconciliation });
-    else if (
-      operation === "PICK_UP_SHARD" ||
-      operation === "PICK_UP_FOR_DELIVERY" ||
-      operation === "RENEW_SHARD" ||
-      operation === "RELEASE_SHARD"
+    this.reconciliation = DeliveryOutcomeValues.reconciliation(operation, reconciliation);
+  }
+}
+
+/**
+ * Builds safe labels and reconciliation scopes for unknown mutation outcomes.
+ */
+const DeliveryOutcomeValues = Object.freeze({
+  /**
+   * Returns a safe error message for the operation.
+   *
+   * @param operation Names the uncertain mutation.
+   * @returns A message without server-provided data.
+   */
+  message(operation: DeliveryOutcomeUnknownError["operation"]): string {
+    if (operation === "WRITE_ONE" || operation === "WRITE_MANY")
+      return "Delivery write outcome is unknown.";
+    if (
+      operation === "REMOVE_ONE" ||
+      operation === "REMOVE_MANY" ||
+      operation === "REMOVE_DUPLICATE_GUARDED" ||
+      operation === "REMOVE_DELIVERED_GUARDED"
     )
-      this.reconciliation = Object.freeze({
+      return "Delivery removal outcome is unknown.";
+    return "Delivery shard operation outcome is unknown.";
+  },
+
+  /**
+   * Builds the observation required after an uncertain mutation.
+   *
+   * @param operation Names the uncertain mutation.
+   * @param input Supplies affected messages or shards.
+   * @returns A detached safe reconciliation scope.
+   */
+  reconciliation(
+    operation: DeliveryOutcomeUnknownError["operation"],
+    input: readonly string[] | readonly ShardIndex[] | "ALL_SHARDS",
+  ): DeliveryOutcomeUnknownError["reconciliation"] {
+    if (typeof input === "string") return Object.freeze({ kind: "OBSERVE_SHARD", scope: input });
+    if (DeliveryOutcomeValues.shardOperation(operation))
+      return Object.freeze({
         kind: "OBSERVE_SHARD",
         shards: Object.freeze(
-          (reconciliation as readonly ShardIndex[]).map(
+          (input as readonly ShardIndex[]).map(
             (value) => new ShardIndex(value.index, value.ofTotal),
           ),
         ),
       });
-    else
-      this.reconciliation = Object.freeze({
-        kind: "FIND_MESSAGE",
-        messageIds: Object.freeze([...(reconciliation as readonly string[])]),
-      });
-  }
-}
+    return Object.freeze({
+      kind: "FIND_MESSAGE",
+      messageIds: Object.freeze([...(input as readonly string[])]),
+    });
+  },
+
+  /**
+   * Checks whether one operation needs shard observation.
+   *
+   * @param operation Names the uncertain mutation.
+   * @returns Whether shard observation is required.
+   */
+  shardOperation(operation: DeliveryOutcomeUnknownError["operation"]): boolean {
+    return (
+      operation === "PICK_UP_SHARD" ||
+      operation === "PICK_UP_FOR_DELIVERY" ||
+      operation === "RENEW_SHARD" ||
+      operation === "RELEASE_SHARD" ||
+      operation === "ACKNOWLEDGE" ||
+      operation === "REMOVE_DUPLICATE_GUARDED" ||
+      operation === "REMOVE_DELIVERED_GUARDED"
+    );
+  },
+});
 
 /**
  * Options for constructing a delivery client.

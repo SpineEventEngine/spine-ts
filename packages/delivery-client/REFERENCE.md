@@ -79,16 +79,29 @@ and `whenReleased`. Admin observations expose the same precision in
 `lastPicked` when populated. A caller can convert a timestamp to a JavaScript
 `Date` for display. Keep the original seconds and nanoseconds for comparisons.
 
-`RemoteInbox` and `RemoteWorkRegistry` satisfy the server delivery-builder
-ports. `RemoteInbox` rereads the exact pending remote row before acknowledgement
-and upserts that exact row as `DELIVERED`. An exact retained `DELIVERED` row is
-an idempotent acknowledgement after a lost response. Expired-row cleanup first
-checks the remote snapshot and then sends a separate removal request; it is
-best effort, not an atomic compare-and-delete guarantee. It creates no local attempt history,
-receipt, fingerprint, or quarantine record. Shard ownership excludes concurrent
-delivery and delivered rows are the deduplication fact. This
-package does not add authentication, authorization, durability, exactly-once
-effects, or a production topology.
+## Worker acknowledgement and cleanup
+
+A remote worker sends its current session and the exact inbox row it read when
+acknowledging a Command, removing a pending duplicate, or removing an expired
+completion. The server checks both in the same operation as the change.
+
+When calling the remote inbox adapter directly, pass the object returned by a
+read. The client keeps the original Protobuf row with that object, including
+fields unknown to the application. Reconstructing a row from its TypeScript
+properties loses that evidence, so the client rejects such a mutation.
+
+Suppose a worker reads row 7 and enters its Command handler. Another caller
+replaces row 7 before the handler returns. Even a one-nanosecond difference in
+the stored timestamp identifies a different row for this check. The server
+leaves the replacement intact. If the first acknowledgement succeeded and
+only its reply was lost, repeating it for the same row preserves the original
+retention deadline.
+
+Workers renew while handlers run. With the default 60-second session, a
+healthy worker renews every 20 seconds. If its connection fails, the server
+can grant the shard to another worker after expiry. An Entity write already
+sent by the first handler may still complete. A handler that calls an external
+system needs to account for a repeated Command.
 
 Each delivery read requests one bounded logical shard page. Status filtering
 advances through bounded raw pages by their last received timestamp within one
@@ -99,20 +112,15 @@ scan. The server
 delivery policy compares pending rows with
 delivered rows in the logical page and its bounded recent-delivery cache, then
 removes exact duplicates without treating them as delivered acknowledgements.
-Remote duplicate removal compares the current snapshot before sending the
-existing best-effort removal request.
+The server compares the worker's exact read snapshot within the removal
+operation. If a later write replaced the duplicate, the later row survives.
 
-Local retention filtering uses the client's clock for both retained-row
-duplicate recognition and cleanup eligibility. It skips cleanup requests for
-rows whose retention deadline is still in the future. This does not synchronize
-client and server clocks or change the remote server's mutation checks.
-
-Remote reception writes a pending row without `keep_until`. After delivery, the
-application reads the row, sets `DELIVERED` and `keep_until` to its current time
-plus five seconds, and sends the existing Inbox write request. A repeated
-acknowledgement of a matching delivered row returns its stored deadline. The
-service write is an upsert, so the read and write do not form a conditional
-transition. A write with an unknown outcome keeps its existing error behavior.
+Remote reception writes a pending row without `keep_until`. A successful
+guarded acknowledgement sets the status to `DELIVERED` and records the
+server's acknowledgement time plus five seconds in `keep_until`. Before
+deleting a completion, the server checks its deadline and that it still
+matches the worker's read. A quiet shard can retain a completion past the
+deadline until another drain visits it.
 
 ## Remote delivery in an environment
 

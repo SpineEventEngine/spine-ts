@@ -89,11 +89,13 @@ export interface DeliveryInbox {
    *
    * @param message Supplies the expected pending row snapshot.
    * @param options Propagates cancellation and a delivery deadline.
+   * @param session Supplies the current exclusive fence to remote adapters.
    * @returns The delivered row, or `undefined` when durable acknowledgement failed.
    */
   markDelivered(
     message: InboxMessage,
     options?: DeliveryOperationOptions,
+    session?: DeliveryWorkSession,
   ): Promise<InboxMessage | undefined>;
 
   /**
@@ -101,9 +103,14 @@ export interface DeliveryInbox {
    *
    * @param message Supplies the pending duplicate snapshot.
    * @param options Propagates cancellation and a delivery deadline.
+   * @param session Supplies the current exclusive fence to remote adapters.
    * @returns Whether the adapter deleted the ID.
    */
-  removeDuplicate(message: InboxMessage, options?: DeliveryOperationOptions): Promise<boolean>;
+  removeDuplicate(
+    message: InboxMessage,
+    options?: DeliveryOperationOptions,
+    session?: DeliveryWorkSession,
+  ): Promise<boolean>;
 
   /**
    * Removes one eligible delivered message by storage ID.
@@ -112,9 +119,14 @@ export interface DeliveryInbox {
    *
    * @param message Supplies the expected delivered row snapshot.
    * @param options Propagates cancellation and a delivery deadline.
+   * @param session Supplies the current exclusive fence to remote adapters.
    * @returns Whether the adapter completed its supported removal operation.
    */
-  removeDelivered?(message: InboxMessage, options?: DeliveryOperationOptions): Promise<boolean>;
+  removeDelivered?(
+    message: InboxMessage,
+    options?: DeliveryOperationOptions,
+    session?: DeliveryWorkSession,
+  ): Promise<boolean>;
 }
 
 /**
@@ -127,6 +139,22 @@ export interface DeliveryWorkRegistry {
    * Session fence kind this registry issues; ports supplied together must agree.
    */
   readonly sessionKind: DeliveryWorkSession["kind"];
+
+  /**
+   * Creates a distinct worker identity for one independent remote run.
+   *
+   * @param worker Supplies the configured node identity.
+   * @returns The worker identity used throughout this run.
+   */
+  workerForRun?(worker: WorkerId): WorkerId;
+
+  /**
+   * Returns the cadence for renewing one remote session during a handler.
+   *
+   * @param session Supplies the acquired session.
+   * @returns Milliseconds between renewal attempts, when required.
+   */
+  renewalIntervalMs?(session: DeliveryWorkSession): number | undefined;
 
   /**
    * Acquires one shard work fence when it is available.

@@ -19,6 +19,7 @@ import {
   AdminService,
   InboxService,
   ManagedShardService,
+  GuardedInboxService,
   ShardObservingService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
@@ -26,6 +27,7 @@ import {
 import { AdminPublisher } from "../admin/admin-service.js";
 import { InMemoryDeliveryState } from "../core/in-memory-delivery-state.js";
 import { InboxHandlers } from "../core/inbox-service.js";
+import { GuardedInboxRuntime } from "../core/guarded-inbox-service.js";
 import { MutationAdmission } from "../core/mutation-admission.js";
 import { ShardSessionRuntime } from "../core/shard-service.js";
 import { ShardObserving } from "../core/shard-observing-service.js";
@@ -52,6 +54,11 @@ export interface DeliveryAssembly {
    * Serves typed raw and managed delivery sessions.
    */
   readonly managed: ServiceImpl<typeof ManagedShardService>;
+
+  /**
+   * Serves session-guarded Inbox acknowledgement and cleanup.
+   */
+  readonly guarded: ServiceImpl<typeof GuardedInboxService>;
 
   /**
    * Streams advisory notifications for free pending shards.
@@ -111,6 +118,52 @@ export const DeliveryAssembly: Readonly<{
       admin.publish(shard);
       observing.changed(shard);
     };
+    const { sessions, guarded } = DeliverySessionAssembly.create(
+      state,
+      admission,
+      configuration,
+      onShardTransition,
+      onStoredChange,
+      onWorkChange,
+    );
+    return Object.freeze({
+      inbox: InboxHandlers.create(state, admission, onStoredChange, onWorkChange),
+      shards: sessions.raw,
+      managed: sessions.managed,
+      guarded: guarded.service,
+      admin: admin.service,
+      observing: observing.service,
+      closeAdmission: admission.close.bind(admission),
+      closeAdmin: admin.close.bind(admin),
+      closeObserving: observing.close.bind(observing),
+      closeSessions: sessions.close.bind(sessions),
+    });
+  },
+});
+
+/**
+ * Constructs the session and guarded Inbox handlers over one admission queue.
+ */
+const DeliverySessionAssembly = Object.freeze({
+  /**
+   * Creates coupled session and guarded Inbox handlers.
+   *
+   * @param state Stores canonical rows and sessions.
+   * @param admission Serializes mutations.
+   * @param configuration Supplies the session lifetime.
+   * @param onShardTransition Publishes session changes.
+   * @param onStoredChange Publishes retained row changes.
+   * @param onWorkChange Publishes pending work changes.
+   * @returns The coupled handlers.
+   */
+  create(
+    state: InMemoryDeliveryState,
+    admission: MutationAdmission,
+    configuration: DeliveryAssemblyConfiguration,
+    onShardTransition: (shard: ShardIndex) => void,
+    onStoredChange: (shard: ShardIndex) => void,
+    onWorkChange: (shard: ShardIndex) => void,
+  ) {
     const sessions = new ShardSessionRuntime(
       state,
       admission,
@@ -119,17 +172,15 @@ export const DeliveryAssembly: Readonly<{
       onShardTransition,
       () => Time.monotonicTime(),
     );
-    return Object.freeze({
-      inbox: InboxHandlers.create(state, admission, onStoredChange, onWorkChange),
-      shards: sessions.raw,
-      managed: sessions.managed,
-      admin: admin.service,
-      observing: observing.service,
-      closeAdmission: admission.close.bind(admission),
-      closeAdmin: admin.close.bind(admin),
-      closeObserving: observing.close.bind(observing),
-      closeSessions: sessions.close.bind(sessions),
-    });
+    const guarded = new GuardedInboxRuntime(
+      state,
+      admission,
+      sessions,
+      () => Time.currentTime(),
+      onStoredChange,
+      onWorkChange,
+    );
+    return { sessions, guarded };
   },
 });
 

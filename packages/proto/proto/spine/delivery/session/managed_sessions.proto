@@ -20,6 +20,7 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "spine/options.proto";
 import "spine/server/delivery/delivery.proto";
+import "spine/server/delivery/inbox.proto";
 
 option java_multiple_files = true;
 option (type_url_prefix) = "type.spine.io";
@@ -39,6 +40,22 @@ service ManagedShardService {
   // Releases only the live session named by the complete handle. A previously issued
   // handle for the same session ID remains valid after a completed renewal.
   rpc ReleaseShardSession(DeliverySessionHandle) returns (google.protobuf.Empty);
+}
+
+// Changes an Inbox row only while its managed session and exact read row remain current.
+// A lost session fails with FAILED_PRECONDITION; a changed row returns matched=false.
+service GuardedInboxService {
+  // Completes the exact pending row and retains the first completion deadline on retry.
+  // The service checks the session and row together before changing the stored row.
+  rpc Acknowledge(GuardedInboxRequest) returns (GuardedInboxResult);
+
+  // Deletes an exact pending row identified as a duplicate by the worker.
+  // A retry after deletion succeeds while the same session remains live.
+  rpc RemovePendingDuplicate(GuardedInboxRequest) returns (GuardedInboxResult);
+
+  // Deletes an exact delivered row after its completion deadline.
+  // A retry after deletion succeeds while the same session remains live.
+  rpc RemoveExpiredDelivered(GuardedInboxRequest) returns (GuardedInboxResult);
 }
 
 // Identifies one pickup attempt made by a stable worker.
@@ -92,4 +109,23 @@ message DeliveryShardBusy {
 
   // Reports the retained full-precision pickup or renewal wall time.
   google.protobuf.Timestamp when_picked = 2 [(required) = true];
+}
+
+// Carries a live session and the unchanged wire row read by its worker.
+message GuardedInboxRequest {
+  // Identifies the managed session authorizing this row mutation.
+  DeliverySessionHandle session = 1 [(required) = true];
+
+  // Preserves every field of the read row, including unknown fields and nanoseconds.
+  spine.server.delivery.InboxMessage expected = 2 [(required) = true];
+}
+
+// Reports whether the guarded row mutation applied or was already completed.
+message GuardedInboxResult {
+  // Is true when acknowledgement found its earlier completion, or a cleanup
+  // changed the exact row or found it already absent. A stale row returns false.
+  bool matched = 1;
+
+  // Returns the retained completed row after a successful acknowledgement.
+  spine.server.delivery.InboxMessage message = 2;
 }

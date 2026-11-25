@@ -18,6 +18,7 @@ import { DurationSchema, TimestampSchema, type Timestamp } from "@bufbuild/proto
 import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import {
   DeliverySessionHandleSchema,
+  type DeliverySessionHandle,
   DeliveryShardBusySchema,
   DeliveryShardPickupOutcomeSchema as PickupOutcomeSchema,
   ExpiredSessionSchema,
@@ -200,6 +201,23 @@ export class ShardSessionRuntime {
     const current = this.#live(shard);
     if (SessionValues.matches(current, worker, id) && current.revision === revision)
       this.#release(shard);
+  }
+
+  /**
+   * Validates a live managed session during an admitted Inbox mutation.
+   *
+   * @param handle Supplies the worker's complete session handle.
+   * @returns The shard held by the matching session.
+   */
+  requireManaged(handle: DeliverySessionHandle): ShardIndex {
+    const shard = SessionValues.requireShard(handle.shard);
+    const worker = SessionValues.requireWorker(handle.worker);
+    const id = SessionValues.requireId(handle.sessionId);
+    this.#requireHandle(handle);
+    const current = this.#live(shard);
+    if (!SessionValues.matches(current, worker, id) || current.kind !== "MANAGED")
+      throw SessionValues.lost();
+    return shard;
   }
 
   /**

@@ -18,10 +18,12 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   InboxService,
   ManagedShardService,
+  GuardedInboxService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 
 import { InboxHandlers } from "./inbox-service.js";
+import { GuardedInboxRuntime } from "./guarded-inbox-service.js";
 import { InMemoryDeliveryState } from "./in-memory-delivery-state.js";
 import { MutationAdmission } from "./mutation-admission.js";
 import { ShardSessionRuntime } from "./shard-service.js";
@@ -89,6 +91,11 @@ export interface DeliveryCore {
   readonly managed: ServiceImpl<typeof ManagedShardService>;
 
   /**
+   * Serves session-guarded Inbox mutations.
+   */
+  readonly guarded: ServiceImpl<typeof GuardedInboxService>;
+
+  /**
    * Cancels pending expiry timers.
    */
   close(): void;
@@ -133,10 +140,12 @@ export const InMemoryDelivery: Readonly<{
       undefined,
       options.monotonicNow ?? (() => Time.monotonicTime()),
     );
+    const guarded = new GuardedInboxRuntime(state, admission, sessions, now);
     return Object.freeze({
       inbox: InboxHandlers.create(state, admission),
       shards: sessions.raw,
       managed: sessions.managed,
+      guarded: guarded.service,
       close: sessions.close.bind(sessions),
     });
   },

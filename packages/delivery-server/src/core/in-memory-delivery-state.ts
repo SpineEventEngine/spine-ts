@@ -13,6 +13,7 @@
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
+import { createHash } from "node:crypto";
 import {
   InboxMessageStatus,
   type InboxMessage,
@@ -89,6 +90,8 @@ export class InMemoryDeliveryState {
 
   readonly #messageBytes = new Map<string, number>();
 
+  readonly #acknowledgements = new Map<string, string>();
+
   readonly #buckets = new Map<string, ShardBucket>();
 
   readonly #trackedKeys = new Set<string>();
@@ -140,11 +143,33 @@ export class InMemoryDeliveryState {
     const current = this.messages.get(key);
     if (current === undefined) return false;
     this.messages.delete(key);
+    this.#acknowledgements.delete(key);
     this.#retainedBytes -= this.#messageBytes.get(key) ?? 0;
     this.#messageBytes.delete(key);
     this.#removeFromBucket(current);
     this.#pruneBucket(DeliveryShards.key(this.#requiredShard(current)));
     return true;
+  }
+
+  /**
+   * Records the exact wire transition performed by a guarded acknowledgement.
+   *
+   * @param key Identifies the retained row.
+   * @param expected Encodes its original pending snapshot.
+   */
+  rememberAcknowledgement(key: string, expected: Uint8Array): void {
+    this.#acknowledgements.set(key, DeliveryBytes.digest(expected));
+  }
+
+  /**
+   * Checks a retry against the exact first guarded completion.
+   *
+   * @param key Identifies the retained row.
+   * @param expected Encodes its original pending snapshot.
+   * @returns Whether the first completion remains unchanged.
+   */
+  sameAcknowledgement(key: string, expected: Uint8Array): boolean {
+    return this.#acknowledgements.get(key) === DeliveryBytes.digest(expected);
   }
 
   /**
@@ -317,6 +342,7 @@ export class InMemoryDeliveryState {
   }
 
   #replace(key: string, message: InboxMessage, bytes: number): void {
+    this.#acknowledgements.delete(key);
     const prior = this.messages.get(key);
     if (prior !== undefined) {
       this.#retainedBytes -= this.#messageBytes.get(key) ?? 0;
@@ -368,6 +394,21 @@ export class InMemoryDeliveryState {
     return message.id.index;
   }
 }
+
+/**
+ * Digests encoded row snapshots without retaining a second payload.
+ */
+const DeliveryBytes = Object.freeze({
+  /**
+   * Calculates one exact wire encoding's digest.
+   *
+   * @param value Supplies the encoding.
+   * @returns Its fixed-size SHA-256 digest.
+   */
+  digest(value: Uint8Array): string {
+    return createHash("sha256").update(value).digest("hex");
+  },
+});
 
 /**
  * Maintains the per-shard receive-time, version, and UTF-8 ID order.

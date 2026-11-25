@@ -29,6 +29,7 @@ import {
   InboxService,
   ShardService,
   ManagedShardService,
+  GuardedInboxService,
 } from "@spine-event-engine/proto/delivery-server";
 import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
 import {
@@ -322,6 +323,7 @@ class DeliveryListener {
           router.service(InboxService, this.#assembly.inbox);
           router.service(ShardService, this.#assembly.shards);
           router.service(ManagedShardService, this.#assembly.managed);
+          router.service(GuardedInboxService, this.#assembly.guarded);
           router.service(AdminService, this.#assembly.admin);
         },
       }),

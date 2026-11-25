@@ -33,6 +33,8 @@ import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import {
   OptionalInboxMessageSchema,
   PageOfMessagesSchema,
+  GuardedInboxResultSchema,
+  DeliverySessionHandleSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
   InboxMessageIdSchema,
@@ -40,6 +42,7 @@ import {
   InboxLabel,
   InboxMessageStatus,
   ShardIndexSchema,
+  WorkerIdSchema,
 } from "@spine-event-engine/proto/delivery";
 import { describe, expect, it } from "vitest";
 import {
@@ -47,6 +50,7 @@ import {
   DeliveryPagingError,
   DeliveryProtocolError,
   RemoteInbox,
+  RemoteWorkRegistry,
 } from "../src/index.js";
 import {
   DeliveryMessageCodec,
@@ -79,7 +83,7 @@ describe("delivery codec and immutable snapshots", () => {
     expect(new RemoteInbox(client)).toBeInstanceOf(RemoteInbox);
   });
 
-  it("writes, pages, and directly removes only an exact pending remote row", async () => {
+  it("writes, pages, and directly removes a row through the low-level storage API", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport, { pageSize: 2 });
     const inbox = new RemoteInbox(client);
@@ -100,36 +104,47 @@ describe("delivery codec and immutable snapshots", () => {
     fake.reply(create(OptionalInboxMessageSchema, { message: currentWire }));
     const current = await client.findOne({ value: "work", shard: ShardIndex.single() });
     if (current === undefined) throw new Error("Expected remote message.");
-    fake.reply(create(OptionalInboxMessageSchema, { message: currentWire }));
     fake.reply(create(EmptySchema));
-    await expect(inbox.markDelivered(current)).resolves.toMatchObject({ status: "DELIVERED" });
+    await expect(client.removeOne(current)).resolves.toBeUndefined();
+    expect(fake.unary.mock.calls.at(-1)?.[0]).toMatchObject({ name: "RemoveOne" });
   });
 
-  it("cleans only expired delivered rows and pending duplicates by exact remote ID", async () => {
+  it("uses guarded RPCs for delivered cleanup and pending duplicate removal", async () => {
     const fake = transport();
-    const inbox = new RemoteInbox(DeliveryClient.usingTransport(fake.transport));
-    const pending = domainMessage("pending-duplicate");
-    const delivered = { ...pending, status: "DELIVERED" as const };
-
-    await expect(inbox.removeDelivered(pending)).resolves.toBe(false);
-    await expect(
-      inbox.removeDelivered({ ...delivered, keepUntil: new Date(8_640_000_000_000) }),
-    ).resolves.toBe(false);
-    expect(fake.unary).not.toHaveBeenCalled();
-
-    fake.reply(create(EmptySchema));
-    await expect(inbox.removeDelivered({ ...delivered, keepUntil: new Date(0) })).resolves.toBe(
-      true,
+    const client = DeliveryClient.usingTransport(fake.transport);
+    const inbox = new RemoteInbox(client);
+    const registry = new RemoteWorkRegistry(client);
+    fake.replyPickup();
+    const session = await registry.pickUp(
+      ShardIndex.single(),
+      create(WorkerIdSchema, {
+        nodeId: { value: "node" },
+        value: "run",
+      }),
     );
-    await expect(inbox.removeDuplicate(delivered)).resolves.toBe(false);
-    fake.reply(create(EmptySchema));
-    await expect(inbox.removeDuplicate(pending)).resolves.toBe(true);
-    expect(fake.unary).toHaveBeenCalledTimes(2);
-    expect(
-      fake.unary.mock.calls.map(
-        (call) => (call[4] as { message?: { id?: { uuid?: string } } }).message?.id?.uuid,
-      ),
-    ).toEqual([pending.id.value, pending.id.value]);
+    if (session === undefined) throw new Error("Expected a managed session.");
+    const pending = domainMessage("pending-duplicate");
+    const readPending = DeliveryMessageCodec.decode(
+      DeliveryMessageCodec.encode(pending),
+      ShardIndex.single(),
+    );
+    const readDelivered = DeliveryMessageCodec.decode(
+      DeliveryMessageCodec.encode({
+        ...pending,
+        status: "DELIVERED",
+        keepUntil: new Date(0),
+      }),
+      ShardIndex.single(),
+    );
+    fake.reply(create(GuardedInboxResultSchema, { matched: false }));
+    await expect(inbox.removeDelivered(readDelivered, undefined, session)).resolves.toBe(false);
+    fake.reply(create(GuardedInboxResultSchema, { matched: true }));
+    await expect(inbox.removeDuplicate(readPending, undefined, session)).resolves.toBe(true);
+    expect(fake.unary.mock.calls.map((call) => (call[0] as { name: string }).name)).toEqual([
+      "PickShardForDelivery",
+      "RemoveExpiredDelivered",
+      "RemovePendingDuplicate",
+    ]);
   });
 
   it("validates an empty-filter read cursor and caller cancellation before remote I/O", async () => {
@@ -284,19 +299,34 @@ describe("delivery codec and immutable snapshots", () => {
     expect(() => DeliveryRequestCodec.expiry(new Date(Number.NaN))).toThrow(TypeError);
   });
 
-  it("keeps remote pickup validation on protocol errors", () => {
+  it("keeps typed remote pickup validation on protocol errors", () => {
     const worker = { nodeId: { value: "node" }, value: "worker" };
     const whenPicked = { seconds: 1n, nanos: 0 };
     expect(() => {
-      DeliveryShardCodec.validatePicked({ whenPicked }, ShardIndex.single());
-    }).toThrow(DeliveryProtocolError);
-    expect(() => {
-      DeliveryShardCodec.validatePicked({ worker }, ShardIndex.single());
-    }).toThrow(DeliveryProtocolError);
-    expect(() => {
-      DeliveryShardCodec.validatePicked(
-        { worker, whenPicked, shard: { index: 1, ofTotal: 2 } },
+      DeliveryShardCodec.decodePicked(
+        create(DeliverySessionHandleSchema, { whenPicked }),
         ShardIndex.single(),
+        { nodeId: "node", value: "worker" },
+      );
+    }).toThrow(DeliveryProtocolError);
+    expect(() => {
+      DeliveryShardCodec.decodePicked(
+        create(DeliverySessionHandleSchema, { worker }),
+        ShardIndex.single(),
+        { nodeId: "node", value: "worker" },
+      );
+    }).toThrow(DeliveryProtocolError);
+    expect(() => {
+      DeliveryShardCodec.decodePicked(
+        create(DeliverySessionHandleSchema, {
+          worker,
+          whenPicked,
+          shard: { index: 1, ofTotal: 2 },
+          sessionId: "session",
+          lifetime: { seconds: 60n },
+        }),
+        ShardIndex.single(),
+        { nodeId: "node", value: "worker" },
       );
     }).toThrow(DeliveryProtocolError);
   });

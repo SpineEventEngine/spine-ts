@@ -15,7 +15,11 @@
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { afterEach, describe, expect, it } from "vitest";
-import { Health, ManagedShardService } from "@spine-event-engine/proto/delivery-server";
+import {
+  Health,
+  ManagedShardService,
+  GuardedInboxService,
+} from "@spine-event-engine/proto/delivery-server";
 import { DeliveryServer } from "@spine-event-engine/delivery-server";
 import { ShardIndex } from "@spine-event-engine/server";
 import { DeliveryClient } from "../src/index.js";
@@ -41,6 +45,10 @@ describe("typed session gRPC", () => {
         service: ManagedShardService.typeName,
       });
       expect(health.status).toBe(1);
+      const guardedHealth = await createClient(Health, transport).check({
+        service: GuardedInboxService.typeName,
+      });
+      expect(guardedHealth.status).toBe(1);
     } finally {
       sessions.abort();
     }

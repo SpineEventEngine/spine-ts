@@ -240,7 +240,7 @@ interface InboxRecord {
 /**
  * Validates Inbox messages and preserves their delivery ordering.
  */
-const InboxMessages: Readonly<{
+export const InboxMessages: Readonly<{
   // prettier-ignore
 
   /**

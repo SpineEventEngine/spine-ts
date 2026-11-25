@@ -31,8 +31,9 @@ import type {
 } from "@spine-event-engine/server";
 import { ShardIndex } from "@spine-event-engine/server";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
+import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 
-import { conditionalPickUp, InboxRetention } from "@spine-event-engine/server/spi/delivery";
+import { conditionalPickUp } from "@spine-event-engine/server/spi/delivery";
 import { DeliveryClient } from "../client/client.js";
 import { Code, ConnectError } from "@connectrpc/connect";
 import {
@@ -50,6 +51,31 @@ interface RemoteInboxPage {
   readonly last: InboxMessage | undefined;
   readonly unsafeContinuation: boolean;
 }
+
+/**
+ * Shares session bindings between the Inbox and registry adapters of one client.
+ */
+const RemoteSessionBindings = Object.freeze({
+  /**
+   * Stores weak client-local session maps.
+   */
+  cache: new WeakMap<DeliveryClient, WeakMap<DeliveryWorkSession, RemoteShardSession>>(),
+
+  /**
+   * Returns the session map shared by adapters using one delivery client.
+   *
+   * @param client Identifies the remote connection.
+   * @returns The client-local session map.
+   */
+  get(client: DeliveryClient): WeakMap<DeliveryWorkSession, RemoteShardSession> {
+    let bindings = RemoteSessionBindings.cache.get(client);
+    if (bindings === undefined) {
+      bindings = new WeakMap();
+      RemoteSessionBindings.cache.set(client, bindings);
+    }
+    return bindings;
+  },
+});
 
 /**
  * Adapts a delivery-server client to the server-owned inbox port.
@@ -251,10 +277,11 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Reads the current row and writes its completed form through the existing service.
+   * Completes the exact read row under its live managed session.
    *
    * @param message Supplies the expected pending message snapshot.
    * @param options Bounds or cancels the remote read and delivered upsert.
+   * @param session Supplies the current local exclusive session.
    * @returns The completed row written by this attempt, or a matching completed
    * row already found with its stored deadline. Returns `undefined` when the row
    * is absent or its content differs. A write with an unknown outcome raises its
@@ -263,19 +290,15 @@ export class RemoteInbox implements DeliveryInbox {
   async markDelivered(
     message: InboxMessage,
     options?: DeliveryOperationOptions,
+    session?: DeliveryWorkSession,
   ): Promise<InboxMessage | undefined> {
-    const current = await this.client.findOne(message.id, options);
-    if (current?.status === "DELIVERED" && RemoteValues.sameCompletion(current, message))
-      return current;
-    if (current?.status !== "TO_DELIVER" || !RemoteValues.sameMessage(current, message))
-      return undefined;
-    const delivered = DeliveryMessageCodec.snapshot({
-      ...current,
-      status: "DELIVERED",
-      keepUntil: InboxRetention.deadline(Time.currentTimeMillis()),
-    });
-    await this.client.writeOne(delivered, options);
-    return delivered;
+    const remote = this.#session(session);
+    const wire = await this.client.acknowledgeGuarded(
+      remote,
+      DeliveryMessageCodec.readWire(message),
+      options,
+    );
+    return wire === undefined ? undefined : DeliveryMessageCodec.decode(wire, message.shard);
   }
 
   /**
@@ -283,19 +306,19 @@ export class RemoteInbox implements DeliveryInbox {
    *
    * @param message Supplies the delivered snapshot.
    * @param options Bounds remote reads and removal.
+   * @param session Supplies the current local exclusive session.
    * @returns Whether the removal request completed.
    */
   async removeDelivered(
     message: InboxMessage,
     options?: DeliveryOperationOptions,
+    session?: DeliveryWorkSession,
   ): Promise<boolean> {
-    if (
-      message.status !== "DELIVERED" ||
-      (message.keepUntil !== undefined && message.keepUntil.getTime() > Time.currentTimeMillis())
-    )
-      return false;
-    await this.client.removeOne(message, options);
-    return true;
+    return this.client.removeDeliveredGuarded(
+      this.#session(session),
+      DeliveryMessageCodec.readWire(message),
+      options,
+    );
   }
 
   /**
@@ -303,15 +326,32 @@ export class RemoteInbox implements DeliveryInbox {
    *
    * @param message Supplies the pending duplicate snapshot.
    * @param options Bounds remote reads and removal.
+   * @param session Supplies the current local exclusive session.
    * @returns Whether the removal request completed.
    */
   async removeDuplicate(
     message: InboxMessage,
     options?: DeliveryOperationOptions,
+    session?: DeliveryWorkSession,
   ): Promise<boolean> {
-    if (message.status !== "TO_DELIVER") return false;
-    await this.client.removeOne(message, options);
-    return true;
+    return this.client.removeDuplicateGuarded(
+      this.#session(session),
+      DeliveryMessageCodec.readWire(message),
+      options,
+    );
+  }
+
+  /**
+   * Requires the handle issued to this client for a framework session.
+   *
+   * @param session Supplies the local exclusive fence.
+   * @returns Its current remote handle.
+   */
+  #session(session: DeliveryWorkSession | undefined): RemoteShardSession {
+    const handle =
+      session === undefined ? undefined : RemoteSessionBindings.get(this.client).get(session);
+    if (handle === undefined) throw new DeliveryProtocolError();
+    return handle;
   }
 }
 
@@ -330,8 +370,10 @@ class RemoteSessionOwner {
 
   readonly #pendingRenewals = new WeakMap<
     ExclusiveDeliveryWorkSession,
-    Promise<RemoteShardSession>
+    Promise<{ handle: RemoteShardSession; sentAt: number }>
   >();
+
+  readonly #knownLiveUntil = new WeakMap<ExclusiveDeliveryWorkSession, number>();
 
   readonly #terminal = new WeakSet<ExclusiveDeliveryWorkSession>();
 
@@ -359,6 +401,7 @@ class RemoteSessionOwner {
       ...(options?.signal === undefined ? {} : { signal: options.signal }),
       ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
     };
+    const sentAt = Time.monotonicTime();
     const pickup = await this.client.pickUpForDelivery(
       shardIndex,
       RemoteValues.worker(worker),
@@ -371,6 +414,8 @@ class RemoteSessionOwner {
       shard: DeliveryShardCodec.snapshot(shardIndex),
     });
     this.#sessions.set(session, remote);
+    this.#knownLiveUntil.set(session, sentAt + RemoteValues.lifetimeMs(remote));
+    RemoteSessionBindings.get(this.client).set(session, remote);
     const key = RemoteValues.shardKey(shardIndex);
     const sessions = this.#sessionsByShard.get(key) ?? new Set<ExclusiveDeliveryWorkSession>();
     sessions.add(session);
@@ -395,9 +440,11 @@ class RemoteSessionOwner {
     this.#terminal.add(session);
     const key = RemoteValues.shardKey(session.shard);
     this.#sessions.delete(session);
+    this.#knownLiveUntil.delete(session);
+    RemoteSessionBindings.get(this.client).delete(session);
     this.#removeSession(key, session);
     const latest = await this.#pendingRenewals.get(session)?.catch(() => undefined);
-    await this.client.release(latest ?? remote, options);
+    await this.client.release(latest?.handle ?? remote, options);
     return true;
   }
 
@@ -416,22 +463,65 @@ class RemoteSessionOwner {
     const remote = this.#sessions.get(session);
     if (remote === undefined || this.#terminal.has(session)) return undefined;
     const previous = this.#pendingRenewals.get(session);
-    const renewal = (async () => {
-      const latest = previous === undefined ? remote : await previous;
-      if (this.#terminal.has(session)) return latest;
-      return this.client.renew(latest, options);
-    })();
+    const renewal = this.#renew(session, remote, previous, options);
     this.#pendingRenewals.set(session, renewal);
     try {
-      const renewed = await renewal;
+      const { handle: renewed, sentAt } = await renewal;
       if (this.#terminal.has(session)) return undefined;
+      if (Time.monotonicTime() >= sentAt + RemoteValues.lifetimeMs(renewed)) {
+        this.#invalidate(session);
+        return undefined;
+      }
       this.#sessions.set(session, renewed);
+      this.#knownLiveUntil.set(session, sentAt + RemoteValues.lifetimeMs(renewed));
+      RemoteSessionBindings.get(this.client).set(session, renewed);
       return session;
     } catch (error) {
       if (!this.#terminal.has(session)) this.#invalidate(session);
       if (error instanceof ConnectError && error.code === Code.FailedPrecondition) return undefined;
       throw error;
     }
+  }
+
+  /**
+   * Sends a renewal only before the previous confirmed lease deadline.
+   *
+   * @param session Supplies the local session.
+   * @param remote Supplies its last confirmed handle.
+   * @param previous Serializes an earlier renewal, when present.
+   * @param options Bounds or cancels the renewal.
+   * @returns The renewed handle and original send time.
+   */
+  async #renew(
+    session: ExclusiveDeliveryWorkSession,
+    remote: RemoteShardSession,
+    previous: Promise<{ handle: RemoteShardSession; sentAt: number }> | undefined,
+    options?: DeliveryOperationOptions,
+  ): Promise<{ handle: RemoteShardSession; sentAt: number }> {
+    const prior = previous === undefined ? undefined : await previous;
+    const latest = prior?.handle ?? remote;
+    const deadline =
+      prior === undefined
+        ? this.#knownLiveUntil.get(session)
+        : prior.sentAt + RemoteValues.lifetimeMs(latest);
+    if (this.#terminal.has(session)) return { handle: latest, sentAt: prior?.sentAt ?? 0 };
+    if (deadline === undefined || Time.monotonicTime() >= deadline)
+      throw new ConnectError("Delivery session lifetime elapsed.", Code.FailedPrecondition);
+    const sentAt = Time.monotonicTime();
+    const handle = await this.client.renew(latest, options);
+    return { handle, sentAt };
+  }
+
+  /**
+   * Returns one third of the server lifetime for an active remote session.
+   *
+   * @param session Supplies the local exclusive session.
+   * @returns The renewal interval, when its handle remains current.
+   */
+  renewalIntervalMs(session: DeliveryWorkSession): number | undefined {
+    if (session.kind !== "EXCLUSIVE" || this.#terminal.has(session)) return undefined;
+    const remote = this.#sessions.get(session);
+    return remote === undefined ? undefined : RemoteValues.lifetimeMs(remote) / 3;
   }
 
   /**
@@ -442,6 +532,8 @@ class RemoteSessionOwner {
   #invalidate(session: ExclusiveDeliveryWorkSession): void {
     this.#terminal.add(session);
     this.#sessions.delete(session);
+    this.#knownLiveUntil.delete(session);
+    RemoteSessionBindings.get(this.client).delete(session);
     this.#removeSession(RemoteValues.shardKey(session.shard), session);
   }
 
@@ -470,6 +562,8 @@ class RemoteSessionOwner {
     if (sessions !== undefined) {
       for (const session of sessions) {
         this.#sessions.delete(session);
+        this.#knownLiveUntil.delete(session);
+        RemoteSessionBindings.get(this.client).delete(session);
       }
       this.#sessionsByShard.delete(key);
     }
@@ -513,6 +607,27 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
       this.#owner.pickUp(shard, worker, options),
     );
     Object.freeze(this);
+  }
+
+  /**
+   * Creates a fresh worker identity for one independent asynchronous run.
+   *
+   * @param worker Supplies the configured application node.
+   * @returns A complete run-specific worker identity.
+   */
+  workerForRun(worker: WorkerId): WorkerId {
+    const node = RemoteValues.worker(worker).nodeId;
+    return create(WorkerIdSchema, { nodeId: { value: node }, value: randomUUID() });
+  }
+
+  /**
+   * Returns one third of the acquired server lifetime.
+   *
+   * @param session Supplies the acquired local session.
+   * @returns Its renewal interval, when still active.
+   */
+  renewalIntervalMs(session: DeliveryWorkSession): number | undefined {
+    return this.#owner.renewalIntervalMs(session);
   }
 
   /**
@@ -570,6 +685,16 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
  * Groups immutable remote-adapter value operations.
  */
 const RemoteValues = Object.freeze({
+  /**
+   * Converts a positive session Duration to milliseconds.
+   *
+   * @param session Supplies the server-issued handle.
+   * @returns Its full-precision lifetime in milliseconds.
+   */
+  lifetimeMs(session: RemoteShardSession): number {
+    return Number(session.lifetime.seconds) * 1_000 + session.lifetime.nanos / 1_000_000;
+  },
+
   /**
    * Creates a detached message with a generated inbox identity.
    *
@@ -639,28 +764,6 @@ const RemoteValues = Object.freeze({
   },
 
   /**
-   * Compares shard indexes by index and shard count.
-   *
-   * @param left Supplies the first shard.
-   * @param right Supplies the second shard.
-   * @returns Whether both values identify the same shard.
-   */
-  sameShard(left: ShardIndex, right: ShardIndex): boolean {
-    return left.index === right.index && left.ofTotal === right.ofTotal;
-  },
-
-  /**
-   * Compares worker IDs by node and worker values.
-   *
-   * @param left Supplies the first worker ID.
-   * @param right Supplies the second worker ID.
-   * @returns Whether both values identify the same worker.
-   */
-  sameWorker(left: DeliveryWorkerId, right: DeliveryWorkerId): boolean {
-    return left.nodeId === right.nodeId && left.value === right.value;
-  },
-
-  /**
    * Finds a continuation row returned by the JVM timestamp query.
    * @param page Returned page.
    * @param after Previous row identity.
@@ -675,74 +778,6 @@ const RemoteValues = Object.freeze({
     );
     if (exact < 0) throw new DeliveryPagingError();
     return exact + 1;
-  },
-
-  /**
-   * Compares all stored fields of two inbox messages.
-   *
-   * @param left Supplies the first message.
-   * @param right Supplies the second message.
-   * @returns Whether all compared fields match.
-   */
-  sameMessage(left: InboxMessage, right: InboxMessage): boolean {
-    return (
-      left.id.value === right.id.value &&
-      RemoteValues.sameShard(left.id.shard, right.id.shard) &&
-      RemoteValues.sameShard(left.shard, right.shard) &&
-      RemoteValues.sameAny(left.inboxId.targetId, right.inboxId.targetId) &&
-      left.inboxId.targetTypeUrl === right.inboxId.targetTypeUrl &&
-      left.signalId === right.signalId &&
-      RemoteValues.sameAny(left.signal, right.signal) &&
-      left.label === right.label &&
-      left.status === right.status &&
-      left.version === right.version &&
-      RemoteValues.sameTime(left.whenReceived, right.whenReceived) &&
-      RemoteValues.sameDate(left.keepUntil, right.keepUntil)
-    );
-  },
-
-  /**
-   * Compares stored completion with a pending snapshot, excluding transition fields.
-   *
-   * @param completed Supplies the persisted delivered row.
-   * @param pending Supplies the expected pending row.
-   * @returns Whether immutable delivery fields match.
-   */
-  sameCompletion(completed: InboxMessage, pending: InboxMessage): boolean {
-    const { keepUntil: completedDeadline, ...completedContent } = completed;
-    const { keepUntil: pendingDeadline, ...pendingContent } = pending;
-    void completedDeadline;
-    void pendingDeadline;
-    return RemoteValues.sameMessage(
-      { ...completedContent, status: "TO_DELIVER" },
-      { ...pendingContent, status: "TO_DELIVER" },
-    );
-  },
-
-  /**
-   * Compares optional dates by their millisecond values.
-   *
-   * @param left Supplies the first date.
-   * @param right Supplies the second date.
-   * @returns Whether both dates are absent or represent the same time.
-   */
-  sameDate(left: Date | undefined, right: Date | undefined): boolean {
-    return left === undefined ? right === undefined : left.getTime() === right?.getTime();
-  },
-
-  /**
-   * Compares optional Protobuf Any values by type URL and bytes.
-   *
-   * @param left Supplies the first Any value.
-   * @param right Supplies the second Any value.
-   * @returns Whether both values have the same type URL and bytes.
-   */
-  sameAny(left: InboxMessage["signal"], right: InboxMessage["signal"]): boolean {
-    return left === undefined || right === undefined
-      ? left === right
-      : left.typeUrl === right.typeUrl &&
-          left.value.length === right.value.length &&
-          left.value.every((value, index) => value === right.value[index]);
   },
 
   /**

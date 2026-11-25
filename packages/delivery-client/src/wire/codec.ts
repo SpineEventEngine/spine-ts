@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, toBinary } from "@bufbuild/protobuf";
+import { clone, create, toBinary } from "@bufbuild/protobuf";
 import {
   AnySchema,
   type Duration,
@@ -163,6 +163,8 @@ const DeliveryValues = Object.freeze({
   },
 });
 
+const readWireRows = new WeakMap<InboxMessage, WireInboxMessage>();
+
 const DeliveryTargetIds = Object.freeze({
   /**
    * Checks known Protobuf target identifier encodings before delivery serialization.
@@ -216,6 +218,22 @@ type DeliveryMessageCodecApi = Readonly<{
    * @returns The detached immutable inbox message.
    */
   decode(message: WireInboxMessage, expectedShard: ShardIndex): InboxMessage;
+
+  /**
+   * Copies the exact wire row retained during a remote read.
+   *
+   * @param message Supplies the decoded read result.
+   * @returns The original wire row including unknown fields.
+   */
+  readWire(message: InboxMessage): WireInboxMessage;
+
+  /**
+   * Copies a wire Inbox row without dropping unknown fields.
+   *
+   * @param message Supplies the original wire row.
+   * @returns A detached wire row.
+   */
+  copyWire(message: WireInboxMessage): WireInboxMessage;
 
   /**
    * Validates the wire identifiers and requested shard before decoding the payload.
@@ -410,7 +428,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     } catch (error) {
       throw new DeliveryProtocolError(error);
     }
-    return DeliveryValues.freeze({
+    const decoded = DeliveryValues.freeze({
       id: DeliveryValues.freeze({ value: id.uuid, shard }),
       inboxId: DeliveryValues.freeze({ targetId, targetTypeUrl: inboxId.typeUrl }),
       signalId: signalId.value,
@@ -422,6 +440,30 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
       version: BigInt(message.version),
       ...(keepUntil === undefined ? {} : { keepUntil }),
     });
+    readWireRows.set(decoded, clone(InboxMessageSchema, message));
+    return decoded;
+  },
+
+  /**
+   * Copies the exact wire snapshot retained during decoding.
+   *
+   * @param message Supplies the decoded read result.
+   * @returns The original wire row including unknown fields.
+   */
+  readWire(message: InboxMessage): WireInboxMessage {
+    const wire = readWireRows.get(message);
+    if (wire === undefined) throw DeliveryRequestCodec.protocol();
+    return clone(InboxMessageSchema, wire);
+  },
+
+  /**
+   * Copies a wire Inbox row without dropping unknown fields.
+   *
+   * @param message Supplies the original wire row.
+   * @returns A detached wire row.
+   */
+  copyWire(message: WireInboxMessage): WireInboxMessage {
+    return clone(InboxMessageSchema, message);
   },
 
   /**

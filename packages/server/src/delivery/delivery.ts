@@ -797,7 +797,8 @@ export class Delivery {
     if (this.#shouldStop(options)) return result("STOPPED");
     let session;
     try {
-      session = await this.shards.pickUp(shard, this.worker, options.operation);
+      const worker = this.shards.workerForRun?.(this.worker) ?? this.worker;
+      session = await this.shards.pickUp(shard, worker, options.operation);
     } catch (error) {
       await safely(async () =>
         (await this.#monitor.onShardPickUpFailure(new FailedPickUp(shard, error))).execute(),
@@ -903,6 +904,14 @@ class DeliveryDrain {
 
   #current: DeliveryWorkSession;
 
+  readonly #renewalIntervalMs: number | undefined;
+
+  #renewalDue = 0;
+
+  #renewalTimer: ReturnType<typeof setTimeout> | undefined;
+
+  #heartbeatActive = false;
+
   #ownershipLost = false;
 
   #failureLimitReached = false;
@@ -929,6 +938,7 @@ class DeliveryDrain {
    */
   constructor(private readonly input: DeliveryDrainInputState) {
     this.#current = input.session;
+    this.#renewalIntervalMs = input.shards.renewalIntervalMs?.(input.session);
     this.#deduplication = new DeliveryDeduplication(input.inbox);
   }
 
@@ -950,6 +960,7 @@ class DeliveryDrain {
    */
   stop(): void {
     this.#stopped = true;
+    this.#stopHeartbeat();
     this.wake();
   }
 
@@ -974,6 +985,7 @@ class DeliveryDrain {
    * @returns The terminal delivery outcome and counts.
    */
   async run(): Promise<DeliveryRun> {
+    this.#startHeartbeat();
     let run: DeliveryRun;
     try {
       run = (await this.#canStart()) ? await this.#readPages() : this.#complete("STOPPED");
@@ -984,7 +996,54 @@ class DeliveryDrain {
       throw error;
     }
     this.#reading = false;
+    this.#stopHeartbeat();
     return (await this.#release()) ? run : this.#complete("FAILED");
+  }
+
+  /**
+   * Starts renewal throughout a remote handler using the server lifetime.
+   */
+  #startHeartbeat(): void {
+    const interval = this.#renewalIntervalMs;
+    if (interval === undefined || !Number.isFinite(interval) || interval <= 0) return;
+    this.#heartbeatActive = true;
+    this.#renewalDue = Time.monotonicTime() + interval;
+    this.#armHeartbeat();
+  }
+
+  /**
+   * Schedules the next renewal, chaining timers for long server lifetimes.
+   */
+  #armHeartbeat(): void {
+    if (!this.#heartbeatActive || this.#stopped) return;
+    const remaining = this.#renewalDue - Time.monotonicTime();
+    const delay = Math.max(1, Math.min(remaining, 2_147_483_647));
+    this.#renewalTimer = setTimeout(() => {
+      this.#renewalTimer = undefined;
+      if (!this.#heartbeatActive || this.#stopped) return;
+      if (Time.monotonicTime() < this.#renewalDue) {
+        this.#armHeartbeat();
+        return;
+      }
+      void this.#validate()
+        .then((current) => {
+          if (!current || !this.#heartbeatActive || this.#stopped) return;
+          this.#renewalDue = Time.monotonicTime() + (this.#renewalIntervalMs ?? 0);
+          this.#armHeartbeat();
+        })
+        .catch(() => {
+          this.stop();
+        });
+    }, delay);
+  }
+
+  /**
+   * Cancels further heartbeat attempts before releasing the session.
+   */
+  #stopHeartbeat(): void {
+    this.#heartbeatActive = false;
+    if (this.#renewalTimer !== undefined) clearTimeout(this.#renewalTimer);
+    this.#renewalTimer = undefined;
   }
 
   /**
@@ -1196,7 +1255,13 @@ class DeliveryDrain {
    */
   async #removeDuplicate(message: InboxMessage, target: string): Promise<boolean> {
     try {
-      if (!(await this.input.inbox.removeDuplicate(message, this.input.options.operation)))
+      if (
+        !(await this.input.inbox.removeDuplicate(
+          message,
+          this.input.options.operation,
+          this.#current,
+        ))
+      )
         throw new Error("Inbox duplicate was not removed.");
       this.#removedInPage.add(message);
       this.#messageOutcomes.set(message, { kind: "acknowledged", agent: false });
@@ -1409,7 +1474,11 @@ class DeliveryDrain {
    * @returns Completion after durable acknowledgement.
    */
   async #markDelivered(message: InboxMessage): Promise<void> {
-    const completed = await this.input.inbox.markDelivered(message, this.input.options.operation);
+    const completed = await this.input.inbox.markDelivered(
+      message,
+      this.input.options.operation,
+      this.#current,
+    );
     if (completed === undefined) throw new Error("Inbox message was not marked delivered.");
     this.#deduplication.recordDelivered(completed);
     this.#statistics.delivered += 1;
@@ -1454,7 +1523,11 @@ class DeliveryDrain {
     if (this.input.inbox.removeDelivered === undefined) return false;
     if (this.input.options.operation?.signal?.aborted || !(await this.#validate()))
       return undefined;
-    const removed = await this.input.inbox.removeDelivered(message, this.input.options.operation);
+    const removed = await this.input.inbox.removeDelivered(
+      message,
+      this.input.options.operation,
+      this.#current,
+    );
     return removed;
   }
 

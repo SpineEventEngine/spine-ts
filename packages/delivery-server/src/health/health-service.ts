@@ -16,6 +16,7 @@ import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import {
   Health,
   ManagedShardService,
+  GuardedInboxService,
   HealthCheckResponse_ServingStatus as ServingStatus,
 } from "@spine-event-engine/proto/delivery-server";
 
@@ -25,6 +26,7 @@ const known = new Set([
   "spine.delivery.InboxService",
   "spine.delivery.ShardService",
   ManagedShardService.typeName,
+  GuardedInboxService.typeName,
   "spine.delivery.ShardObservingService",
   "spine.delivery.AdminService",
 ]);

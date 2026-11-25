@@ -23,6 +23,7 @@ import {
   Health,
   InboxService,
   ManagedShardService,
+  GuardedInboxService,
   ShardObservingService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
@@ -262,6 +263,7 @@ export class DeliveryServer {
           router.service(InboxService, core.inbox);
           router.service(ShardService, core.shards);
           router.service(ManagedShardService, core.managed);
+          router.service(GuardedInboxService, core.guarded);
           router.service(ShardObservingService, core.observing);
           router.service(AdminService, core.admin);
           router.service(Health, health);

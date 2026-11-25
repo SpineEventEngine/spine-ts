@@ -12,7 +12,7 @@ This reference describes the public in-memory Delivery server API. Read the
 ## Public entry points
 
 `InMemoryDelivery.create(options)` returns `DeliveryCore` with Connect handler
-implementations `inbox`, `shards`, and `managed`. The caller registers these handlers and
+implementations `inbox`, `guarded`, `shards`, and `managed`. The caller registers these handlers and
 provides the network lifecycle. Call `close()` on the core during shutdown to
 cancel session timers. For a listener with work observation, Admin,
 and health, start a `DeliveryServer`.
