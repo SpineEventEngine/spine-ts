@@ -53,6 +53,8 @@ accepted or silently shortened.
 `workReminderSeconds` configures the interval before the server repeats a
 notice for a free shard that still contains pending rows. The executable reads
 `WORK_REMINDER_SECONDS`. The default is ten seconds.
+The accepted value is a whole number of seconds from 1 through
+`Math.floor(Number.MAX_SAFE_INTEGER / 1_000)`.
 
 For example, setting it to 30 gives workers thirty seconds before the server
 sends a reminder for the same unclaimed shard. A new subscriber still receives

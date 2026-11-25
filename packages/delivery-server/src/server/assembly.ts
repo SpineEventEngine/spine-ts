@@ -88,11 +88,7 @@ export const DeliveryAssembly: Readonly<{
   create: (configuration?: DeliveryAssemblyConfiguration) => DeliveryAssembly;
 }> = Object.freeze({
   create: (
-    configuration: DeliveryAssemblyConfiguration = {
-      processingTimeoutMs: 0,
-      reminderIntervalMs: 10_000,
-      ...DEFAULT_DELIVERY_STATE_LIMITS,
-    },
+    configuration: DeliveryAssemblyConfiguration = DEFAULT_ASSEMBLY_CONFIGURATION,
   ): DeliveryAssembly => {
     const state = new InMemoryDeliveryState(configuration);
     const admission = new MutationAdmission();
@@ -117,9 +113,9 @@ export const DeliveryAssembly: Readonly<{
       ),
       admin: admin.service,
       observing: observing.service,
-      closeAdmission: () => admission.close(),
-      closeAdmin: () => admin.close(),
-      closeObserving: () => observing.close(),
+      closeAdmission: admission.close.bind(admission),
+      closeAdmin: admin.close.bind(admin),
+      closeObserving: observing.close.bind(observing),
     });
   },
 });
@@ -137,3 +133,12 @@ type DeliveryAssemblyConfiguration = Partial<
     | "maxTrackedShards"
   >
 >;
+
+/**
+ * Default settings for listener-free assembly tests and callers.
+ */
+const DEFAULT_ASSEMBLY_CONFIGURATION: DeliveryAssemblyConfiguration = Object.freeze({
+  processingTimeoutMs: 0,
+  reminderIntervalMs: 10_000,
+  ...DEFAULT_DELIVERY_STATE_LIMITS,
+});

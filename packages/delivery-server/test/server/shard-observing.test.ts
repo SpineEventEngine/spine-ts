@@ -15,6 +15,14 @@
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
+import { CommandIdSchema, CommandSchema } from "@spine-event-engine/proto";
+import { CreateTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import {
   PickUpShardSchema,
   ReleaseShardSchema,
@@ -24,6 +32,7 @@ import {
 import {
   InboxMessageSchema,
   InboxMessageStatus,
+  InboxLabel,
   ShardIndexSchema,
   WorkerIdSchema,
 } from "@spine-event-engine/proto/delivery";
@@ -146,6 +155,62 @@ describe("ShardObservingService", () => {
     assembly.closeObserving();
   });
 
+  it("drops queued shards that become busy or empty while the reader is paused", async () => {
+    const assembly = DeliveryAssembly.create();
+    const busy = create(ShardIndexSchema, { index: 0, ofTotal: 4 });
+    const removed = create(ShardIndexSchema, { index: 1, ofTotal: 4 });
+    const valid = create(ShardIndexSchema, { index: 3, ofTotal: 4 });
+    await assembly.inbox.writeOne({ message: message("initial") }, context);
+    const stream = assembly.observing
+      .observeAll(create(EmptySchema), context)
+      [Symbol.asyncIterator]();
+    await expect(stream.next()).resolves.toMatchObject({ value: { shard } });
+    await assembly.inbox.writeOne({ message: message("busy", busy) }, context);
+    await assembly.inbox.writeOne({ message: message("removed", removed) }, context);
+    await assembly.shards.pickShard(create(PickUpShardSchema, { shard: busy, worker }), context);
+    await assembly.inbox.removeOne({ message: message("removed", removed) }, context);
+    await assembly.inbox.writeOne({ message: message("valid", valid) }, context);
+    await expect(stream.next()).resolves.toMatchObject({ value: { shard: valid } });
+    await stream.return?.();
+    assembly.closeObserving();
+  });
+
+  it("finishes immediately when closed before subscription or called with an aborted signal", async () => {
+    const assembly = DeliveryAssembly.create();
+    await assembly.inbox.writeOne({ message: message("pending") }, context);
+    const aborted = new AbortController();
+    aborted.abort();
+    await expect(
+      assembly.observing
+        .observeAll(create(EmptySchema), { signal: aborted.signal } as never)
+        [Symbol.asyncIterator]()
+        .next(),
+    ).resolves.toMatchObject({ done: true });
+    assembly.closeObserving();
+    await expect(
+      assembly.observing.observeAll(create(EmptySchema), context)[Symbol.asyncIterator]().next(),
+    ).resolves.toMatchObject({ done: true });
+    const empty = DeliveryAssembly.create();
+    empty.closeObserving();
+    await expect(
+      empty.observing.observeAll(create(EmptySchema), context)[Symbol.asyncIterator]().next(),
+    ).resolves.toMatchObject({ done: true });
+  });
+
+  it("detaches an active subscriber's abort listener on shutdown while its reader is paused", async () => {
+    const assembly = DeliveryAssembly.create();
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, "removeEventListener");
+    await assembly.inbox.writeOne({ message: message("pending") }, context);
+    const stream = assembly.observing
+      .observeAll(create(EmptySchema), { signal: controller.signal } as never)
+      [Symbol.asyncIterator]();
+    await expect(stream.next()).resolves.toMatchObject({ value: { shard } });
+    assembly.closeObserving();
+    expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+    await expect(stream.next()).resolves.toMatchObject({ done: true });
+  });
+
   it("does not discover completed-only shards or repeat work after pending removal", async () => {
     vi.useFakeTimers();
     const assembly = DeliveryAssembly.create({ reminderIntervalMs: 10_000 });
@@ -179,13 +244,28 @@ describe("ShardObservingService", () => {
   });
 });
 
-function message(uuid: string) {
+function message(uuid: string, index = shard) {
+  const taskId = create(TaskIdSchema, { value: `task-${uuid}` });
+  const command = create(CommandSchema, {
+    id: create(CommandIdSchema, { uuid: `command-${uuid}` }),
+    message: AnyPacker.pack(
+      CreateTaskSchema,
+      create(CreateTaskSchema, {
+        id: taskId,
+        taskListId: create(TaskListIdSchema, { value: "list-1" }),
+        title: "Observe delivery",
+      }),
+    ),
+  });
   return create(InboxMessageSchema, {
-    id: { uuid, index: shard },
+    id: { uuid, index },
     signalId: { value: "signal" },
-    inboxId: { entityId: { id: { typeUrl: "example.Entity" } }, typeUrl: "example.State" },
-    payload: { case: "command", value: {} },
-    label: 1,
+    inboxId: {
+      entityId: { id: AnyPacker.pack(TaskIdSchema, taskId) },
+      typeUrl: TypeUrls.derive(TaskSchema),
+    },
+    payload: { case: "command", value: command },
+    label: InboxLabel.HANDLE_COMMAND,
     whenReceived: { seconds: 0n, nanos: 0 },
     status: InboxMessageStatus.TO_DELIVER,
   });

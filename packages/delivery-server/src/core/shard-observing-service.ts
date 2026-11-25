@@ -76,7 +76,7 @@ export const ShardObserving: Readonly<{
  * Coordinates subscriptions and reminder timers for one delivery state.
  */
 class WorkPublisher implements ShardObservingHandle {
-  readonly #subscribers = new Set<WorkSubscriber>();
+  readonly #subscribers = new Map<WorkSubscriber, () => void>();
 
   readonly #reminders = new Map<string, LongReminder>();
 
@@ -102,10 +102,15 @@ class WorkPublisher implements ShardObservingHandle {
       _request: Parameters<ServiceImpl<typeof ShardObservingService>["observeAll"]>[0],
       context: Parameters<ServiceImpl<typeof ShardObservingService>["observeAll"]>[1],
     ) {
+      if (this.#closed || context.signal.aborted) return;
       const subscriber = new WorkSubscriber();
-      const abort = () => subscriber.close();
-      context.signal.addEventListener("abort", abort, { once: true });
-      this.#subscribers.add(subscriber);
+      const detach = () => {
+        context.signal.removeEventListener("abort", detach);
+        this.#subscribers.delete(subscriber);
+        subscriber.close();
+      };
+      context.signal.addEventListener("abort", detach, { once: true });
+      this.#subscribers.set(subscriber, detach);
       try {
         for (const message of this.state.messages.values()) {
           const shard = message.id?.index;
@@ -116,11 +121,10 @@ class WorkPublisher implements ShardObservingHandle {
           )
             subscriber.push(this.#notice(shard));
         }
-        for await (const notice of subscriber) yield notice;
+        for await (const notice of subscriber)
+          if (notice.shard !== undefined && this.#available(notice.shard)) yield notice;
       } finally {
-        context.signal.removeEventListener("abort", abort);
-        this.#subscribers.delete(subscriber);
-        subscriber.close();
+        detach();
       }
     }.bind(this),
   };
@@ -136,6 +140,7 @@ class WorkPublisher implements ShardObservingHandle {
     if (!this.#available(shard)) {
       this.#reminders.get(key)?.cancel();
       this.#reminders.delete(key);
+      for (const subscriber of this.#subscribers.keys()) subscriber.invalidate(key);
       return;
     }
     this.#publish(shard);
@@ -150,7 +155,7 @@ class WorkPublisher implements ShardObservingHandle {
     this.#closed = true;
     for (const timer of this.#reminders.values()) timer.cancel();
     this.#reminders.clear();
-    for (const subscriber of this.#subscribers) subscriber.close();
+    for (const detach of this.#subscribers.values()) detach();
     this.#subscribers.clear();
   }
 
@@ -181,7 +186,7 @@ class WorkPublisher implements ShardObservingHandle {
    */
   #publish(shard: ShardIndex): void {
     const notice = this.#notice(shard);
-    for (const subscriber of this.#subscribers) subscriber.push(notice);
+    for (const subscriber of this.#subscribers.keys()) subscriber.push(notice);
   }
 
   /**
@@ -266,6 +271,15 @@ class WorkSubscriber implements AsyncIterable<ShardedWorkAvailable> {
     if (this.#closed || notice.shard === undefined) return;
     this.#pending.set(DeliveryShards.key(notice.shard), notice);
     this.#wake?.();
+  }
+
+  /**
+   * Removes a queued shard after it becomes unavailable.
+   *
+   * @param key Identifies the unavailable shard.
+   */
+  invalidate(key: string): void {
+    this.#pending.delete(key);
   }
 
   /**

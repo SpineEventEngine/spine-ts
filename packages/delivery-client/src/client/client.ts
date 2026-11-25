@@ -234,8 +234,19 @@ export class DeliveryClient {
     if (this.#closed) throw new Error("Delivery client is closed.");
     if (options.signal?.aborted) throw options.signal.reason;
     const controller = new AbortController();
-    const abort = () => controller.abort(options.signal?.reason);
+    let active = true;
+    const finish = () => {
+      if (!active) return;
+      active = false;
+      options.signal?.removeEventListener("abort", abort);
+      this.#activeReads.delete(controller);
+    };
+    const abort = () => {
+      controller.abort(options.signal?.reason);
+      finish();
+    };
     options.signal?.addEventListener("abort", abort, { once: true });
+    controller.signal.addEventListener("abort", finish, { once: true });
     this.#activeReads.add(controller);
     try {
       for await (const notice of this.#observing.observeAll(
@@ -246,9 +257,8 @@ export class DeliveryClient {
         yield DeliveryShardCodec.decode(notice.shard);
       }
     } finally {
-      options.signal?.removeEventListener("abort", abort);
-      this.#activeReads.delete(controller);
       controller.abort();
+      finish();
     }
   }
 

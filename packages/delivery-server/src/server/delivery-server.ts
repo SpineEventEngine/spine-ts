@@ -66,6 +66,8 @@ export interface DeliveryServerOptions {
   /**
    * Seconds between notices while a shard remains free with pending work.
    * Overrides `WORK_REMINDER_SECONDS`; defaults to 10 seconds.
+   * Accepts whole seconds from 1 through
+   * `Math.floor(Number.MAX_SAFE_INTEGER / 1_000)`.
    */
   readonly workReminderSeconds?: number;
 

@@ -13,6 +13,14 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
+import { CommandIdSchema, CommandSchema } from "@spine-event-engine/proto";
+import { CreateTaskSchema } from "../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { afterEach, expect, it } from "vitest";
@@ -23,6 +31,7 @@ import {
   WriteMessageSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
+  InboxLabel,
   InboxMessageSchema,
   InboxMessageStatus,
   ShardIndexSchema,
@@ -57,14 +66,29 @@ it("streams a free pending shard to each real gRPC client and advertises service
       }),
     ).resolves.toMatchObject({ status: 1 });
     const shard = create(ShardIndexSchema, { index: 2, ofTotal: 4 });
+    const taskId = create(TaskIdSchema, { value: "task-1" });
+    const command = create(CommandSchema, {
+      id: create(CommandIdSchema, { uuid: "command-1" }),
+      message: AnyPacker.pack(
+        CreateTaskSchema,
+        create(CreateTaskSchema, {
+          id: taskId,
+          taskListId: create(TaskListIdSchema, { value: "list-1" }),
+          title: "Observe delivery",
+        }),
+      ),
+    });
     await createClient(InboxService, transport).writeOne(
       create(WriteMessageSchema, {
         message: create(InboxMessageSchema, {
           id: { uuid: "one", index: shard },
           signalId: { value: "signal" },
-          inboxId: { entityId: { id: { typeUrl: "example.Entity" } }, typeUrl: "example.State" },
-          payload: { case: "command", value: {} },
-          label: 1,
+          inboxId: {
+            entityId: { id: AnyPacker.pack(TaskIdSchema, taskId) },
+            typeUrl: TypeUrls.derive(TaskSchema),
+          },
+          payload: { case: "command", value: command },
+          label: InboxLabel.HANDLE_COMMAND,
           whenReceived: { seconds: 0n, nanos: 0 },
           status: InboxMessageStatus.TO_DELIVER,
         }),
