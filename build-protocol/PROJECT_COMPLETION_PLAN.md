@@ -1,6 +1,8 @@
 # Spine TS Project Completion Plan
 
-Current implementation: [Agent model Commands and asynchronous handlers](tasks/agent-model-commands/TASK.md)
+Current implementation: [Shard delivery correctness and performance](tasks/shard-delivery-correctness-and-performance/TASK.md). Implement the approved TS delivery design on its dedicated worktree.
+
+Previous implementation: [Agent model Commands and asynchronous handlers](tasks/agent-model-commands/TASK.md)
 on `delivery-agent-analysis`, based on official master `987a687d1`.
 The human authorized implementation on 2026-11-19. Restore ordinary Agent
 delivery, add message-based model requests and a general asynchronous Command
