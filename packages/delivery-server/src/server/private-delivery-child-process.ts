@@ -77,7 +77,10 @@ class PrivateDeliveryChildProcess {
   async #open(options: PrivateDeliveryChildOptions): Promise<void> {
     if (this.#child !== undefined || this.#closing !== undefined) return;
     try {
-      const child = new PrivateDeliveryChild(options);
+      const child = new PrivateDeliveryChild(options, () => {
+        process.exitCode = 1;
+        void this.#close();
+      });
       this.#child = child;
       await child.start();
       process.send?.({ kind: "ready", baseUrl: child.baseUrl });

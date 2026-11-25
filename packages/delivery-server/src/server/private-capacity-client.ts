@@ -60,8 +60,12 @@ export class PrivateCapacityClient implements CapacityReservationClient {
    * @param phase Orders an adjusted growth estimate before commit.
    * @returns Completion after the parent reserves capacity.
    */
-  async reserve(ticket: CapacityTicket, growth: CapacityUsage,
-    signal?: AbortSignal, phase = 0n): Promise<void> {
+  async reserve(
+    ticket: CapacityTicket,
+    growth: CapacityUsage,
+    signal?: AbortSignal,
+    phase = 0n,
+  ): Promise<void> {
     await this.#client.reserve(
       {
         ticket: PrivateCapacityClient.#ticket(ticket),
@@ -81,8 +85,12 @@ export class PrivateCapacityClient implements CapacityReservationClient {
    * @param signal Cancels an unanswered private transport call.
    * @returns Completion after the parent applies exact usage.
    */
-  async report(ticket: CapacityTicket, usage: CapacityUsage, revision: bigint,
-    signal?: AbortSignal): Promise<void> {
+  async report(
+    ticket: CapacityTicket,
+    usage: CapacityUsage,
+    revision: bigint,
+    signal?: AbortSignal,
+  ): Promise<void> {
     await this.#client.report(
       {
         ticket: PrivateCapacityClient.#ticket(ticket),

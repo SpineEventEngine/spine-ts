@@ -311,11 +311,18 @@ describe("typed Shard sessions", () => {
       const delayedRevision = assembly.sessionRuntime.receivedRevision(first.shard);
       await assembly.managed.renewShardSession(first, context);
       await assembly.sessionRuntime.releaseAtRevision(
-        first, new AbortController().signal, delayedRevision,
+        first,
+        new AbortController().signal,
+        delayedRevision,
       );
-      expect((await assembly.managed.pickShardRaw(
-        create(DeliveryShardPickupSchema, { shard, worker: rival }), context,
-      )).result.case).toBe("busy");
+      expect(
+        (
+          await assembly.managed.pickShardRaw(
+            create(DeliveryShardPickupSchema, { shard, worker: rival }),
+            context,
+          )
+        ).result?.case,
+      ).toBe("busy");
     } finally {
       assembly.closeSessions();
     }

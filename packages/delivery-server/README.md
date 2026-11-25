@@ -53,6 +53,14 @@ then defaults.
 | Retained messages | `MAX_RETAINED_MESSAGES`    | 10,000      |
 | Retained bytes    | `MAX_RETAINED_BYTES`       | 32 MiB      |
 | Tracked shards    | `MAX_TRACKED_SHARDS`       | 1,000       |
+| Child processes   | `DELIVERY_PROCESS_COUNT`   | 1           |
+
+Set `processCount: 2` when constructing `DeliveryServer`, or set
+`DELIVERY_PROCESS_COUNT=2` for the executable. The public listener stays in the
+parent process. It routes shard number `s` to child `s % 2`, while each child
+keeps the full shard identity. The retained row, byte, and shard limits apply
+across both children. If a child exits, the parent starts a replacement in the
+same slot; rows and sessions from the exited process were in memory and are lost.
 
 ## 🧩 Embed the handlers
 

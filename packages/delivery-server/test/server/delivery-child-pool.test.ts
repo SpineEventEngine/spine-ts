@@ -12,6 +12,8 @@
  * the License.
  */
 
+import { fork, type ChildProcess } from "node:child_process";
+import { resolve } from "node:path";
 import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
@@ -24,6 +26,61 @@ import { DeliveryChildPool } from "../../src/server/delivery-child-pool.js";
 import { DeliveryConfig } from "../../src/server/config.js";
 
 describe("forked delivery children", () => {
+  it("reaps a delayed startup-failed child during shutdown", async () => {
+    let failed: ChildProcess | undefined;
+    let attempts = 0;
+    const fixture = resolve("packages/delivery-server/test/fixtures/delayed-failed-child.mjs");
+    const pool = new DeliveryChildPool(
+      1,
+      DeliveryConfig.resolve({ port: 0 }),
+      (entry, args, options) => {
+        attempts++;
+        if (attempts === 1) {
+          failed = fork(fixture, [], options);
+          return failed;
+        }
+        return fork(entry, args, options);
+      },
+    );
+    try {
+      await pool.start();
+      await vi.waitFor(() => {
+        expect(pool.endpoint(0).pid).toBeGreaterThan(0);
+      });
+      expect(failed?.exitCode).toBeNull();
+      await pool.close();
+      expect(failed?.exitCode !== null || failed.signalCode !== null).toBe(true);
+    } finally {
+      failed?.kill("SIGKILL");
+      await pool.close();
+    }
+  });
+  it.each(["synchronous", "asynchronous"])(
+    "retries a %s fork failure without stopping its fixed slot",
+    async (kind) => {
+      let attempts = 0;
+      const pool = new DeliveryChildPool(
+        1,
+        DeliveryConfig.resolve({ port: 0 }),
+        (entry, args, options) => {
+          attempts++;
+          if (attempts === 1 && kind === "synchronous") throw new Error("fork failed");
+          if (attempts === 1)
+            return fork(entry, args, { ...options, execPath: "/not-a-node-executable" });
+          return fork(entry, args, options);
+        },
+      );
+      try {
+        await pool.start();
+        await vi.waitFor(() => {
+          expect(pool.endpoint(0).pid).toBeGreaterThan(0);
+        });
+        expect(attempts).toBeGreaterThanOrEqual(2);
+      } finally {
+        await pool.close();
+      }
+    },
+  );
   it("runs distinct slots in distinct processes and restarts a failed slot", async () => {
     const pool = new DeliveryChildPool(
       2,

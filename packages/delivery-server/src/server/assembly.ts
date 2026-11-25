@@ -24,7 +24,7 @@ import {
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 
-import { AdminPublisher } from "../admin/admin-service.js";
+import { AdminPublisher, type AdminPublisherHandle } from "../admin/admin-service.js";
 import {
   InMemoryDeliveryState,
   type DeliveryResourceUsage,
@@ -33,7 +33,7 @@ import { InboxHandlers } from "../core/inbox-service.js";
 import { GuardedInboxRuntime } from "../core/guarded-inbox-service.js";
 import { MutationAdmission } from "../core/mutation-admission.js";
 import { ShardSessionRuntime } from "../core/shard-service.js";
-import { ShardObserving } from "../core/shard-observing-service.js";
+import { ShardObserving, type ShardObservingHandle } from "../core/shard-observing-service.js";
 import { DEFAULT_DELIVERY_STATE_LIMITS } from "../core/limits.js";
 import type { DeliveryConfiguration } from "./config.js";
 
@@ -130,23 +130,53 @@ export const DeliveryAssembly: Readonly<{
     const admission = new MutationAdmission();
     const admin = AdminPublisher.create(state);
     const observing = ShardObserving.create(state, configuration.reminderIntervalMs ?? 10_000);
-    const onStoredChange = admin.publish.bind(admin),
-      onWorkChange = observing.changed.bind(observing);
-    const onShardTransition = (shard: ShardIndex) => {
-      admin.publish(shard);
-      observing.changed(shard);
-    };
+    const onStoredChange = admin.publish.bind(admin);
     const { sessions, guarded } = DeliverySessionAssembly.create(
       state,
       admission,
       configuration,
-      onShardTransition,
+      (shard: ShardIndex) => {
+        admin.publish(shard);
+        observing.changed(shard);
+      },
       onStoredChange,
-      onWorkChange,
+      observing.changed.bind(observing),
     );
+    return DeliveryAssemblyWiring.create(state, admission, admin, observing, sessions, guarded);
+  },
+});
+
+/**
+ * Connects the shared storage, session, observation, and close handlers.
+ */
+const DeliveryAssemblyWiring = Object.freeze({
+  /**
+   * Builds the complete in-process service assembly.
+   *
+   * @param state Stores retained rows and sessions.
+   * @param admission Serializes local mutations.
+   * @param admin Publishes stored shard changes.
+   * @param observing Publishes available work.
+   * @param sessions Serves raw and managed session calls.
+   * @param guarded Serves guarded Inbox mutations.
+   * @returns The complete in-process service assembly.
+   */
+  create(
+    state: InMemoryDeliveryState,
+    admission: MutationAdmission,
+    admin: AdminPublisherHandle,
+    observing: ShardObservingHandle,
+    sessions: ShardSessionRuntime,
+    guarded: GuardedInboxRuntime,
+  ): DeliveryAssembly {
     return Object.freeze({
       state,
-      inbox: InboxHandlers.create(state, admission, onStoredChange, onWorkChange),
+      inbox: InboxHandlers.create(
+        state,
+        admission,
+        admin.publish.bind(admin),
+        observing.changed.bind(observing),
+      ),
       shards: sessions.raw,
       managed: sessions.managed,
       sessionRuntime: sessions,

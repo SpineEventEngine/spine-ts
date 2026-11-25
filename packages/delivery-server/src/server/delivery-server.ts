@@ -32,6 +32,8 @@ import { DeliveryAssembly } from "./assembly.js";
 import { DeliveryConfig, type DeliveryConfiguration } from "./config.js";
 import { DeliveryShutdown } from "./shutdown.js";
 import { deliveryServerLog } from "./delivery-server-log.js";
+import { DeliveryChildPool } from "./delivery-child-pool.js";
+import { DeliveryParentProxy } from "./delivery-parent-proxy.js";
 
 /**
  * Construction-time configuration for {@link DeliveryServer}.
@@ -50,6 +52,12 @@ export interface DeliveryServerOptions {
    * Accepts integers from `0` through `65535`; zero requests an ephemeral port.
    */
   readonly port?: number;
+
+  /**
+   * Fixed number of homogeneous child processes. Overrides `DELIVERY_PROCESS_COUNT`;
+   * the default is one in-process delivery runtime. Accepts positive safe integers.
+   */
+  readonly processCount?: number;
 
   /**
    * Maximum inbound RPC message size in bytes. The explicit option overrides
@@ -127,6 +135,12 @@ export class DeliveryServer {
    */
   readonly #logger: ILogLayer | undefined;
 
+  readonly #processCount: number;
+
+  #pool: DeliveryChildPool | undefined;
+
+  #proxy: DeliveryParentProxy | undefined;
+
   /**
    * Active HTTP/2 listener.
    */
@@ -175,6 +189,14 @@ export class DeliveryServer {
     this.host = this.#configuration.host;
     this.#port = this.#configuration.port;
     this.#logger = options.logger;
+    this.#processCount = DeliveryConfig.number(
+      options.processCount,
+      "DELIVERY_PROCESS_COUNT",
+      1,
+      1,
+      Number.MAX_SAFE_INTEGER,
+      "process count",
+    );
   }
 
   /**
@@ -229,6 +251,7 @@ export class DeliveryServer {
       },
       closeAdmission: () => {
         this.#assembly?.closeAdmission();
+        this.#proxy?.close();
       },
       closeAdmin: () => {
         this.#assembly?.closeAdmin();
@@ -248,14 +271,41 @@ export class DeliveryServer {
           for (const session of this.#sessions) session.close();
           await closing;
         }
+        await this.#pool?.close();
       },
     });
     return this.#close;
   }
 
   async #startOnce(): Promise<this> {
-    const core = DeliveryAssembly.create(this.#configuration);
-    this.#assembly = core;
+    let server: http2.Http2Server | undefined;
+    try {
+      const core = await this.#services();
+      server = this.#createServer(core);
+      this.#server = server;
+      const address = await this.#listen(server, this.host, this.#port);
+      this.#port = address.port;
+      this.#started = true;
+      return this;
+    } catch (error) {
+      // spine-log-boundary: delivery_server.listener_start
+      deliveryServerLog.error(this.#logger);
+      this.#proxy?.close();
+      if (server !== undefined) await this.#closeListener(server);
+      await this.#pool?.close();
+      throw error;
+    }
+  }
+
+  /**
+   * Builds the public listener after its service handlers are ready.
+   */
+  #createServer(
+    core: Pick<
+      DeliveryAssembly,
+      "inbox" | "shards" | "managed" | "guarded" | "observing" | "admin"
+    >,
+  ): http2.Http2Server {
     const server = http2.createServer(
       connectNodeAdapter({
         routes: (router) => {
@@ -275,18 +325,33 @@ export class DeliveryServer {
       this.#sessions.add(session);
       session.on("close", () => this.#sessions.delete(session));
     });
-    this.#server = server;
-    try {
-      const address = await this.#listen(server, this.host, this.#port);
-      this.#port = address.port;
-      this.#started = true;
-      return this;
-    } catch (error) {
-      // spine-log-boundary: delivery_server.listener_start
-      deliveryServerLog.error(this.#logger);
-      await this.#closeListener(server);
-      throw error;
+    return server;
+  }
+
+  /**
+   * Constructs single-process handlers or starts fixed private child slots.
+   */
+  async #services(): Promise<
+    Pick<DeliveryAssembly, "inbox" | "shards" | "managed" | "guarded" | "observing" | "admin">
+  > {
+    if (this.#processCount === 1) {
+      const core = DeliveryAssembly.create(this.#configuration);
+      this.#assembly = core;
+      return core;
     }
+    const pool = new DeliveryChildPool(this.#processCount, this.#configuration);
+    this.#pool = pool;
+    await pool.start();
+    const proxy = new DeliveryParentProxy(pool);
+    this.#proxy = proxy;
+    return {
+      inbox: proxy.inbox(),
+      shards: proxy.shards(),
+      managed: proxy.managed(),
+      guarded: proxy.guarded(),
+      observing: proxy.observing(),
+      admin: proxy.admin(),
+    };
   }
 
   /**

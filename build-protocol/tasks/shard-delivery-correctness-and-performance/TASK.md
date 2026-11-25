@@ -23,7 +23,7 @@ Implementation sequence and decisions:
 - An application's nodes use the same configuration. A joining node must discover existing free work through its own subscription, even through a multi-process parent. A custom observer receives an inbox row after a successful write or after a normal run finds a late pending row. An exception during processing still releases the session. Distinguish lookup failure from callback failure.
 - Add child-process capacity settlement before enabling distributed writes. Reserve global capacity across slots, account for uncertain outcomes, and settle using a barrier ordered after the original mutation. Aggregate global results only when all required slots responded.
 
-The single-process observing endpoint and its low-level client are implemented. The indexed inbox and stored-row Admin reporting are implemented. Typed sessions, server expiry and same-run pickup recovery are implemented. Worker mutations now require the managed session and exact read row. The framework now uses server or custom observation. Current milestone: child-process topology. Combined verification and release review follow.
+The single-process observing endpoint and its low-level client are implemented. The indexed inbox and stored-row Admin reporting are implemented. Typed sessions, server expiry and same-run pickup recovery are implemented. Worker mutations now require the managed session and exact read row. The framework now uses server or custom observation. The optional multi-process server is implemented. Public routing review is complete. Current milestone: combined release verification and security review.
 
 Milestone 1 review corrections: queued work notices are removed when a shard becomes held or empty, and availability is checked again before sending. Closed or already-aborted streams end without registering a subscriber; shutdown detaches active abort listeners. The low-level client detaches its caller listener and active read immediately on abort, including while paused after a response. Tests use a packed To-do `CreateTask` Command and typed task target. Focused server and client observation tests, package typecheck, ESLint, TSDoc, and cleanup checks pass. Automatic session expiry remains in the managed-sessions milestone.
 
@@ -76,3 +76,17 @@ An application can install a custom observer with either storage option. A
 normal pass releases the shard, then reads the newest pending row for the
 callback. Tests with PostgreSQL and MySQL cover a separate process writing
 immediately before and immediately after release.
+
+## Delivery server processes
+
+The default server runs in one Node.js process. With two or more children, a
+public parent sends each shard to a fixed child. Each application's work
+subscription discovers available shards across those children. A failed
+child loses its in-memory rows and sessions. The parent restores the slot
+and continues serving healthy shards. The private capacity service accounts
+for changes across all slots, including writes whose replies were lost.
+
+Real-process tests cover child loss and replacement, traffic to a healthy
+slot, separate public subscribers, and an identical application node joining
+a deployment with busy peers. The executable can select this mode through
+`DELIVERY_PROCESS_COUNT`.

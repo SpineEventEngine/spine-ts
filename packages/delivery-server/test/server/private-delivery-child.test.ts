@@ -39,6 +39,50 @@ import { PrivateCapacityListener } from "../../src/server/private-capacity-liste
 import { PrivateDeliveryChild } from "../../src/server/private-delivery-child.js";
 
 describe("private delivery child", () => {
+  it("ends a generation after an autonomous expiry report is rejected permanently", async () => {
+    const configuration = { ...DeliveryConfig.resolve({ port: 0 }), processingTimeoutMs: 20 };
+    const ledger = new CapacityLedger(configuration);
+    ledger.replace(0, "first");
+    const credentials = new Map([["Bearer capacity", { slot: 0, generation: "first" }]]);
+    const capacity = new PrivateCapacityListener(ledger, credentials);
+    await capacity.start();
+    const onFatal = vi.fn();
+    const child = new PrivateDeliveryChild(
+      {
+        slot: 0,
+        generation: "first",
+        credential: "Bearer child",
+        capacityCredential: "Bearer capacity",
+        capacityBaseUrl: capacity.baseUrl,
+        configuration,
+      },
+      onFatal,
+    );
+    await child.start();
+    const sessions = new Http2SessionManager(child.baseUrl);
+    const managed = createClient(
+      ManagedShardService,
+      createGrpcTransport({ baseUrl: child.baseUrl, sessionManager: sessions }),
+    );
+    try {
+      const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
+      const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run" });
+      await managed.pickShardRaw(create(DeliveryShardPickupSchema, { shard, worker }), {
+        headers: { authorization: "Bearer child", "x-spine-capacity-sequence": "1" },
+      });
+      credentials.delete("Bearer capacity");
+      await vi.waitFor(
+        () => {
+          expect(onFatal).toHaveBeenCalledOnce();
+        },
+        { timeout: 2_000 },
+      );
+    } finally {
+      sessions.abort();
+      await child.close();
+      await capacity.close();
+    }
+  });
   it("authenticates requests and reserves exact capacity for Inbox writes", async () => {
     const configuration = DeliveryConfig.resolve({ host: "127.0.0.1", port: 0 });
     const ledger = new CapacityLedger(configuration);

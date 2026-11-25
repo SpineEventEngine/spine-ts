@@ -13,7 +13,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { fork, type ChildProcess } from "node:child_process";
+import { fork, type ChildProcess, type ForkOptions } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -107,6 +107,11 @@ interface SlotProcess {
 }
 
 /**
+ * Starts a child with the same arguments as the production Node fork.
+ */
+type ChildFork = (entry: string, args: readonly string[], options: ForkOptions) => ChildProcess;
+
+/**
  * Keeps a fixed set of volatile child slots alive behind one private capacity ledger.
  */
 export class DeliveryChildPool {
@@ -117,6 +122,8 @@ export class DeliveryChildPool {
   readonly #capacity: PrivateCapacityListener;
 
   readonly #slots = new Map<number, SlotProcess>();
+
+  readonly #children = new Set<ChildProcess>();
 
   readonly #restartTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
@@ -133,10 +140,12 @@ export class DeliveryChildPool {
    *
    * @param processCount Selects the explicit positive child count.
    * @param configuration Preserves global retained-state and session settings.
+   * @param forkChild Starts child processes through Node's fork operation.
    */
   constructor(
     readonly processCount: number,
     private readonly configuration: DeliveryConfiguration,
+    private readonly forkChild: ChildFork = fork,
   ) {
     if (!Number.isSafeInteger(processCount) || processCount < 1)
       throw new RangeError("Delivery child process count is invalid.");
@@ -188,10 +197,13 @@ export class DeliveryChildPool {
    * Creates a correlated mutation sequence for the current child generation.
    *
    * @param slot Identifies the target child slot.
+   * @param expected Refuses a ticket after a selected generation changes.
    * @returns A ticket accepted only by the current child generation.
    */
-  ticket(slot: number): CapacityTicket {
+  ticket(slot: number, expected?: DeliveryChildEndpoint): CapacityTicket {
     const endpoint = this.endpoint(slot);
+    if (expected !== undefined && endpoint.generation !== expected.generation)
+      throw new ConnectError("Delivery child generation changed.", Code.Unavailable);
     const current = this.#slots.get(slot);
     if (current === undefined)
       throw new ConnectError("Delivery child slot is unavailable.", Code.Unavailable);
@@ -210,15 +222,15 @@ export class DeliveryChildPool {
   }
 
   /**
-   * Reports child readiness, replacement, and terminal closure to stream fan-in.
+   * Registers child readiness, replacement, and terminal closure notifications.
    *
-   * @param listener Receives the changed fixed slot.
+   * @param onChange Receives the changed fixed slot.
    * @returns A function that detaches the listener.
    */
-  onChange(listener: (slot: number) => void): () => void {
-    this.#changes.add(listener);
+  onChange(onChange: (slot: number) => void): () => void {
+    this.#changes.add(onChange);
     return () => {
-      this.#changes.delete(listener);
+      this.#changes.delete(onChange);
     };
   }
 
@@ -247,6 +259,26 @@ export class DeliveryChildPool {
    */
   async #spawn(slot: number): Promise<void> {
     if (this.#close !== undefined) return;
+    const current = this.#fork(slot);
+    if (current === undefined) return;
+    this.#slots.set(slot, current);
+    await this.#awaitReady(current, {
+      slot,
+      generation: current.generation,
+      credential: current.credential,
+      capacityCredential: current.capacityCredential,
+      capacityBaseUrl: this.#capacity.baseUrl,
+      configuration: this.configuration,
+    });
+  }
+
+  /**
+   * Creates one private credential set and a Node fork for a slot.
+   *
+   * @param slot Identifies the fixed route slot.
+   * @returns The launched process, or undefined after a failed fork.
+   */
+  #fork(slot: number): SlotProcess | undefined {
     const generation = randomUUID();
     const credential = `Bearer ${randomUUID()}`;
     const capacityCredential = `Bearer ${randomUUID()}`;
@@ -254,16 +286,20 @@ export class DeliveryChildPool {
     this.#credentials.set(capacityCredential, { slot, generation });
     let child: ChildProcess;
     try {
-      child = fork(DeliveryChildPool.#entry(), [], {
+      child = this.forkChild(DeliveryChildPool.#entry(), [], {
         stdio: ["ignore", "ignore", "ignore", "ipc"],
       });
     } catch {
       this.#credentials.delete(capacityCredential);
       this.#ledger.replace(slot, randomUUID());
       this.#scheduleFailedStart(slot, 1);
-      return;
+      return undefined;
     }
-    const current: SlotProcess = {
+    this.#children.add(child);
+    child.once("exit", () => {
+      this.#children.delete(child);
+    });
+    return {
       slot,
       generation,
       credential,
@@ -274,16 +310,6 @@ export class DeliveryChildPool {
       ready: false,
       baseUrl: undefined,
     };
-    this.#slots.set(slot, current);
-    const options: PrivateDeliveryChildOptions = {
-      slot,
-      generation,
-      credential,
-      capacityCredential,
-      capacityBaseUrl: this.#capacity.baseUrl,
-      configuration: this.configuration,
-    };
-    await this.#awaitReady(current, options);
   }
 
   /**
@@ -317,8 +343,29 @@ export class DeliveryChildPool {
         this.#retire(current);
         resolve();
       });
-      child.send({ kind: "start", options });
+      this.#sendStart(current, options, resolve);
     });
+  }
+
+  /**
+   * Retires a fork when its IPC startup message cannot be delivered.
+   */
+  #sendStart(
+    current: SlotProcess,
+    options: PrivateDeliveryChildOptions,
+    onFailure: () => void,
+  ): void {
+    try {
+      current.process.send({ kind: "start", options }, (error) => {
+        if (error !== null) {
+          this.#retire(current);
+          onFailure();
+        }
+      });
+    } catch {
+      this.#retire(current);
+      onFailure();
+    }
   }
 
   /**
@@ -329,6 +376,7 @@ export class DeliveryChildPool {
   #retire(current: SlotProcess): void {
     if (this.#slots.get(current.slot) !== current) return;
     this.#slots.delete(current.slot);
+    if (current.process.pid === undefined) this.#children.delete(current.process);
     for (const listener of this.#changes) listener(current.slot);
     this.#credentials.delete(current.capacityCredential);
     this.#ledger.replace(current.slot, randomUUID());
@@ -379,23 +427,30 @@ export class DeliveryChildPool {
       for (const listener of this.#changes) listener(slot);
     for (const timer of this.#restartTimers.values()) clearTimeout(timer);
     this.#restartTimers.clear();
-    await Promise.all(
-      [...this.#slots.values()].map(
-        (slot) =>
-          new Promise<void>((resolve) => {
-            if (slot.process.exitCode !== null) {
-              resolve();
-              return;
-            }
-            slot.process.once("exit", () => {
-              resolve();
-            });
-            if (slot.process.connected) slot.process.send({ kind: "close" });
-          }),
-      ),
-    );
+    await Promise.all([...this.#children].map((child) => this.#stopChild(child)));
     await this.#start?.catch(() => undefined);
     await this.#capacity.close();
+  }
+
+  /**
+   * Waits for each reached fork, including a retired child that reported startup failure.
+   */
+  #stopChild(child: ChildProcess): Promise<void> {
+    return new Promise<void>((resolve) => {
+      if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) {
+        resolve();
+        return;
+      }
+      child.once("exit", () => {
+        resolve();
+      });
+      const ready = [...this.#slots.values()].some((slot) => slot.process === child);
+      if (!ready || !child.connected) child.kill("SIGTERM");
+      else
+        child.send({ kind: "close" }, (error) => {
+          if (error !== null) child.kill("SIGTERM");
+        });
+    });
   }
 
   /**

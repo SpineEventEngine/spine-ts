@@ -22,6 +22,7 @@ import {
   type ConnectRouter,
   type Interceptor,
   type ServiceImpl,
+  type HandlerContext,
 } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { Time } from "@spine-event-engine/core/time";
@@ -33,6 +34,7 @@ import {
   ShardObservingService,
   ShardService,
   type DeliveryShardPickup,
+  type DeliverySessionHandle,
 } from "@spine-event-engine/proto/delivery-server";
 import * as privateProto from "@spine-event-engine/proto/generated/spine/delivery/session/private_delivery_pb.js";
 
@@ -135,8 +137,12 @@ export class PrivateDeliveryChild {
    * Creates a child listener and its private capacity client without binding.
    *
    * @param options Supplies the fixed slot, generation, credentials, and limits.
+   * @param onFatal Ends the child process after a terminal capacity-report failure.
    */
-  constructor(private readonly options: PrivateDeliveryChildOptions) {
+  constructor(
+    private readonly options: PrivateDeliveryChildOptions,
+    private readonly onFatal?: () => void,
+  ) {
     this.#capacity = new PrivateCapacityClient(
       options.capacityBaseUrl,
       options.capacityCredential,
@@ -149,7 +155,9 @@ export class PrivateDeliveryChild {
       ...options.configuration,
       onAutonomousExpiry: (snapshot) => {
         void this.#reporter.publish(snapshot).catch(() => {
-          void this.close();
+          void this.close().finally(() => {
+            this.onFatal?.();
+          });
         });
       },
     });
@@ -382,25 +390,38 @@ export class PrivateDeliveryChild {
           () => this.#pickupGrowth(request, "MANAGED"),
           () => Promise.resolve(source.pickShardForDelivery(request, context)),
         ),
-      renewShardSession: (request, context) => {
-        const revision = this.#assembly.sessionRuntime.receivedRevision(request.shard);
-        return this.#mutate(
-          context.requestHeader,
-          context.signal,
-          () => noGrowth,
-          () => this.#assembly.sessionRuntime.renewAtRevision(request, context.signal, revision),
-        );
-      },
-      releaseShardSession: (request, context) => {
-        const revision = this.#assembly.sessionRuntime.receivedRevision(request.shard);
-        return this.#mutate(
-          context.requestHeader,
-          context.signal,
-          () => noGrowth,
-          () => this.#assembly.sessionRuntime.releaseAtRevision(request, context.signal, revision),
-        );
-      },
+      renewShardSession: (request, context) =>
+        this.#sessionChange(request, context, (revision) =>
+          this.#assembly.sessionRuntime.renewAtRevision(request, context.signal, revision),
+        ),
+      releaseShardSession: (request, context) =>
+        this.#sessionChange(request, context, (revision) =>
+          this.#assembly.sessionRuntime.releaseAtRevision(request, context.signal, revision),
+        ),
     };
+  }
+
+  /**
+   * Captures a session revision before waiting on the private capacity gate.
+   *
+   * @typeParam T The typed session response.
+   * @param request Supplies the received session handle.
+   * @param context Carries the public signal and private ticket.
+   * @param apply Changes only the captured revision after capacity admission.
+   * @returns The typed session response.
+   */
+  #sessionChange<T>(
+    request: DeliverySessionHandle,
+    context: HandlerContext,
+    apply: (revision: number | undefined) => Promise<T>,
+  ): Promise<T> {
+    const revision = this.#assembly.sessionRuntime.receivedRevision(request.shard);
+    return this.#mutate(
+      context.requestHeader,
+      context.signal,
+      () => noGrowth,
+      () => apply(revision),
+    );
   }
 
   /**
@@ -443,7 +464,9 @@ export class PrivateDeliveryChild {
     let sampled: Timestamp | undefined;
     const plan = () => {
       sampled = Time.currentTime();
-      return this.#positive(this.#assembly.guardedRuntime.projectedAcknowledgement(request, sampled));
+      return this.#positive(
+        this.#assembly.guardedRuntime.projectedAcknowledgement(request, sampled),
+      );
     };
     return this.#mutate(
       context.requestHeader,

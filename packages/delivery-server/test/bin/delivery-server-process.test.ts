@@ -17,6 +17,9 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { describe, expect, it, onTestFinished } from "vitest";
+import { createClient } from "@connectrpc/connect";
+import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
+import { Health } from "@spine-event-engine/proto/delivery-server";
 
 import { DeliveryServer } from "../../src/index.js";
 
@@ -28,6 +31,69 @@ const signalSequences: readonly (readonly NodeJS.Signals[])[] = [
 ];
 
 describe("spine-delivery-server executable", () => {
+  it("exits nonzero after a two-child startup collides with the public port", async () => {
+    const occupied = new DeliveryServer({ port: 0 });
+    await occupied.start();
+    const child = spawn(process.execPath, [executable], {
+      detached: true,
+      env: { ...process.env, PORT: String(occupied.port), DELIVERY_PROCESS_COUNT: "2" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const stderr = collect(child.stderr);
+    try {
+      const code = await Promise.race([
+        exited(child),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error("CLI did not exit after public bind failure."));
+          }, 2_000);
+        }),
+      ]);
+      expect(code).not.toBe(0);
+      await expect(stderr).resolves.toContain("Delivery server startup failed:");
+    } finally {
+      if (child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {
+          /* Process group already exited. */
+        }
+      }
+      await occupied.close();
+    }
+  });
+  it("starts and closes a parent with two private children from its environment", async () => {
+    const child = spawn(process.execPath, [executable], {
+      env: { ...process.env, PORT: "0", DELIVERY_PROCESS_COUNT: "2" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const closed = new Promise<void>((resolve) => {
+      child.once("close", () => {
+        resolve();
+      });
+    });
+    onTestFinished(async () => {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      await closed;
+    });
+    const stderr = collect(child.stderr);
+    const exit = exited(child);
+    const readiness = await waitFor(child, "Delivery server listening at http://127.0.0.1:");
+    const baseUrl = `http://127.0.0.1:${String(readinessPort(readiness))}`;
+    const sessions = new Http2SessionManager(baseUrl);
+    try {
+      const health = createClient(
+        Health,
+        createGrpcTransport({ baseUrl, sessionManager: sessions }),
+      );
+      await expect(health.check({ service: "" })).resolves.toBeDefined();
+    } finally {
+      sessions.abort();
+      child.kill("SIGTERM");
+    }
+    await expect(exit).resolves.toBe(0);
+    await expect(stderr).resolves.toBe("");
+  });
   it("fails invalid configuration before listener startup with a sanitized nonzero error", async () => {
     const child = spawn(process.execPath, [executable], {
       env: { ...process.env, PORT: "invalid" },

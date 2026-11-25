@@ -47,7 +47,8 @@ describe("per-child mutation admission", () => {
         return Promise.resolve();
       },
     });
-    const running = gate.run(ticket(0, "first", 1),
+    const running = gate.run(
+      ticket(0, "first", 1),
       () => ({ ...growth, bytes: 70 }),
       () => Promise.resolve("committed"),
       () => ({ usage: { ...growth, bytes: 71 }, revision: 1n }),
@@ -495,13 +496,21 @@ describe("per-child mutation admission", () => {
       report: () => Promise.resolve(),
       cancel: () => {
         enteredCancel.resolve(undefined);
-        return new Promise<undefined>(() => { /* Deliberately unanswered transport. */ });
+        return new Promise<undefined>(() => {
+          /* Deliberately unanswered transport. */
+        });
       },
     });
     const controller = new AbortController();
-    const running = gate.run(ticket(0, "first", 1), () => growth, () => {
-      throw new Error("handler must not start");
-    }, () => ({ usage: growth, revision: 1n }), controller.signal);
+    const running = gate.run(
+      ticket(0, "first", 1),
+      () => growth,
+      () => {
+        throw new Error("handler must not start");
+      },
+      () => ({ usage: growth, revision: 1n }),
+      controller.signal,
+    );
     const rejected = expect(running).rejects.toThrow();
     await enteredReserve.promise;
     controller.abort(new Error("caller stopped"));
@@ -520,16 +529,23 @@ describe("per-child mutation admission", () => {
     const gate = new CapacityMutationGate({
       reserve: () => {
         enteredReserve.resolve(undefined);
-        return new Promise<undefined>(() => { /* Deliberately unanswered transport. */ });
+        return new Promise<undefined>(() => {
+          /* Deliberately unanswered transport. */
+        });
       },
       report: () => Promise.resolve(),
       cancel: () => Promise.resolve(),
     });
     let invoked = false;
-    const running = gate.run(ticket(0, "first", 1), () => growth, () => {
-      invoked = true;
-      return Promise.resolve();
-    }, () => ({ usage: growth, revision: 1n }));
+    const running = gate.run(
+      ticket(0, "first", 1),
+      () => growth,
+      () => {
+        invoked = true;
+        return Promise.resolve();
+      },
+      () => ({ usage: growth, revision: 1n }),
+    );
     const rejected = expect(running).rejects.toThrow();
     await enteredReserve.promise;
     gate.close();

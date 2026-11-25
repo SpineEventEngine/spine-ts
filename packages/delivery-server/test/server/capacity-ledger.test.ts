@@ -35,8 +35,9 @@ describe("global child capacity", () => {
     ledger.reserve(id, { ...growth, bytes: 71 }, 1n);
     ledger.reserve(id, growth, 0n);
     expect(ledger.usage()).toEqual({ ...growth, bytes: 71 });
-    expect(() => { ledger.reserve(id, { ...growth, bytes: 72 }, 2n); })
-      .toThrow(expect.objectContaining({ code: Code.ResourceExhausted }));
+    expect(() => {
+      ledger.reserve(id, { ...growth, bytes: 72 }, 2n);
+    }).toThrow(expect.objectContaining({ code: Code.ResourceExhausted }));
     expect(ledger.usage()).toEqual({ ...growth, bytes: 71 });
   });
   it("holds an uncertain reservation while another slot uses remaining headroom", () => {

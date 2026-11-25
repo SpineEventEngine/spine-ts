@@ -35,6 +35,7 @@ which override defaults. Invalid values throw before a listener is created:
 
 - `host` / `HOST`: non-blank text; default `127.0.0.1`;
 - `port` / `PORT`: integer 0–65535; default 8484;
+- `processCount` / `DELIVERY_PROCESS_COUNT`: positive safe integer; default 1;
 - `maxInboundMessageBytes` / `MAX_INBOUND_MESSAGE_SIZE`: integer 1–2147483647;
   default 4194304;
 - `processingTimeoutSeconds` / `SHARD_PROCESSING_TIMEOUT`: integer
@@ -48,6 +49,15 @@ payloads no larger than 1 MiB, and request/response bodies no larger than 4
 MiB. Capacity is finite: an operation that would exceed retained messages,
 bytes, or shards fails atomically with `RESOURCE_EXHAUSTED`; it is not partially
 accepted or silently shortened.
+
+With `processCount` greater than one, the public endpoint runs in a parent
+process and starts that many homogeneous child processes. Shard number `s`
+routes to child `s % processCount`; the child keeps the full shard identity.
+The parent combines Admin snapshots and streams work notices from all healthy
+children. Global retained-state limits still apply across the children. A
+restarting child makes its targeted shards temporarily unavailable, while
+healthy children continue serving their shards. Its in-memory rows and
+sessions are lost when it exits.
 
 ## Work reminder interval
 

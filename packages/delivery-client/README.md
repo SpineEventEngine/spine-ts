@@ -85,24 +85,48 @@ a worker must still request pickup before processing a row.
 
 ## 👀 Shard state for Admin
 
-For an Admin view, use a snapshot to read current shard state and an Admin
-observation stream for later state changes. Cancel the stream when it is no longer needed.
+For an Admin view, keep a live observation stream open. A snapshot gives a
+separate point-in-time view; it must not replace newer live updates. Rebuild the
+live view when opening a new stream, and mark it stale if the stream fails.
 
 <!-- docs-snippet-path: packages/delivery-client/src/client/client.ts -->
 
 ```ts
-import { DeliveryClient } from "@spine-event-engine/delivery-client";
+import { DeliveryClient, type RemoteShardObservation } from "@spine-event-engine/delivery-client";
 
 declare const client: DeliveryClient;
-const updates = client.observeShardUpdates({ timeoutMs: 5_000 });
-for await (const update of updates) {
-  console.log(update.shard, update.status);
-  updates.cancel();
+declare const shutdown: AbortSignal;
+declare function showSnapshot(rows: readonly RemoteShardObservation[]): void;
+declare function showLive(rows: ReadonlyMap<string, RemoteShardObservation>, stale: boolean): void;
+
+async function showAdmin(): Promise<void> {
+  const live = new Map<string, RemoteShardObservation>();
+  showLive(live, true);
+  const updates = client.observeShardUpdates({ signal: shutdown, timeoutMs: 5_000 });
+  try {
+    const snapshot = await client.shardSnapshot({ signal: shutdown });
+    showSnapshot(snapshot);
+    for await (const update of updates) {
+      const key = `${update.shard.index}/${update.shard.ofTotal}`;
+      live.set(key, update);
+      showLive(live, false);
+    }
+  } catch (error) {
+    showLive(live, true);
+    throw error;
+  } finally {
+    updates.cancel();
+  }
 }
+
+void showAdmin();
 ```
 
+Call `showAdmin()` again after a failure to build a fresh live view. The client
+defaults to no hidden Admin reconnects, so a failed stream reaches the caller.
 Here `timeoutMs` bounds setup through the first acknowledgement only; it never
-ends an acknowledged observation stream.
+ends an acknowledged observation stream. Keep the snapshot and live view
+separate so a slower snapshot response cannot overwrite a newer live update.
 
 `RemoteInbox` and `RemoteWorkRegistry` adapt a client to a server
 `DeliveryBuilder`. The authoritative delivery state is the remote Inbox row and

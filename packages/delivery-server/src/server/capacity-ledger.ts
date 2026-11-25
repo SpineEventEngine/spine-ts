@@ -106,7 +106,8 @@ export class CapacityLedger {
   reserve(ticket: CapacityTicket, growth: CapacityUsage, phase = 0n): void {
     const slot = this.#current(ticket);
     CapacityLedger.#validateUsage(growth);
-    if (phase < 0n) throw new ConnectError("Delivery capacity phase is invalid.", Code.InvalidArgument);
+    if (phase < 0n)
+      throw new ConnectError("Delivery capacity phase is invalid.", Code.InvalidArgument);
     if (CapacityLedger.#retired(slot, ticket.sequence))
       throw new ConnectError("Delivery capacity ticket is retired.", Code.FailedPrecondition);
     const previous = slot.reservations.get(ticket.sequence);

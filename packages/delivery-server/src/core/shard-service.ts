@@ -151,7 +151,11 @@ export class ShardSessionRuntime {
         return this.renewAtRevision(request, context.signal, this.receivedRevision(request.shard));
       },
       releaseShardSession: async (request, context) => {
-        return this.releaseAtRevision(request, context.signal, this.receivedRevision(request.shard));
+        return this.releaseAtRevision(
+          request,
+          context.signal,
+          this.receivedRevision(request.shard),
+        );
       },
     };
   }
@@ -167,7 +171,7 @@ export class ShardSessionRuntime {
   }
 
   /**
-   * Renews only the revision observed before a private capacity wait, so a
+   * Updates only the revision observed before a private capacity wait, so a
    * queued request cannot apply to a later revision of the same session.
    *
    * @param request Supplies the session handle.
@@ -175,8 +179,11 @@ export class ShardSessionRuntime {
    * @param revision Captures the received revision.
    * @returns The renewed handle.
    */
-  renewAtRevision(request: DeliverySessionHandle, signal: AbortSignal,
-    revision: number | undefined): Promise<DeliverySessionHandle> {
+  renewAtRevision(
+    request: DeliverySessionHandle,
+    signal: AbortSignal,
+    revision: number | undefined,
+  ): Promise<DeliverySessionHandle> {
     const shard = SessionValues.requireShard(request.shard);
     const worker = SessionValues.requireWorker(request.worker);
     const id = SessionValues.requireId(request.sessionId);
@@ -185,7 +192,7 @@ export class ShardSessionRuntime {
   }
 
   /**
-   * Releases only the revision observed before a private capacity wait, so a
+   * Removes only the revision observed before a private capacity wait, so a
    * delayed release cannot clear a session renewed while it was queued.
    *
    * @param request Supplies the session handle.
@@ -193,8 +200,11 @@ export class ShardSessionRuntime {
    * @param revision Captures the received revision.
    * @returns An empty response after the matching session is released.
    */
-  async releaseAtRevision(request: DeliverySessionHandle, signal: AbortSignal,
-    revision: number | undefined): Promise<Record<string, never>> {
+  async releaseAtRevision(
+    request: DeliverySessionHandle,
+    signal: AbortSignal,
+    revision: number | undefined,
+  ): Promise<Record<string, never>> {
     const shard = SessionValues.requireShard(request.shard);
     const worker = SessionValues.requireWorker(request.worker);
     const id = SessionValues.requireId(request.sessionId);

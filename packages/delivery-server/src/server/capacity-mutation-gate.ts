@@ -30,8 +30,12 @@ export interface CapacityReservationClient {
    * @param phase Orders a later growth estimate for this ticket.
    * @returns Completion after the parent reserves capacity.
    */
-  reserve(ticket: CapacityTicket, growth: CapacityUsage, signal?: AbortSignal,
-    phase?: bigint): Promise<void>;
+  reserve(
+    ticket: CapacityTicket,
+    growth: CapacityUsage,
+    signal?: AbortSignal,
+    phase?: bigint,
+  ): Promise<void>;
 
   /**
    * Updates a reservation with exact committed usage.
@@ -373,7 +377,9 @@ export class CapacityMutationGate {
       return;
     }
     const attempt = new AbortController();
-    const end = setImmediate(() => { attempt.abort(); });
+    const end = setImmediate(() => {
+      attempt.abort();
+    });
     try {
       await this.#callWithAbort(
         (signal) => this.capacity.cancel(ticket, signal),

@@ -159,67 +159,71 @@ it("fans out one real work notice through two remote ServerEnvironment assemblie
   });
 });
 
-it("lets a third identical replica discover old free work before the reminder", async () => {
-  const server = trackedServer();
-  await server.start();
-  const settings = { DELIVERY_SHARDS: "3", DELIVERY_MAX_CONCURRENT: "1" };
-  const east = application(server.baseUrl, "east", settings);
-  const west = application(server.baseUrl, "west", settings);
-  const events: { readonly node: string; readonly signalId: string }[] = [];
-  for (const child of [east, west])
-    child.on("message", (frame: unknown) => {
+it.each([1, 2])(
+  "lets a third identical replica discover old free work with %i delivery processes before the reminder",
+  async (processCount) => {
+    const server = trackedServer(0, processCount);
+    await server.start();
+    const settings = { DELIVERY_SHARDS: "3", DELIVERY_MAX_CONCURRENT: "1" };
+    const east = application(server.baseUrl, "east", settings);
+    const west = application(server.baseUrl, "west", settings);
+    const events: { readonly node: string; readonly signalId: string }[] = [];
+    for (const child of [east, west])
+      child.on("message", (frame: unknown) => {
+        if (isDispatch(frame)) events.push(frame);
+      });
+    await Promise.all([ready(east), ready(west)]);
+    await Promise.all([
+      command(east, { command: "block-first" }),
+      command(west, { command: "block-first" }),
+    ]);
+    const eastId = routedId("first-east", 0, 3);
+    const westId = routedId("first-west", 1, 3);
+    const northId = routedId("waiting-north", 2, 3);
+    await command(east, { command: "write", signalId: eastId, shardIndex: 0 });
+    await eventually(() => {
+      expect(events.filter((event) => event.signalId === `${eastId}-started`)).toHaveLength(1);
+    });
+    await command(west, { command: "write", signalId: westId, shardIndex: 1 });
+    await eventually(() => {
+      expect(events.filter((event) => event.signalId === `${westId}-started`)).toHaveLength(1);
+    });
+    expect(events.find((event) => event.signalId === `${eastId}-started`)?.node).not.toBe(
+      events.find((event) => event.signalId === `${westId}-started`)?.node,
+    );
+
+    await command(east, { command: "write", signalId: northId, shardIndex: 2 });
+    expect(events.filter((event) => event.signalId === northId)).toHaveLength(0);
+    const north = application(server.baseUrl, "north", settings);
+    north.on("message", (frame: unknown) => {
       if (isDispatch(frame)) events.push(frame);
     });
-  await Promise.all([ready(east), ready(west)]);
-  await Promise.all([
-    command(east, { command: "block-first" }),
-    command(west, { command: "block-first" }),
-  ]);
-  const eastId = routedId("first-east", 0, 3);
-  const westId = routedId("first-west", 1, 3);
-  const northId = routedId("waiting-north", 2, 3);
-  await command(east, { command: "write", signalId: eastId, shardIndex: 0 });
-  await eventually(() => {
-    expect(events.filter((event) => event.signalId === `${eastId}-started`)).toHaveLength(1);
-  });
-  await command(west, { command: "write", signalId: westId, shardIndex: 1 });
-  await eventually(() => {
-    expect(events.filter((event) => event.signalId === `${westId}-started`)).toHaveLength(1);
-  });
-  expect(events.find((event) => event.signalId === `${eastId}-started`)?.node).not.toBe(
-    events.find((event) => event.signalId === `${westId}-started`)?.node,
-  );
+    const joinedAt = Date.now();
+    await ready(north);
+    await eventually(() => {
+      const matching = events.filter((event) => event.signalId === northId);
+      expect(matching).toHaveLength(1);
+      expect(matching[0]).toMatchObject({ node: "north", signalId: northId });
+    });
+    expect(Date.now() - joinedAt).toBeLessThan(10_000);
 
-  await command(east, { command: "write", signalId: northId, shardIndex: 2 });
-  expect(events.filter((event) => event.signalId === northId)).toHaveLength(0);
-  const north = application(server.baseUrl, "north", settings);
-  north.on("message", (frame: unknown) => {
-    if (isDispatch(frame)) events.push(frame);
-  });
-  const joinedAt = Date.now();
-  await ready(north);
-  await eventually(() => {
-    const matching = events.filter((event) => event.signalId === northId);
-    expect(matching).toHaveLength(1);
-    expect(matching[0]).toMatchObject({ node: "north", signalId: northId });
-  });
-  expect(Date.now() - joinedAt).toBeLessThan(10_000);
-
-  await Promise.all([
-    command(east, { command: "release-first" }),
-    command(west, { command: "release-first" }),
-  ]);
-  const reader = DeliveryClient.connectTo(server.baseUrl);
-  clients.push(reader);
-  await eventuallyAsync(async () => {
-    for (let index = 0; index < 3; index += 1) {
-      expect(await reader.newestPending(new ShardIndex(index, 3))).toBeUndefined();
-    }
-    expect((await reader.shardSnapshot()).every((shard) => shard.status === "NOT_PICKED")).toBe(
-      true,
-    );
-  });
-}, 15_000);
+    await Promise.all([
+      command(east, { command: "release-first" }),
+      command(west, { command: "release-first" }),
+    ]);
+    const reader = DeliveryClient.connectTo(server.baseUrl);
+    clients.push(reader);
+    await eventuallyAsync(async () => {
+      for (let index = 0; index < 3; index += 1) {
+        expect(await reader.newestPending(new ShardIndex(index, 3))).toBeUndefined();
+      }
+      expect((await reader.shardSnapshot()).every((shard) => shard.status === "NOT_PICKED")).toBe(
+        true,
+      );
+    });
+  },
+  15_000,
+);
 
 it("accepts a server reminder after a full-cap work notice was dropped", async () => {
   const server = new DeliveryServer({ host: "127.0.0.1", port: 0, workReminderSeconds: 1 });
@@ -368,8 +372,8 @@ it("forces a child that ignores graceful shutdown and settles its forced exit", 
   expect(child.signalCode).toBe("SIGKILL");
 });
 
-function trackedServer(port = 0): DeliveryServer {
-  const server = new DeliveryServer({ host: "127.0.0.1", port });
+function trackedServer(port = 0, processCount = 1): DeliveryServer {
+  const server = new DeliveryServer({ host: "127.0.0.1", port, processCount });
   servers.push(server);
   return server;
 }

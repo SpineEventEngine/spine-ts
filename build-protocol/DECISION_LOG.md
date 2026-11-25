@@ -2,7 +2,7 @@
 
 Navigation: [README](README.md)
 
-## D-0129. Work notifications and shard pickup
+## D-0166. Work notifications and shard pickup
 
 Accepted on 25 November 2026.
 
