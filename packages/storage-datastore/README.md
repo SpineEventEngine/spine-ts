@@ -227,11 +227,11 @@ them automatically.
 
 ## 📏 Understand query limits
 
-The factory does not impose a candidate count on legacy record reads. It asks
-Datastore for cursor pages, applies provider filters and ordering, then reconciles
-the complete result locally for offsets and continuations. A custom record
-provider may set its own scan policy. Normalized queries retain their separate
-candidate limits. The adapter has no public Datastore cursor API.
+For a record query such as an inbox read, the factory follows Datastore cursors
+until it has read the rows needed for the result. It applies the requested
+ordering and offset before returning the page. A custom record provider can
+set a limit on the number of rows it examines. Normalized queries use the
+scan policy described in the package reference.
 
 Ordinary `write()` and `writeAll()` calls are independent provider writes. Use
 compare-and-set for an atomic conditional record update. An Entity commit

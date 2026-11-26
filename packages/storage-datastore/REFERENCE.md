@@ -151,7 +151,7 @@ pushed only when Datastore can execute the whole selected conjunction. Runtime
 descriptor/column validation happens before that decision. An omitted normalized-query
 budget uses the shared 10,000-record materialization bound, and Datastore's
 explicit normalized-query value cannot exceed 10,000. Legacy `RecordQuery`
-reads use provider cursor pages and have no factory-imposed candidate ceiling.
+reads follow Datastore cursors until they have all rows needed for the result.
 An explicitly configured scan policy on a custom record storage handle can
 still reject a larger local reconciliation. There is no public Datastore cursor API.
 
