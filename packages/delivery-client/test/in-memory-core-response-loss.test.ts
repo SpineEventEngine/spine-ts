@@ -658,7 +658,7 @@ describe("in-memory delivery core response loss", () => {
     }
   });
 
-  it("classifies an oversized post-commit expiration response as unknown", async () => {
+  it("classifies a post-commit transport size rejection as unknown", async () => {
     let now = 0;
     const core = InMemoryDelivery.create({ now: () => timestampFromDate(new Date(now)) });
     const normal = DeliveryClient.usingTransport(
@@ -675,10 +675,8 @@ describe("in-memory delivery core response loss", () => {
         router.service(ShardService, {
           ...core.shards,
           releaseSessions: async (request, context) => {
-            const response = await core.shards.releaseSessions(request, context);
-            const first = response.shard?.[0];
-            if (first?.worker !== undefined) first.worker.value = "x".repeat(4_200_000);
-            return response;
+            await core.shards.releaseSessions(request, context);
+            throw new ConnectError("Configured response size exceeded", Code.ResourceExhausted);
           },
         });
       }),

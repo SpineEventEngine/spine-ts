@@ -264,10 +264,13 @@ interface ShardCooldown {
 }
 
 /**
- * Buffers one Admin stream and coalesces changes independently per shard.
+ * Keeps the latest unread state for each shard on one Admin connection.
  */
 class Subscriber {
-  #frames: SubscriptionResponse[] = [];
+  readonly #pending = new Map<
+    string,
+    { frame: SubscriptionResponse; previous: string | undefined }
+  >();
 
   #waiter:
     | {
@@ -330,8 +333,9 @@ class Subscriber {
     if (this.#closed) return;
     const key = DeliveryShards.key(shard);
     if (this.#replayPending.has(key)) return;
+    const previous = this.#lastState.get(key);
     const frame = this.#record(shard);
-    if (frame !== undefined) this.#push(frame);
+    if (frame !== undefined) this.#push(key, frame, previous);
   }
 
   /**
@@ -376,11 +380,13 @@ class Subscriber {
   }
 
   /**
-   * Adds a frame to the buffer or hands it to a waiting reader.
+   * Sends the state to a waiting dashboard or updates the unread state for its shard.
    *
+   * @param key Identifies the changed shard.
    * @param frame Supplies the Admin response.
+   * @param previous Identifies the preceding state before this update.
    */
-  #push(frame: SubscriptionResponse): void {
+  #push(key: string, frame: SubscriptionResponse, previous: string | undefined): void {
     if (this.#closed) return;
     if (this.#waiter !== undefined) {
       const waiter = this.#waiter;
@@ -388,13 +394,10 @@ class Subscriber {
       waiter.resolve(frame);
       return;
     }
-    if (this.#frames.length === 100) {
-      this.#terminate(
-        new ConnectError("Delivery shard update buffer is full.", Code.ResourceExhausted),
-      );
-      return;
-    }
-    this.#frames.push(frame);
+    const unread = this.#pending.get(key);
+    if (unread === undefined) this.#pending.set(key, { frame, previous });
+    else if (unread.previous === this.#lastState.get(key)) this.#pending.delete(key);
+    else unread.frame = frame;
   }
 
   /**
@@ -404,8 +407,11 @@ class Subscriber {
    */
   next(): Promise<SubscriptionResponse | undefined> {
     if (this.#error !== undefined) return Promise.reject(this.#error);
-    const frame = this.#frames.shift();
-    if (frame !== undefined) return Promise.resolve(frame);
+    const first = this.#pending.entries().next().value;
+    if (first !== undefined) {
+      this.#pending.delete(first[0]);
+      return Promise.resolve(first[1].frame);
+    }
     if (this.#closed) return Promise.resolve(undefined);
     return new Promise((resolve, reject) => {
       this.#waiter = { resolve, reject };
@@ -436,7 +442,7 @@ class Subscriber {
   #terminate(error: Error | undefined): void {
     if (this.#closed) return;
     this.#closed = true;
-    this.#frames = [];
+    this.#pending.clear();
     for (const entry of this.#cooldowns.values())
       if (entry.timer !== undefined) clearTimeout(entry.timer);
     this.#cooldowns.clear();

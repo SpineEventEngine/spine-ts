@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, toBinary } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import {
   Code,
   ConnectError,
@@ -40,7 +40,6 @@ import type { InboxMessage, ShardIndex } from "@spine-event-engine/proto/deliver
 
 import { InboxMessages, InboxShards } from "../core/inbox-service.js";
 import { DeliverySessionInputs } from "../core/shard-service.js";
-import { MAX_DELIVERY_RPC_BYTES } from "../core/limits.js";
 import { DeliveryChildPool, type DeliveryChildEndpoint } from "./delivery-child-pool.js";
 import { DeliveryStreamFanIn } from "./delivery-stream-fan-in.js";
 
@@ -283,11 +282,6 @@ export class DeliveryParentProxy {
     this.#assertCurrent(endpoints);
     const shard = replies.flatMap((reply) => reply.shard);
     const response = create(ExpiredSessionsReleasedSchema, { shard });
-    if (toBinary(ExpiredSessionsReleasedSchema, response).byteLength > MAX_DELIVERY_RPC_BYTES)
-      throw new ConnectError(
-        "Global released-session response is too large.",
-        Code.ResourceExhausted,
-      );
     return response;
   }
 
@@ -330,8 +324,6 @@ export class DeliveryParentProxy {
       .flatMap((reply) => reply.shards)
       .sort((a, b) => DeliveryShards.compare(a.index, b.index));
     const response = create(ShardInfoListSchema, { shards });
-    if (toBinary(ShardInfoListSchema, response).byteLength > MAX_DELIVERY_RPC_BYTES)
-      throw new ConnectError("Global Admin snapshot is too large.", Code.ResourceExhausted);
     return response;
   }
 
@@ -423,7 +415,12 @@ export class DeliveryParentProxy {
     const connection = {
       endpoint,
       sessions,
-      transport: createGrpcTransport({ baseUrl: endpoint.baseUrl, sessionManager: sessions }),
+      transport: createGrpcTransport({
+        baseUrl: endpoint.baseUrl,
+        sessionManager: sessions,
+        readMaxBytes: this.pool.configuration.maxOutboundMessageBytes,
+        writeMaxBytes: this.pool.configuration.maxInboundMessageBytes,
+      }),
     };
     this.#connections.set(slot, connection);
     return connection;
@@ -462,7 +459,9 @@ export class DeliveryParentProxy {
     if (remaining !== undefined && remaining <= 0)
       throw new ConnectError("Delivery request deadline elapsed.", Code.DeadlineExceeded);
     const active = AbortSignal.any([signal, this.#closed.signal]);
-    return remaining === undefined
+    // Connect writes milliseconds with an eight-digit gRPC header. The public
+    // cancellation signal also reaches this child when a longer deadline expires.
+    return remaining === undefined || remaining > 99_999_999
       ? { headers, signal: active }
       : { headers, signal: active, timeoutMs: remaining };
   }

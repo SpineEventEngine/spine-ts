@@ -30,7 +30,6 @@ import type { ShardIndex, WorkerId } from "@spine-event-engine/proto/delivery";
 import { Time } from "@spine-event-engine/core/time";
 
 import { InMemoryDeliveryState, type ShardRecord } from "./in-memory-delivery-state.js";
-import { MAX_DELIVERY_WORKER_BYTES } from "./limits.js";
 import { MutationAdmission } from "./mutation-admission.js";
 import { DeliveryShards, DeliveryWorkers } from "./wire-values.js";
 
@@ -545,13 +544,7 @@ const SessionValues = Object.freeze({
    * @returns The valid worker.
    */
   requireWorker(worker: WorkerId | undefined): WorkerId {
-    if (
-      worker?.nodeId === undefined ||
-      !worker.value.trim() ||
-      !worker.nodeId.value.trim() ||
-      new TextEncoder().encode(worker.value + worker.nodeId.value).byteLength >
-        MAX_DELIVERY_WORKER_BYTES
-    )
+    if (worker?.nodeId === undefined || !worker.value.trim() || !worker.nodeId.value.trim())
       throw SessionValues.invalid("Delivery worker is invalid.");
     return worker;
   },

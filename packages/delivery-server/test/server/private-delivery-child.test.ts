@@ -38,10 +38,10 @@ describe("private delivery child", () => {
     await expect(child.start()).rejects.toThrow("is closed");
   });
 
-  it("authenticates direct Inbox and session calls and enforces local row capacity", async () => {
+  it("authenticates direct Inbox and session calls across multiple rows", async () => {
     const child = new PrivateDeliveryChild({
       credential: "Bearer child",
-      configuration: DeliveryConfig.resolve({ port: 0, maxRetainedMessages: 1 }),
+      configuration: DeliveryConfig.resolve({ port: 0 }),
     });
     await child.start();
     const sessions = new Http2SessionManager(child.baseUrl);
@@ -58,9 +58,10 @@ describe("private delivery child", () => {
       await inbox.writeOne({ message: domainMessage("one", shard) }, headers);
       const found = await inbox.findOne({ index: shard, uuid: "one" }, headers);
       expect(found.message?.id?.uuid).toBe("one");
-      await expect(
-        inbox.writeOne({ message: domainMessage("two", shard) }, headers),
-      ).rejects.toMatchObject({ code: Code.ResourceExhausted });
+      await inbox.writeOne({ message: domainMessage("two", shard) }, headers);
+      expect((await inbox.findOne({ index: shard, uuid: "two" }, headers)).message?.id?.uuid).toBe(
+        "two",
+      );
       const pickup = await managed.pickShardForDelivery(
         create(DeliveryShardPickupSchema, { shard, worker }),
         headers,

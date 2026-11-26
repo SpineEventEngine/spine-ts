@@ -36,7 +36,6 @@ import { InboxRetention } from "./inbox-retention.js";
 import { ShardIndex } from "./shard-index.js";
 
 const defaultReadLimit = 100;
-const maxReadLimit = 1_000;
 const storageClocks = new WeakMap<InboxStorage, () => Date>();
 
 /**
@@ -472,15 +471,8 @@ const Values = Object.freeze({
    * @returns The valid page limit.
    */
   limit(value: unknown): number {
-    if (
-      !Number.isSafeInteger(value) ||
-      typeof value !== "number" ||
-      value <= 0 ||
-      value > maxReadLimit
-    ) {
-      throw new InboxMessageError(
-        `Inbox read limit must be a positive safe integer at most ${String(maxReadLimit)}.`,
-      );
+    if (!Number.isSafeInteger(value) || typeof value !== "number" || value <= 0) {
+      throw new InboxMessageError("Inbox read limit must be a positive safe integer.");
     }
     return value;
   },

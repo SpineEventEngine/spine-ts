@@ -33,8 +33,8 @@ import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
 import { DeliveryLeases } from "./delivery-lease.js";
 import { ShardIndex } from "./shard-index.js";
+import type { DeliveryOperationOptions } from "./delivery-ports.js";
 
-const retries = 8;
 const leaseDefault = 30_000;
 
 /**
@@ -107,17 +107,25 @@ export class ShardedWorkRegistry {
    *
    * @param shard Identifies the shard to acquire.
    * @param worker Identifies the worker requesting ownership.
+   * @param options Propagates cancellation from the delivery run.
    * @returns The live owned session, or `undefined` when another worker owns it.
    */
-  async pickUp(shard: ShardIndex, worker: WorkerId): Promise<ShardSession | undefined> {
+  async pickUp(
+    shard: ShardIndex,
+    worker: WorkerId,
+    options?: DeliveryOperationOptions,
+  ): Promise<ShardSession | undefined> {
+    this.#requireActive(options);
     const nextShard = checkedShard(shard);
     const nextWorker = checkedWorker(worker);
     const storage = this.#storage();
     try {
       atomic(storage);
-      for (let i = 0; i < retries; i++) {
+      for (;;) {
+        this.#requireActive(options);
         const id = wireId(nextShard);
         const record = await storage.read(id);
+        this.#requireActive(options);
         const current = record === undefined ? undefined : session(record, nextShard, this.#lease);
         const now = time(this.#now());
         if (current?.worker !== undefined && current.expiresAt.getTime() > now) {
@@ -125,8 +133,9 @@ export class ShardedWorkRegistry {
         }
         const next = owned(nextShard, nextWorker, now, this.#lease);
         if (await storage.compareAndSet(id, record, toRecord(next))) return next;
+        this.#requireActive(options);
+        await new Promise<void>((resolve) => setImmediate(resolve));
       }
-      throw concurrent("Shard pickup");
     } finally {
       this.#finish();
     }
@@ -136,33 +145,43 @@ export class ShardedWorkRegistry {
    * Returns one renewed exact live shard-session snapshot.
    *
    * @param expected Supplies the previously observed session.
+   * @param options Propagates cancellation from the delivery run.
    * @returns The renewed session, or `undefined` when ownership was lost.
    */
-  async renew(expected: ShardSession): Promise<ShardSession | undefined> {
-    return this.#update(expected);
+  async renew(
+    expected: ShardSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<ShardSession | undefined> {
+    return this.#update(expected, options);
   }
 
   /**
    * Returns the renewed exact ownership session.
    *
    * @param expected Supplies the previously observed session.
+   * @param options Propagates cancellation from the delivery run.
    * @returns The renewed session, or `undefined` when ownership was lost.
    */
-  validateOwnership(expected: ShardSession): Promise<ShardSession | undefined> {
-    return this.renew(expected);
+  validateOwnership(
+    expected: ShardSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<ShardSession | undefined> {
+    return this.renew(expected, options);
   }
 
   /**
    * Returns whether one exact live shard-session snapshot became unowned.
    *
    * @param expected Supplies the session to release.
+   * @param options Stops repeated conflicts during delivery shutdown.
    * @returns Whether the session is or became unowned.
    */
-  async release(expected: ShardSession): Promise<boolean> {
+  async release(expected: ShardSession, options?: DeliveryOperationOptions): Promise<boolean> {
     const storage = this.#storage();
     try {
       atomic(storage);
-      for (let i = 0; i < retries; i++) {
+      for (;;) {
+        this.#requireOpen();
         const record = await storage.read(wireId(expected.shard));
         if (record === undefined) return false;
         const current = session(record, expected.shard, this.#lease);
@@ -171,8 +190,9 @@ export class ShardedWorkRegistry {
         }
         if (await storage.compareAndSet(wireId(expected.shard), record, unowned(current)))
           return true;
+        this.#requireActive(options);
+        await new Promise<void>((resolve) => setImmediate(resolve));
       }
-      throw concurrent("Shard release");
     } finally {
       this.#finish();
     }
@@ -213,12 +233,18 @@ export class ShardedWorkRegistry {
     }
   }
 
-  async #update(expected: ShardSession): Promise<ShardSession | undefined> {
+  async #update(
+    expected: ShardSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<ShardSession | undefined> {
+    this.#requireActive(options);
     const storage = this.#storage();
     try {
       atomic(storage);
-      for (let i = 0; i < retries; i++) {
+      for (;;) {
+        this.#requireActive(options);
         const record = await storage.read(wireId(expected.shard));
+        this.#requireActive(options);
         if (record === undefined) return undefined;
         const current = session(record, expected.shard, this.#lease);
         const now = time(this.#now());
@@ -234,15 +260,16 @@ export class ShardedWorkRegistry {
         const next = owned(current.shard, current.worker, now, this.#lease);
         if (await storage.compareAndSet(wireId(expected.shard), record, toRecord(next)))
           return next;
+        this.#requireActive(options);
+        await new Promise<void>((resolve) => setImmediate(resolve));
       }
-      throw concurrent("Shard renewal");
     } finally {
       this.#finish();
     }
   }
 
   #storage(): RecordStorage<WireShardIndex, ShardSessionRecord> {
-    if (this.#closing) throw new Error("Shard registry is closed.");
+    this.#requireOpen();
     this.#active++;
     try {
       return (this.#retained ??= this.#factory.createRecordStorage(
@@ -253,6 +280,23 @@ export class ShardedWorkRegistry {
       this.#finish();
       throw error;
     }
+  }
+
+  /**
+   * Stops an admitted operation once shutdown begins.
+   */
+  #requireOpen(): void {
+    if (this.#closing) throw new Error("Shard registry is closed.");
+  }
+
+  /**
+   * Stops acquisition and renewal after the caller cancels an admitted operation.
+   *
+   * @param options Supplies the caller's cancellation signal.
+   */
+  #requireActive(options?: DeliveryOperationOptions): void {
+    this.#requireOpen();
+    if (options?.signal?.aborted) throw new Error("Shard registry operation was canceled.");
   }
 
   #finish(): void {
@@ -470,7 +514,4 @@ function copy(value: StorageContext): StorageContext {
         tenantId: clone(TenantIdSchema, value.tenantId),
       }
     : { name: value.name, multitenant: false };
-}
-function concurrent(label: string): Error {
-  return new Error(`${label} could not be completed due to concurrent changes.`);
 }

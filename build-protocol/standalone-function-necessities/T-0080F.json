@@ -147,15 +147,6 @@
     "rule": "standalone-function",
     "file": "packages/server/src/delivery/sharded-work-registry.ts",
     "kind": "function-declaration",
-    "identity": "concurrent()#1",
-    "name": "concurrent",
-    "disposition": "necessity",
-    "reason": "TypeScript concurrency boundary: concurrent creates one consistent stale-session error for compare-and-set rejection."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "kind": "function-declaration",
     "identity": "context()#1",
     "name": "context",
     "disposition": "necessity",

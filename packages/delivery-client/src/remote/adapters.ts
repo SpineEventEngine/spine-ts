@@ -12,8 +12,9 @@
  * the License.
  */
 
+import { DeliveryTimers } from "../client/delivery-timers.js";
 import { Time } from "@spine-event-engine/core/time";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { create } from "@bufbuild/protobuf";
 
@@ -138,20 +139,19 @@ export class RemoteInbox implements DeliveryInbox {
     options: InboxReadOptions & DeliveryOperationOptions = {},
   ): Promise<readonly InboxMessage[]> {
     if (options.offset !== undefined && options.offset !== 0) throw new DeliveryPagingError();
-    const limit =
-      options.limit === undefined
-        ? this.client.pageSize
-        : DeliveryRequestCodec.pageSize(options.limit);
+    const limit = options.limit ?? this.client.pageSize;
+    if (!Number.isSafeInteger(limit) || limit < 1)
+      throw new TypeError("Delivery page size is invalid.");
     RemoteInbox.#validateRead(shardIndex, options.after);
     if (options.signal?.aborted) throw options.signal.reason;
-    const timeoutMs = DeliveryRequestCodec.timeout(options.timeoutMs ?? 30_000);
-    const deadline = Time.monotonicTime() + timeoutMs;
+    const timeoutMs = DeliveryRequestCodec.timeout(options.timeoutMs);
+    const deadline = timeoutMs === undefined ? Infinity : Time.monotonicTime() + timeoutMs;
     const controller = new AbortController();
     const abort = () => {
       controller.abort(options.signal?.reason);
     };
     options.signal?.addEventListener("abort", abort, { once: true });
-    const timer = setTimeout(() => {
+    const cancelTimer = DeliveryTimers.after(() => {
       controller.abort(new Error("Delivery Inbox read timed out."));
     }, timeoutMs);
     try {
@@ -162,7 +162,7 @@ export class RemoteInbox implements DeliveryInbox {
         deadline,
       );
     } finally {
-      clearTimeout(timer);
+      cancelTimer?.();
       options.signal?.removeEventListener("abort", abort);
     }
   }
@@ -213,15 +213,15 @@ export class RemoteInbox implements DeliveryInbox {
     limit: number,
     options: DeliveryOperationOptions & {
       readonly signal: AbortSignal;
-      readonly timeoutMs: number;
+      readonly timeoutMs?: number;
     },
   ): Promise<RemoteInboxPage> {
-    const pageSize = after === undefined ? limit : Math.min(1_000, limit + 1);
+    const pageSize = Math.min(0x7fff_ffff, after === undefined ? limit : limit + 1);
     const page = await RemoteInbox.#awaitPage(
       this.client.readPage(shardIndex, {
         pageSize,
         signal: options.signal,
-        timeoutMs: options.timeoutMs,
+        ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
         ...(after === undefined ? {} : { sinceWhen: RemoteValues.pageAnchor(after.whenReceived) }),
       }),
       options.signal,
@@ -256,7 +256,7 @@ export class RemoteInbox implements DeliveryInbox {
       if (remaining <= 0) throw new Error("Delivery Inbox read timed out.");
       const page = await this.#readPage(shardIndex, after, limit, {
         ...options,
-        timeoutMs: remaining,
+        ...(Number.isFinite(remaining) ? { timeoutMs: remaining } : {}),
       });
       for (const message of page.messages) {
         if (options.statuses === undefined || options.statuses.includes(message.status))
@@ -634,18 +634,12 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
    * Creates a fresh worker identity for one independent asynchronous run.
    *
    * @param worker Supplies the configured application node.
-   * @returns A run-specific worker identity. A stable digest aliases the node
-   * ID on the wire only when the full node ID and UUID exceed 128 UTF-8 bytes.
+   * @returns The configured node ID and a new UUID for this run.
    */
   workerForRun(worker: WorkerId): WorkerId {
     const configuredNode = RemoteValues.worker(worker).nodeId;
     const value = randomUUID();
-    const combined = new TextEncoder().encode(configuredNode + value).length;
-    const node =
-      combined <= 128
-        ? configuredNode
-        : `n-${createHash("sha256").update(configuredNode).digest("hex")}`;
-    return create(WorkerIdSchema, { nodeId: { value: node }, value });
+    return create(WorkerIdSchema, { nodeId: { value: configuredNode }, value });
   }
 
   /**

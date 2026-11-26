@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { InboxRetention } from "./inbox-retention.js";
 import { Time } from "@spine-event-engine/core/time";
 import { clone, create } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
@@ -29,7 +30,12 @@ import {
   FailedReception,
   type DeliveryStatistics,
 } from "./delivery-monitor.js";
-import type { DeliveryInbox, DeliveryWorkRegistry, DeliveryWorkSession } from "./delivery-ports.js";
+import type {
+  DeliveryInbox,
+  DeliveryOperationOptions,
+  DeliveryWorkRegistry,
+  DeliveryWorkSession,
+} from "./delivery-ports.js";
 import { Inbox, InboxTargets, type InboxMessage } from "./inbox.js";
 import { InboxStorage, InboxStorageClock } from "./inbox-storage.js";
 import { ShardIndex } from "./shard-index.js";
@@ -40,7 +46,6 @@ import { receptionObservation, type ReceptionObservation } from "./reception-obs
 import type { DeliveryResult, DeliveryRunOptions, DeliveryStrategy } from "./delivery-builder.js";
 import { emitServerError } from "../server/server-log.js";
 
-const deliveryFailureLimit = 100;
 const controlledMessageSettlers = new WeakMap<
   DeliveryDrainOptions,
   (message: InboxMessage) => void
@@ -1004,24 +1009,14 @@ export class Delivery {
     active: ActiveDeliveryRun,
   ): Promise<DeliveryRun> {
     if (this.#shouldStop(options)) return result("STOPPED");
-    let session;
+    let session: DeliveryWorkSession | "NO_WORK" | undefined;
     try {
-      const worker = this.shards.workerForRun?.(this.worker) ?? this.worker;
-      if (options.managed && this.shards.pickUpForWork !== undefined) {
-        const pickup = await this.shards.pickUpForWork(shard, worker, options.operation);
-        if (pickup.kind === "NO_WORK") return result("NO_WORK");
-        session = pickup.kind === "PICKED" ? pickup.session : undefined;
-      } else {
-        if (
-          options.managed &&
-          (await this.inbox.newestPending(shard, options.operation)) === undefined
-        )
-          return result("NO_WORK");
-        session = await this.shards.pickUp(shard, worker, options.operation);
-      }
+      session = await this.#acquireSession(shard, options);
     } catch (error) {
+      if (this.#shouldStop(options)) return result("STOPPED");
       return this.#pickupFailed(shard, error, options.managed === true);
     }
+    if (session === "NO_WORK") return result("NO_WORK");
     if (session === undefined) {
       await safely(async () =>
         (await this.#monitor.onShardAlreadyPicked(new AlreadyPickedUp(shard))).execute(),
@@ -1030,6 +1025,47 @@ export class Delivery {
     }
     if (this.#shouldStop(options)) return this.#releaseStoppedSession(session, active);
     return this.#runSession(shard, options, session, active);
+  }
+
+  /**
+   * Acquires a shard session after direct or managed admission.
+   *
+   * @param shard Selects the shard.
+   * @param options Supplies managed work and cancellation settings.
+   * @returns A session, no work, or an unavailable shard.
+   */
+  async #acquireSession(
+    shard: ShardIndex,
+    options: DeliveryDrainOptions,
+  ): Promise<DeliveryWorkSession | "NO_WORK" | undefined> {
+    const worker = this.shards.workerForRun?.(this.worker) ?? this.worker;
+    const operation = this.#registryOperation(options.operation);
+    if (options.managed && this.shards.pickUpForWork !== undefined) {
+      const pickup = await this.shards.pickUpForWork(shard, worker, operation);
+      return pickup.kind === "NO_WORK"
+        ? "NO_WORK"
+        : pickup.kind === "PICKED"
+          ? pickup.session
+          : undefined;
+    }
+    if (options.managed && (await this.inbox.newestPending(shard, options.operation)) === undefined)
+      return "NO_WORK";
+    return this.shards.pickUp(shard, worker, operation);
+  }
+
+  /**
+   * Combines caller cancellation with delivery shutdown for registry work.
+   *
+   * @param operation Supplies caller cancellation and deadline settings.
+   * @returns Settings observing both cancellation signals.
+   */
+  #registryOperation(operation?: DeliveryOperationOptions): DeliveryOperationOptions {
+    const shutdown = this.#closeLookups.signal;
+    return {
+      ...operation,
+      signal:
+        operation?.signal === undefined ? shutdown : AbortSignal.any([operation.signal, shutdown]),
+    };
   }
 
   /**
@@ -1063,7 +1099,12 @@ export class Delivery {
     active: ActiveDeliveryRun,
   ): Promise<DeliveryRun> {
     try {
-      const released = await this.shards.release(session);
+      const released = await this.shards.release(
+        session,
+        this.shards instanceof ShardedWorkRegistry
+          ? { signal: this.#closeLookups.signal }
+          : undefined,
+      );
       if (!released) active.releaseFailure = new Error("Shard release was not confirmed.");
       return result(released ? "STOPPED" : "FAILED");
     } catch (error) {
@@ -1097,6 +1138,7 @@ export class Delivery {
       session,
       shards: this.shards,
       shard,
+      registryShutdown: this.#closeLookups.signal,
     });
     active.drain = drain;
     if (active.shared) {
@@ -1153,8 +1195,6 @@ class DeliveryDrain {
   #confirmedLost = false;
 
   #terminalFailure: Error | undefined;
-
-  #failureLimitReached = false;
 
   #stopped = false;
 
@@ -1303,7 +1343,14 @@ class DeliveryDrain {
     }
     let released = false;
     try {
-      released = await this.#sessionOperation(() => this.input.shards.release(this.#current));
+      released = await this.#sessionOperation(() =>
+        this.input.shards.release(
+          this.#current,
+          this.input.shards instanceof ShardedWorkRegistry
+            ? { signal: this.input.registryShutdown }
+            : undefined,
+        ),
+      );
     } catch (error) {
       this.#releaseFailure =
         error instanceof Error ? error : new Error("Shard release failed.", { cause: error });
@@ -1422,7 +1469,6 @@ class DeliveryDrain {
     const page = this.#deduplication.page(messages, this.#retentionTime());
     for (const message of messages) {
       if (!(await this.#processMessage(message, page))) return false;
-      if (this.#failureLimitReached) return false;
     }
     return true;
   }
@@ -1811,10 +1857,13 @@ class DeliveryDrain {
       if (this.#stopped || this.#ownershipLost) return false;
       let current: DeliveryWorkSession | undefined;
       try {
-        current = await this.input.shards.validateOwnership(
-          this.#current,
-          this.input.options.operation,
-        );
+        current = await this.input.shards.validateOwnership(this.#current, {
+          ...this.input.options.operation,
+          signal:
+            this.input.options.operation?.signal === undefined
+              ? this.input.registryShutdown
+              : AbortSignal.any([this.input.options.operation.signal, this.input.registryShutdown]),
+        });
       } catch (error) {
         this.#terminalFailure ??=
           error instanceof Error ? error : new Error("Shard validation failed.", { cause: error });
@@ -1847,7 +1896,7 @@ class DeliveryDrain {
   }
 
   /**
-   * Records an ephemeral delivery failure up to the configured limit.
+   * Records the failed row and its error for this run.
    *
    * @param message Supplies the failed inbox message.
    * @param error Supplies the observed failure.
@@ -1856,9 +1905,7 @@ class DeliveryDrain {
     this.#statistics.failed += 1;
     if (this.#messageOutcomes.get(message)?.kind !== "acknowledged")
       this.#messageOutcomes.set(message, { kind: "failed", error });
-    if (this.#failures.length < deliveryFailureLimit)
-      this.#failures.push(Object.freeze({ message: snapshot(message), error }));
-    this.#failureLimitReached = this.#failures.length === deliveryFailureLimit;
+    this.#failures.push(Object.freeze({ message: snapshot(message), error }));
   }
 
   /**
@@ -1897,6 +1944,7 @@ interface DeliveryDrainInputState {
   readonly pageSize: number;
   readonly session: DeliveryWorkSession;
   readonly shard: ShardIndex;
+  readonly registryShutdown: AbortSignal;
   readonly shards: DeliveryWorkRegistry;
 }
 
@@ -2029,8 +2077,7 @@ function result(
   value = counts(),
   failures: readonly DeliveryFailure[] = [],
 ): DeliveryRun {
-  const run = Object.freeze({ status, ...value, failures: Object.freeze([...failures]) });
-  return run;
+  return Object.freeze({ status, ...value, failures: Object.freeze(failures) });
 }
 function snapshot(message: InboxMessage): InboxMessage {
   return Object.freeze({
@@ -2153,10 +2200,10 @@ class DeliveryPageDeduplication {
 }
 
 /**
- * Stores a bounded set of recently delivered message identities.
+ * Keeps recently acknowledged identities for the inbox retention interval.
  */
 class RecentDeliveries {
-  readonly #identities = new Map<string, undefined>();
+  readonly #identities = new Map<string, number>();
 
   /**
    * Checks whether an identity is in the recent-delivery set.
@@ -2165,21 +2212,32 @@ class RecentDeliveries {
    * @returns Whether that identity is present.
    */
   has(identity: string): boolean {
+    this.#prune(Time.monotonicTime());
     return this.#identities.has(identity);
   }
 
   /**
-   * Adds a message identity and removes the oldest entry when over capacity.
+   * Adds a delivered identity with its local expiration time.
    *
    * @param message Supplies the delivered message.
    */
   add(message: InboxMessage): void {
     const identity = RecentDeliveries.key(message);
+    const now = Time.monotonicTime();
+    this.#prune(now);
     this.#identities.delete(identity);
-    this.#identities.set(identity, undefined);
-    if (this.#identities.size > 1_000) {
-      const oldest = this.#identities.keys().next().value;
-      if (oldest !== undefined) this.#identities.delete(oldest);
+    this.#identities.set(identity, now + InboxRetention.durationMs);
+  }
+
+  /**
+   * Removes expired identities in the order they were acknowledged.
+   *
+   * @param now Current monotonic time in milliseconds.
+   */
+  #prune(now: number): void {
+    for (const [identity, deadline] of this.#identities) {
+      if (deadline > now) break;
+      this.#identities.delete(identity);
     }
   }
 

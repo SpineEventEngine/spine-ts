@@ -46,8 +46,8 @@ import { DeliveryParentProxy } from "../../src/server/delivery-parent-proxy.js";
 import { DeliveryStreamFanIn } from "../../src/server/delivery-stream-fan-in.js";
 
 describe("multi-process public Delivery endpoint", () => {
-  it("lets each storage child apply writes under its local row limit", async () => {
-    const server = new DeliveryServer({ port: 0, processCount: 2, maxRetainedMessages: 1 });
+  it("lets each storage child retain multiple rows", async () => {
+    const server = new DeliveryServer({ port: 0, processCount: 2 });
     await server.start();
     const sessions = new Http2SessionManager(server.baseUrl);
     const inbox = createClient(
@@ -61,9 +61,10 @@ describe("multi-process public Delivery endpoint", () => {
         inbox.writeOne({ message: domainMessage("first", first) }),
         inbox.writeOne({ message: domainMessage("second", second) }),
       ]);
-      await expect(
-        inbox.writeOne({ message: domainMessage("extra", first) }),
-      ).rejects.toMatchObject({ code: Code.ResourceExhausted });
+      await inbox.writeOne({ message: domainMessage("extra", first) });
+      expect((await inbox.findOne({ index: first, uuid: "extra" })).message?.id?.uuid).toBe(
+        "extra",
+      );
       expect((await inbox.findOne({ index: second, uuid: "second" })).message?.id?.uuid).toBe(
         "second",
       );
@@ -384,6 +385,12 @@ describe("multi-process public Delivery endpoint", () => {
     const row = domainMessage("expired-read", shard);
     if (row.id === undefined) throw new Error("Inbox fixture identity is missing.");
     try {
+      await expect(
+        proxy.inbox().findOne(row.id, {
+          signal: new AbortController().signal,
+          timeoutMs: () => 100_000_000,
+        } as never),
+      ).resolves.toMatchObject({});
       await expect(
         proxy.inbox().findOne(row.id, {
           signal: new AbortController().signal,

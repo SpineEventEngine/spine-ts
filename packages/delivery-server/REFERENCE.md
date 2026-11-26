@@ -36,16 +36,19 @@ which override defaults. Invalid values throw before a listener is created:
 - `host` / `HOST`: non-blank text; default `127.0.0.1`;
 - `port` / `PORT`: integer 0–65535; default 8484;
 - `processCount` / `DELIVERY_PROCESS_COUNT`: positive safe integer; default 1;
-- `maxInboundMessageBytes` / `MAX_INBOUND_MESSAGE_SIZE`: integer 1–2147483647;
-  default 4194304;
-- `processingTimeoutSeconds` / `SHARD_PROCESSING_TIMEOUT`: integer
-  seconds of inactivity before the server expires a session, default 60;
-- retained message/byte limits: integer 1–2147483647; defaults 10000 and 33554432.
+- `maxInboundMessageBytes` / `MAX_INBOUND_MESSAGE_SIZE` controls the bytes
+  received in one gRPC message. `maxOutboundMessageBytes` /
+  `MAX_OUTBOUND_MESSAGE_SIZE` controls the bytes sent. Both accept integers
+  from 1 to 4,294,967,295. The default is the upper end of the transport's range.
+- `processingTimeoutSeconds` / `SHARD_PROCESSING_TIMEOUT` sets the session
+  lifetime. It defaults to 60 seconds.
 
-The core accepts pages of 1–1000 messages, mutation batches of 1–100 messages,
-payloads no larger than 1 MiB, and request/response bodies no larger than 4
-MiB. A write that would exceed the total stored rows or encoded bytes fails
-with `RESOURCE_EXHAUSTED`. The server stores a batch only if the whole batch fits.
+The in-memory inbox stores rows while process memory is available. A batch
+is applied atomically. For example, a batch of 150 valid rows for the same
+shard makes one write. A request for 2,000 rows uses the page size in the
+call. If a configured transport size prevents a request or reply from being
+sent, gRPC reports the error. The transport settings cover both the public
+connection and connections to storage subprocesses.
 
 With `processCount` greater than one, the public endpoint runs in a parent
 process and starts that many homogeneous child processes. Shard number `s`
@@ -53,10 +56,7 @@ routes to subprocess `s % processCount`. The public endpoint forwards each
 shard-specific gRPC call there. That subprocess handles the read, write,
 pickup, renewal, or release and returns its result.
 The parent combines Admin snapshots and streams work notices from all healthy
-children. Each storage subprocess applies the row and byte settings to its
-local inbox. For example, with two subprocesses and a row limit of 10,000,
-each can store 10,000 rows if the rows fit within its byte limit. When a
-subprocess exits, it loses its in-memory rows and sessions. Its shards are
+children. When a subprocess exits, it loses its in-memory rows and sessions. Its shards are
 temporarily unavailable while its replacement starts. The other subprocess
 continues serving its shards.
 
@@ -135,3 +135,5 @@ recovery, cluster coordination, Redis/Hazelcast mode, TLS, authentication,
 authorization, public-Internet hardening, CLI flags, or configuration reload.
 An application may choose a non-loopback bind or a proxy, but those deployment
 controls remain its responsibility.
+
+A dashboard that pauses can still see the latest state for every changed shard. While an update is waiting to be read, a newer state for the same shard replaces it. For example, if the inbox count changes from one to two to three before the dashboard reads the update, it receives three.

@@ -22,7 +22,7 @@ import { AnyPacker, Identifiers, TypeUrls } from "@spine-event-engine/core";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
@@ -31,6 +31,8 @@ import { Inbox, type InboxMessage, type InboxReadOptions } from "../../src/deliv
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
+import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
+import { RemoteWorkRegistry } from "../../../delivery-client/src/remote/adapters.js";
 import {
   TaskIdSchema,
   TaskListIdSchema,
@@ -39,6 +41,92 @@ import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/exa
 import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 describe("Delivery direct worker", () => {
+  it("closes a direct run during sustained shard pickup conflicts", async () => {
+    let attempts = 0;
+    const handle = {
+      atomicCompareAndSet: true,
+      read: () => Promise.resolve(undefined),
+      compareAndSet: () => {
+        attempts += 1;
+        return Promise.resolve(false);
+      },
+      close: vi.fn(),
+    };
+    const context = { name: "ClosingPickup", multitenant: false } as const;
+    const delivery = new Delivery({
+      context,
+      storageFactory: { createRecordStorage: () => handle } as never,
+      inbox: {} as never,
+      workRegistry: new ShardedWorkRegistry({
+        context,
+        storageFactory: { createRecordStorage: () => handle } as never,
+        now: () => new Date(0),
+      }),
+    });
+    const run = delivery.drain(ShardIndex.single(), {
+      onMessage: () => {
+        return;
+      },
+    });
+    await vi.waitFor(() => {
+      expect(attempts).toBeGreaterThan(8);
+    });
+
+    await expect(delivery.close()).resolves.toBeUndefined();
+    await expect(run).resolves.toMatchObject({ status: "STOPPED" });
+    expect(handle.close).toHaveBeenCalledOnce();
+  });
+
+  it("releases an acquired remote session after close without a canceled signal", async () => {
+    const shard = ShardIndex.single();
+    const pickup = Promise.withResolvers<{
+      kind: "PICKED";
+      session: {
+        kind: "EXCLUSIVE";
+        shard: ShardIndex;
+        worker: { nodeId: string; value: string };
+        whenPicked: { seconds: bigint; nanos: number };
+        sessionId: string;
+        lifetime: { seconds: bigint; nanos: number };
+      };
+    }>();
+    const entered = Promise.withResolvers<undefined>();
+    const release = vi.fn(async (_session: unknown, options?: DeliveryOperationOptions) => {
+      if (options?.signal?.aborted) throw new Error("Remote release was canceled.");
+    });
+    const client = {
+      pickUpForDelivery: () => {
+        entered.resolve(undefined);
+        return pickup.promise;
+      },
+      release,
+    };
+    const delivery = new Delivery({
+      context: { name: "ClosingRemotePickup", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      inbox: {} as never,
+      workRegistry: new RemoteWorkRegistry(client as never),
+    });
+    const run = delivery.drain(shard, { onMessage: () => undefined });
+    await entered.promise;
+    const closing = delivery.close();
+    pickup.resolve({
+      kind: "PICKED",
+      session: {
+        kind: "EXCLUSIVE",
+        shard,
+        worker: { nodeId: "local", value: "run" },
+        whenPicked: { seconds: 0n, nanos: 0 },
+        sessionId: "shutdown-release",
+        lifetime: { seconds: 60n, nanos: 0 },
+      },
+    });
+
+    await expect(closing).resolves.toBeUndefined();
+    await expect(run).resolves.toMatchObject({ status: "STOPPED" });
+    expect(release).toHaveBeenCalledOnce();
+    expect(release.mock.calls[0]?.[1]).toBeUndefined();
+  });
   it("wakes an active direct drain for a durable row arriving during its empty read", async () => {
     const shard = ShardIndex.single();
     const row = message("late-direct", "target", shard);
@@ -503,7 +591,7 @@ describe("Delivery direct worker", () => {
     expect(dispatched).toEqual([pending.id.value]);
   });
 
-  it("evicts the oldest recent identity after 1000 newer deliveries", async () => {
+  it("recognizes a duplicate after 1000 other deliveries within the retention window", async () => {
     const shard = ShardIndex.single();
     const first = message("first-signal", "first-target", shard);
     const rows = [first];
@@ -531,27 +619,42 @@ describe("Delivery direct worker", () => {
       workRegistry: localRegistry(shard),
       pageSize: 1_000,
     };
-    const dispatched: string[] = [];
-    await new Delivery(options).drain(shard, {
-      onMessage: (row) => {
-        dispatched.push(row.signalId);
-      },
-    });
-    rows.push(
-      ...Array.from({ length: 1_000 }, (_, index) =>
-        message(`newer-${String(index)}`, `target-${String(index)}`, shard),
-      ),
-    );
-    await new Delivery(options).drain(shard, { onMessage: () => undefined });
-    rows.push({ ...message("duplicate-row", "first-target", shard), signalId: first.signalId });
+    const instant = Time.currentTime();
+    let elapsed = 0;
+    const original = Time.setProvider({ currentTime: () => instant, monotonicTime: () => elapsed });
+    try {
+      const dispatched: string[] = [];
+      await new Delivery(options).drain(shard, {
+        onMessage: (row) => {
+          dispatched.push(row.signalId);
+        },
+      });
+      rows.push(
+        ...Array.from({ length: 1_000 }, (_, index) =>
+          message(`newer-${String(index)}`, `target-${String(index)}`, shard),
+        ),
+      );
+      await new Delivery(options).drain(shard, { onMessage: () => undefined });
+      rows.push({ ...message("duplicate-row", "first-target", shard), signalId: first.signalId });
 
-    await new Delivery(options).drain(shard, {
-      onMessage: (row) => {
-        dispatched.push(row.signalId);
-      },
-    });
+      await new Delivery(options).drain(shard, {
+        onMessage: (row) => {
+          dispatched.push(row.signalId);
+        },
+      });
 
-    expect(dispatched).toEqual([first.signalId, first.signalId]);
+      expect(dispatched).toEqual([first.signalId]);
+      elapsed += 5_001;
+      rows.push({ ...message("later-row", "first-target", shard), signalId: first.signalId });
+      await new Delivery(options).drain(shard, {
+        onMessage: (row) => {
+          dispatched.push(row.signalId);
+        },
+      });
+      expect(dispatched).toEqual([first.signalId, first.signalId]);
+    } finally {
+      Time.setProvider(original);
+    }
   });
 
   it("retains an acknowledged identity across short-lived delivery wrappers", async () => {
@@ -1830,7 +1933,7 @@ describe("Delivery direct worker", () => {
     expect(seen).toBe(0);
   });
 
-  it("stops after retaining a bounded sample of distinct target failures", async () => {
+  it("reports every distinct target failure during a pass", async () => {
     const shard = ShardIndex.single();
     const rows = Array.from({ length: 101 }, (_, index) => {
       const signal = `failed-${String(index)}`;
@@ -1846,13 +1949,14 @@ describe("Delivery direct worker", () => {
     const delivery = createDelivery({
       rows,
       pageSize: rows.length,
+      read: async (options) => (options?.after === undefined ? rows : []),
       removeDuplicate: async () => false,
     });
 
     const run = await delivery.drain(shard, { onMessage: () => undefined });
 
-    expect(run).toMatchObject({ status: "STOPPED", failed: 100 });
-    expect(run.failures).toHaveLength(100);
+    expect(run).toMatchObject({ failed: 101 });
+    expect(run.failures).toHaveLength(101);
   });
 });
 

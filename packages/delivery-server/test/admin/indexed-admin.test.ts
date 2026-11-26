@@ -20,7 +20,7 @@ import { ShardIndexSchema, InboxMessageStatus } from "@spine-event-engine/proto/
 import { DeliveryAssembly } from "../../src/server/assembly.js";
 import { AdminPublisher } from "../../src/admin/admin-service.js";
 import { InMemoryDeliveryState } from "../../src/core/in-memory-delivery-state.js";
-import { domainMessage, encodedBytes } from "../core/domain-message.js";
+import { domainMessage } from "../core/domain-message.js";
 
 const context = { signal: new AbortController().signal } as never;
 const shard = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
@@ -155,12 +155,12 @@ it("reports the exact stored total after concurrent writes, rewrites, and repeat
   assembly.closeAdmin();
 });
 
-it("replays more than 100 known shards without consuming the bounded live buffer", async () => {
+it("replays more than 100 known shards before sending updates for newly discovered shards", async () => {
   const state = new InMemoryDeliveryState();
   for (let index = 0; index < 150; index++) {
     const at = create(ShardIndexSchema, { index, ofTotal: 151 });
     const row = domainMessage(`row-${String(index)}`, at);
-    state.putAll([{ message: row, bytes: encodedBytes(row) }]);
+    state.putAll([{ message: row }]);
   }
   const publisher = AdminPublisher.create(state);
   const stream = publisher.service
@@ -169,11 +169,11 @@ it("replays more than 100 known shards without consuming the bounded live buffer
   await expect(stream.next()).resolves.toMatchObject({ value: { value: { case: "created" } } });
   const late = create(ShardIndexSchema, { index: 149, ofTotal: 151 });
   const newRow = domainMessage("late", late);
-  state.putAll([{ message: newRow, bytes: encodedBytes(newRow) }]);
+  state.putAll([{ message: newRow }]);
   publisher.publish(late);
   const live = create(ShardIndexSchema, { index: 150, ofTotal: 151 });
   const liveRow = domainMessage("live", live);
-  state.putAll([{ message: liveRow, bytes: encodedBytes(liveRow) }]);
+  state.putAll([{ message: liveRow }]);
   publisher.publish(live);
   for (let index = 0; index < 150; index++) {
     const result = await stream.next();
@@ -198,7 +198,7 @@ it("includes more than 1,000 known shards in a complete snapshot", async () => {
   const rows = Array.from({ length: 1_201 }, (_, index) => {
     const at = create(ShardIndexSchema, { index, ofTotal: 1_201 });
     const message = domainMessage(`snapshot-${String(index)}`, at);
-    return { message, bytes: encodedBytes(message) };
+    return { message };
   });
   state.putAll(rows);
   const publisher = AdminPublisher.create(state);

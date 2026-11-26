@@ -148,12 +148,12 @@ batches.
 
 Provider-legal ID predicates, declared-property comparisons, and ordering are
 pushed only when Datastore can execute the whole selected conjunction. Runtime
-descriptor/column validation happens before that decision. An omitted query
-budget uses the shared 10,000-record materialization bound, but Datastore's
-explicit value cannot exceed 10,000. Datastore's accepted/provider ceiling is
-1,000 rows. It may read one overflow-lookahead row
-(1,001 raw rows) to reject an oversized scan rather than materializing more
-rows. There is no public Datastore cursor API.
+descriptor/column validation happens before that decision. An omitted normalized-query
+budget uses the shared 10,000-record materialization bound, and Datastore's
+explicit normalized-query value cannot exceed 10,000. Legacy `RecordQuery`
+reads use provider cursor pages and have no factory-imposed candidate ceiling.
+An explicitly configured scan policy on a custom record storage handle can
+still reject a larger local reconciliation. There is no public Datastore cursor API.
 
 This is deliberately the overlap, not MySQL parity: nested or disjunctive
 predicates and provider-illegal inequality/order shapes reject before provider
@@ -188,6 +188,12 @@ longer than Datastore's 1,500-byte indexed-string limit reject before append;
 original scope strings remain unindexed in the payload. Reads use native pages
 of at most 128 rows and sum serialized entry bytes. A fetched chunk can be
 larger than the returned byte budget.
+
+The same `index.yaml` declares four Inbox composite indexes for shard equality,
+optional status equality, and ascending or descending receive-time, version,
+and message-ID order. The descending indexes include an ascending key tie
+breaker to match the adapter's provider query. If the application maps Inbox
+records to another kind, deploy equivalent indexes for that kind.
 
 The factory has one tenant catalog. It reads native `__namespace__` metadata,
 converts only namespaces recognized by its `NamespaceConverter`. `keep()`

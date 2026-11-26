@@ -378,7 +378,7 @@ export interface InboxReadOptions {
   readonly statuses?: readonly DeliveryStatus[];
 
   /**
-   * Optional page limit for one ordered page; must be positive and at most 1000.
+   * Optional page limit for one ordered page; must be a positive safe integer.
    */
   readonly limit?: number;
 

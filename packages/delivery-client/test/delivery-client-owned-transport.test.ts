@@ -45,14 +45,17 @@ describe("DeliveryClient owned HTTP/2 transport", () => {
     expect(owned.calls).toEqual([]);
   });
 
-  it("selects gRPC with bounded bytes and aborts its session exactly once", () => {
-    const client = DeliveryClient.connectTo("http://127.0.0.1:8080");
+  it("passes the configured gRPC byte limits and aborts its session exactly once", () => {
+    const client = DeliveryClient.connectTo("http://127.0.0.1:8080", {
+      maxInboundMessageBytes: 8_000_000,
+      maxOutboundMessageBytes: 9_000_000,
+    });
 
     expect(owned.calls).toEqual([
       expect.objectContaining({
         baseUrl: "http://127.0.0.1:8080",
-        readMaxBytes: 4 * 1024 * 1024,
-        writeMaxBytes: 4 * 1024 * 1024,
+        readMaxBytes: 8_000_000,
+        writeMaxBytes: 9_000_000,
       }),
     ]);
     client.close();

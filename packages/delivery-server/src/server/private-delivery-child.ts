@@ -38,7 +38,7 @@ export interface PrivateDeliveryChildOptions {
   readonly credential: string;
 
   /**
-   * Preserves local retained limits and session lifetime.
+   * Preserves local session lifetime and transport settings.
    */
   readonly configuration: DeliveryConfiguration;
 }
@@ -90,6 +90,7 @@ export class PrivateDeliveryChild {
           this.#routes(router);
         },
         readMaxBytes: this.options.configuration.maxInboundMessageBytes,
+        writeMaxBytes: this.options.configuration.maxOutboundMessageBytes,
       }),
     );
     server.on("session", (session) => {

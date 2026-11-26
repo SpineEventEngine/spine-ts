@@ -67,8 +67,6 @@ import {
 } from "./namespace.js";
 import { DatastoreTenantCatalog } from "./tenant-catalog.js";
 
-const maxClientSideScan = 1_000;
-
 interface NativePreparation {
   signature: string;
   pending: Promise<void> | undefined;
@@ -142,7 +140,7 @@ export interface RecordLayout {
  * @param context The storage context.
  * @param recordSpec The record-family contract.
  * @param client The caller-owned Datastore client.
- * @param maxClientSideScan The finite reconciliation bound.
+ * @param maxClientSideScan Optional local reconciliation bound.
  * @returns The customized storage handle.
  * @typeParam R Stored record message type.
  */
@@ -154,7 +152,7 @@ export interface CreateRecordStorage<R extends Message = Message> {
    * @param context Identifies the storage context.
    * @param recordSpec Defines the record family.
    * @param client Supplies the Datastore client.
-   * @param maxClientSideScan Bounds local query reconciliation.
+   * @param maxClientSideScan Optionally bounds local query reconciliation.
    * @returns The custom record handle.
    */
   // eslint-disable-next-line @typescript-eslint/prefer-function-type -- Documented generic call signature.
@@ -162,7 +160,7 @@ export interface CreateRecordStorage<R extends Message = Message> {
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
     client: Datastore,
-    maxClientSideScan: number,
+    maxClientSideScan: number | undefined,
   ): RecordStorage<I, R>;
 }
 
@@ -1159,7 +1157,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     const resolved = this.resolve(recordSpec, group, true);
     const creator = resolved.creator;
     if (creator !== undefined)
-      return creator(context, recordSpec, this.#client, maxClientSideScan) as RecordStorage<I, R>;
+      return creator(context, recordSpec, this.#client, undefined) as RecordStorage<I, R>;
     return this.openNative(context, recordSpec, group, resolved.layout?.kind);
   }
 
@@ -1238,7 +1236,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
       context,
       spec,
       this.#client,
-      maxClientSideScan,
+      undefined,
       group,
       selectedKind,
       this.#namespaceConverter,

@@ -5,7 +5,7 @@ High-risk implementation on `shard-delivery-correctness-and-performance`, from o
 ## Requirements and acceptance
 
 1. Ship a TS-specific `ShardObservingService.ObserveAll(Empty)` in `spine/delivery/message_delivery.proto`. The streamed response contains only the required shard index. Document the complete notification contract on the method itself. Register before discovering existing free shards with pending rows; omit held and completed-only shards; remain silent while idle; recheck on release or expiry; repeat unclaimed work after a configurable interval (10 seconds by default). Additional writes cannot postpone the reminder. Reconnect discovers current work. The notice grants no session. Preserve the Admin wire descriptor.
-2. Port per-shard ordered and pending indexes and exact stored counts from JVM Delivery issues 70 and 71, preserving TS page continuation, inbox row and byte checks in the process storing the rows, and atomic batch rejection. Admin and expiration replies return the complete list or fail if its encoded size exceeds the gRPC response limit. After the Admin acknowledgement, replay known shards. Send the first eligible change immediately, coalesce later changes independently per shard using the approved JVM default of 25 milliseconds, and suppress consecutive identical states. Preserve the existing five-second opportunistic retention policy.
+2. Port per-shard ordered and pending indexes and exact stored counts from JVM Delivery issues 70 and 71, preserving TS page continuation, atomic batch rejection. Admin and expiration replies return the complete list or fail if its encoded size exceeds the configured gRPC transport size. After the Admin acknowledgement, replay known shards. Send the first eligible change immediately, coalesce later changes independently per shard using the approved JVM default of 25 milliseconds, and suppress consecutive identical states. Preserve the existing five-second opportunistic retention policy.
 3. Recover uncertain pickup with a stable run ID; differentiate busy and no work; require live session handles and changing record revisions for managed renewal/release. Server-driven 60-second default expiry and renewal at one third of the lifetime. Retain Protobuf time precision. Guard worker acknowledgement and both deletion paths with session and wire-exact row identity. Do not couple delivery with Entity persistence.
 4. Replace the supervisor with built-in all-shard observation or an application-selected custom observer through normal environment startup. Independent same-config nodes may run distinct shards concurrently without a default cap. Offer per-node concurrency only for built-in server observation. Join simultaneous same-shard local calls. Preserve monitor actions, cancellation, and orderly shutdown. Publish the new higher-level run result and shared newest-pending inbox operation. On normal completion release before checking the pending row, remove the local run before invoking the custom observer, and log callback failures without retry. Test new-node startup and equal-configuration replicas, stale notices, and missed notifications.
 5. Keep one server process by default. Offer one public gRPC parent with a fixed number of homogeneous child processes and private gRPC endpoints. Route the full shard identity by index modulo child count. Each subprocess applies shard operations directly. Fan out global calls and provide fresh subscriptions to each public subscriber. Restart a lost child in its original slot, keep healthy slots serving and discard old handles and obsolete stream responses.
@@ -67,9 +67,7 @@ that differ only by nanoseconds or unknown fields, preserving the first
 acknowledgement deadline, and a three-minute handler under a 60-second session.
 An uncertain guarded operation identifies its row for inspection.
 
-A run uses a fresh worker UUID. If the configured node name and UUID together
-would exceed the existing wire limit, the client uses a stable digest of the
-node name on the wire. The application still uses its configured node name.
+A run uses the configured node name and a fresh worker UUID. Pickup recovery uses the same worker ID for that run.
 
 ## Application observation
 
@@ -98,3 +96,7 @@ Real-process tests cover child loss and replacement, traffic to a healthy
 slot, separate public subscribers, and an identical application node joining
 a deployment with busy peers. The executable can select this mode through
 `DELIVERY_PROCESS_COUNT`.
+
+## Delivery resource limits
+
+Inbox storage, same-shard batch writes, and Admin updates use the available memory. The transport enforces its configured inbound and outbound message sizes. The wire page size uses a positive Protobuf int32. Applications may set operation deadlines, retries, and built-in delivery concurrency explicitly.

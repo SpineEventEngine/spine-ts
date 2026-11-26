@@ -12,16 +12,19 @@ advanced form for a Connect transport supplied by the caller; closing that clien
 close the supplied transport. `close()` is synchronous and idempotent. It
 aborts active reads and observation streams and closes its session once.
 
-Options default to page size 100, no read retry, no retry backoff, no observation
-reconnect, no reconnect backoff, observation buffer 100, and operation timeout
-30000 ms. Page size is 1–1000; retry/reconnect counts are 0–5; backoffs are
-0–10000 ms; observation buffers are 1–1000; finite-operation and observation-setup timeouts are
-1–120000 ms.
+The client requests 100 rows per page by default. For example, `pageSize: 2000`
+requests up to 2,000 rows per call. The wire field is a positive Protobuf
+`int32`. Batches may contain any number of distinct rows for the same shard
+that fit in one gRPC message.
 
-Worker `nodeId` and `value` must be non-blank and together at most 128 UTF-8
-bytes. Decoded payloads must be Command or Event envelopes. The client rejects
-payloads above 1 MiB, RPC request/response bodies above 4 MiB, batches above
-100, and pages above 1000.
+`connectTo()` accepts `maxInboundMessageBytes` for replies and
+`maxOutboundMessageBytes` for requests. Omit them to use the transport's
+own message-size range. With `usingTransport()`, configure the supplied
+transport directly. Worker and node IDs must contain text.
+
+A call runs until it completes, the caller cancels it, or the connection
+ends. To set a deadline, supply `timeoutMs` on the call. Read retries and
+Admin reconnects are opt-in. The caller selects the retry count and delay. A read deadline includes the wait before each retry. If a pickup exceeds a configured transport size, the client stops and reports the shard to check. A server may already have granted the pickup before the transport rejected its reply.
 
 ## Operations and unknown outcomes
 
@@ -53,11 +56,11 @@ rows the server stores in each shard. This includes completed rows retained
 for duplicate detection. To see whether a worker can try to pick up work, use
 `observeAvailableShards()`.
 
-`observeShardUpdates()` requires one acknowledgement, has a bounded queue, and
-reconnects only within configured limits. A slow consumer can receive
-`ShardObservationOverflowError`; an unrecoverable stream ends with
-`DeliveryShardObservationError`. Its setup timeout never limits an acknowledged active stream. Observation is a hint: reconcile a known
-mutation with `shardSnapshot()` before a later action.
+`observeShardUpdates()` opens the Admin stream and checks its acknowledgement.
+The client reads another update when its consumer accepts the current one.
+For example, a slow dashboard can read an initial replay of 500 shards.
+An explicit setup timeout ends at acknowledgement. A later disconnect follows
+the caller's reconnect settings.
 
 `pickUpForDelivery()` requests a shard with pending work.
 If a managed pickup has an uncertain outcome, the client repeats it using the
@@ -76,7 +79,7 @@ the second run active.
 
 `releaseExpired(inactivityMs)` asks the server to release every session that
 has been idle for that long. If the releases succeed but the reply is lost
-or exceeds the 4 MiB response limit, the client throws
+or exceeds a transport message-size setting, the client throws
 `DeliveryOutcomeUnknownError`. For example, a second call can return an empty
 list because the first call already released the sessions. A shard snapshot
 shows which sessions are active now. It cannot reconstruct the earlier list.

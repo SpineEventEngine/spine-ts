@@ -55,20 +55,16 @@ describe("RemoteWorkRegistry", () => {
     expect(fake.unary).not.toHaveBeenCalled();
   });
 
-  it("keeps a full UUID per run within the existing UTF-8 worker boundary", () => {
+  it("keeps the configured node ID and a distinct UUID for each run", () => {
     const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(transport().transport));
-    for (const length of [92, 93, 100, 127]) {
+    for (const length of [92, 93, 127, 256]) {
       const nodeId = "n".repeat(length);
       const configured = workerId(nodeId, "x");
       const first = registry.workerForRun(configured);
       const second = registry.workerForRun(configured);
       expect(first.value).not.toBe(second.value);
       expect(first.nodeId?.value).toBe(second.nodeId?.value);
-      if (length <= 92) expect(first.nodeId?.value).toBe(nodeId);
-      else expect(first.nodeId?.value).toMatch(/^n-[0-9a-f]{64}$/);
-      expect(
-        new TextEncoder().encode((first.nodeId?.value ?? "") + first.value).length,
-      ).toBeLessThanOrEqual(128);
+      expect(first.nodeId?.value).toBe(nodeId);
     }
   });
 
@@ -477,7 +473,7 @@ describe("RemoteWorkRegistry", () => {
     expect(fake.unary).toHaveBeenLastCalledWith(
       expect.objectContaining({ name: "PickShardRaw" }),
       expect.any(AbortSignal),
-      30_000,
+      undefined,
       undefined,
       create(DeliveryShardPickupSchema, {
         shard: create(ShardIndexSchema, { index: 0, ofTotal: 2 }),
@@ -491,7 +487,7 @@ describe("RemoteWorkRegistry", () => {
     expect(fake.unary).toHaveBeenLastCalledWith(
       expect.objectContaining({ name: "ReleaseShardSession" }),
       expect.any(AbortSignal),
-      30_000,
+      undefined,
       undefined,
       create(DeliverySessionHandleSchema, {
         shard: create(ShardIndexSchema, { index: 0, ofTotal: 2 }),
@@ -529,7 +525,7 @@ describe("RemoteWorkRegistry", () => {
     expect(fake.unary).toHaveBeenLastCalledWith(
       expect.objectContaining({ name: "ReleaseSessions" }),
       expect.any(AbortSignal),
-      30_000,
+      undefined,
       undefined,
       create(ReleaseExpiredSessionsSchema, {
         inactivityPeriod: { seconds: 0n, nanos: 500_000_000 },
@@ -570,9 +566,6 @@ describe("RemoteWorkRegistry", () => {
       reconciliation: { kind: "OBSERVE_SHARD", scope: "ALL_SHARDS" },
     });
     await expect(client.pickUp(shard, { nodeId: "", value: "worker" })).rejects.toThrow();
-    await expect(client.pickUp(shard, { nodeId: "node", value: "é".repeat(63) })).rejects.toThrow(
-      "Delivery worker ID is invalid.",
-    );
     await expect(client.release({} as never)).rejects.toThrow();
     for (const duration of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])
       await expect(client.releaseExpired(duration)).rejects.toThrow();

@@ -87,8 +87,7 @@ a worker must still request pickup before processing a row.
 
 For a live Admin view, read updates as soon as the stream opens. It sends
 the known shards first and keeps sending changes. For a one-time report,
-use `shardSnapshot()` separately. Waiting for a snapshot before reading a live
-stream can fill the client buffer during the initial replay.
+use `shardSnapshot()` separately. The stream reads at the pace of its consumer.
 
 <!-- docs-snippet-path: packages/delivery-client/src/client/client.ts -->
 
@@ -134,8 +133,8 @@ not one transaction. If an acknowledgement is lost, delivery can happen again
 after restart, so make downstream effects idempotent.
 Remote delivery reads bounded raw pages. The shared server delivery policy
 removes a pending duplicate when its signal ID and typed Inbox target match a
-delivered row in that page or a recent delivery in the bounded process-local
-cache. A different target or a newly generated signal ID remains independently
+delivered row in that page or a recent delivery during the five-second local deduplication
+window. A different target or a newly generated signal ID remains independently
 deliverable, even when its payload is equal.
 
 Remote reception writes a pending row without a completion deadline. When the

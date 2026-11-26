@@ -33,7 +33,6 @@ import {
   DeliveryOutcomeUnknownError,
   DeliveryProtocolError,
   DeliveryShardObservationError,
-  ShardObservationOverflowError,
   RemoteWorkRegistry,
 } from "../src/index.js";
 import { ShardObservationStream } from "../src/client/shard-observation.js";
@@ -159,7 +158,6 @@ describe("DeliveryClient shard observation", () => {
       const stream = new ShardObservationStream({
         signal: controller.signal,
         setupTimeoutMs: 5,
-        capacity: 1,
         reconnects: 0,
         reconnectBackoffMs: 0,
         open: async function* (signal) {
@@ -207,7 +205,6 @@ describe("DeliveryClient shard observation", () => {
       const stream = new ShardObservationStream({
         signal: controller.signal,
         setupTimeoutMs: 5,
-        capacity: 1,
         reconnects: 0,
         reconnectBackoffMs: 0,
         open: async function* (signal) {
@@ -261,7 +258,7 @@ describe("DeliveryClient shard observation", () => {
     );
   });
 
-  it("bounds a slow Admin observation consumer with a stable sanitized overflow error", async () => {
+  it("delivers every update to a slow Admin consumer", async () => {
     const fake = transport();
     fake.streamReply([
       create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
@@ -278,32 +275,26 @@ describe("DeliveryClient shard observation", () => {
         }),
       ),
     ]);
-    const stream = DeliveryClient.usingTransport(fake.transport, {
-      observationBufferSize: 1,
-    }).observeShardUpdates();
+    const stream = DeliveryClient.usingTransport(fake.transport).observeShardUpdates();
 
     await new Promise((resolve) => setTimeout(resolve, 0));
-    await expect(stream[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
-      ShardObservationOverflowError,
-    );
+    const iterator = stream[Symbol.asyncIterator]();
+    expect(await iterator.next()).toMatchObject({ done: false, value: { messages: 1 } });
+    expect(await iterator.next()).toMatchObject({ done: false, value: { messages: 2 } });
+    stream.cancel();
   });
 
-  it("bounds pending observation next waiters with the same stable overflow error", async () => {
+  it("releases all waiting readers on cancellation", async () => {
     const fake = transport();
     fake.streamReplyAndHold([
       create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
     ]);
-    const stream = DeliveryClient.usingTransport(fake.transport, {
-      observationBufferSize: 1,
-    }).observeShardUpdates();
+    const stream = DeliveryClient.usingTransport(fake.transport).observeShardUpdates();
     const iterator = stream[Symbol.asyncIterator]();
 
-    const first = iterator.next();
-    await vi.waitFor(() => {
-      expect(fake.streamStarted).toBe(1);
-    });
-    await expect(iterator.next()).rejects.toBeInstanceOf(ShardObservationOverflowError);
-    await expect(first).rejects.toBeInstanceOf(ShardObservationOverflowError);
+    const readers = Array.from({ length: 150 }, () => iterator.next());
+    stream.cancel();
+    expect((await Promise.all(readers)).every((result) => result.done)).toBe(true);
   });
 
   it("reconnects a transient Admin stream ending only through a fresh ACK", async () => {
@@ -468,7 +459,6 @@ describe("DeliveryClient shard observation", () => {
     const stream = new ShardObservationStream({
       signal: controller.signal,
       setupTimeoutMs: 1,
-      capacity: 1,
       reconnects: 0,
       reconnectBackoffMs: 0,
       open: async function* () {

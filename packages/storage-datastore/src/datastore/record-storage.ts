@@ -166,7 +166,7 @@ class FlatEntityCodec<I, R extends Message> {
    * @param context Storage tenant context.
    * @param recordSpec Generated record and column contract.
    * @param client Datastore client supplying the default namespace.
-   * @param maxClientSideScan Maximum local materialization budget.
+   * @param maxClientSideScan Optional local materialization budget.
    * @param group Optional storage group used in the physical kind.
    * @param kind Optional explicit physical kind.
    * @param namespaceConverter Converts tenant IDs to Datastore namespaces.
@@ -177,7 +177,7 @@ class FlatEntityCodec<I, R extends Message> {
     context: StorageContext,
     private readonly recordSpec: RecordSpec<I, R>,
     client: Datastore,
-    private readonly maxClientSideScan: number,
+    private readonly maxClientSideScan: number | undefined,
     private readonly group: StorageGroup | undefined,
     kind: string | undefined,
     namespaceConverter: NamespaceConverter,
@@ -316,12 +316,14 @@ class FlatEntityCodec<I, R extends Message> {
   }
 
   /**
-   * Returns a row limit with one sentinel beyond the local scan budget.
+   * Returns a row limit with one sentinel when a local scan budget is configured.
    *
-   * @returns Provider row limit used to detect budget overflow.
+   * @returns The overflow-detection limit, or infinity without a scan budget.
    */
   queryLimit(): number {
-    return this.maxClientSideScan + 1;
+    return this.maxClientSideScan === undefined
+      ? Number.POSITIVE_INFINITY
+      : this.maxClientSideScan + 1;
   }
 
   /**
@@ -470,7 +472,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
    * @param context Storage tenancy and naming context.
    * @param recordSpec Schema, identifier, and column materialization contract.
    * @param client Injected Datastore client owned by the factory.
-   * @param maxClientSideScan Maximum candidate records to materialize locally.
+   * @param maxClientSideScan Optional maximum candidate records to materialize locally.
    * @param group The optional generated storage group.
    * @param kind The optional physical Datastore kind override.
    * @param namespaceConverter Converts complete tenants to native namespaces.
@@ -481,7 +483,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
     readonly client: Datastore,
-    maxClientSideScan: number,
+    maxClientSideScan: number | undefined,
     group?: StorageGroup,
     kind?: string,
     namespaceConverter: NamespaceConverter = new DefaultNamespaceConverter(),
@@ -689,9 +691,10 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   protected async queryRecordEntries(
     _query: RecordQuery<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
-    const query = this.#codec.createQuery(this.client);
     const exactPage = DatastoreRecordQuery.isKeysetPage(_query, this.recordSpec.indexes);
     const providerLimit = this.queryPageLimit(_query);
+    if (!Number.isFinite(providerLimit)) return this.exhaustiveLegacyEntries(_query);
+    const query = this.#codec.createQuery(this.client);
     DatastoreQueryPushdown.translate(
       query,
       _query,
@@ -722,10 +725,51 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   }
 
   /**
+   * Reads provider cursor pages until local filters and ordering have every candidate.
+   *
+   * @param request The legacy query to evaluate.
+   * @returns Exact filtered and ordered entries.
+   */
+  private async exhaustiveLegacyEntries(
+    request: RecordQuery<I>,
+  ): Promise<readonly RecordEntry<I, R>[]> {
+    const entries: QueriedEntry<I, R>[] = [];
+    let cursor: Buffer | string | undefined;
+    const seen = new Set<string>();
+    for (;;) {
+      const query = this.#codec.createQuery(this.client);
+      DatastoreQueryPushdown.translate(
+        query,
+        request,
+        (id) => this.#codec.key(this.client, id),
+        (column) => this.#codec.columnProperty(column),
+        (column, value) => this.#codec.columnValue(column, value),
+        false,
+      );
+      query.limit(128);
+      if (cursor !== undefined) query.start(cursor);
+      const response = await this.provider(() => this.client.runQuery(query, wrappedReadOptions));
+      for (const entity of DatastoreResults.entities(response))
+        entries.push({
+          id: this.#codec.id(entity, this.client),
+          record: this.#codec.decode(entity),
+          columns: this.#codec.columns(entity),
+        });
+      const info = DatastoreResults.queryInfo(response);
+      if (!info.more) return LocalQueryResults.apply(entries, request);
+      const next = info.cursor;
+      const key = typeof next === "string" ? next : next.toString("base64");
+      if (seen.has(key)) throw new Error("Datastore query continuation did not advance.");
+      seen.add(key);
+      cursor = next;
+    }
+  }
+
+  /**
    * Returns the safe native row limit for one record query.
    *
    * @param query Requested record query.
-   * @returns Exact page size or configured candidate limit.
+   * @returns Exact page size, configured candidate limit, or infinity for cursor paging.
    */
   private queryPageLimit(query: RecordQuery<I>): number {
     return DatastoreRecordQuery.limit(query, this.#codec.queryLimit(), this.recordSpec.indexes);

@@ -12,23 +12,26 @@
  * the License.
  */
 
+import { DeliveryTimers } from "./delivery-timers.js";
 import type { SubscriptionResponse } from "@spine-event-engine/proto/delivery-server";
 
 import {
   DeliveryProtocolError,
   DeliveryShardObservationError,
-  ShardObservationOverflowError,
   type DeliveryShardObservationStream,
   type RemoteShardObservation,
 } from "./types.js";
 
 /**
- * Buffers one bounded, reconnecting remote shard-observation stream.
+ * Reads the next Admin update when the subscriber consumes the current one.
  */
 export class ShardObservationStream implements DeliveryShardObservationStream {
-  readonly #values: RemoteShardObservation[] = [];
-  readonly #waiters: ((result: IteratorResult<RemoteShardObservation>) => void)[] = [];
+  #pending: { value: RemoteShardObservation; consumed: () => void } | undefined;
+
+  readonly #waiters = new Set<(result: IteratorResult<RemoteShardObservation>) => void>();
+
   #error: Error | undefined;
+
   #done = false;
 
   /**
@@ -38,8 +41,7 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
   constructor(
     private readonly config: {
       readonly signal: AbortSignal;
-      readonly setupTimeoutMs: number;
-      readonly capacity: number;
+      readonly setupTimeoutMs: number | undefined;
       readonly reconnects: number;
       readonly reconnectBackoffMs: number;
       readonly open: (signal: AbortSignal) => AsyncIterable<SubscriptionResponse>;
@@ -49,6 +51,7 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
       readonly cancel: () => void;
     },
   ) {
+    config.signal.addEventListener("abort", this.#stop, { once: true });
     void this.#pump();
   }
 
@@ -75,6 +78,9 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
     };
   }
 
+  /**
+   * Reads Admin updates and reconnects when requested by the caller.
+   */
   async #pump(): Promise<void> {
     try {
       for (let attempt = 0; ; attempt++) {
@@ -82,11 +88,7 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
           await this.#observeAttempt();
         } catch (error) {
           if (this.config.signal.aborted) return;
-          if (
-            error instanceof DeliveryProtocolError ||
-            error instanceof ShardObservationOverflowError
-          )
-            throw error;
+          if (error instanceof DeliveryProtocolError) throw error;
           if (attempt === this.config.reconnects) throw new DeliveryShardObservationError();
           await ShardObservationStream.#pause(this.config.reconnectBackoffMs, this.config.signal);
         }
@@ -99,13 +101,16 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
     }
   }
 
+  /**
+   * Opens one Admin stream and waits for the initial subscription response.
+   */
   async #observeAttempt(): Promise<never> {
     const setup = new AbortController();
     const abort = () => {
       setup.abort(this.config.signal.reason);
     };
     this.config.signal.addEventListener("abort", abort, { once: true });
-    const timeout = setTimeout(() => {
+    const cancelTimer = DeliveryTimers.after(() => {
       setup.abort(new DeliveryShardObservationError());
     }, this.config.setupTimeoutMs);
     try {
@@ -114,57 +119,76 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
         if (!acknowledged) {
           if (!this.config.acknowledge(frame)) throw new DeliveryProtocolError();
           acknowledged = true;
-          clearTimeout(timeout);
+          cancelTimer?.();
           continue;
         }
-        this.#push(this.config.decodeUpdate(frame));
+        await this.#push(this.config.decodeUpdate(frame));
       }
       throw new DeliveryShardObservationError();
     } finally {
-      clearTimeout(timeout);
+      cancelTimer?.();
       this.config.signal.removeEventListener("abort", abort);
     }
   }
 
-  #push(value: RemoteShardObservation): void {
-    if (this.#waiters.length > 0) {
-      const waiter = this.#waiters.shift();
-      if (waiter === undefined) throw new DeliveryShardObservationError();
+  /**
+   * Passes an update to the next reader and waits until the reader accepts it.
+   */
+  #push(value: RemoteShardObservation): Promise<void> {
+    const waiter = this.#waiters.values().next().value;
+    if (waiter !== undefined) {
+      this.#waiters.delete(waiter);
       waiter({ done: false, value });
-      return;
+      return Promise.resolve();
     }
-    if (this.#values.length >= this.config.capacity) throw new ShardObservationOverflowError();
-    this.#values.push(value);
+    if (this.#done) return Promise.resolve();
+    return new Promise<void>((consumed) => {
+      this.#pending = { value, consumed };
+    });
   }
 
+  /**
+   * Returns the pending update or waits for the next one.
+   */
   #next(): Promise<IteratorResult<RemoteShardObservation>> {
     if (this.#error !== undefined) return Promise.reject(this.#error);
-    const value = this.#values.shift();
-    if (value !== undefined) return Promise.resolve({ done: false, value });
-    if (this.#done) return Promise.resolve({ done: true, value: undefined });
-    if (this.#waiters.length >= this.config.capacity) {
-      const error = new ShardObservationOverflowError();
-      this.#error = error;
-      this.config.cancel();
-      this.#finish();
-      return Promise.reject(error);
+    const pending = this.#pending;
+    if (pending !== undefined) {
+      this.#pending = undefined;
+      pending.consumed();
+      return Promise.resolve({ done: false, value: pending.value });
     }
+    if (this.#done) return Promise.resolve({ done: true, value: undefined });
     return new Promise<IteratorResult<RemoteShardObservation>>((resolve) =>
-      this.#waiters.push(resolve),
+      this.#waiters.add(resolve),
     ).then((result) => {
       if (this.#error !== undefined) throw this.#error;
       return result;
     });
   }
 
+  readonly #stop = (): void => {
+    this.#finish();
+  };
+
+  /**
+   * Releases an unread update and wakes every waiting reader.
+   */
   #finish(): void {
     if (this.#done) return;
     this.#done = true;
+    this.config.signal.removeEventListener("abort", this.#stop);
+    this.#pending?.consumed();
+    this.#pending = undefined;
     this.config.finish();
     const result: IteratorResult<RemoteShardObservation> = { done: true, value: undefined };
-    for (const resolve of this.#waiters.splice(0)) resolve(result);
+    for (const resolve of this.#waiters) resolve(result);
+    this.#waiters.clear();
   }
 
+  /**
+   * Waits before reconnecting and stops if the stream closes.
+   */
   static #pause(delay: number, signal: AbortSignal): Promise<void> {
     if (delay === 0)
       return signal.aborted
@@ -180,9 +204,9 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
         if (reason === undefined) resolve();
         else reject(reason);
       };
-      const timer = setTimeout(finish, delay);
+      const cancelTimer = DeliveryTimers.after(finish, delay);
       const abort = () => {
-        clearTimeout(timer);
+        cancelTimer?.();
         finish(
           signal.reason instanceof Error
             ? signal.reason

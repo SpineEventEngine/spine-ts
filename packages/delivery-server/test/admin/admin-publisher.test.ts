@@ -21,7 +21,7 @@ import { ShardIndexSchema } from "@spine-event-engine/proto/delivery";
 
 import { AdminPublisher } from "../../src/admin/admin-service.js";
 import { InMemoryDeliveryState } from "../../src/core/in-memory-delivery-state.js";
-import { domainMessage, encodedBytes } from "../core/domain-message.js";
+import { domainMessage } from "../core/domain-message.js";
 
 const context = { signal: new AbortController().signal } as never;
 const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
@@ -80,7 +80,7 @@ describe("Admin publisher", () => {
       const state = new InMemoryDeliveryState();
       if (seeded) {
         const row = domainMessage("pending", shard);
-        state.putAll([{ message: row, bytes: encodedBytes(row) }]);
+        state.putAll([{ message: row }]);
       }
       const publisher = AdminPublisher.create(state);
       publisher.close();
@@ -121,7 +121,7 @@ describe("Admin publisher", () => {
       value: { value: { case: "update", value: { newMessagesCount: 0 } } },
     });
     const row = domainMessage("churn", shard);
-    state.putAll([{ message: row, bytes: encodedBytes(row) }]);
+    state.putAll([{ message: row }]);
     publisher.publish(shard);
     state.delete(row);
     publisher.publish(shard);
@@ -136,7 +136,63 @@ describe("Admin publisher", () => {
     vi.useRealTimers();
   });
 
-  it("rejects the 101st distinct pending shard update with the stable resource error", async () => {
+  it("keeps the latest state for a dashboard that pauses across several updates", async () => {
+    vi.useFakeTimers();
+    const state = new InMemoryDeliveryState();
+    const publisher = AdminPublisher.create(state);
+    const stream = publisher.service
+      .subscribeToShardUpdates(create(EmptySchema), context)
+      [Symbol.asyncIterator]();
+    try {
+      await stream.next();
+      for (const id of ["one", "two", "three"]) {
+        state.putAll([{ message: domainMessage(id, shard) }]);
+        publisher.publish(shard);
+        await vi.advanceTimersByTimeAsync(25);
+      }
+      await expect(stream.next()).resolves.toMatchObject({
+        value: { value: { value: { newMessagesCount: 3 } } },
+      });
+    } finally {
+      await stream.return?.();
+      publisher.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("suppresses unread changes that return to a shard state the dashboard already received", async () => {
+    vi.useFakeTimers();
+    const state = new InMemoryDeliveryState();
+    const publisher = AdminPublisher.create(state);
+    const stream = publisher.service
+      .subscribeToShardUpdates(create(EmptySchema), context)
+      [Symbol.asyncIterator]();
+    try {
+      await stream.next();
+      const first = domainMessage("first", shard);
+      const second = domainMessage("second", shard);
+      state.putAll([{ message: first }]);
+      publisher.publish(shard);
+      await stream.next();
+      await vi.advanceTimersByTimeAsync(25);
+      state.putAll([{ message: second }]);
+      publisher.publish(shard);
+      await vi.advanceTimersByTimeAsync(25);
+      state.delete(second);
+      publisher.publish(shard);
+      const other = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+      publisher.publish(other);
+      await expect(stream.next()).resolves.toMatchObject({
+        value: { value: { value: { index: other } } },
+      });
+    } finally {
+      await stream.return?.();
+      publisher.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("delivers more than 100 queued shard updates in publication order", async () => {
     const publisher = AdminPublisher.create(new InMemoryDeliveryState());
     const stream = publisher.service
       .subscribeToShardUpdates(create(EmptySchema), context)
@@ -146,13 +202,16 @@ describe("Admin publisher", () => {
     await Promise.resolve();
     for (let index = 0; index < 102; index++)
       publisher.publish(create(ShardIndexSchema, { index, ofTotal: 102 }));
-    await expect(delivered).resolves.toMatchObject({ done: false });
-    await expect(stream.next()).rejects.toMatchObject({
-      code: Code.ResourceExhausted,
-      rawMessage: "Delivery shard update buffer is full.",
+    await expect(delivered).resolves.toMatchObject({
+      value: { value: { case: "update", value: { index: { index: 0 } } } },
     });
-    expect(publisher.subscriberCount).toBe(0);
-    publisher.publish(shard);
+    for (let index = 1; index < 102; index++) {
+      await expect(stream.next()).resolves.toMatchObject({
+        value: { value: { case: "update", value: { index: { index } } } },
+      });
+    }
+    expect(publisher.subscriberCount).toBe(1);
+    await stream.return?.();
     expect(publisher.subscriberCount).toBe(0);
   });
 
@@ -160,7 +219,7 @@ describe("Admin publisher", () => {
     const state = new InMemoryDeliveryState();
     const publisher = AdminPublisher.create(state);
     const one = domainMessage("one", shard);
-    state.putAll([{ message: one, bytes: encodedBytes(one) }]);
+    state.putAll([{ message: one }]);
     const values = vi.spyOn(state.messages, "values").mockImplementation(() => {
       throw new Error("global Inbox scan");
     });

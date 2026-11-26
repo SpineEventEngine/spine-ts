@@ -17,7 +17,7 @@ import type { Duration, Timestamp } from "@bufbuild/protobuf/wkt";
 
 /**
  * Stable public worker identity represented by the frozen `WorkerId` wire type.
- * `nodeId` and `value` must be non-blank and together occupy at most 128 UTF-8 bytes.
+ * `nodeId` and `value` must both contain text.
  */
 export interface DeliveryWorkerId {
   // prettier-ignore
@@ -173,26 +173,6 @@ export interface RemoteShardObservation {
 }
 
 /**
- * Maximum serialized command or event envelope accepted from the delivery server.
- */
-export const MAX_INBOX_PAYLOAD_BYTES: 1048576 = 1_048_576;
-
-/**
- * Hard maximum number of messages accepted by one delivery batch mutation.
- */
-export const MAX_DELIVERY_BATCH_MESSAGES = 100;
-
-/**
- * Maximum serialized delivery RPC request or page response accepted by this client.
- */
-export const MAX_DELIVERY_RPC_BYTES: 4194304 = 4_194_304;
-
-/**
- * Maximum combined UTF-8 bytes of one worker and node identity.
- */
-export const MAX_DELIVERY_WORKER_BYTES = 128;
-
-/**
  * Raised when a frozen delivery-server response cannot be represented safely.
  */
 export class DeliveryProtocolError extends Error {
@@ -220,21 +200,6 @@ export class DeliveryPagingError extends Error {
   constructor() {
     super("Remote Inbox cannot continue safely from the supplied page position.");
     this.name = "DeliveryPagingError";
-  }
-}
-
-/**
- * Raised when a slow observer exceeds the bounded shard-update buffer.
- */
-export class ShardObservationOverflowError extends Error {
-  // prettier-ignore
-
-  /**
-   * Creates an error for a full shard-observation buffer.
-   */
-  constructor() {
-    super("Delivery shard observation buffer overflowed.");
-    this.name = "ShardObservationOverflowError";
   }
 }
 
@@ -290,12 +255,14 @@ export class DeliveryOutcomeUnknownError extends Error {
    *
    * @param operation Identifies the mutation with an unknown outcome.
    * @param reconciliation Identifies messages or shards that must be observed.
+   * @param options Supplies a sanitized transport cause when available.
    */
   constructor(
     operation: DeliveryOutcomeUnknownError["operation"],
     reconciliation: readonly string[] | readonly ShardIndex[] | "ALL_SHARDS",
+    options?: ErrorOptions,
   ) {
-    super(DeliveryOutcomeValues.message(operation));
+    super(DeliveryOutcomeValues.message(operation), options);
     this.name = "DeliveryOutcomeUnknownError";
     this.operation = operation;
     this.reconciliation = DeliveryOutcomeValues.reconciliation(operation, reconciliation);
@@ -400,13 +367,20 @@ export interface DeliveryClientOptions {
   readonly observationReconnectBackoffMs?: number;
 
   /**
-   * Limits queued observations and pending consumers.
+   * Maximum encoded response bytes per gRPC message for connectTo().
+   * Omitting this option uses the transport's framing limit.
    */
-  readonly observationBufferSize?: number;
+  readonly maxInboundMessageBytes?: number;
+
+  /**
+   * Maximum encoded request bytes per gRPC message for connectTo().
+   * Omitting this option uses the transport's framing limit.
+   */
+  readonly maxOutboundMessageBytes?: number;
 }
 
 /**
- * A cancellable, bounded stream of detached remote shard observations.
+ * A cancellable, demand-driven stream of detached remote shard observations.
  */
 export interface DeliveryShardObservationStream extends AsyncIterable<RemoteShardObservation> {
   // prettier-ignore

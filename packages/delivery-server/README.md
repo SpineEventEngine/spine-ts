@@ -19,7 +19,6 @@ pnpm add @spine-event-engine/delivery-server@snapshot
 
 - ✅ Coordinates inbox work and shard ownership between trusted Node processes.
 - ✅ Starts as a standalone command or embeds in another Node server.
-- ✅ Limits the total number and encoded size of stored inbox rows.
 - ✅ Provides administration and gRPC health endpoints for local operations.
 
 ## 🚀 Run a local server
@@ -43,23 +42,22 @@ The `spine-delivery-server` executable runs the same server. It reads
 configuration once at startup from explicit options, then environment variables,
 then defaults.
 
-| Setting           | Environment variable       | Default     |
-| ----------------- | -------------------------- | ----------- |
-| Listener host     | `HOST`                     | `127.0.0.1` |
-| Listener port     | `PORT`                     | `8484`      |
-| Inbound size      | `MAX_INBOUND_MESSAGE_SIZE` | 4 MiB       |
-| Session lifetime  | `SHARD_PROCESSING_TIMEOUT` | 60 seconds  |
-| Work reminder     | `WORK_REMINDER_SECONDS`    | 10 seconds  |
-| Retained messages | `MAX_RETAINED_MESSAGES`    | 10,000      |
-| Retained bytes    | `MAX_RETAINED_BYTES`       | 32 MiB      |
-| Child processes   | `DELIVERY_PROCESS_COUNT`   | 1           |
+| Setting          | Environment variable        | Default              |
+| ---------------- | --------------------------- | -------------------- |
+| Listener host    | `HOST`                      | `127.0.0.1`          |
+| Listener port    | `PORT`                      | `8484`               |
+| Inbound size     | `MAX_INBOUND_MESSAGE_SIZE`  | gRPC framing maximum |
+| Outbound size    | `MAX_OUTBOUND_MESSAGE_SIZE` | gRPC framing maximum |
+| Session lifetime | `SHARD_PROCESSING_TIMEOUT`  | 60 seconds           |
+| Work reminder    | `WORK_REMINDER_SECONDS`     | 10 seconds           |
+| Child processes  | `DELIVERY_PROCESS_COUNT`    | 1                    |
 
 Set `processCount: 2` when constructing `DeliveryServer`, or set
 `DELIVERY_PROCESS_COUNT=2` for the executable. The public listener stays in the
 parent process. It routes shard number `s` to child `s % 2`, while each child
 keeps the full shard identity. For example, the parent forwards a write for
 shard 3 to subprocess 1. Subprocess 1 writes to its inbox and returns the
-result. Each subprocess applies the row and byte settings to the rows it stores.
+result. Each subprocess stores its rows in memory.
 If a subprocess exits, the parent starts a replacement in the same slot.
 The exited process loses its in-memory rows and sessions.
 
@@ -90,8 +88,6 @@ import {
 
 const delivery = InMemoryDelivery.create({
   processingTimeoutMs: 30_000,
-  maxRetainedMessages: 10_000,
-  maxRetainedBytes: 32 * 1024 * 1024,
 });
 const transport = createRouterTransport((router) => {
   router.service(InboxService, delivery.inbox);

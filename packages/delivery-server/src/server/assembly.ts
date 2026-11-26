@@ -32,7 +32,6 @@ import { GuardedInboxRuntime } from "../core/guarded-inbox-service.js";
 import { MutationAdmission } from "../core/mutation-admission.js";
 import { ShardSessionRuntime } from "../core/shard-service.js";
 import { ShardObserving, type ShardObservingHandle } from "../core/shard-observing-service.js";
-import { DEFAULT_DELIVERY_STATE_LIMITS } from "../core/limits.js";
 import type { DeliveryConfiguration } from "./config.js";
 
 /**
@@ -119,7 +118,7 @@ export const DeliveryAssembly: Readonly<{
   create: (
     configuration: DeliveryAssemblyConfiguration = DEFAULT_ASSEMBLY_CONFIGURATION,
   ): DeliveryAssembly => {
-    const state = new InMemoryDeliveryState(configuration);
+    const state = new InMemoryDeliveryState();
     const admission = new MutationAdmission();
     const admin = AdminPublisher.create(state);
     const observing = ShardObserving.create(state, configuration.reminderIntervalMs ?? 10_000);
@@ -232,10 +231,7 @@ const DeliverySessionAssembly = Object.freeze({
  * Supplies the runtime settings used by one delivery assembly.
  */
 type DeliveryAssemblyConfiguration = Partial<
-  Pick<
-    DeliveryConfiguration,
-    "processingTimeoutMs" | "reminderIntervalMs" | "maxRetainedMessages" | "maxRetainedBytes"
-  >
+  Pick<DeliveryConfiguration, "processingTimeoutMs" | "reminderIntervalMs">
 > & {
   /**
    * Samples the wall clock for session and acknowledgement timestamps.
@@ -254,5 +250,4 @@ type DeliveryAssemblyConfiguration = Partial<
 const DEFAULT_ASSEMBLY_CONFIGURATION: DeliveryAssemblyConfiguration = Object.freeze({
   processingTimeoutMs: 60_000,
   reminderIntervalMs: 10_000,
-  ...DEFAULT_DELIVERY_STATE_LIMITS,
 });

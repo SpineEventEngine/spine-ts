@@ -281,9 +281,7 @@ describe("Inbox", () => {
     await expect(open("Tasks").read(ShardIndex.single(), { limit: 0 })).rejects.toThrow(
       InboxMessageError,
     );
-    await expect(open("Tasks").read(ShardIndex.single(), { limit: 1_001 })).rejects.toThrow(
-      InboxMessageError,
-    );
+    await expect(open("Tasks").read(ShardIndex.single(), { limit: 1_001 })).resolves.toEqual([]);
   });
 
   it("does not let caller mutation change the durable input snapshot", async () => {

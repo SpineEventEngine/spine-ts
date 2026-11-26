@@ -782,8 +782,8 @@ or attributes. The framework does not add a durable outgoing queue, scheduled
 retry policy, or exactly-once side effects.
 Local and remote delivery removes a pending duplicate when its signal ID and
 typed Inbox target match a delivered row in the current page or a recent local
-delivery remembered by the bounded cache. This process-local cache holds at most
-1,000 identities and disappears on restart. Suppression is temporary: after the
+acknowledgement during the five-second local retention window. This cache
+disappears on restart. After the
 relevant delivered rows and cache entries are gone, a later Inbox delivery may
 execute the same recipient again. Cleaning SQL Inbox rows alone may still leave
 a cache entry that suppresses Inbox delivery; cleanup does not guarantee

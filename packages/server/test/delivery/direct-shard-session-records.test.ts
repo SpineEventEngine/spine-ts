@@ -19,6 +19,8 @@ import {
   ShardIndexSchema,
   ShardSessionRecordSchema,
   WorkerIdSchema,
+  type ShardIndex as WireShardIndex,
+  type ShardSessionRecord,
 } from "@spine-event-engine/proto/delivery";
 
 import {
@@ -31,6 +33,226 @@ import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { tenant } from "../tenant-fixture.js";
 
 describe("direct ShardSessionRecord storage", () => {
+  it("cancels pickup before a CAS attempt and renewal after repeated conflicts", async () => {
+    const delegate = new InMemoryStorageFactory().createRecordStorage(
+      { name: "Canceled.delivery.shards", multitenant: false },
+      shardSessionRecordSpec,
+    );
+    let conflicts = false;
+    let attempts = 0;
+    const handle = {
+      atomicCompareAndSet: true,
+      read: (id: WireShardIndex) => delegate.read(id),
+      compareAndSet: (
+        id: WireShardIndex,
+        prior: ShardSessionRecord | undefined,
+        next: ShardSessionRecord | undefined,
+      ) => {
+        attempts += 1;
+        return conflicts ? Promise.resolve(false) : delegate.compareAndSet(id, prior, next);
+      },
+      close: () => {
+        delegate.close();
+      },
+    };
+    const shards = new ShardedWorkRegistry({
+      context: { name: "Canceled", multitenant: false },
+      storageFactory: { createRecordStorage: () => handle } as never,
+      now: () => new Date(0),
+    });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      shards.pickUp(ShardIndex.single(), worker("node", "worker"), {
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow("canceled");
+    expect(attempts).toBe(0);
+
+    const current = await shards.pickUp(ShardIndex.single(), worker("node", "worker"));
+    if (current === undefined) throw new Error("Expected shard pickup.");
+    conflicts = true;
+    const renewal = new AbortController();
+    const pending = shards.renew(current, { signal: renewal.signal });
+    await vi.waitFor(() => {
+      expect(attempts).toBeGreaterThan(9);
+    });
+    renewal.abort();
+    await expect(pending).rejects.toThrow("canceled");
+    await shards.close();
+  });
+
+  it("tries to release a held session once after cancellation", async () => {
+    const delegate = new InMemoryStorageFactory().createRecordStorage(
+      { name: "ReleaseCanceled.delivery.shards", multitenant: false },
+      shardSessionRecordSpec,
+    );
+    let conflict = false;
+    let attempts = 0;
+    const handle = {
+      atomicCompareAndSet: true,
+      read: (id: WireShardIndex) => delegate.read(id),
+      compareAndSet: (
+        id: WireShardIndex,
+        prior: ShardSessionRecord | undefined,
+        next: ShardSessionRecord | undefined,
+      ) => {
+        attempts += 1;
+        return conflict ? Promise.resolve(false) : delegate.compareAndSet(id, prior, next);
+      },
+      close: () => {
+        delegate.close();
+      },
+    };
+    const shards = new ShardedWorkRegistry({
+      context: { name: "ReleaseCanceled", multitenant: false },
+      storageFactory: { createRecordStorage: () => handle } as never,
+      now: () => new Date(0),
+    });
+    const current = await shards.pickUp(ShardIndex.single(), worker("node", "worker"));
+    if (current === undefined) throw new Error("Expected shard pickup.");
+    const controller = new AbortController();
+    controller.abort();
+    await expect(shards.release(current, { signal: controller.signal })).resolves.toBe(true);
+    expect(attempts).toBe(2);
+    const held = await shards.pickUp(ShardIndex.single(), worker("node", "worker"));
+    if (held === undefined) throw new Error("Expected shard pickup.");
+    conflict = true;
+    await expect(shards.release(held, { signal: controller.signal })).rejects.toThrow("canceled");
+    expect(attempts).toBe(4);
+    await shards.close();
+  });
+
+  it("completes pickup, renewal, and release after nine CAS conflicts each", async () => {
+    const delegate = new InMemoryStorageFactory().createRecordStorage(
+      { name: "Conflicts.delivery.shards", multitenant: false },
+      shardSessionRecordSpec,
+    );
+    let clashes = 9;
+    let attempts = 0;
+    const handle = {
+      atomicCompareAndSet: true,
+      read: (id: WireShardIndex) => delegate.read(id),
+      compareAndSet: (
+        id: WireShardIndex,
+        prior: ShardSessionRecord | undefined,
+        next: ShardSessionRecord | undefined,
+      ) => {
+        attempts += 1;
+        if (clashes-- > 0) return Promise.resolve(false);
+        return delegate.compareAndSet(id, prior, next);
+      },
+      close: () => {
+        delegate.close();
+      },
+    };
+    let now = 0;
+    const shards = new ShardedWorkRegistry({
+      context: { name: "Conflicts", multitenant: false },
+      storageFactory: { createRecordStorage: () => handle } as never,
+      leaseMs: 1_000,
+      now: () => new Date(now),
+    });
+    const shard = ShardIndex.single();
+    const first = await shards.pickUp(shard, worker("node", "worker"));
+    expect(first).toBeDefined();
+    expect(attempts).toBe(10);
+    if (first === undefined) throw new Error("Expected shard pickup.");
+    clashes = 9;
+    now = 100;
+    const renewed = await shards.renew(first);
+    expect(renewed).toBeDefined();
+    expect(attempts).toBe(20);
+    if (renewed === undefined) throw new Error("Expected shard renewal.");
+    clashes = 9;
+    await expect(shards.release(renewed)).resolves.toBe(true);
+    expect(attempts).toBe(30);
+    await shards.close();
+  });
+
+  it("observes a changed worker after repeated conflicts", async () => {
+    const delegate = new InMemoryStorageFactory().createRecordStorage(
+      { name: "Closing.delivery.shards", multitenant: false },
+      shardSessionRecordSpec,
+    );
+    let attempts = 0;
+    let replace = true;
+    const otherWorker = worker("node-b", "worker-b");
+    const handle = {
+      atomicCompareAndSet: true,
+      read: (id: WireShardIndex) => delegate.read(id),
+      compareAndSet: async (
+        id: WireShardIndex,
+        prior: ShardSessionRecord | undefined,
+        next: ShardSessionRecord | undefined,
+      ) => {
+        attempts += 1;
+        if (replace && attempts === 9) {
+          await delegate.compareAndSet(
+            id,
+            prior,
+            create(ShardSessionRecordSchema, {
+              index: id,
+              whenLastPicked: { seconds: 0n },
+              worker: otherWorker,
+            }),
+          );
+          return false;
+        }
+        if (replace) return false;
+        return delegate.compareAndSet(id, prior, next);
+      },
+      close: () => {
+        delegate.close();
+      },
+    };
+    const shards = new ShardedWorkRegistry({
+      context: { name: "Closing", multitenant: false },
+      storageFactory: { createRecordStorage: () => handle } as never,
+      leaseMs: 1_000,
+      now: () => new Date(0),
+    });
+    await expect(
+      shards.pickUp(ShardIndex.single(), worker("node-a", "worker-a")),
+    ).resolves.toBeUndefined();
+    expect(attempts).toBe(9);
+    replace = false;
+    const other = await shards.pickUp(ShardIndex.single(), otherWorker);
+    expect(other?.worker?.value).toBe("worker-b");
+    await shards.close();
+  });
+
+  it("closes an admitted pickup despite continued CAS conflicts", async () => {
+    let attempts = 0;
+    const handle = {
+      atomicCompareAndSet: true,
+      read: () => Promise.resolve(undefined),
+      compareAndSet: () => {
+        attempts += 1;
+        return Promise.resolve(false);
+      },
+      close: vi.fn(() => undefined),
+    };
+    const shards = new ShardedWorkRegistry({
+      context: { name: "ClosingConflicts", multitenant: false },
+      storageFactory: { createRecordStorage: () => handle } as never,
+      leaseMs: 1_000,
+      now: () => new Date(0),
+    });
+    const settled = shards.pickUp(ShardIndex.single(), worker("node", "worker")).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await vi.waitFor(() => {
+      expect(attempts).toBeGreaterThan(8);
+    });
+    const closing = shards.close();
+    const outcome = await settled;
+    expect(outcome).toBeInstanceOf(Error);
+    expect((outcome as Error).message).toBe("Shard registry is closed.");
+    await expect(closing).resolves.toBeUndefined();
+    expect(handle.close).toHaveBeenCalledOnce();
+  });
   it("retains one record handle across shard operations until close", async () => {
     const factory = new InMemoryStorageFactory();
     const opened = vi.spyOn(factory, "createRecordStorage");
@@ -274,6 +496,27 @@ describe("direct ShardSessionRecord storage", () => {
     await expect(shards.pickUp(ShardIndex.single(), worker("node", "worker"))).rejects.toThrow(
       "lease expiry",
     );
+  });
+
+  it("rejects a local lease whose expiry cannot be represented as a Date", async () => {
+    const factory = new InMemoryStorageFactory();
+    const shards = new ShardedWorkRegistry({
+      context: { name: "LocalDateLimit", multitenant: false },
+      storageFactory: factory,
+      leaseMs: 8_640_000_000_000_001,
+      now: () => new Date(0),
+    });
+    await expect(shards.pickUp(ShardIndex.single(), worker("node", "worker"))).rejects.toThrow(
+      "Shard lease expiry is invalid.",
+    );
+    const records = factory.createRecordStorage(
+      { name: "LocalDateLimit.delivery.shards", multitenant: false },
+      shardSessionRecordSpec,
+    );
+    await expect(
+      records.read(create(ShardIndexSchema, { index: 0, ofTotal: 1 })),
+    ).resolves.toBeUndefined();
+    await shards.close();
   });
 
   it("handles absent, expired, unowned, and malformed direct session rows", async () => {

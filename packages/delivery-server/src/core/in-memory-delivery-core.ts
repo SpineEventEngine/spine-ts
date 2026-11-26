@@ -53,16 +53,6 @@ export interface DeliveryCoreOptions {
    * @returns An elapsed-time reading independent of wall-clock changes.
    */
   readonly monotonicNow?: () => number;
-
-  /**
-   * Maximum retained records; integer from 1 through 2,147,483,647.
-   */
-  readonly maxRetainedMessages?: number;
-
-  /**
-   * Maximum retained serialized record bytes; integer from 1 through 2,147,483,647.
-   */
-  readonly maxRetainedBytes?: number;
 }
 
 /**
@@ -111,7 +101,7 @@ export const InMemoryDelivery: Readonly<{
   /**
    * Creates an empty Inbox and Shard core.
    *
-   * @param options Configures state limits and stale pickup expiry.
+   * @param options Configures stale pickup expiry and work reminders.
    * @returns Provides the handlers without owning a listener or process lifecycle.
    * @throws {RangeError} When the processing timeout is not a positive safe integer.
    */
@@ -122,7 +112,7 @@ export const InMemoryDelivery: Readonly<{
   /**
    * Creates an empty Inbox and Shard core.
    *
-   * @param options Configures state limits and stale pickup expiry.
+   * @param options Configures stale pickup expiry and work reminders.
    * @returns Provides the handlers without owning a listener or process lifecycle.
    * @throws {RangeError} When the processing timeout is not a positive safe integer.
    */

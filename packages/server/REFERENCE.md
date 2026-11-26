@@ -1692,8 +1692,8 @@ delivery, global update ordering, nor cluster-complete notification delivery.
 `Inbox`, `InboxStorage`, `ShardIndex`, and `ShardedWorkRegistry` provide the
 local durable-row abstraction. Inbox and shard storage require a single-tenant
 Delivery storage context shared by all tenants; the packed signal supplies
-the dispatch tenant. Read limits are 1–1000; work leases are
-1000–2147483647 ms. Framework delivery supports command handling, projection
+the dispatch tenant. The caller chooses a positive page size and supplies
+work leases in positive whole milliseconds. Framework delivery supports command handling, projection
 updates, process-manager reactions, and Aggregate Event reactions. Callbacks must tolerate redelivery:
 lost renewal can prevent stale finalization but cannot undo a callback already
 run. The package exposes no general raw worker callback API.
@@ -1887,12 +1887,11 @@ pending work: an active drain continues from the last row read until that scan
 ends. It restarts from the beginning only if the completed scan delivered
 messages, allowing it to find work added during delivery. It finishes after a
 scan delivers nothing; it does not restart after each productive page.
-Delivery compares pending rows with delivered rows in the current page
-and a process-local cache of the 1,000 most recent deliveries, then removes
-duplicates. The 30-second Inbox deduplication window controls how long delivered
-rows remain available as duplicate evidence; it is not a delivery-retention
-period. Persisted accepted rows follow their delivery lifecycle and may be
-redelivered according to that lifecycle after the deduplication window has elapsed.
+Delivery compares a pending row with retained completions in the current page
+and with identities acknowledged locally during the five-second retention
+window. The local cache drops identities as they age out. A busy shard still
+recognizes duplicates when thousands of other messages finish in that window.
+A retained row becomes eligible for cleanup when its deadline passes.
 
 Direct delivery uses the configured Inbox storage clock for both retained-row
 duplicate checks and early cleanup filtering. Remote delivery uses local client

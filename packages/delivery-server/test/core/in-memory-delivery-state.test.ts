@@ -29,7 +29,7 @@ describe("InMemoryDeliveryState", () => {
     const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
     const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
     state.putAll([
-      { message: create(InboxMessageSchema, { id: { uuid: "message", index: shard } }), bytes: 1 },
+      { message: create(InboxMessageSchema, { id: { uuid: "message", index: shard } }) },
     ]);
     state.setSession(
       shard,
@@ -50,7 +50,7 @@ describe("InMemoryDeliveryState", () => {
     const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
     const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
     const message = create(InboxMessageSchema, { id: { uuid: "message", index: first } });
-    state.putAll([{ message, bytes: 1 }]);
+    state.putAll([{ message }]);
     state.setSession(
       first,
       worker,
@@ -81,7 +81,6 @@ describe("InMemoryDeliveryState", () => {
       state.putAll([
         {
           message: create(InboxMessageSchema, { id: { uuid: "missing-shard" } }),
-          bytes: 1,
         },
       ]),
     ).toThrow("Delivery message identity is missing.");
@@ -91,18 +90,18 @@ describe("InMemoryDeliveryState", () => {
     const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
     const message = create(InboxMessageSchema, { id: { uuid: "message", index: shard } });
     const seeded = new InMemoryDeliveryState();
-    seeded.putAll([{ message, bytes: 1 }]);
+    seeded.putAll([{ message }]);
     const key = seeded.messages.keys().next().value;
     if (key === undefined) throw new Error("Expected a retained message key.");
 
     const replacement = new InMemoryDeliveryState();
     replacement.messages.set(key, message);
-    expect(() => replacement.putAll([{ message, bytes: 2 }])).toThrow(
+    expect(() => replacement.putAll([{ message }])).toThrow(
       "Delivery message shard count is invalid.",
     );
 
     const deletion = new InMemoryDeliveryState();
-    deletion.putAll([{ message, bytes: 1 }]);
+    deletion.putAll([{ message }]);
     expect(deletion.delete(message)).toBe(true);
     deletion.messages.set(key, message);
     expect(() => deletion.delete(message)).toThrow("Delivery message shard count is invalid.");

@@ -42,7 +42,7 @@ import { describe, expect, it } from "vitest";
 import { ProjectCreatedSchema } from "../../core/test-fixtures/generated/project_events_pb.js";
 import { ProjectStateSchema } from "../../core/test-fixtures/generated/project_states_pb.js";
 import { ProjectIdSchema } from "../../server/test-fixtures/generated/repository-routing/project_identifiers_pb.js";
-import { DatastoreQueryLimitError, DatastoreStorageFactory } from "../src/index.js";
+import { DatastoreStorageFactory } from "../src/index.js";
 import { DatastoreRecordStorage } from "../src/datastore/record-storage.js";
 
 const emulatorHost = process.env.DATASTORE_EMULATOR_HOST;
@@ -253,7 +253,7 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       await records.writeAll(
         Array.from({ length: 1_001 }, (_, index) => message(`scan-${String(index)}`)),
       );
-      await expect(records.query()).rejects.toEqual(new DatastoreQueryLimitError(1_000));
+      expect((await records.query()).length).toBeGreaterThan(1_000);
       await expect(
         records.queryPlan({
           exhaustive: true,
@@ -291,7 +291,12 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       for (let offset = 0; offset < values.length; offset += 500) {
         await records.writeAll(values.slice(offset, offset + 500).map(message));
       }
-      await expect(records.query()).rejects.toEqual(new DatastoreQueryLimitError(1_000));
+      await expect(
+        records.query({
+          filters: [{ column: "value", value: "item-10001" }],
+          limit: 1,
+        }),
+      ).resolves.toEqual([message("item-10001")]);
       await expect(records.queryPlan({ exhaustive: true })).resolves.toHaveLength(10_002);
       await expect(
         records.queryPlan({

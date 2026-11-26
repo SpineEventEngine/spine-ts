@@ -12,16 +12,8 @@
  * the License.
  */
 
-import {
-  create,
-  toBinary,
-  type Message,
-  type MessageInitShape,
-  type MessageShape,
-} from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
-import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
   InboxService,
   OptionalInboxMessageSchema,
@@ -29,19 +21,12 @@ import {
 } from "@spine-event-engine/proto/delivery-server";
 import {
   InboxLabel,
-  InboxMessageSchema,
   InboxMessageStatus,
   type InboxMessage,
   type ShardIndex,
 } from "@spine-event-engine/proto/delivery";
 
 import { InMemoryDeliveryState } from "./in-memory-delivery-state.js";
-import {
-  MAX_DELIVERY_BATCH_MESSAGES,
-  MAX_DELIVERY_RPC_BYTES,
-  MAX_INBOX_PAYLOAD_BYTES,
-  MAX_INBOX_RECORD_BYTES,
-} from "./limits.js";
 import { MutationAdmission } from "./mutation-admission.js";
 import { DeliveryMessages, DeliveryShards } from "./wire-values.js";
 
@@ -189,7 +174,7 @@ const InboxOperations = {
         throw InboxResponses.invalid("Delivery message identity is missing.");
       InboxShards.required(request.index);
       const message = state.messages.get(`${DeliveryShards.key(request.index)}:${request.uuid}`);
-      return InboxResponses.bounded(
+      return create(
         OptionalInboxMessageSchema,
         message === undefined ? {} : { message: DeliveryMessages.copy(message) },
       );
@@ -198,30 +183,27 @@ const InboxOperations = {
     (state: InMemoryDeliveryState): ServiceImpl<typeof InboxService>["findManyInShard"] =>
     (request) => {
       const shard = InboxShards.required(request.shard);
-      if (!Number.isInteger(request.pageSize) || request.pageSize < 1 || request.pageSize > 1_000)
-        throw InboxResponses.invalid("Delivery page size must be between 1 and 1000.");
+      if (
+        !Number.isInteger(request.pageSize) ||
+        request.pageSize < 1 ||
+        request.pageSize > 2_147_483_647
+      )
+        throw InboxResponses.invalid("Delivery page size must be a positive int32.");
       if (request.sinceWhen !== undefined && !InboxTime.valid(request.sinceWhen))
         throw InboxResponses.invalid("Delivery page timestamp is invalid.");
       const message = state.page(shard, request.sinceWhen, request.pageSize);
-      return InboxResponses.bounded(
-        PageOfMessagesSchema,
-        { message },
-        "Delivery page exceeds the 4 MiB response limit; request a smaller page.",
-      );
+      return create(PageOfMessagesSchema, { message });
     },
   newestMessageToDeliver:
     (state: InMemoryDeliveryState): ServiceImpl<typeof InboxService>["newestMessageToDeliver"] =>
     (shard) => {
       const newest = state.newestPending(InboxShards.required(shard));
-      return InboxResponses.bounded(
-        OptionalInboxMessageSchema,
-        newest === undefined ? {} : { message: newest },
-      );
+      return create(OptionalInboxMessageSchema, newest === undefined ? {} : { message: newest });
     },
 };
 
 /**
- * Describes a validated Inbox message and its encoded record size.
+ * Describes a validated Inbox message.
  */
 interface InboxRecord {
   // prettier-ignore
@@ -230,11 +212,6 @@ interface InboxRecord {
    * Holds the detached validated Inbox message.
    */
   readonly message: InboxMessage;
-
-  /**
-   * Holds the encoded Inbox record size in bytes.
-   */
-  readonly bytes: number;
 }
 
 /**
@@ -247,7 +224,7 @@ export const InboxMessages: Readonly<{
    * Validates and copies an Inbox message.
    *
    * @param message Holds the candidate Inbox message.
-   * @returns The validated detached message and its encoded size.
+   * @returns The validated detached message.
    */
   required: (message: InboxMessage | undefined) => InboxRecord;
 
@@ -305,23 +282,16 @@ export const InboxMessages: Readonly<{
       throw InboxResponses.invalid("Delivery message payload is invalid.");
     if (!InboxMessages.validLabel(message.label) || !InboxMessages.validStatus(message.status))
       throw InboxResponses.invalid("Delivery message enum is invalid.");
-    const bytes = toBinary(InboxMessageSchema, message).byteLength;
-    if (bytes > MAX_INBOX_RECORD_BYTES)
-      throw InboxResponses.invalid("Delivery message record is too large.");
-    return { message: DeliveryMessages.copy(message), bytes };
+    return { message: DeliveryMessages.copy(message) };
   },
   requiredBatchLength: (length: number): void => {
-    if (length < 1 || length > MAX_DELIVERY_BATCH_MESSAGES)
-      throw InboxResponses.invalid("Delivery message batch is invalid.");
+    if (length < 1) throw InboxResponses.invalid("Delivery message batch is invalid.");
   },
   validPayload: (message: InboxMessage): boolean => {
     const payload = message.payload;
     if (payload.case !== "command" && payload.case !== "event") return false;
-    const schema = payload.case === "command" ? CommandSchema : EventSchema;
-    return (
-      toBinary(schema, payload.value, { writeUnknownFields: false }).byteLength <=
-      MAX_INBOX_PAYLOAD_BYTES
-    );
+    const value: unknown = Reflect.get(payload, "value");
+    return typeof value === "object" && value !== null;
   },
   validLabel: (label: InboxLabel): boolean =>
     label === InboxLabel.HANDLE_COMMAND ||
@@ -429,27 +399,8 @@ const InboxTransitions = Object.freeze({
 });
 
 /**
- * Bounds Inbox responses and creates RPC errors.
+ * Creates Inbox RPC errors.
  */
 const InboxResponses = Object.freeze({
-  /**
-   * Creates a bounded response message.
-   * @typeParam Schema The generated response schema.
-   * @param schema Defines the response message type.
-   * @param initializer Holds the response fields.
-   * @param errorMessage Describes an oversized response.
-   * @returns The bounded response message.
-   */
-  bounded<Schema extends GenMessage<Message>>(
-    schema: Schema,
-    initializer: MessageInitShape<Schema>,
-    errorMessage = "Delivery response exceeds the 4 MiB limit.",
-  ): MessageShape<Schema> {
-    const response = create(schema, initializer);
-    if (toBinary(schema, response).byteLength > MAX_DELIVERY_RPC_BYTES)
-      throw new ConnectError(errorMessage, Code.ResourceExhausted);
-    return response;
-  },
   invalid: (message: string): ConnectError => new ConnectError(message, Code.InvalidArgument),
-  exhausted: (message: string): ConnectError => new ConnectError(message, Code.ResourceExhausted),
 });

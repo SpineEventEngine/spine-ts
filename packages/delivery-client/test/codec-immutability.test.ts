@@ -396,26 +396,6 @@ describe("delivery codec and immutable snapshots", () => {
     expect(DeliveryRequestCodec.callOptions(signal, 200)).toEqual({ timeoutMs: 200, signal });
   });
 
-  it("accepts a response at the 4 MiB limit and rejects a larger response", () => {
-    const within = create(StringValueSchema, { value: "a".repeat(4 * 1024 * 1024 - 5) });
-    const oversized = create(StringValueSchema, { value: "a".repeat(4 * 1024 * 1024 - 4) });
-    expect(toBinary(StringValueSchema, within)).toHaveLength(4 * 1024 * 1024);
-    expect(toBinary(StringValueSchema, oversized)).toHaveLength(4 * 1024 * 1024 + 1);
-    expect(() => {
-      DeliveryRequestCodec.responseBytes(StringValueSchema, within);
-    }).not.toThrow();
-    expect(() => {
-      DeliveryRequestCodec.responseBytes(StringValueSchema, oversized);
-    }).toThrow(DeliveryProtocolError);
-  });
-
-  it("rejects a request that exceeds the delivery RPC byte limit", () => {
-    const oversized = create(StringValueSchema, { value: "a".repeat(4 * 1024 * 1024) });
-    expect(() => {
-      DeliveryRequestCodec.requestBytes(StringValueSchema, oversized);
-    }).toThrow("4 MiB");
-  });
-
   it("isolates decoded receive timestamps and payload bytes from later caller mutation", () => {
     const wire = message("command");
     const first = DeliveryMessageCodec.decode(wire, ShardIndex.single());

@@ -318,17 +318,16 @@ Successful processing followed by failed acknowledgement gets finite
 acknowledgement-only retries; exhaustion leaves the row pending.
 Normal local and remote delivery reads every status in a bounded page. It
 removes a pending duplicate when its signal ID and typed Inbox target match a
-delivered row in that page or one of the 1,000 most recent deliveries remembered
-by the process. A different target or a new signal ID remains independently
+delivered row still within its retention window in that page, or an identity
+the process acknowledged within the last five seconds. A different target or a new signal ID remains independently
 deliverable, even when the domain payload is equal.
 
 Each Inbox read is bounded to one page, not to a total backlog: an active drain
 advances through later pages while it retains the shard. After reaching the end,
 it starts another scan only if it delivered messages during the completed scan.
 It stops after a scan with no deliveries, rather than returning to the beginning
-after every productive page. The 30-second Inbox
-deduplication window controls how long delivered rows remain available as
-duplicate evidence. It is not a delivery-retention period; ordinary accepted rows
+after every productive page. A delivered row supplies duplicate evidence for five seconds from acknowledgement.
+A later drain removes the row after that deadline. It is not a delivery-retention period; ordinary accepted rows
 follow their Inbox lifecycle and may be redelivered after the duplicate window has
 elapsed. Agent inputs use the same ordinary Inbox acknowledgement and redelivery rules.
 A saved `CallModel` request or pending call is not a durable execution queue;

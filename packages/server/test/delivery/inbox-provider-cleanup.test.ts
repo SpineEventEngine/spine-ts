@@ -266,6 +266,49 @@ describe.skipIf(!providerEnabled(inboxProvider, "datastore", datastoreHost !== u
       }
     });
 
+    it("reads a whole shard and finds its newest waiting row beyond 1,000 candidates", async () => {
+      const client = new Datastore({ projectId: datastoreProject });
+      const stringifiers = new StringifierRegistry();
+      stringifiers.setTypeRegistry(new TypeRegistry([TaskListIdSchema]));
+      const kind = `DeliveryInbox${randomUUID().replaceAll("-", "")}`;
+      const factory = DatastoreStorageFactory.newBuilder()
+        .setClient(client)
+        .setStringifierRegistry(stringifiers)
+        .organizeRecords(inboxRecordSpec.recordType, {
+          kind,
+        })
+        .build();
+      const context = { name: "DeliveryInboxPaging", multitenant: false } as const;
+      const rows = Array.from({ length: 1_002 }, (_, i) =>
+        createMessage(`task-${String(i)}`, `signal-${String(i)}`, BigInt(i)),
+      );
+      const records = factory.createRecordStorage(context, inboxRecordSpec);
+      const inbox = open(factory, context);
+      try {
+        for (let i = 0; i < rows.length; i += 200)
+          await records.writeAll(rows.slice(i, i + 200).map((row) => InboxRecords.write(row)));
+        const shard = ShardIndex.single();
+        expect(
+          (await inbox.read(shard, { limit: rows.length })).map((row) => row.id.value),
+        ).toEqual(rows.map((row) => row.id.value));
+        expect((await inbox.newestPending(shard))?.id.value).toBe(rows.at(-1)?.id.value);
+      } finally {
+        const [keys] = await client.runQuery(client.createQuery(kind).select("__key__"));
+        for (let i = 0; i < keys.length; i += 200)
+          await client.delete(
+            keys
+              .slice(i, i + 200)
+              .map(
+                (row: { [Datastore.KEY]: import("@google-cloud/datastore").Key }) =>
+                  row[Datastore.KEY],
+              ),
+          );
+        await inbox.storage.close();
+        records.close();
+        await factory.close();
+      }
+    }, 30_000);
+
     it("shares direct ID deletion across independently opened factories", async () => {
       const stringifiers = new StringifierRegistry();
       stringifiers.setTypeRegistry(new TypeRegistry([TaskListIdSchema]));

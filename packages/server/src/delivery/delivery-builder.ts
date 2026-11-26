@@ -273,7 +273,7 @@ export interface Delivery {
   readonly worker: WorkerId;
 
   /**
-   * Maximum accepted work per internal delivery page, from 1 through 1000.
+   * Maximum accepted work per internal delivery page, selected by the caller.
    */
   readonly pageSize: number;
 
@@ -415,7 +415,7 @@ export class DeliveryBuilder {
    * @returns This builder.
    */
   withPageSize(pageSize: number): this {
-    this.#pageSize = DeliveryValues.requireBound("Delivery page size", pageSize, 1_000);
+    this.#pageSize = DeliveryValues.positive("Delivery page size", pageSize);
     return this;
   }
 
@@ -728,15 +728,11 @@ const DeliveryValues = Object.freeze({
    *
    * @param name Name reported for invalid configuration.
    * @param value Supplied configuration value.
-   * @param max Maximum accepted value.
    * @returns The validated positive value.
    */
-  requireBound(name: string, value: number, max: number): number {
+  positive(name: string, value: number): number {
     if (!Number.isSafeInteger(value) || value <= 0) {
       throw new Error(`${name} must be a positive safe integer.`);
-    }
-    if (value > max) {
-      throw new Error(`${name} must be at most ${String(max)}.`);
     }
     return value;
   },

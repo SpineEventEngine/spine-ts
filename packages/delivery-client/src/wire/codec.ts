@@ -52,10 +52,6 @@ import {
 
 import {
   DeliveryProtocolError,
-  MAX_DELIVERY_BATCH_MESSAGES,
-  MAX_DELIVERY_RPC_BYTES,
-  MAX_DELIVERY_WORKER_BYTES,
-  MAX_INBOX_PAYLOAD_BYTES,
   type DeliveryClientOptions,
   type DeliveryWorkerId,
   type ReleasedShardSession,
@@ -92,16 +88,6 @@ const DeliveryValues = Object.freeze({
    */
   hasText(value: string): boolean {
     return value.trim().length > 0;
-  },
-
-  /**
-   * Calculates the encoded UTF-8 byte length used by wire limits.
-   *
-   * @param value Supplies the text value.
-   * @returns The UTF-8 byte count.
-   */
-  utf8Bytes(value: string): number {
-    return new TextEncoder().encode(value).byteLength;
   },
 
   /**
@@ -368,7 +354,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     readonly shard: WireShardIndex;
     readonly messages: WireInboxMessage[];
   } {
-    if (messages.length === 0 || messages.length > MAX_DELIVERY_BATCH_MESSAGES)
+    if (messages.length === 0)
       throw new TypeError("Delivery message batch is invalid.");
     const ids = messages.map((message) => DeliveryMessageCodec.encodeId(message.id));
     if (new Set(ids).size !== ids.length)
@@ -713,7 +699,6 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
       wire.case === "command"
         ? AnyPacker.pack(CommandSchema, wire.value)
         : AnyPacker.pack(EventSchema, wire.value);
-    if (packed.value.byteLength > MAX_INBOX_PAYLOAD_BYTES) throw DeliveryRequestCodec.protocol();
     return DeliveryValues.freeze(packed);
   },
 
@@ -946,9 +931,7 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
       typeof value.nodeId !== "string" ||
       !DeliveryValues.hasText(value.nodeId) ||
       typeof value.value !== "string" ||
-      !DeliveryValues.hasText(value.value) ||
-      DeliveryValues.utf8Bytes(value.nodeId) + DeliveryValues.utf8Bytes(value.value) >
-        MAX_DELIVERY_WORKER_BYTES
+      !DeliveryValues.hasText(value.value)
     )
       throw new TypeError("Delivery worker ID is invalid.");
     return create(WorkerIdSchema, { nodeId: { value: value.nodeId }, value: value.value });
@@ -1154,17 +1137,6 @@ type DeliveryRequestCodecApi = Readonly<{
   pageSize(value: number): number;
 
   /**
-   * Validates an integer in an inclusive range.
-   *
-   * @param value Supplies the number to validate.
-   * @param minimum Defines the inclusive lower bound.
-   * @param maximum Defines the inclusive upper bound.
-   * @param name Names the value in validation errors.
-   * @returns The validated value.
-   */
-  bounded(value: number, minimum: number, maximum: number, name: string): number;
-
-  /**
    * Normalizes client options to bounded immutable values.
    *
    * @param options Supplies the optional client settings.
@@ -1178,25 +1150,6 @@ type DeliveryRequestCodecApi = Readonly<{
    * @param value Supplies the URL.
    */
   baseUrl(value: string): void;
-
-  /**
-   * Rejects an oversized RPC request.
-   *
-   * @param schema Supplies the message schema.
-   * @param value Supplies the message value.
-   */
-  requestBytes(schema: Parameters<typeof toBinary>[0], value: Parameters<typeof toBinary>[1]): void;
-
-  /**
-   * Rejects an oversized RPC response when it can be re-encoded.
-   *
-   * @param schema Supplies the message schema.
-   * @param value Supplies the message value.
-   */
-  responseBytes(
-    schema: Parameters<typeof toBinary>[0],
-    value: Parameters<typeof toBinary>[1],
-  ): void;
 
   /**
    * Validates read retry count.
@@ -1220,7 +1173,7 @@ type DeliveryRequestCodecApi = Readonly<{
    * @param value Supplies the timeout.
    * @returns The validated timeout.
    */
-  timeout(value: number): number;
+  timeout(value: number | undefined): number | undefined;
 }>;
 
 /**
@@ -1295,7 +1248,10 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
     signal: AbortSignal | undefined,
     timeoutMs?: number,
   ): { readonly timeoutMs?: number; readonly signal?: AbortSignal } {
-    if (timeoutMs === undefined) return signal === undefined ? {} : { signal };
+    // Connect writes this header in milliseconds. gRPC allows eight digits.
+    // A longer deadline still cancels the call through the client signal.
+    if (timeoutMs === undefined || timeoutMs > 99_999_999)
+      return signal === undefined ? {} : { signal };
     return signal === undefined ? { timeoutMs } : { timeoutMs, signal };
   },
 
@@ -1306,20 +1262,7 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
    * @returns The validated page size.
    */
   pageSize(value: number): number {
-    return DeliveryValues.bounded(value, 1, 1_000, "Delivery page size");
-  },
-
-  /**
-   * Validates an integer in an inclusive range.
-   *
-   * @param value Supplies the number to validate.
-   * @param minimum Defines the inclusive lower bound.
-   * @param maximum Defines the inclusive upper bound.
-   * @param name Names the value in validation errors.
-   * @returns The validated value.
-   */
-  bounded(value: number, minimum: number, maximum: number, name: string): number {
-    return DeliveryValues.bounded(value, minimum, maximum, name);
+    return DeliveryValues.bounded(value, 1, 0x7fff_ffff, "Delivery page size");
   },
 
   /**
@@ -1337,12 +1280,26 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
       observationReconnectBackoffMs: DeliveryRequestCodec.backoff(
         options.observationReconnectBackoffMs ?? 0,
       ),
-      observationBufferSize: DeliveryValues.bounded(
-        options.observationBufferSize ?? 100,
-        1,
-        1_000,
-        "Delivery observation buffer size",
-      ),
+      ...(options.maxInboundMessageBytes === undefined
+        ? {}
+        : {
+            maxInboundMessageBytes: DeliveryValues.bounded(
+              options.maxInboundMessageBytes,
+              1,
+              0xffff_ffff,
+              "Inbound gRPC message bytes",
+            ),
+          }),
+      ...(options.maxOutboundMessageBytes === undefined
+        ? {}
+        : {
+            maxOutboundMessageBytes: DeliveryValues.bounded(
+              options.maxOutboundMessageBytes,
+              1,
+              0xffff_ffff,
+              "Outbound gRPC message bytes",
+            ),
+          }),
     });
   },
 
@@ -1364,46 +1321,13 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
   },
 
   /**
-   * Rejects an oversized RPC request.
-   *
-   * @param schema Supplies the message schema.
-   * @param value Supplies the message value.
-   */
-  requestBytes(
-    schema: Parameters<typeof toBinary>[0],
-    value: Parameters<typeof toBinary>[1],
-  ): void {
-    if (toBinary(schema, value).byteLength > MAX_DELIVERY_RPC_BYTES)
-      throw new TypeError("Delivery RPC request exceeds the 4 MiB limit.");
-  },
-
-  /**
-   * Rejects an oversized RPC response when it can be re-encoded.
-   *
-   * @param schema Supplies the message schema.
-   * @param value Supplies the message value.
-   */
-  responseBytes(
-    schema: Parameters<typeof toBinary>[0],
-    value: Parameters<typeof toBinary>[1],
-  ): void {
-    try {
-      if (toBinary(schema, value).byteLength > MAX_DELIVERY_RPC_BYTES)
-        throw DeliveryRequestCodec.protocol();
-    } catch (error) {
-      if (error instanceof DeliveryProtocolError) throw error;
-      return;
-    }
-  },
-
-  /**
    * Validates read retry count.
    *
    * @param value Supplies the retry count.
    * @returns The validated count.
    */
   retries(value: number): number {
-    return DeliveryValues.bounded(value, 0, 5, "Delivery read retries");
+    return DeliveryValues.bounded(value, 0, Number.MAX_SAFE_INTEGER, "Delivery read retries");
   },
 
   /**
@@ -1413,7 +1337,7 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
    * @returns The validated backoff.
    */
   backoff(value: number): number {
-    return DeliveryValues.finite(value, 0, 10_000, "Delivery retry backoff");
+    return DeliveryValues.finite(value, 0, Number.MAX_SAFE_INTEGER, "Delivery retry backoff");
   },
 
   /**
@@ -1422,8 +1346,9 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
    * @param value Supplies the timeout.
    * @returns The validated timeout.
    */
-  timeout(value: number): number {
-    return DeliveryValues.bounded(value, 1, 120_000, "Delivery request timeout");
+  timeout(value: number | undefined): number | undefined {
+    if (value === undefined) return undefined;
+    return DeliveryValues.bounded(value, 1, Number.MAX_SAFE_INTEGER, "Delivery request timeout");
   },
 });
 

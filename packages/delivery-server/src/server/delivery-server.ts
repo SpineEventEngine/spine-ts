@@ -61,15 +61,22 @@ export interface DeliveryServerOptions {
 
   /**
    * Maximum inbound RPC message size in bytes. The explicit option overrides
-   * `MAX_INBOUND_MESSAGE_SIZE`; the default is 4 MiB (`4_194_304`). Accepts
-   * positive integers through `2_147_483_647`.
+   * `MAX_INBOUND_MESSAGE_SIZE`; the default is the protobuf framing maximum
+   * (`4_294_967_295`). Accepts positive integers through that maximum.
    */
   readonly maxInboundMessageBytes?: number;
 
   /**
+   * Maximum outbound RPC message size in bytes. The explicit option overrides
+   * `MAX_OUTBOUND_MESSAGE_SIZE`; the default is the protobuf framing maximum
+   * (`4_294_967_295`). Accepts positive integers through that maximum.
+   */
+  readonly maxOutboundMessageBytes?: number;
+
+  /**
    * Automatic stale-pickup timeout in seconds. The explicit option overrides
    * `SHARD_PROCESSING_TIMEOUT`; the default is 60. Accepts positive integers
-   * through `2_147_483_647`.
+   * through `315_576_000_000`, the Protobuf Duration maximum.
    */
   readonly processingTimeoutSeconds?: number;
 
@@ -80,20 +87,6 @@ export interface DeliveryServerOptions {
    * `Math.floor(Number.MAX_SAFE_INTEGER / 1_000)`.
    */
   readonly workReminderSeconds?: number;
-
-  /**
-   * Maximum retained Inbox records. The explicit option overrides
-   * `MAX_RETAINED_MESSAGES`; the default is `10_000`. Accepts integers from 1
-   * through `2_147_483_647`.
-   */
-  readonly maxRetainedMessages?: number;
-
-  /**
-   * Maximum serialized bytes retained across Inbox records. The explicit option
-   * overrides `MAX_RETAINED_BYTES`; the default is 32 MiB (`33_554_432`).
-   * Accepts integers from 1 through `2_147_483_647`.
-   */
-  readonly maxRetainedBytes?: number;
 
   /**
    * Application-owned logger reserved for component-local records. The component
@@ -312,6 +305,7 @@ export class DeliveryServer {
           router.service(Health, health);
         },
         readMaxBytes: this.#configuration.maxInboundMessageBytes,
+        writeMaxBytes: this.#configuration.maxOutboundMessageBytes,
       }),
     );
     server.on("session", (session) => {

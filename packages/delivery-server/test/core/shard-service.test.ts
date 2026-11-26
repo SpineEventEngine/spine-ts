@@ -245,18 +245,6 @@ describe("typed Shard sessions", () => {
     ).rejects.toMatchObject({ code: Code.InvalidArgument });
     await expect(
       core.managed.pickShardRaw(
-        create(DeliveryShardPickupSchema, {
-          shard,
-          worker: create(WorkerIdSchema, {
-            nodeId: { value: "node" },
-            value: "w".repeat(125),
-          }),
-        }),
-        context,
-      ),
-    ).rejects.toMatchObject({ code: Code.InvalidArgument });
-    await expect(
-      core.managed.pickShardRaw(
         create(DeliveryShardPickupSchema, { shard: invalidShard, worker }),
         context,
       ),

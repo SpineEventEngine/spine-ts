@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Code, ConnectError } from "@connectrpc/connect";
 import { createHash } from "node:crypto";
 import {
   InboxMessageStatus,
@@ -23,7 +22,6 @@ import {
 
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
-import { DeliveryLimits, type DeliveryStateLimits } from "./limits.js";
 import { DeliveryMessages, DeliveryShards, DeliveryWorkers } from "./wire-values.js";
 
 /**
@@ -73,21 +71,6 @@ interface ShardBucket {
 }
 
 /**
- * Counts canonical resources retained by one delivery child.
- */
-export interface DeliveryResourceUsage {
-  /**
-   * Counts retained Inbox records.
-   */
-  readonly rows: number;
-
-  /**
-   * Counts encoded bytes retained by Inbox records.
-   */
-  readonly bytes: number;
-}
-
-/**
  * Package-private canonical detached state; a new instance deliberately starts empty.
  */
 export class InMemoryDeliveryState {
@@ -103,80 +86,27 @@ export class InMemoryDeliveryState {
    */
   readonly shards: Map<string, ShardRecord> = new Map<string, ShardRecord>();
 
-  readonly #messageBytes = new Map<string, number>();
-
   readonly #acknowledgements = new Map<string, string>();
 
   readonly #buckets = new Map<string, ShardBucket>();
 
-  readonly #limits: DeliveryStateLimits;
-
-  #retainedBytes = 0;
-
-  /**
-   * Creates empty state.
-   *
-   * @param limits Configures retained-state limits.
-   */
-  constructor(limits: Partial<DeliveryStateLimits> = {}) {
-    this.#limits = DeliveryLimits.resolve(limits);
-  }
-
-  /**
-   * Returns exact retained resources without copying unrelated shards.
-   *
-   * @returns The current row and encoded-byte totals.
-   */
-  usage(): DeliveryResourceUsage {
-    return {
-      rows: this.messages.size,
-      bytes: this.#retainedBytes,
-    };
-  }
-
-  /**
-   * Calculates a batch's final resource totals using its last write for each ID.
-   *
-   * @param candidates Supplies validated encoded rows.
-   * @returns The exact totals if the batch commits.
-   */
-  projectedUsage(
-    candidates: readonly { readonly message: InboxMessage; readonly bytes: number }[],
-  ): DeliveryResourceUsage {
-    const final = new Map<string, { readonly message: InboxMessage; readonly bytes: number }>();
-    for (const candidate of candidates)
-      final.set(DeliveryMessages.key(candidate.message), candidate);
-    let rows = this.messages.size;
-    let bytes = this.#retainedBytes;
-    for (const [key, candidate] of final) {
-      const prior = this.messages.get(key);
-      if (prior === undefined) rows++;
-      else bytes -= this.#messageBytes.get(key) ?? 0;
-      bytes += candidate.bytes;
-    }
-    return { rows, bytes };
-  }
-
   /**
    * Stores a validated batch atomically.
    *
-   * @param messages Supplies encoded messages.
+   * @param messages Supplies validated messages.
    * @returns Lists newly inserted messages.
    */
-  putAll(
-    messages: readonly { readonly message: InboxMessage; readonly bytes: number }[],
-  ): InboxMessage[] {
-    this.#ensureCapacity(messages);
+  putAll(messages: readonly { readonly message: InboxMessage }[]): InboxMessage[] {
     const inserted: InboxMessage[] = [];
     const seen = new Set<string>();
-    const final = new Map<string, { readonly message: InboxMessage; readonly bytes: number }>();
+    const final = new Map<string, { readonly message: InboxMessage }>();
     for (const candidate of messages) {
       const key = DeliveryMessages.key(candidate.message);
       if (!this.messages.has(key) && !seen.has(key)) inserted.push(candidate.message);
       seen.add(key);
       final.set(key, candidate);
     }
-    for (const [key, candidate] of final) this.#replace(key, candidate.message, candidate.bytes);
+    for (const [key, candidate] of final) this.#replace(key, candidate.message);
     return inserted;
   }
 
@@ -192,8 +122,6 @@ export class InMemoryDeliveryState {
     if (current === undefined) return false;
     this.messages.delete(key);
     this.#acknowledgements.delete(key);
-    this.#retainedBytes -= this.#messageBytes.get(key) ?? 0;
-    this.#messageBytes.delete(key);
     this.#removeFromBucket(current);
     this.#pruneBucket(DeliveryShards.key(this.#requiredShard(current)));
     return true;
@@ -358,26 +286,14 @@ export class InMemoryDeliveryState {
     return record;
   }
 
-  #ensureCapacity(
-    candidates: readonly { readonly message: InboxMessage; readonly bytes: number }[],
-  ): void {
-    const { rows, bytes } = this.projectedUsage(candidates);
-    if (rows > this.#limits.maxRetainedMessages || bytes > this.#limits.maxRetainedBytes) {
-      throw new ConnectError("Delivery retained-state capacity is full.", Code.ResourceExhausted);
-    }
-  }
-
-  #replace(key: string, message: InboxMessage, bytes: number): void {
+  #replace(key: string, message: InboxMessage): void {
     this.#acknowledgements.delete(key);
     const prior = this.messages.get(key);
     if (prior !== undefined) {
-      this.#retainedBytes -= this.#messageBytes.get(key) ?? 0;
       this.#removeFromBucket(prior);
     }
     const detached = DeliveryMessages.copy(message);
     this.messages.set(key, detached);
-    this.#messageBytes.set(key, bytes);
-    this.#retainedBytes += bytes;
     const shard = this.#requiredShard(detached);
     const shardKey = DeliveryShards.key(shard);
     let bucket = this.#buckets.get(shardKey);

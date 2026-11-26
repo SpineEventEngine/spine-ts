@@ -280,12 +280,12 @@ describe("DeliveryMonitor delivery", () => {
     expect(shards[0]?.[0]).toEqual(first.shardFor(Identifiers.pack("string", "42"), targetType));
   });
 
-  it.each([
-    [0, "Delivery page size must be a positive safe integer."],
-    [1_001, "Delivery page size must be at most 1000."],
-  ])("rejects page size %i outside the finite delivery bound", (pageSize, message) => {
-    expect(() => build().withPageSize(pageSize)).toThrow(message);
-  });
+  it.each([[0, "Delivery page size must be a positive safe integer."]])(
+    "rejects page size %i outside the finite delivery bound",
+    (pageSize, message) => {
+      expect(() => build().withPageSize(pageSize)).toThrow(message);
+    },
+  );
 
   it("rejects a strategy that returns a shard from a different configured total", () => {
     const delivery = build()

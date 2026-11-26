@@ -144,7 +144,6 @@ describe("forked delivery children", () => {
       DeliveryConfig.resolve({
         host: "127.0.0.1",
         port: 0,
-        maxRetainedMessages: 2,
       }),
     );
     await pool.start();

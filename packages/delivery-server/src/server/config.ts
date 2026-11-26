@@ -12,19 +12,17 @@
  * the License.
  */
 
-import {
-  DEFAULT_DELIVERY_STATE_LIMITS,
-  MAX_DELIVERY_LIMIT,
-  MAX_DELIVERY_RPC_BYTES,
-  DeliveryLimits,
-  type DeliveryStateLimits,
-} from "../core/limits.js";
 import type { DeliveryServerOptions } from "./delivery-server.js";
 
 /**
- * Describes the resolved delivery listener and retained-state configuration.
+ * Maximum message length in protobuf's 32-bit framing and Connect 2.1.2.
  */
-export interface DeliveryConfiguration extends DeliveryStateLimits {
+const PROTOBUF_FRAME_MAX_BYTES = 0xffff_ffff;
+
+/**
+ * Describes the resolved delivery listener and session configuration.
+ */
+export interface DeliveryConfiguration {
   // prettier-ignore
 
   /**
@@ -41,6 +39,11 @@ export interface DeliveryConfiguration extends DeliveryStateLimits {
    * Holds the maximum inbound RPC message size in bytes.
    */
   readonly maxInboundMessageBytes: number;
+
+  /**
+   * Holds the maximum outbound RPC message size in bytes.
+   */
+  readonly maxOutboundMessageBytes: number;
 
   /**
    * Holds the automatic Shard processing timeout in milliseconds.
@@ -107,10 +110,18 @@ export const DeliveryConfig: Readonly<{
       maxInboundMessageBytes: DeliveryConfig.number(
         options.maxInboundMessageBytes,
         "MAX_INBOUND_MESSAGE_SIZE",
-        MAX_DELIVERY_RPC_BYTES,
+        PROTOBUF_FRAME_MAX_BYTES,
         1,
-        MAX_DELIVERY_LIMIT,
+        PROTOBUF_FRAME_MAX_BYTES,
         "inbound message size",
+      ),
+      maxOutboundMessageBytes: DeliveryConfig.number(
+        options.maxOutboundMessageBytes,
+        "MAX_OUTBOUND_MESSAGE_SIZE",
+        PROTOBUF_FRAME_MAX_BYTES,
+        1,
+        PROTOBUF_FRAME_MAX_BYTES,
+        "outbound message size",
       ),
       processingTimeoutMs:
         DeliveryConfig.number(
@@ -118,11 +129,10 @@ export const DeliveryConfig: Readonly<{
           "SHARD_PROCESSING_TIMEOUT",
           60,
           1,
-          MAX_DELIVERY_LIMIT,
+          315_576_000_000,
           "processing timeout",
         ) * 1_000,
       reminderIntervalMs: DeliveryConfigSupport.reminderInterval(options),
-      ...DeliveryConfigSupport.retention(options),
     });
   },
   number: (
@@ -153,33 +163,6 @@ export const DeliveryConfig: Readonly<{
  * Resolves supporting delivery server configuration values.
  */
 const DeliveryConfigSupport = Object.freeze({
-  /**
-   * Resolves existing retained-state limits.
-   *
-   * @param options Supplies explicit limit overrides.
-   * @returns Validated retained-state limits.
-   */
-  retention(options: DeliveryServerOptions): DeliveryStateLimits {
-    return DeliveryLimits.resolve({
-      maxRetainedMessages: DeliveryConfig.number(
-        options.maxRetainedMessages,
-        "MAX_RETAINED_MESSAGES",
-        DEFAULT_DELIVERY_STATE_LIMITS.maxRetainedMessages,
-        1,
-        MAX_DELIVERY_LIMIT,
-        "retained message limit",
-      ),
-      maxRetainedBytes: DeliveryConfig.number(
-        options.maxRetainedBytes,
-        "MAX_RETAINED_BYTES",
-        DEFAULT_DELIVERY_STATE_LIMITS.maxRetainedBytes,
-        1,
-        MAX_DELIVERY_LIMIT,
-        "retained byte limit",
-      ),
-    });
-  },
-
   /**
    * Resolves the work-reminder interval without a feature-specific cap.
    *

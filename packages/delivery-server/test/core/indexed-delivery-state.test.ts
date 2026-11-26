@@ -13,31 +13,28 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { ConnectError } from "@connectrpc/connect";
 import { describe, expect, it, vi } from "vitest";
 import { InboxMessageStatus, ShardIndexSchema } from "@spine-event-engine/proto/delivery";
 import { InMemoryDeliveryState } from "../../src/core/in-memory-delivery-state.js";
-import { domainMessage, encodedBytes } from "./domain-message.js";
+import { domainMessage } from "./domain-message.js";
 
 const first = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
 const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
 
 describe("indexed delivery state", () => {
-  it("discovers more than 1,000 shards while preserving row and byte safeguards", () => {
-    const state = new InMemoryDeliveryState({ maxRetainedMessages: 1_201 });
-    const rows = Array.from({ length: 1_201 }, (_, index) => {
-      const shard = create(ShardIndexSchema, { index, ofTotal: 1_201 });
+  it("retains more than the former 10,000 row default across shards", () => {
+    const state = new InMemoryDeliveryState();
+    const rows = Array.from({ length: 10_001 }, (_, index) => {
+      const shard = create(ShardIndexSchema, { index, ofTotal: 10_001 });
       const message = domainMessage(`row-${String(index)}`, shard);
-      return { message, bytes: encodedBytes(message) };
+      return { message };
     });
     state.putAll(rows);
-    expect([...state.knownShards()]).toHaveLength(1_201);
-    expect([...state.pendingShards()]).toHaveLength(1_201);
-    expect(state.usage().rows).toBe(1_201);
+    expect([...state.knownShards()]).toHaveLength(10_001);
+    expect([...state.pendingShards()]).toHaveLength(10_001);
     const extra = domainMessage("extra", first);
-    expect(() => state.putAll([{ message: extra, bytes: encodedBytes(extra) }])).toThrow(
-      ConnectError,
-    );
+    state.putAll([{ message: extra }]);
+    expect(state.storedCount(first)).toBe(1);
   });
 
   it("orders one shard by full time, version, then UTF-8 ID without reading unrelated rows", () => {
@@ -49,7 +46,7 @@ describe("indexed delivery state", () => {
       domainMessage("later", first, 500_000, 2),
       domainMessage("other", second, 0, 0),
     ];
-    state.putAll(rows.map((message) => ({ message, bytes: encodedBytes(message) })));
+    state.putAll(rows.map((message) => ({ message })));
     const values = vi.spyOn(state.messages, "values").mockImplementation(() => {
       throw new Error("unrelated global scan");
     });
@@ -70,37 +67,29 @@ describe("indexed delivery state", () => {
     expect([...state.pendingShards()]).toEqual([first, second]);
     expect([...state.knownShards()]).toEqual([first, second]);
     const added = domainMessage("new", first, 501_000, 0);
-    state.putAll([{ message: added, bytes: encodedBytes(added) }]);
+    state.putAll([{ message: added }]);
     expect(state.storedCount(first)).toBe(5);
     values.mockRestore();
     keys.mockRestore();
   });
 
-  it("tracks a final repeated identity once and leaves all indexes unchanged on rejection", () => {
-    const state = new InMemoryDeliveryState({ maxRetainedMessages: 2 });
+  it("tracks a final repeated identity once and indexes later writes", () => {
+    const state = new InMemoryDeliveryState();
     const one = domainMessage("one", first);
     const completed = domainMessage("one", first, 0, 1, InboxMessageStatus.DELIVERED);
-    state.putAll([
-      { message: one, bytes: encodedBytes(one) },
-      { message: completed, bytes: encodedBytes(completed) },
-    ]);
+    state.putAll([{ message: one }, { message: completed }]);
     expect(state.storedCount(first)).toBe(1);
     expect(state.hasPending(first)).toBe(false);
     expect(state.newestPending(first)).toBeUndefined();
     const two = domainMessage("two", second);
     const three = domainMessage("three", first);
-    expect(() =>
-      state.putAll([
-        { message: two, bytes: encodedBytes(two) },
-        { message: three, bytes: encodedBytes(three) },
-      ]),
-    ).toThrow(ConnectError);
-    expect(state.storedCount(first)).toBe(1);
-    expect(state.storedCount(second)).toBe(0);
-    expect(state.messages.size).toBe(1);
+    state.putAll([{ message: two }, { message: three }]);
+    expect(state.storedCount(first)).toBe(2);
+    expect(state.storedCount(second)).toBe(1);
+    expect(state.messages.size).toBe(3);
     expect(state.delete(completed)).toBe(true);
     expect(state.delete(completed)).toBe(false);
-    expect(state.storedCount(first)).toBe(0);
-    expect([...state.knownShards()]).toEqual([]);
+    expect(state.storedCount(first)).toBe(1);
+    expect([...state.knownShards()]).toEqual([first, second]);
   });
 });

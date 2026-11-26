@@ -125,7 +125,7 @@ export class DeliveryChildPool {
    */
   constructor(
     readonly processCount: number,
-    private readonly configuration: DeliveryConfiguration,
+    readonly configuration: DeliveryConfiguration,
     private readonly forkChild: ChildFork = fork,
   ) {
     if (!Number.isSafeInteger(processCount) || processCount < 1)

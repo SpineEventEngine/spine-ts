@@ -427,7 +427,7 @@ describe("direct InboxMessage storage", () => {
 
     await storage.write(message);
     await expect(storage.read(message.shard)).resolves.toEqual([message]);
-    for (const limit of [-1, 1.5, 1_001, Number.MAX_SAFE_INTEGER + 1])
+    for (const limit of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1])
       await expect(storage.read(message.shard, { limit })).rejects.toThrow("limit");
     for (const offset of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1])
       await expect(storage.read(message.shard, { offset })).rejects.toThrow("offset");
