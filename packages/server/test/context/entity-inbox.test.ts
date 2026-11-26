@@ -518,6 +518,23 @@ describe("LocalEntityInbox", () => {
     await delivery.close();
   });
 
+  it("notifies a custom observer of a new Entity row without a local route", async () => {
+    const delivery = new Delivery({
+      context: { name: "UnroutedTasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const observer = vi.fn();
+    const inbox = new LocalEntityInbox(
+      "UnroutedTasks",
+      new DeliveryReadiness(undefined, delivery, undefined, false, observer),
+    );
+    const input = taskCommandInput("unrouted-custom");
+
+    const stored = await inbox.receive(delivery, input);
+    expect(observer).toHaveBeenCalledExactlyOnceWith(stored);
+    await delivery.close();
+  });
+
   it("accepts a local shared Command after its Inbox write and wakes delivery", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },

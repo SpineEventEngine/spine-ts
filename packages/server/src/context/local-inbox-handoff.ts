@@ -214,15 +214,15 @@ export class DeliveryReadiness {
   /**
    * Notifies shared Delivery after persistence or returns a standalone completion claim.
    * @param ready Route made eligible by the write, if a recipient is registered.
-   * @param message Supplies the persisted row for a custom observer.
+   * @param message Supplies a newly persisted row for a custom observer.
    * @returns A completion claim for that write.
    */
   claim(ready?: DeliveryReady, message?: InboxMessage): DeliveryHandoff {
-    if (ready === undefined) return settledHandoff;
     if (this.#onMessage !== undefined && message !== undefined) {
       this.#onMessage(message);
       return settledHandoff;
     }
+    if (ready === undefined) return settledHandoff;
     if (this.#remoteObserved && this.#shared !== undefined) {
       this.notify(ready);
       return settledHandoff;

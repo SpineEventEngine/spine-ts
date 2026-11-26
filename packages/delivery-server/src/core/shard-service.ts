@@ -286,9 +286,7 @@ export class ShardSessionRuntime {
     if (
       value.whenPicked === undefined ||
       value.lifetime === undefined ||
-      !Number.isInteger(value.whenPicked.nanos) ||
-      value.whenPicked.nanos < 0 ||
-      value.whenPicked.nanos >= 1_000_000_000 ||
+      !SessionValues.validTimestamp(value.whenPicked) ||
       !SessionValues.validDuration(value.lifetime) ||
       value.lifetime.seconds * 1_000_000_000n + BigInt(value.lifetime.nanos) !==
         BigInt(this.#lifetimeMs) * 1_000_000n
@@ -466,13 +464,7 @@ export class ShardSessionRuntime {
    */
   #sample(): Timestamp {
     const value = this.#now();
-    if (
-      value.seconds < -62_135_596_800n ||
-      value.seconds > 253_402_300_799n ||
-      !Number.isInteger(value.nanos) ||
-      value.nanos < 0 ||
-      value.nanos >= 1_000_000_000
-    )
+    if (!SessionValues.validTimestamp(value))
       throw new RangeError("Delivery clock returned an invalid timestamp.");
     return SessionValues.copyTime(value);
   }
@@ -647,6 +639,22 @@ const SessionValues = Object.freeze({
     return (
       value.seconds >= 0n &&
       value.seconds <= 315_576_000_000n &&
+      Number.isInteger(value.nanos) &&
+      value.nanos >= 0 &&
+      value.nanos < 1_000_000_000
+    );
+  },
+
+  /**
+   * Validates the Protobuf Timestamp seconds and nanos range.
+   *
+   * @param value Supplies the candidate timestamp.
+   * @returns Whether it is valid.
+   */
+  validTimestamp(value: { seconds: bigint; nanos: number }): boolean {
+    return (
+      value.seconds >= -62_135_596_800n &&
+      value.seconds <= 253_402_300_799n &&
       Number.isInteger(value.nanos) &&
       value.nanos >= 0 &&
       value.nanos < 1_000_000_000

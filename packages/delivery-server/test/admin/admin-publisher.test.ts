@@ -28,7 +28,8 @@ const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
 
 describe("Admin publisher", () => {
   it("publishes one complete state per shard and suppresses repeated identical states", async () => {
-    const publisher = AdminPublisher.create(new InMemoryDeliveryState());
+    const state = new InMemoryDeliveryState();
+    const publisher = AdminPublisher.create(state);
     const stream = publisher.service
       .subscribeToShardUpdates(create(EmptySchema), context)
       [Symbol.asyncIterator]();
@@ -37,13 +38,15 @@ describe("Admin publisher", () => {
     });
     const update = stream.next();
     await Promise.resolve();
+    state.putAll([{ message: domainMessage("first", shard) }]);
     publisher.publish(shard);
     await expect(update).resolves.toMatchObject({
-      value: { value: { case: "update", value: { index: shard, newMessagesCount: 0 } } },
+      value: { value: { case: "update", value: { index: shard, newMessagesCount: 1 } } },
     });
     publisher.publish(shard);
     const next = stream.next();
     const other = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    state.putAll([{ message: domainMessage("other", other) }]);
     publisher.publish(other);
     await expect(next).resolves.toMatchObject({
       value: { value: { case: "update", value: { index: other } } },
@@ -116,20 +119,31 @@ describe("Admin publisher", () => {
       .subscribeToShardUpdates(create(EmptySchema), context)
       [Symbol.asyncIterator]();
     await stream.next();
+    const initial = domainMessage("initial", shard);
+    state.putAll([{ message: initial }]);
     publisher.publish(shard);
     await expect(stream.next()).resolves.toMatchObject({
-      value: { value: { case: "update", value: { newMessagesCount: 0 } } },
+      value: { value: { case: "update", value: { newMessagesCount: 1 } } },
     });
+    state.delete(initial);
+    publisher.publish(shard);
     const row = domainMessage("churn", shard);
     state.putAll([{ message: row }]);
     publisher.publish(shard);
     state.delete(row);
     publisher.publish(shard);
     await vi.advanceTimersByTimeAsync(25);
+    await vi.advanceTimersByTimeAsync(25);
     expect(vi.getTimerCount()).toBe(0);
-    publisher.publish(shard);
     await expect(stream.next()).resolves.toMatchObject({
       value: { value: { case: "update", value: { newMessagesCount: 0 } } },
+    });
+    publisher.publish(shard);
+    const other = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    state.putAll([{ message: domainMessage("other-after-empty", other) }]);
+    publisher.publish(other);
+    await expect(stream.next()).resolves.toMatchObject({
+      value: { value: { case: "update", value: { index: other } } },
     });
     await stream.return?.();
     publisher.close();
@@ -181,6 +195,7 @@ describe("Admin publisher", () => {
       state.delete(second);
       publisher.publish(shard);
       const other = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+      state.putAll([{ message: domainMessage("other-unread", other) }]);
       publisher.publish(other);
       await expect(stream.next()).resolves.toMatchObject({
         value: { value: { value: { index: other } } },
@@ -193,15 +208,19 @@ describe("Admin publisher", () => {
   });
 
   it("delivers more than 100 queued shard updates in publication order", async () => {
-    const publisher = AdminPublisher.create(new InMemoryDeliveryState());
+    const state = new InMemoryDeliveryState();
+    const publisher = AdminPublisher.create(state);
     const stream = publisher.service
       .subscribeToShardUpdates(create(EmptySchema), context)
       [Symbol.asyncIterator]();
     await stream.next();
     const delivered = stream.next();
     await Promise.resolve();
-    for (let index = 0; index < 102; index++)
-      publisher.publish(create(ShardIndexSchema, { index, ofTotal: 102 }));
+    for (let index = 0; index < 102; index++) {
+      const current = create(ShardIndexSchema, { index, ofTotal: 102 });
+      state.putAll([{ message: domainMessage(`queued-${String(index)}`, current) }]);
+      publisher.publish(current);
+    }
     await expect(delivered).resolves.toMatchObject({
       value: { value: { case: "update", value: { index: { index: 0 } } } },
     });

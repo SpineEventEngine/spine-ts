@@ -18,6 +18,7 @@ import { Code } from "@connectrpc/connect";
 import { describe, expect, it, vi } from "vitest";
 import {
   DeliveryShardPickupSchema,
+  GuardedInboxRequestSchema,
   WriteMessageSchema,
   PickUpShardSchema,
   ReleaseExpiredSessionsSchema,
@@ -91,6 +92,42 @@ describe("typed Shard sessions", () => {
       ).rejects.toMatchObject({ code: Code.InvalidArgument });
       const renewed = await core.managed.renewShardSession(active, context);
       expect(renewed.sessionId).toBe(active.sessionId);
+    } finally {
+      core.close();
+    }
+  });
+
+  it("rejects an out-of-range pickup timestamp across session operations", async () => {
+    const core = InMemoryDelivery.create();
+    try {
+      const row = domainMessage("invalid-session-time", shard);
+      await core.inbox.writeOne(create(WriteMessageSchema, { message: row }), context);
+      const active = pickedHandle(await core.managed.pickShardForDelivery(request, context));
+      const malformed = {
+        ...active,
+        whenPicked: create(TimestampSchema, { seconds: 253_402_300_800n }),
+      };
+
+      await expect(core.managed.renewShardSession(malformed, context)).rejects.toMatchObject({
+        code: Code.InvalidArgument,
+      });
+      await expect(core.managed.releaseShardSession(malformed, context)).rejects.toMatchObject({
+        code: Code.InvalidArgument,
+      });
+      await expect(
+        core.guarded.acknowledge(
+          create(GuardedInboxRequestSchema, { session: malformed, expected: row }),
+          context,
+        ),
+      ).rejects.toMatchObject({ code: Code.InvalidArgument });
+      expect(
+        (
+          await core.managed.pickShardForDelivery(
+            create(DeliveryShardPickupSchema, { shard, worker: rival }),
+            context,
+          )
+        ).result?.case,
+      ).toBe("busy");
     } finally {
       core.close();
     }

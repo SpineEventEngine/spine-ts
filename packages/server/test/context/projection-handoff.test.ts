@@ -274,6 +274,36 @@ describe("LocalProjectionInbox", () => {
     await delivery.close();
   });
 
+  it("notifies a custom observer of a new Projection row without a local route", async () => {
+    const delivery = new Delivery({
+      context: { name: "UnroutedProjects", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const observer = vi.fn();
+    const inbox = new LocalProjectionInbox(
+      "UnroutedProjects",
+      new DeliveryReadiness(undefined, delivery, undefined, false, observer),
+    );
+    const targetTypeUrl = TypeUrls.derive(ProjectOverviewStateSchema);
+    const project = create(ProjectCreatedSchema, { id: "unrouted-project", name: "Custom" });
+    const event = SignalEnvelopes.event({
+      context: create(EventContextSchema),
+      schema: ProjectCreatedSchema,
+      message: project,
+    });
+    const input = {
+      inboxId: { targetId: Identifiers.pack("string", project.id), targetTypeUrl },
+      signalId: event.id?.value ?? "",
+      signal: AnyPacker.pack(EventSchema, event),
+      label: "UPDATE_SUBSCRIBER" as const,
+      status: "TO_DELIVER" as const,
+    };
+
+    const stored = await inbox.receive(delivery, input);
+    expect(observer).toHaveBeenCalledExactlyOnceWith(stored);
+    await delivery.close();
+  });
+
   it("accepts a local shared Event after its Projection Inbox write and wakes delivery", async () => {
     const delivery = new Delivery({
       context: { name: "Projects", multitenant: false },

@@ -67,7 +67,9 @@ If a managed pickup has an uncertain outcome, the client repeats it using the
 same worker and run ID within the original deadline. A grant, a busy shard, an
 empty shard, or a definitive error ends the attempt. Repeated transport failures
 increase the delay between tries. Closing the client or cancelling the call
-also ends a wait between requests.
+also ends a wait between requests. Retry waits count toward the caller’s operation
+deadline. The worker measures a granted session’s lifetime from the pickup
+request that returned the grant.
 `pickUp()` also permits deliberately taking an empty shard.
 A successful TS pickup returns a session handle for one worker and shard.
 The handle carries a session ID and the lifetime set by the server. Keep that
@@ -75,7 +77,10 @@ handle when calling `renew()` or `release()`. If a worker misses the reply to
 its managed pickup of shard 4, it can repeat that pickup with the same run ID. While the original session is
 live, the server returns the same session ID. After releasing the shard, a new
 run receives a fresh session ID. A delayed release from the first run leaves
-the second run active.
+the second run active. If a renewal reply is lost, the worker stops processing
+and can still send a release for its original session. If the server still
+has that session, the release frees the shard. If another worker has taken
+its place, the release leaves that worker’s session active.
 
 `releaseExpired(inactivityMs)` asks the server to release every session that
 has been idle for that long. If the releases succeed but the reply is lost

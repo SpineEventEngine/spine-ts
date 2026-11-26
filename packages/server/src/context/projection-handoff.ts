@@ -154,7 +154,12 @@ export class LocalProjectionInbox implements ProjectionInbox {
     await this.#onAdmit(deliveryTenantId);
     const written = await this.#writeInboxRow(delivery, input);
     this.#trackMessage(written.message);
-    const processing = this.#drainWritten(delivery, written.message, deliveryTenantId);
+    const processing = this.#drainWritten(
+      delivery,
+      written.message,
+      written.outcome === "WRITTEN",
+      deliveryTenantId,
+    );
     void processing
       .finally(() => {
         this.#untrackMessage(written.message);
@@ -183,9 +188,18 @@ export class LocalProjectionInbox implements ProjectionInbox {
     });
   }
 
+  /**
+   * Notifies a custom observer for a new row or starts its local route.
+   *
+   * @param delivery Reads the stored row during direct draining.
+   * @param message Supplies the stored Inbox row.
+   * @param newlyWritten Distinguishes a new write from a duplicate receipt.
+   * @param deliveryTenantId Identifies its tenant when present.
+   */
   async #drainWritten(
     delivery: Delivery,
     message: InboxMessage,
+    newlyWritten: boolean,
     deliveryTenantId?: TenantId,
   ): Promise<void> {
     const endpoint = InboxHandoff.configuredEndpoint(
@@ -195,7 +209,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
     await this.#readiness
       .claim(
         endpoint === undefined ? undefined : InboxHandoff.ready(endpoint, deliveryTenantId),
-        message,
+        newlyWritten ? message : undefined,
       )
       .complete(() =>
         this.#isAcknowledged(message)

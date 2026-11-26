@@ -13,7 +13,7 @@ High-risk implementation on `shard-delivery-correctness-and-performance`, from o
 
 ## Reference and execution
 
-The application-side comparison used core-jvm Delivery.java, DeliveryMonitor.java and ShardObserver.java at f2bdce55. Server and remote adapter comparisons used Delivery v0.24.0 ShardInbox.kt, ShardUpdateSender.kt, DeliveryShardRegistry.java, ShardService.java and WorkRegistry.java. Preserve normal post-release observation independently of application notification strategy. Node's child-process and the repository's existing gRPC, Protobuf and clock implementations are the starting points.
+The application-side comparison used core-jvm Delivery.java, DeliveryMonitor.java and ShardObserver.java at f2bdce55. Server and remote adapter comparisons used Delivery v0.24.0 ShardInbox.kt, ShardUpdateSender.kt, DeliveryShardRegistry.java, ShardService.java and WorkRegistry.java. Check for late work on normal release in both notification modes. The Delivery server checks its pending index and offers a free shard to built-in observers. With a custom observer, the framework reads the newest pending inbox row and passes it to the callback. Node's child-process and the repository's existing gRPC, Protobuf and clock implementations are the starting points.
 
 Implementation sequence and decisions:
 

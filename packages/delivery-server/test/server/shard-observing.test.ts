@@ -96,6 +96,36 @@ describe("ShardObservingService", () => {
     assembly.closeObserving();
   });
 
+  it("starts reminders when pending work is replayed to the first observer", async () => {
+    vi.useFakeTimers();
+    const assembly = DeliveryAssembly.create({ reminderIntervalMs: 10_000 });
+    await assembly.inbox.writeOne(
+      create(WriteMessageSchema, { message: message("idle") }),
+      context,
+    );
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(vi.getTimerCount()).toBe(0);
+
+    const stream = assembly.observing
+      .observeAll(create(EmptySchema), context)
+      [Symbol.asyncIterator]();
+    await expect(stream.next()).resolves.toMatchObject({ value: { shard } });
+    const reminder = stream.next();
+    let settled = false;
+    void reminder.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(reminder).resolves.toMatchObject({ value: { shard } });
+
+    await stream.return?.();
+    expect(vi.getTimerCount()).toBe(0);
+    assembly.closeObserving();
+  });
+
   it("discovers existing free work and reminds at the original interval despite further writes", async () => {
     vi.useFakeTimers();
     const assembly = DeliveryAssembly.create({ reminderIntervalMs: 10_000 });

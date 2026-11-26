@@ -111,12 +111,20 @@ class WorkPublisher implements ShardObservingHandle {
         context.signal.removeEventListener("abort", detach);
         this.#subscribers.delete(subscriber);
         subscriber.close();
+        if (this.#subscribers.size === 0) {
+          for (const timer of this.#reminders.values()) timer.cancel();
+          this.#reminders.clear();
+        }
       };
       context.signal.addEventListener("abort", detach, { once: true });
       this.#subscribers.set(subscriber, detach);
       try {
-        for (const shard of this.state.pendingShards())
-          if (this.#available(shard)) subscriber.push(this.#notice(shard));
+        for (const shard of this.state.pendingShards()) {
+          if (this.#available(shard)) {
+            subscriber.push(this.#notice(shard));
+            if (!this.#reminders.has(DeliveryShards.key(shard))) this.#schedule(shard);
+          }
+        }
         for await (const notice of subscriber)
           if (notice.shard !== undefined && this.#available(notice.shard)) yield notice;
       } finally {
@@ -140,7 +148,7 @@ class WorkPublisher implements ShardObservingHandle {
       return;
     }
     this.#publish(shard);
-    if (!this.#reminders.has(key)) this.#schedule(shard);
+    if (this.#subscribers.size > 0 && !this.#reminders.has(key)) this.#schedule(shard);
   }
 
   /**
@@ -196,7 +204,7 @@ class WorkPublisher implements ShardObservingHandle {
       key,
       new LongReminder(this.reminderMs, () => {
         this.#reminders.delete(key);
-        if (this.#closed || !this.#available(shard)) return;
+        if (this.#closed || this.#subscribers.size === 0 || !this.#available(shard)) return;
         this.#publish(shard);
         this.#schedule(shard);
       }),

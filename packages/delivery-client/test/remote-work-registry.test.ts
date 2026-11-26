@@ -33,10 +33,12 @@ import {
   DeliveryClient,
   DeliveryOutcomeUnknownError,
   DeliveryProtocolError,
+  RemoteInbox,
   RemoteWorkRegistry,
 } from "../src/index.js";
 import { deliveryClientAccess } from "../src/client/client.js";
 import { echoPickup, message, transport } from "./shared-fixtures.js";
+import { createMessage } from "../../server/test/delivery/inbox-message-fixture.js";
 
 describe("RemoteWorkRegistry", () => {
   it("rejects a managed pickup cancelled before dispatch and a pickup after client close", async () => {
@@ -144,6 +146,39 @@ describe("RemoteWorkRegistry", () => {
     }
   });
 
+  it("starts a recovered pickup lease at the successful attempt", async () => {
+    let now = 0;
+    const previous = Time.setProvider({
+      currentTime: () => create(TimestampSchema),
+      monotonicTime: () => now,
+    });
+    try {
+      const fake = transport();
+      const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(fake.transport));
+      fake.unary.mockImplementationOnce(() => {
+        now = 61_000;
+        throw new Error("first pickup reply lost");
+      });
+      fake.replyPickup();
+      fake.reply(
+        create(DeliverySessionHandleSchema, {
+          shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+          worker: workerId("node", "worker"),
+          whenPicked: { seconds: 2n, nanos: 0 },
+          sessionId: "fixture-session",
+          lifetime: { seconds: 60n, nanos: 0 },
+        }),
+      );
+
+      const session = await registry.pickUp(ShardIndex.single(), workerId("node", "worker"));
+      if (session === undefined) throw new Error("Expected the recovered session.");
+      expect(fake.unary).toHaveBeenCalledTimes(2);
+      await expect(registry.validateOwnership(session)).resolves.toBe(session);
+    } finally {
+      Time.setProvider(previous);
+    }
+  });
+
   it("does not revive a renewal whose reply arrives after its known-live deadline", async () => {
     let now = 0;
     const previous = Time.setProvider({
@@ -178,6 +213,33 @@ describe("RemoteWorkRegistry", () => {
     } finally {
       Time.setProvider(previous);
     }
+  });
+
+  it("does not revive a renewal after Admin reports the shard free", async () => {
+    const fake = transport();
+    const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(fake.transport));
+    echoPickup(fake);
+    const shard = ShardIndex.single();
+    const worker = workerId("node", "worker");
+    const session = await registry.pickUp(shard, worker);
+    if (session === undefined) throw new Error("Expected the managed session.");
+    const held = fake.replyAndHold(
+      create(DeliverySessionHandleSchema, {
+        shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+        worker,
+        whenPicked: { seconds: 2n, nanos: 0 },
+        sessionId: "fixture-session",
+        lifetime: { seconds: 60n, nanos: 0 },
+      }),
+    );
+    const renewal = registry.validateOwnership(session);
+    await Promise.resolve();
+    registry.reconcile({ shard, status: "NOT_PICKED", messages: 1 });
+    held.release();
+
+    await expect(renewal).resolves.toBeUndefined();
+    await expect(registry.validateOwnership(session)).resolves.toBeUndefined();
+    await expect(registry.release(session)).resolves.toBe(false);
   });
 
   it("forwards both operation bounds when acquiring a remote shard", async () => {
@@ -405,9 +467,10 @@ describe("RemoteWorkRegistry", () => {
     ]);
   });
 
-  it("fails an uncertain ownership probe closed without retaining a marker", async () => {
+  it("blocks work after an uncertain renewal but permits a final typed release", async () => {
     const fake = transport();
-    const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(fake.transport));
+    const client = DeliveryClient.usingTransport(fake.transport);
+    const registry = new RemoteWorkRegistry(client);
     echoPickup(fake);
     const session = await registry.pickUp(ShardIndex.single(), workerId("node", "worker-1"));
     if (session === undefined) throw new Error("Remote shard was not acquired.");
@@ -416,6 +479,20 @@ describe("RemoteWorkRegistry", () => {
     await expect(registry.validateOwnership(session)).rejects.toBeInstanceOf(
       DeliveryOutcomeUnknownError,
     );
+    await expect(
+      new RemoteInbox(client).markDelivered(
+        createMessage("uncertain", "uncertain-event", 1n),
+        undefined,
+        session,
+      ),
+    ).rejects.toBeInstanceOf(DeliveryProtocolError);
+    fake.reply(create(EmptySchema));
+    await expect(registry.release(session)).resolves.toBe(true);
+    expect(fake.unary.mock.calls.map((call) => (call[0] as { name: string }).name)).toEqual([
+      "PickShardForDelivery",
+      "RenewShardSession",
+      "ReleaseShardSession",
+    ]);
   });
 
   it("retains no client-side release marker after an unknown outcome", async () => {

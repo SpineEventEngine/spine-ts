@@ -5,8 +5,8 @@ the local delivery path, or as the deliberately ephemeral delivery component in
 the supported examples. Its Inbox rows, leases, and delivered facts disappear
 when the process stops.
 
-The [reference](REFERENCE.md) records finite limits, shutdown order, and the
-complete protocol contract, including API detail for coding agents.
+The [reference](REFERENCE.md) covers gRPC message sizes, shutdown, and the
+contract for each service, including API details for coding agents.
 
 This is an experimental snapshot package. Use Node 24 or newer; an embedded
 server also needs an application-managed Connect listener.
@@ -127,10 +127,13 @@ When all shards are empty or being processed, the call stays open and silent.
 
 If neither instance takes shard 4, the server sends the index again after the
 configured reminder interval, ten seconds by default. Set `workReminderSeconds`
-when constructing the server or set `WORK_REMINDER_SECONDS` for the executable. For example, if the first
-notice went out at 12:00:00, a second Command written to that shard at 12:00:03
-leaves the reminder due at 12:00:10. Pickup stops the reminders. If the worker
-releases shard 4 with a Command still waiting, the server reports it again.
+when constructing the server or set `WORK_REMINDER_SECONDS` for the executable.
+
+Suppose the first subscriber connects at noon and receives a notice for a Command
+written at 11:59:51. The first reminder is due at 12:00:10. A second Command
+written to that shard at 12:00:03 leaves that reminder due at 12:00:10.
+Pickup stops the reminders. If the worker releases shard 4 with a Command
+still waiting, the server reports it again.
 A reconnect starts with the shards available at that time.
 
 ## ⚠️ In-memory means temporary

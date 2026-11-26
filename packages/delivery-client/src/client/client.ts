@@ -178,7 +178,8 @@ export class DeliveryClient {
   }
 
   /**
-   * Connects to a JVM delivery server with a client-owned HTTP/2 gRPC session.
+   * Opens an HTTP/2 gRPC connection to a Delivery server.
+   * Managed sessions and work notifications use services provided by the TS server.
    *
    * The URL and options are validated before opening the session. `close()` is
    * synchronous: it aborts active calls and the owned session immediately; it
@@ -541,7 +542,9 @@ export class DeliveryClient {
       const remaining = this.#pickupRemaining(deadline, pickup.shard, unknown);
       const started = Time.monotonicTime();
       try {
-        return await this.#attemptManaged(pickup, options, controller.signal, remaining);
+        const result = await this.#attemptManaged(pickup, options, controller.signal, remaining);
+        if (result.kind === "PICKED") pickupSendTimes.set(result.session, started);
+        return result;
       } catch (error) {
         unknown = await this.#handleUnknownPickup(
           error,
@@ -1156,6 +1159,8 @@ const deliveryClientObservations = new WeakMap<
   (options: DeliveryFindOneOptions) => DeliveryShardObservationStream
 >();
 
+const pickupSendTimes = new WeakMap<RemoteShardSession, number>();
+
 /**
  * Provides package-internal Admin observations without extending the public client API.
  */
@@ -1164,6 +1169,11 @@ export const deliveryClientAccess: Readonly<{
     client: DeliveryClient,
     options?: DeliveryFindOneOptions,
   ) => DeliveryShardObservationStream;
+
+  /**
+   * Returns the successful attempt's local send time for a managed grant.
+   */
+  pickupSentAt: (session: RemoteShardSession) => number;
 }> = Object.freeze({
   observeOnce(
     client: DeliveryClient,
@@ -1173,5 +1183,17 @@ export const deliveryClientAccess: Readonly<{
     if (observe === undefined)
       throw new TypeError("Delivery client observation access is unavailable.");
     return observe(options);
+  },
+
+  /**
+   * Reads the successful attempt's local send time for a managed grant.
+   *
+   * @param session Supplies the granted session.
+   * @returns Its local send time.
+   */
+  pickupSentAt(session) {
+    const sentAt = pickupSendTimes.get(session);
+    if (sentAt === undefined) throw new TypeError("Delivery client pickup time is unavailable.");
+    return sentAt;
   },
 });

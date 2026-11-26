@@ -81,6 +81,43 @@ it("coalesces repeated changes independently by shard and sends final free empty
   assembly.closeAdmin();
 });
 
+it("does not repeat an empty shard state after a paused reader observes row churn", async () => {
+  vi.useFakeTimers();
+  const assembly = DeliveryAssembly.create();
+  const stream = assembly.admin
+    .subscribeToShardUpdates(create(EmptySchema), context)
+    [Symbol.asyncIterator]();
+  try {
+    await stream.next();
+    const first = domainMessage("first-empty", shard);
+    await assembly.inbox.writeOne(create(WriteMessageSchema, { message: first }), context);
+    await expect(stream.next()).resolves.toMatchObject({
+      value: { value: { value: { index: shard, newMessagesCount: 1 } } },
+    });
+    await vi.advanceTimersByTimeAsync(25);
+    await assembly.inbox.removeOne(create(RemoveMessageSchema, { message: first }), context);
+    await expect(stream.next()).resolves.toMatchObject({
+      value: { value: { value: { index: shard, newMessagesCount: 0 } } },
+    });
+    await vi.advanceTimersByTimeAsync(25);
+
+    const transient = domainMessage("transient-empty", shard);
+    await assembly.inbox.writeOne(create(WriteMessageSchema, { message: transient }), context);
+    await assembly.inbox.removeOne(create(RemoveMessageSchema, { message: transient }), context);
+    await vi.advanceTimersByTimeAsync(25);
+    await assembly.inbox.writeOne(
+      create(WriteMessageSchema, { message: domainMessage("other-update", other) }),
+      context,
+    );
+    await expect(stream.next()).resolves.toMatchObject({
+      value: { value: { value: { index: other, newMessagesCount: 1 } } },
+    });
+  } finally {
+    await stream.return?.();
+    assembly.closeAdmin();
+  }
+});
+
 it("keeps the 25 ms window independent for two subscribers that connect at different times", async () => {
   vi.useFakeTimers();
   const assembly = DeliveryAssembly.create();

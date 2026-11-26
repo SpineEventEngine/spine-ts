@@ -740,11 +740,12 @@ exhaustion, claims, quarantine, receipts, markers, or dead-letter storage.
 The package does not expose a raw worker callback API; framework delivery
 uses the framework's validated endpoints. Managed remote delivery renews its session during long callbacks and fences each acknowledgement and cleanup mutation.
 `InboxReadOptions.limit` remains the page-size control for a single ordered
-inbox read and must be positive and at most `1000`.
+inbox read. Supply a positive safe integer. For example, `limit: 2000` asks
+for up to 2,000 rows.
 `InboxReadContinuation` names the stable row key used to read the next ordered
 inbox page after a previous message: message ID, receive time, and version.
-`ShardedWorkRegistryOptions.leaseMs` must be between `1000` and `2147483647`
-milliseconds inclusive. `Inbox.markDelivered()` and
+`ShardedWorkRegistryOptions.leaseMs` sets the application-storage lease
+in milliseconds and accepts a positive safe integer. `Inbox.markDelivered()` and
 `InboxStorage.markDelivered()` return `undefined` for missing rows, non-pending
 rows, or caller snapshots that do not match the stored message;
 already-delivered matching rows are returned idempotently. Built contexts use

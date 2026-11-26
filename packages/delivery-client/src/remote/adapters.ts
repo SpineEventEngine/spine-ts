@@ -34,10 +34,11 @@ import { ShardIndex } from "@spine-event-engine/server";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 
-import { DeliveryClient } from "../client/client.js";
+import { DeliveryClient, deliveryClientAccess } from "../client/client.js";
 import { Code, ConnectError } from "@connectrpc/connect";
 import {
   DeliveryPagingError,
+  DeliveryOutcomeUnknownError,
   DeliveryProtocolError,
   type DeliveryWorkerId,
   type RemoteShardObservation,
@@ -379,6 +380,8 @@ class RemoteSessionOwner {
 
   readonly #knownLiveUntil = new WeakMap<ExclusiveDeliveryWorkSession, number>();
 
+  readonly #releaseOnly = new WeakMap<ExclusiveDeliveryWorkSession, RemoteShardSession>();
+
   readonly #terminal = new WeakSet<ExclusiveDeliveryWorkSession>();
 
   /**
@@ -425,7 +428,6 @@ class RemoteSessionOwner {
       ...(options?.signal === undefined ? {} : { signal: options.signal }),
       ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
     };
-    const sentAt = Time.monotonicTime();
     const pickup = await this.client.pickUpForDelivery(
       shardIndex,
       RemoteValues.worker(worker),
@@ -433,6 +435,7 @@ class RemoteSessionOwner {
     );
     if (pickup.kind !== "PICKED") return { kind: pickup.kind };
     const remote = pickup.session;
+    const sentAt = deliveryClientAccess.pickupSentAt(remote);
     const session = RemoteValues.freeze({
       kind: "EXCLUSIVE" as const,
       shard: DeliveryShardCodec.snapshot(shardIndex),
@@ -459,12 +462,13 @@ class RemoteSessionOwner {
     options?: DeliveryOperationOptions,
   ): Promise<boolean> {
     if (session.kind !== "EXCLUSIVE") return false;
-    const remote = this.#sessions.get(session);
+    const remote = this.#sessions.get(session) ?? this.#releaseOnly.get(session);
     if (remote === undefined) return false;
     this.#terminal.add(session);
     const key = RemoteValues.shardKey(session.shard);
     this.#sessions.delete(session);
     this.#knownLiveUntil.delete(session);
+    this.#releaseOnly.delete(session);
     RemoteSessionBindings.get(this.client).delete(session);
     this.#removeSession(key, session);
     const latest = await this.#pendingRenewals.get(session)?.catch(() => undefined);
@@ -501,10 +505,32 @@ class RemoteSessionOwner {
       RemoteSessionBindings.get(this.client).set(session, renewed);
       return session;
     } catch (error) {
-      if (!this.#terminal.has(session)) this.#invalidate(session);
+      this.#onFailedRenewal(session, error);
       if (error instanceof ConnectError && error.code === Code.FailedPrecondition) return undefined;
       throw error;
     }
+  }
+
+  /**
+   * Blocks further work after renewal failure and retains only an uncertain session for release.
+   *
+   * @param session Supplies the local session.
+   * @param error Supplies the failed renewal outcome.
+   */
+  #onFailedRenewal(session: ExclusiveDeliveryWorkSession, error: unknown): void {
+    if (this.#terminal.has(session)) return;
+    const releaseOnly =
+      error instanceof DeliveryOutcomeUnknownError &&
+      Time.monotonicTime() < (this.#knownLiveUntil.get(session) ?? -Infinity)
+        ? this.#sessions.get(session)
+        : undefined;
+    this.#invalidate(session);
+    if (releaseOnly === undefined) return;
+    this.#releaseOnly.set(session, releaseOnly);
+    const key = RemoteValues.shardKey(session.shard);
+    const sessions = this.#sessionsByShard.get(key) ?? new Set<ExclusiveDeliveryWorkSession>();
+    sessions.add(session);
+    this.#sessionsByShard.set(key, sessions);
   }
 
   /**
@@ -557,6 +583,7 @@ class RemoteSessionOwner {
     this.#terminal.add(session);
     this.#sessions.delete(session);
     this.#knownLiveUntil.delete(session);
+    this.#releaseOnly.delete(session);
     RemoteSessionBindings.get(this.client).delete(session);
     this.#removeSession(RemoteValues.shardKey(session.shard), session);
   }
@@ -583,14 +610,7 @@ class RemoteSessionOwner {
     if (observation.status !== "NOT_PICKED") return;
     const key = RemoteValues.shardKey(observation.shard);
     const sessions = this.#sessionsByShard.get(key);
-    if (sessions !== undefined) {
-      for (const session of sessions) {
-        this.#sessions.delete(session);
-        this.#knownLiveUntil.delete(session);
-        RemoteSessionBindings.get(this.client).delete(session);
-      }
-      this.#sessionsByShard.delete(key);
-    }
+    if (sessions !== undefined) for (const session of [...sessions]) this.#invalidate(session);
   }
 
   /**

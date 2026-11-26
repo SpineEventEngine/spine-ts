@@ -260,7 +260,6 @@ interface ShardCooldown {
   readonly shard: ShardIndex;
   timer?: ReturnType<typeof setTimeout>;
   dirty: boolean;
-  readonly empty: boolean;
 }
 
 /**
@@ -333,7 +332,7 @@ class Subscriber {
     if (this.#closed) return;
     const key = DeliveryShards.key(shard);
     if (this.#replayPending.has(key)) return;
-    const previous = this.#lastState.get(key);
+    const previous = this.#lastState.get(key) ?? "";
     const frame = this.#record(shard);
     if (frame !== undefined) this.#push(key, frame, previous);
   }
@@ -353,25 +352,24 @@ class Subscriber {
       return undefined;
     }
     const frame = this.#update(shard);
-    const signature = Buffer.from(toBinary(SubscriptionResponseSchema, frame)).toString("base64");
     const empty =
       frame.value.case === "update" &&
       frame.value.value.newMessagesCount === 0 &&
-      frame.value.value.newStatus === ShardStatus.NOT_PICKED;
-    if (this.#lastState.get(key) === signature) {
-      if (empty) this.#lastState.delete(key);
-      return undefined;
-    }
-    this.#lastState.set(key, signature);
+      frame.value.value.newStatus === ShardStatus.NOT_PICKED &&
+      frame.value.value.whenLastPicked === undefined;
+    const signature = empty
+      ? ""
+      : Buffer.from(toBinary(SubscriptionResponseSchema, frame)).toString("base64");
+    if ((this.#lastState.get(key) ?? "") === signature) return undefined;
+    if (empty) this.#lastState.delete(key);
+    else this.#lastState.set(key, signature);
     const entry: ShardCooldown = {
       shard: DeliveryShards.copy(shard),
       dirty: false,
-      empty,
     };
     const timer = setTimeout(() => {
       this.#cooldowns.delete(key);
       if (entry.dirty) this.offer(entry.shard);
-      else if (entry.empty) this.#lastState.delete(key);
     }, 25);
     entry.timer = timer;
     timer.unref();
@@ -396,7 +394,7 @@ class Subscriber {
     }
     const unread = this.#pending.get(key);
     if (unread === undefined) this.#pending.set(key, { frame, previous });
-    else if (unread.previous === this.#lastState.get(key)) this.#pending.delete(key);
+    else if (unread.previous === (this.#lastState.get(key) ?? "")) this.#pending.delete(key);
     else unread.frame = frame;
   }
 
