@@ -22,6 +22,7 @@ import {
 } from "@spine-event-engine/proto/delivery";
 
 import { InMemoryDeliveryState } from "../../src/core/in-memory-delivery-state.js";
+import { domainMessage } from "./domain-message.js";
 
 describe("InMemoryDeliveryState", () => {
   it("retains last-pick data while clearing a released worker", () => {
@@ -49,7 +50,7 @@ describe("InMemoryDeliveryState", () => {
     const first = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
     const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
     const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
-    const message = create(InboxMessageSchema, { id: { uuid: "message", index: first } });
+    const message = domainMessage("message", first);
     state.putAll([{ message }]);
     state.setSession(
       first,
@@ -88,7 +89,7 @@ describe("InMemoryDeliveryState", () => {
 
   it("fails closed when callers corrupt the exposed retained-message map", () => {
     const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
-    const message = create(InboxMessageSchema, { id: { uuid: "message", index: shard } });
+    const message = domainMessage("message", shard);
     const seeded = new InMemoryDeliveryState();
     seeded.putAll([{ message }]);
     const key = seeded.messages.keys().next().value;

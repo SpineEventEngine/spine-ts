@@ -15,15 +15,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { ShardIndex } from "@spine-event-engine/server";
 import { create } from "@bufbuild/protobuf";
-import { DurationSchema, TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { Time } from "@spine-event-engine/core/time";
 
 import { DeliveryPagingError, DeliveryProtocolError } from "../src/client/types.js";
-import type { DeliveryClient } from "../src/client/client.js";
+import { DeliveryClient } from "../src/client/client.js";
 import { RemoteInbox, RemoteWorkRegistry } from "../src/remote/adapters.js";
 import { DeliveryMessageCodec } from "../src/wire/codec.js";
-import { domainMessage } from "./shared-fixtures.js";
+import { domainMessage, echoPickup, transport } from "./shared-fixtures.js";
 
 class Client {
   readonly writeOne = vi.fn<DeliveryClient["writeOne"]>();
@@ -34,19 +34,7 @@ class Client {
   readonly acknowledgeGuarded = vi.fn<DeliveryClient["acknowledgeGuarded"]>();
   readonly removeDuplicateGuarded = vi.fn<DeliveryClient["removeDuplicateGuarded"]>();
   readonly removeDeliveredGuarded = vi.fn<DeliveryClient["removeDeliveredGuarded"]>();
-  readonly pickUpForDelivery = vi.fn<DeliveryClient["pickUpForDelivery"]>((shard, worker) =>
-    Promise.resolve({
-      kind: "PICKED" as const,
-      session: Object.freeze({
-        kind: "EXCLUSIVE" as const,
-        shard,
-        worker,
-        whenPicked: create(TimestampSchema, { seconds: 1n }),
-        sessionId: "fixture-session",
-        lifetime: create(DurationSchema, { seconds: 60n }),
-      }),
-    }),
-  );
+  readonly pickUpForDelivery = vi.fn<DeliveryClient["pickUpForDelivery"]>();
   pageSize = 2;
 }
 
@@ -57,8 +45,18 @@ class Client {
  * @returns The Inbox adapter and acquired session.
  */
 async function guarded(client: Client) {
-  const inbox = new RemoteInbox(client as never);
-  const registry = new RemoteWorkRegistry(client as never);
+  const fake = transport();
+  const deliveryClient = DeliveryClient.usingTransport(fake.transport);
+  vi.spyOn(deliveryClient, "acknowledgeGuarded").mockImplementation(client.acknowledgeGuarded);
+  vi.spyOn(deliveryClient, "removeDuplicateGuarded").mockImplementation(
+    client.removeDuplicateGuarded,
+  );
+  vi.spyOn(deliveryClient, "removeDeliveredGuarded").mockImplementation(
+    client.removeDeliveredGuarded,
+  );
+  echoPickup(fake);
+  const inbox = new RemoteInbox(deliveryClient);
+  const registry = new RemoteWorkRegistry(deliveryClient);
   const session = await registry.pickUp(
     ShardIndex.single(),
     create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run" }),
