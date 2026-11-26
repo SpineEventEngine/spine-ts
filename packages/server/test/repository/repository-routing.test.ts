@@ -12993,6 +12993,8 @@ describe("repository signal routing", () => {
         }),
       setup,
     );
+    let now = create(TimestampSchema, { seconds: 30n, nanos: 999_000_000 });
+    const previous = Time.setProvider({ currentTime: () => now });
     try {
       await context
         .eventBus()
@@ -13006,13 +13008,15 @@ describe("repository signal routing", () => {
         "delete-lifecycle",
         "restore-lifecycle",
       ].entries()) {
+        // The unarchive is received two milliseconds after the second archive.
+        if (index === 2) now = create(TimestampSchema, { seconds: 31n, nanos: 1_000_000 });
         await context
           .eventBus()
           .post(
             createProjectCreated(`projection-${String(index)}`, "projection-lifecycle", { name }),
           );
       }
-      await waitForCondition(() => changes.length === 4);
+      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
       expect(changes.map((event) => event.message?.typeUrl)).toEqual([
         TypeUrls.derive(EntityArchivedSchema),
         TypeUrls.derive(EntityUnarchivedSchema),
@@ -13032,7 +13036,11 @@ describe("repository signal routing", () => {
         state: { name: "Task (projected)" },
       });
     } finally {
-      await context.close();
+      try {
+        await context.close();
+      } finally {
+        Time.setProvider(previous);
+      }
     }
   });
 

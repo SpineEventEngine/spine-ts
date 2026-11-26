@@ -29,6 +29,29 @@ import { InboxMessageError, ShardIndex } from "../../src/index.js";
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Inbox", () => {
+  it("orders adjacent-second receipts and continues pages by full timestamp", async () => {
+    const inbox = open("AdjacentSecondOrder");
+    const before = create(TimestampSchema, { seconds: 100n, nanos: 999_000_000 });
+    const after = create(TimestampSchema, { seconds: 101n, nanos: 1_000_000 });
+    const earlier = { ...createMessage("earlier", "signal-early", 1n), whenReceived: before };
+    const later = { ...createMessage("later", "signal-late", 1n), whenReceived: after };
+    await inbox.storage.write(later);
+    await inbox.storage.write(earlier);
+
+    const shard = ShardIndex.single();
+    expect((await inbox.read(shard)).map((row) => row.id.value)).toEqual(["earlier", "later"]);
+    expect((await inbox.newestPending(shard))?.id.value).toBe("later");
+    const firstPage = await inbox.read(shard, { limit: 1 });
+    expect(firstPage.map((row) => row.id.value)).toEqual(["earlier"]);
+    expect(
+      (
+        await inbox.read(shard, {
+          after: { messageId: "earlier", whenReceived: before, version: 1n },
+        })
+      ).map((row) => row.id.value),
+    ).toEqual(["later"]);
+  });
+
   it("finds the newest pending row by full receive time, version, and ID", async () => {
     const inbox = open("NewestPendingOrder");
     const time = create(TimestampSchema, { seconds: 10n, nanos: 777 });

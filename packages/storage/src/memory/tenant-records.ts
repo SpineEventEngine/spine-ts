@@ -816,6 +816,8 @@ const StoredValues = {
    * @returns A negative, zero, or positive comparison result.
    */
   compareObjects(left: NormalizedObject, right: NormalizedObject): number {
+    const chronological = StoredValues.compareTimestamps(left, right);
+    if (chronological !== undefined) return chronological;
     const leftKeys = Object.keys(left);
     const keyComparison = StoredValues.compareLists(leftKeys, Object.keys(right));
     if (keyComparison !== 0) return keyComparison;
@@ -824,6 +826,27 @@ const StoredValues = {
       if (comparison !== 0) return comparison;
     }
     return 0;
+  },
+
+  /**
+   * Compares Protobuf Timestamp column values by seconds before nanos.
+   *
+   * @param left Supplies the first normalized object.
+   * @param right Supplies the second normalized object.
+   * @returns Chronological order, or undefined for ordinary objects.
+   */
+  compareTimestamps(left: NormalizedObject, right: NormalizedObject): number | undefined {
+    if (
+      left.$typeName !== "google.protobuf.Timestamp" ||
+      right.$typeName !== "google.protobuf.Timestamp" ||
+      StoredValues.kind(left.seconds) !== "bigint" ||
+      StoredValues.kind(right.seconds) !== "bigint" ||
+      typeof left.nanos !== "number" ||
+      typeof right.nanos !== "number"
+    )
+      return undefined;
+    const seconds = StoredValues.compareNormalized(left.seconds, right.seconds);
+    return seconds === 0 ? StoredValues.compareNumbers(left.nanos, right.nanos) : seconds;
   },
 
   /**
