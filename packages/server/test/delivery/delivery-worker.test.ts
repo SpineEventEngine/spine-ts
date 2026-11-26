@@ -32,7 +32,6 @@ import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
 import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
-import { RemoteWorkRegistry } from "../../../delivery-client/src/remote/adapters.js";
 import {
   TaskIdSchema,
   TaskListIdSchema,
@@ -77,56 +76,39 @@ describe("Delivery direct worker", () => {
     expect(handle.close).toHaveBeenCalledOnce();
   });
 
-  it("releases an acquired remote session after close without a canceled signal", async () => {
+  it("releases an exclusive session acquired during close with an active cleanup signal", async () => {
     const shard = ShardIndex.single();
-    const pickup = Promise.withResolvers<{
-      kind: "PICKED";
-      session: {
-        kind: "EXCLUSIVE";
-        shard: ShardIndex;
-        worker: { nodeId: string; value: string };
-        whenPicked: { seconds: bigint; nanos: number };
-        sessionId: string;
-        lifetime: { seconds: bigint; nanos: number };
-      };
-    }>();
+    const session = { kind: "EXCLUSIVE" as const, shard };
+    const pickup = Promise.withResolvers<typeof session>();
     const entered = Promise.withResolvers<undefined>();
-    const release = vi.fn(async (_session: unknown, options?: DeliveryOperationOptions) => {
-      if (options?.signal?.aborted) throw new Error("Remote release was canceled.");
+    const release = vi.fn((_session: unknown, options?: DeliveryOperationOptions) => {
+      options?.signal?.throwIfAborted();
+      return Promise.resolve(true);
     });
-    const client = {
-      pickUpForDelivery: () => {
-        entered.resolve(undefined);
-        return pickup.promise;
-      },
-      release,
-    };
     const delivery = new Delivery({
-      context: { name: "ClosingRemotePickup", multitenant: false },
+      context: { name: "ClosingExclusivePickup", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
       inbox: {} as never,
-      workRegistry: new RemoteWorkRegistry(client as never),
+      workRegistry: {
+        sessionKind: "EXCLUSIVE",
+        pickUp: () => {
+          entered.resolve(undefined);
+          return pickup.promise;
+        },
+        validateOwnership: () => Promise.resolve(session),
+        release,
+      },
     });
     const run = delivery.drain(shard, { onMessage: () => undefined });
     await entered.promise;
     const closing = delivery.close();
-    pickup.resolve({
-      kind: "PICKED",
-      session: {
-        kind: "EXCLUSIVE",
-        shard,
-        worker: { nodeId: "local", value: "run" },
-        whenPicked: { seconds: 0n, nanos: 0 },
-        sessionId: "shutdown-release",
-        lifetime: { seconds: 60n, nanos: 0 },
-      },
-    });
-
+    pickup.resolve(session);
     await expect(closing).resolves.toBeUndefined();
     await expect(run).resolves.toMatchObject({ status: "STOPPED" });
     expect(release).toHaveBeenCalledOnce();
-    expect(release.mock.calls[0]?.[1]).toBeUndefined();
+    expect(release.mock.calls[0]?.[0]).toBe(session);
   });
+
   it("wakes an active direct drain for a durable row arriving during its empty read", async () => {
     const shard = ShardIndex.single();
     const row = message("late-direct", "target", shard);

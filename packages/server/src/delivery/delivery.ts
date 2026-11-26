@@ -1009,14 +1009,26 @@ export class Delivery {
     active: ActiveDeliveryRun,
   ): Promise<DeliveryRun> {
     if (this.#shouldStop(options)) return result("STOPPED");
-    let session: DeliveryWorkSession | "NO_WORK" | undefined;
+    let session: DeliveryWorkSession | undefined;
     try {
-      session = await this.#acquireSession(shard, options);
+      const worker = this.shards.workerForRun?.(this.worker) ?? this.worker;
+      const operation = this.#registryOperation(options.operation);
+      if (options.managed && this.shards.pickUpForWork !== undefined) {
+        const pickup = await this.shards.pickUpForWork(shard, worker, operation);
+        if (pickup.kind === "NO_WORK") return result("NO_WORK");
+        session = pickup.kind === "PICKED" ? pickup.session : undefined;
+      } else {
+        if (
+          options.managed &&
+          (await this.inbox.newestPending(shard, options.operation)) === undefined
+        )
+          return result("NO_WORK");
+        session = await this.shards.pickUp(shard, worker, operation);
+      }
     } catch (error) {
       if (this.#shouldStop(options)) return result("STOPPED");
       return this.#pickupFailed(shard, error, options.managed === true);
     }
-    if (session === "NO_WORK") return result("NO_WORK");
     if (session === undefined) {
       await safely(async () =>
         (await this.#monitor.onShardAlreadyPicked(new AlreadyPickedUp(shard))).execute(),
@@ -1025,32 +1037,6 @@ export class Delivery {
     }
     if (this.#shouldStop(options)) return this.#releaseStoppedSession(session, active);
     return this.#runSession(shard, options, session, active);
-  }
-
-  /**
-   * Acquires a shard session after direct or managed admission.
-   *
-   * @param shard Selects the shard.
-   * @param options Supplies managed work and cancellation settings.
-   * @returns A session, no work, or an unavailable shard.
-   */
-  async #acquireSession(
-    shard: ShardIndex,
-    options: DeliveryDrainOptions,
-  ): Promise<DeliveryWorkSession | "NO_WORK" | undefined> {
-    const worker = this.shards.workerForRun?.(this.worker) ?? this.worker;
-    const operation = this.#registryOperation(options.operation);
-    if (options.managed && this.shards.pickUpForWork !== undefined) {
-      const pickup = await this.shards.pickUpForWork(shard, worker, operation);
-      return pickup.kind === "NO_WORK"
-        ? "NO_WORK"
-        : pickup.kind === "PICKED"
-          ? pickup.session
-          : undefined;
-    }
-    if (options.managed && (await this.inbox.newestPending(shard, options.operation)) === undefined)
-      return "NO_WORK";
-    return this.shards.pickUp(shard, worker, operation);
   }
 
   /**
