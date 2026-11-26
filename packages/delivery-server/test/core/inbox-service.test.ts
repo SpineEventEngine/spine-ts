@@ -52,6 +52,37 @@ describe("in-memory Inbox", () => {
     expect(page.message).toHaveLength(1_001);
   });
 
+  it("removes a reverse-order batch while retaining survivor order and newest work", async () => {
+    const core = InMemoryDelivery.create();
+    const rows = Array.from({ length: 512 }, (_, index) =>
+      message(`batch-${String(index)}`, 1, index),
+    );
+    await core.inbox.writeMany(create(WriteMessagesSchema, { shard, message: rows }), context);
+    const removed = rows.filter((_row, index) => index % 2 === 1).reverse();
+    const duplicate = removed[0];
+    if (duplicate === undefined) throw new Error("Expected a batch row to remove.");
+    await core.inbox.removeMany(
+      create(RemoveMessagesSchema, {
+        shard,
+        message: [...removed, duplicate, message("missing-batch", 1, 0)],
+      }),
+      context,
+    );
+
+    const expected = rows.filter((_row, index) => index % 2 === 0);
+    const page = await core.inbox.findManyInShard(
+      create(ReadMessagesSinceTimeSchema, { shard, pageSize: 512 }),
+      context,
+    );
+    expect((page.message ?? []).map((row) => row.id?.uuid)).toEqual(
+      expected.map((row) => row.id?.uuid),
+    );
+    expect((await core.inbox.newestMessageToDeliver(shard, context)).message?.id?.uuid).toBe(
+      "batch-510",
+    );
+    core.close();
+  });
+
   it("accepts a payload and response beyond the former byte cutoffs", async () => {
     const core = InMemoryDelivery.create();
     const large = message("large", 1, 1, shard, 0, 4_194_305);

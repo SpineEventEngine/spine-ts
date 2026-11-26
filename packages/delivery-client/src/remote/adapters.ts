@@ -512,7 +512,7 @@ class RemoteSessionOwner {
   }
 
   /**
-   * Blocks further work after renewal failure and retains only an uncertain session for release.
+   * Clears the processing handle and retains an uncertain session for release.
    *
    * @param session Supplies the local session.
    * @param error Supplies the failed renewal outcome.
@@ -520,10 +520,7 @@ class RemoteSessionOwner {
   #onFailedRenewal(session: ExclusiveDeliveryWorkSession, error: unknown): void {
     if (this.#terminal.has(session)) return;
     const releaseOnly =
-      error instanceof DeliveryOutcomeUnknownError &&
-      Time.monotonicTime() < (this.#knownLiveUntil.get(session) ?? -Infinity)
-        ? this.#sessions.get(session)
-        : undefined;
+      error instanceof DeliveryOutcomeUnknownError ? this.#sessions.get(session) : undefined;
     this.#invalidate(session);
     if (releaseOnly === undefined) return;
     this.#releaseOnly.set(session, releaseOnly);

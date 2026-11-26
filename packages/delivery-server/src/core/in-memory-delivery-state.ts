@@ -128,6 +128,38 @@ export class InMemoryDeliveryState {
   }
 
   /**
+   * Deletes the stored members of one validated shard batch in one ordered-array pass.
+   *
+   * @param shard Identifies the validated batch shard.
+   * @param messages Supplies requested row identities, including possible duplicates.
+   * @returns Whether stored or pending rows changed.
+   */
+  deleteMany(
+    shard: ShardIndex,
+    messages: readonly InboxMessage[],
+  ): { changed: boolean; pendingChanged: boolean } {
+    const keys = new Set(messages.map(DeliveryMessages.key));
+    const removed = new Set<string>();
+    let pendingChanged = false;
+    for (const key of keys) {
+      const current = this.messages.get(key);
+      if (current === undefined) continue;
+      this.messages.delete(key);
+      this.#acknowledgements.delete(key);
+      removed.add(key);
+      pendingChanged ||= current.status === InboxMessageStatus.TO_DELIVER;
+    }
+    if (removed.size === 0) return { changed: false, pendingChanged: false };
+    const shardKey = DeliveryShards.key(shard);
+    const bucket = this.#buckets.get(shardKey);
+    if (bucket === undefined) throw new TypeError("Delivery message shard count is invalid.");
+    DeliveryRowOrder.removeMany(bucket.ordered, removed);
+    DeliveryRowOrder.removeMany(bucket.pending, removed);
+    this.#pruneBucket(shardKey);
+    return { changed: true, pendingChanged };
+  }
+
+  /**
    * Records the exact wire transition performed by a guarded acknowledgement.
    *
    * @param key Identifies the retained row.
@@ -430,8 +462,30 @@ const DeliveryRowOrder = Object.freeze({
    * @param row Identifies the row to remove.
    */
   remove(rows: InboxMessage[], row: InboxMessage): void {
-    const index = rows.findIndex((candidate) => candidate.id?.uuid === row.id?.uuid);
-    if (index < 0) throw new TypeError("Delivery message shard count is invalid.");
-    rows.splice(index, 1);
+    let low = 0;
+    let high = rows.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      const candidate = rows[middle];
+      if (candidate === undefined) throw new TypeError("Delivery row index is invalid.");
+      if (this.compare(candidate, row) < 0) low = middle + 1;
+      else high = middle;
+    }
+    const found = rows[low];
+    if (found === undefined || DeliveryMessages.key(found) !== DeliveryMessages.key(row))
+      throw new TypeError("Delivery message shard count is invalid.");
+    rows.splice(low, 1);
+  },
+
+  /**
+   * Removes selected rows from a sorted shard index after batch validation.
+   *
+   * @param rows Supplies the mutable shard index.
+   * @param keys Identifies stored rows removed from the shard.
+   */
+  removeMany(rows: InboxMessage[], keys: ReadonlySet<string>): void {
+    let retained = 0;
+    for (const row of rows) if (!keys.has(DeliveryMessages.key(row))) rows[retained++] = row;
+    rows.length = retained;
   },
 });

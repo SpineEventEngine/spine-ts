@@ -153,15 +153,10 @@ const InboxOperations = {
         shard,
       );
       await admission.run(context.signal, () => {
-        let changed = false;
-        let pendingChanged = false;
-        for (const message of messages) {
-          const prior = state.messages.get(DeliveryMessages.key(message.message));
-          if (state.delete(message.message)) {
-            changed = true;
-            if (prior?.status === InboxMessageStatus.TO_DELIVER) pendingChanged = true;
-          }
-        }
+        const { changed, pendingChanged } = state.deleteMany(
+          shard,
+          messages.map((value) => value.message),
+        );
         if (changed) onStoredChange?.(shard);
         if (pendingChanged) onWorkChange?.(shard);
       });

@@ -468,31 +468,44 @@ describe("RemoteWorkRegistry", () => {
   });
 
   it("blocks work after an uncertain renewal but permits a final typed release", async () => {
-    const fake = transport();
-    const client = DeliveryClient.usingTransport(fake.transport);
-    const registry = new RemoteWorkRegistry(client);
-    echoPickup(fake);
-    const session = await registry.pickUp(ShardIndex.single(), workerId("node", "worker-1"));
-    if (session === undefined) throw new Error("Remote shard was not acquired.");
-    fake.fail(new Error("probe outcome lost"));
+    let now = 0;
+    const previous = Time.setProvider({
+      currentTime: () => create(TimestampSchema),
+      monotonicTime: () => now,
+    });
+    try {
+      const fake = transport();
+      const client = DeliveryClient.usingTransport(fake.transport);
+      const registry = new RemoteWorkRegistry(client);
+      echoPickup(fake);
+      const session = await registry.pickUp(ShardIndex.single(), workerId("node", "worker-1"));
+      if (session === undefined) throw new Error("Remote shard was not acquired.");
+      now = 59_000;
+      fake.unary.mockImplementationOnce(() => {
+        now = 61_000;
+        throw new Error("probe outcome lost");
+      });
 
-    await expect(registry.validateOwnership(session)).rejects.toBeInstanceOf(
-      DeliveryOutcomeUnknownError,
-    );
-    await expect(
-      new RemoteInbox(client).markDelivered(
-        createMessage("uncertain", "uncertain-event", 1n),
-        undefined,
-        session,
-      ),
-    ).rejects.toBeInstanceOf(DeliveryProtocolError);
-    fake.reply(create(EmptySchema));
-    await expect(registry.release(session)).resolves.toBe(true);
-    expect(fake.unary.mock.calls.map((call) => (call[0] as { name: string }).name)).toEqual([
-      "PickShardForDelivery",
-      "RenewShardSession",
-      "ReleaseShardSession",
-    ]);
+      await expect(registry.validateOwnership(session)).rejects.toBeInstanceOf(
+        DeliveryOutcomeUnknownError,
+      );
+      await expect(
+        new RemoteInbox(client).markDelivered(
+          createMessage("uncertain", "uncertain-event", 1n),
+          undefined,
+          session,
+        ),
+      ).rejects.toBeInstanceOf(DeliveryProtocolError);
+      fake.reply(create(EmptySchema));
+      await expect(registry.release(session)).resolves.toBe(true);
+      expect(fake.unary.mock.calls.map((call) => (call[0] as { name: string }).name)).toEqual([
+        "PickShardForDelivery",
+        "RenewShardSession",
+        "ReleaseShardSession",
+      ]);
+    } finally {
+      Time.setProvider(previous);
+    }
   });
 
   it("retains no client-side release marker after an unknown outcome", async () => {

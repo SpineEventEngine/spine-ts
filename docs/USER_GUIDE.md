@@ -754,8 +754,10 @@ try {
 }
 ```
 
-When the inbox write succeeds, the observer publishes the shard number and
-shard count to the application's queue. A consumer on any application node
+The same callback runs when a handler route writes a new row and when application
+code writes it through `environment.delivery.inbox.receive(input)`. A duplicate
+receipt for an existing row creates no second callback. In this example the
+observer publishes the shard number and shard count to the application's queue. A consumer on any application node
 can receive that item and call `deliverMessagesFrom()`. In this example the
 queue acknowledges the item when the consumer returns. A `busy` result means
 another worker took the shard. A `noWork` result means it was already empty.

@@ -36,7 +36,7 @@ import type {
   DeliveryWorkRegistry,
   DeliveryWorkSession,
 } from "./delivery-ports.js";
-import { Inbox, InboxTargets, type InboxMessage } from "./inbox.js";
+import { Inbox, InboxTargets, type InboxMessage, type InboxMessageInput } from "./inbox.js";
 import { InboxStorage, InboxStorageClock } from "./inbox-storage.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
@@ -394,6 +394,33 @@ export class Delivery {
   }
 
   /**
+   * Exposes a public Inbox that reports newly persisted rows to a custom observer.
+   *
+   * @internal
+   * @returns The direct Inbox or its observing public facade.
+   */
+  publicInbox(): DeliveryInbox {
+    if (this.#shardObserver === undefined) return this.inbox;
+    const inbox = this.inbox;
+    return new Proxy(inbox, {
+      get: (target, property) => {
+        if (property === "receive")
+          return async (input: InboxMessageInput, options?: DeliveryOperationOptions) => {
+            const result = await inbox.receive(input, options);
+            if (result.outcome === "WRITTEN") this.observePersisted(result.message);
+            return result;
+          };
+        const value: unknown = Reflect.get(target, property, target);
+        if (typeof value === "function") {
+          const bound: unknown = value.bind(target);
+          return bound;
+        }
+        return value;
+      },
+    });
+  }
+
+  /**
    * Starts or joins one managed shard attempt using the installed handlers.
    *
    * @param shard Selects the shard to try.
@@ -406,16 +433,25 @@ export class Delivery {
   ): Promise<DeliveryAttempt> {
     if (this.#dispatcher === undefined)
       return Promise.reject(new Error("Delivery handlers are not installed."));
+    if (
+      options.timeoutMs !== undefined &&
+      (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 0)
+    )
+      return Promise.reject(new RangeError("Delivery operation budget is invalid."));
     if (this.#closing || this.#startupDraining)
+      return Promise.resolve(Object.freeze({ status: "stopped" as const }));
+    if (options.timeoutMs === 0)
       return Promise.resolve(Object.freeze({ status: "stopped" as const }));
     const key = shard.key();
     const active = this.#managedAttempts.get(key);
     if (active !== undefined) return active;
-    const attempt = this.#executeManaged(shard, options);
+    const budget = this.#managedBudget(options);
+    const attempt = this.#executeManaged(shard, options, budget.operation);
     this.#managedAttempts.set(key, attempt);
     this.#managedInFlight.add(attempt);
     void attempt
       .finally(() => {
+        budget.cancel();
         this.#managedInFlight.delete(attempt);
         if (this.#managedAttempts.get(key) === attempt) this.#managedAttempts.delete(key);
       })
@@ -428,16 +464,18 @@ export class Delivery {
    *
    * @param shard Selects the admitted shard.
    * @param options Cancels the admitted run on shutdown or caller cancellation.
+   * @param operation Carries the complete managed operation budget.
    * @returns Its terminal public outcome.
    */
   async #executeManaged(
     shard: ShardIndex,
     options: import("./delivery-ports.js").DeliveryOperationOptions,
+    operation: DeliveryOperationOptions,
   ): Promise<DeliveryAttempt> {
     const run = await this.#startShared(shard, {
       ...this.#directOptions(options.signal),
       managed: true,
-      operation: options,
+      operation: this.#registryOperation(operation),
     });
     this.#managedAttempts.delete(shard.key());
     if (run.terminalFailure !== undefined) throw run.terminalFailure;
@@ -445,9 +483,19 @@ export class Delivery {
       run.released &&
       (run.status === "DRAINED" || run.status === "STOPPED") &&
       !this.#closing &&
-      !options.signal?.aborted
+      !operation.signal?.aborted
     )
-      await this.#observeAfterRelease(shard, options);
+      await this.#observeAfterRelease(shard, operation);
+    return this.#managedOutcome(run);
+  }
+
+  /**
+   * Maps one completed shard run to its public managed outcome.
+   *
+   * @param run Supplies the completed run and any failure.
+   * @returns Its public outcome or the original failure.
+   */
+  #managedOutcome(run: DeliveryRun): DeliveryAttempt {
     switch (run.status) {
       case "DRAINED":
         return Object.freeze({ status: "completed" });
@@ -1051,6 +1099,52 @@ export class Delivery {
       ...operation,
       signal:
         operation?.signal === undefined ? shutdown : AbortSignal.any([operation.signal, shutdown]),
+    };
+  }
+
+  /**
+   * Links a caller budget to one managed attempt without changing handler completion.
+   *
+   * @param options Supplies the caller's operation settings.
+   * @returns The bounded port settings and timer cleanup.
+   */
+  #managedBudget(options: DeliveryOperationOptions): {
+    operation: DeliveryOperationOptions;
+    cancel: () => void;
+  } {
+    if (options.timeoutMs === undefined) return { operation: options, cancel: () => undefined };
+    const controller = new AbortController();
+    const signal =
+      options.signal === undefined
+        ? controller.signal
+        : AbortSignal.any([options.signal, controller.signal]);
+    return {
+      operation: { ...options, signal },
+      cancel: this.#scheduleBudget(options.timeoutMs, () => {
+        controller.abort();
+      }),
+    };
+  }
+
+  /**
+   * Schedules a caller budget across Node timer slots without shortening a long duration.
+   *
+   * @param milliseconds Supplies the full operation budget.
+   * @param onExpire Cancels work after the budget.
+   * @returns A function that clears the active timer slot.
+   */
+  #scheduleBudget(milliseconds: number, onExpire: () => void): () => void {
+    let remaining = milliseconds;
+    let timer: ReturnType<typeof setTimeout>;
+    const arm = () => {
+      const slot = Math.min(remaining, 0x7fff_ffff);
+      remaining -= slot;
+      timer = setTimeout(remaining > 0 ? arm : onExpire, slot);
+      timer.unref();
+    };
+    arm();
+    return () => {
+      clearTimeout(timer);
     };
   }
 

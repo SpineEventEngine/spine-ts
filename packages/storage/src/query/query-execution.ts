@@ -312,6 +312,13 @@ const QueryOrdering = {
       return QueryOrdering.compareWithMissing(left, right);
     if (left instanceof Uint8Array && right instanceof Uint8Array)
       return QueryOrdering.compareBytes(left, right);
+    if (
+      QueryOrdering.isOrderedMessage(left) &&
+      QueryOrdering.isOrderedMessage(right) &&
+      left.$typeName === "google.protobuf.Timestamp" &&
+      right.$typeName === "google.protobuf.Timestamp"
+    )
+      return QueryOrdering.compareOrdered(left, right);
     if (typeof left === typeof right && ["number", "bigint", "string"].includes(typeof left)) {
       return QueryOrdering.compareOrdered(left, right);
     }

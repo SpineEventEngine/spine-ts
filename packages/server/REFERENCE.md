@@ -1880,6 +1880,12 @@ model Command may keep running after that acknowledgement.
 
 With remote Delivery, posting completes when the remote Inbox accepts the row. The Delivery server publishes available-shard notices to each built-in application observer, and every new or reconnected node discovers current pending work. Processing may still be pending on another process. A custom observer receives the complete persisted `InboxMessage` after a write or normal release and initiates work through its application mechanism. Callback failures are logged without reversing the write or starting fallback work. `Delivery.deliverMessagesFrom(shard)` starts or joins one managed attempt and returns `completed`, `busy`, `noWork`, or `stopped`. Distinct shards run concurrently by default; only built-in server notification mode accepts a positive `maxConcurrentDeliveries` limit. The server repeats an unclaimed available-shard notice after its configured reminder interval, 10 seconds by default.
 
+A consumer using application storage can pass an explicit deadline to
+`deliverMessagesFrom(shard, { timeoutMs })`. For example, a call with zero
+milliseconds left expires before a handler starts. If two workers keep changing
+the same shard record, the registry checks the caller's remaining time before
+trying another update. Omitting the option sets no deadline.
+
 The delivery-client `DeliveryBuilder.remote({ endpoint, notifications? })` produces an environment-installable remote facility. `DeliveryBuilder.local({ storageFactory, shardObserver })` configures shared application storage and a custom observer. An application-managed multi-process deployment must share its inbox, session registry, and Entity storage across replicas. The framework starts no remote work stream in custom mode.
 
 Each Inbox read is bounded to one page. That bound does not limit the total

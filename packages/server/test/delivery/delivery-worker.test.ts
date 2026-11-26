@@ -32,6 +32,7 @@ import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
 import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
+import { createMessage } from "./inbox-message-fixture.js";
 import {
   TaskIdSchema,
   TaskListIdSchema,
@@ -74,6 +75,51 @@ describe("Delivery direct worker", () => {
     await expect(delivery.close()).resolves.toBeUndefined();
     await expect(run).resolves.toMatchObject({ status: "STOPPED" });
     expect(handle.close).toHaveBeenCalledOnce();
+  });
+
+  it("ends managed pickup contention when its explicit operation budget expires", async () => {
+    vi.useFakeTimers();
+    let attempts = 0;
+    const handle = {
+      atomicCompareAndSet: true,
+      read: () => Promise.resolve(undefined),
+      compareAndSet: () => {
+        attempts += 1;
+        return Promise.resolve(false);
+      },
+      close: vi.fn(),
+    };
+    const context = { name: "BudgetedPickup", multitenant: false } as const;
+    const shard = ShardIndex.single();
+    const delivery = new Delivery({
+      context,
+      storageFactory: new InMemoryStorageFactory(),
+      inbox: {
+        sessionKind: "LEASED",
+        newestPending: () => Promise.resolve(createMessage("pending", "signal", 1n)),
+      } as never,
+      workRegistry: new ShardedWorkRegistry({
+        context,
+        storageFactory: { createRecordStorage: () => handle } as never,
+        now: () => new Date(0),
+      }),
+    });
+    delivery.setDispatcher(vi.fn());
+    const settled = vi.fn();
+    const attempt = delivery.deliverMessagesFrom(shard, { timeoutMs: 10 });
+    void attempt.then(settled);
+    try {
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.runOnlyPendingTimersAsync();
+      for (let index = 0; index < 20; index += 1) await Promise.resolve();
+      expect(settled).toHaveBeenCalledWith({ status: "stopped" });
+      expect(attempts).toBeGreaterThan(0);
+    } finally {
+      delivery.beginClose();
+      await vi.advanceTimersByTimeAsync(1);
+      await delivery.close();
+      vi.useRealTimers();
+    }
   });
 
   it("releases an exclusive session acquired during close with an active cleanup signal", async () => {

@@ -161,6 +161,61 @@ describe("ApplicationWorkObserver", () => {
     await core.close();
   });
 
+  it("treats a zero managed operation budget as expired before dispatch", async () => {
+    const { core, inbox } = delivery();
+    const shard = new ShardIndex(0, 2);
+    await inbox.storage.write(row("expired-budget", shard));
+    const dispatch = vi.fn();
+    core.setDispatcher(dispatch);
+
+    await expect(core.deliverMessagesFrom(shard, { timeoutMs: 0 })).resolves.toEqual({
+      status: "stopped",
+    });
+    expect(dispatch).not.toHaveBeenCalled();
+    await core.close();
+  });
+
+  it("cancels an explicit managed page read on close and releases its session", async () => {
+    const { core, inbox } = delivery();
+    const shard = new ShardIndex(0, 2);
+    await inbox.storage.write(row("stranded-page", shard));
+    core.setDispatcher(() => undefined);
+    const entered = Promise.withResolvers<AbortSignal | undefined>();
+    const fallback =
+      Promise.withResolvers<readonly import("../../src/delivery/inbox.js").InboxMessage[]>();
+    const read = vi.spyOn(Inbox.prototype, "read").mockImplementation((_shard, options) => {
+      const signal: unknown = Reflect.get(options ?? {}, "signal");
+      if (signal !== undefined && !(signal instanceof AbortSignal))
+        throw new TypeError("Expected a read cancellation signal.");
+      entered.resolve(signal);
+      return new Promise((resolve) => {
+        signal?.addEventListener(
+          "abort",
+          () => {
+            resolve([]);
+          },
+          { once: true },
+        );
+        void fallback.promise.then(resolve);
+      });
+    });
+    const release = vi.spyOn(ShardedWorkRegistry.prototype, "release");
+    const attempt = core.deliverMessagesFrom(shard);
+    try {
+      const signal = await entered.promise;
+      const closing = core.close();
+      expect(signal?.aborted).toBe(true);
+      await closing;
+      await expect(attempt).resolves.toEqual({ status: "stopped" });
+      expect(release).toHaveBeenCalledOnce();
+    } finally {
+      fallback.resolve([]);
+      await core.close();
+      read.mockRestore();
+      release.mockRestore();
+    }
+  });
+
   it("rejects an unacknowledged run without invoking the observer or repeating the handler", async () => {
     const { core, inbox } = delivery();
     const shard = new ShardIndex(0, 2);

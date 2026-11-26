@@ -1134,9 +1134,9 @@ describe("ServerEnvironment delivery lifecycle", () => {
     };
     logger.child.mockReturnValue(logger);
     const observer = {
-      onMessage: () => {
+      onMessage: vi.fn(() => {
         throw new Error("custom observer failed");
-      },
+      }),
     };
     const remoteFacility: ServerEnvironmentDelivery = {
       open: () => undefined,
@@ -1151,11 +1151,13 @@ describe("ServerEnvironment delivery lifecycle", () => {
     });
 
     await serverEnvironmentAccess.setup(environment);
-    const received = await ports.inbox.receive(createMessage("notify-failed", "signal", 1n));
-    serverEnvironmentAccess.coreDelivery(environment).observePersisted(received.message);
+    const received = await environment.delivery.inbox.receive(
+      createMessage("notify-failed", "signal", 1n),
+    );
     await expect(
       environment.delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([{ signalId: "signal" }]);
+    expect(observer.onMessage).toHaveBeenCalledExactlyOnceWith(received.message);
     expect(errors).toEqual(["Delivery observer failed."]);
     await environment.close();
   });
@@ -1173,8 +1175,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const row = await environment.delivery.inbox.receive(
       createMessage("local-observer", "signal", 1n),
     );
-    serverEnvironmentAccess.coreDelivery(environment).observePersisted(row.message);
-    expect(shardObserver.onMessage).toHaveBeenCalledWith(row.message);
+    expect(shardObserver.onMessage).toHaveBeenCalledExactlyOnceWith(row.message);
     await environment.close();
   });
 

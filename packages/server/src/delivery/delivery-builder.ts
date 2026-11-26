@@ -612,7 +612,7 @@ class BuiltDelivery implements Delivery {
     this.node = core.node;
     this.worker = core.worker;
     this.pageSize = core.pageSize;
-    this.inbox = core.inbox;
+    this.inbox = core.publicInbox();
     controlledDeliveryRunners.set(this, (options) => core.runControlled(options));
     controlledDeliveryWakers.set(this, (shard) => {
       core.wake(shard);

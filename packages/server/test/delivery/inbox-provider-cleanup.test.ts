@@ -14,6 +14,7 @@
 
 import { randomUUID } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { TaskListIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
@@ -308,6 +309,52 @@ describe.skipIf(!providerEnabled(inboxProvider, "datastore", datastoreHost !== u
         await factory.close();
       }
     }, 30_000);
+
+    it("orders Inbox timestamps across seconds for newest work and continuation", async () => {
+      const stringifiers = new StringifierRegistry();
+      stringifiers.setTypeRegistry(new TypeRegistry([TaskListIdSchema]));
+      const factory = DatastoreStorageFactory.newBuilder()
+        .setClient(new Datastore({ projectId: datastoreProject }))
+        .setStringifierRegistry(stringifiers)
+        .build();
+      const context = {
+        name: `datastore_time_${randomUUID()}`,
+        multitenant: false,
+      } as const;
+      const inbox = open(factory, context);
+      const earlier = {
+        ...createMessage("earlier", "earlier-event", 1n),
+        whenReceived: create(TimestampSchema, { seconds: 100n, nanos: 900_000_000 }),
+      };
+      const later = {
+        ...createMessage("later", "later-event", 1n),
+        whenReceived: create(TimestampSchema, { seconds: 101n, nanos: 100_000_000 }),
+      };
+      const shard = ShardIndex.single();
+      try {
+        await inbox.storage.write(earlier);
+        await inbox.storage.write(later);
+        expect((await inbox.read(shard, { limit: 1 })).map((row) => row.id.value)).toEqual([
+          "earlier",
+        ]);
+        expect(
+          (
+            await inbox.read(shard, {
+              limit: 1,
+              after: {
+                messageId: earlier.id.value,
+                whenReceived: earlier.whenReceived,
+                version: earlier.version,
+              },
+            })
+          ).map((row) => row.id.value),
+        ).toEqual(["later"]);
+        expect((await inbox.newestPending(shard))?.id.value).toBe("later");
+      } finally {
+        await inbox.storage.close();
+        await factory.close();
+      }
+    });
 
     it("shares direct ID deletion across independently opened factories", async () => {
       const stringifiers = new StringifierRegistry();
