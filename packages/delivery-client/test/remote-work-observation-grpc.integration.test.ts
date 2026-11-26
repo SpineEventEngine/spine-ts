@@ -16,7 +16,8 @@ import { DeliveryServer } from "@spine-event-engine/delivery-server";
 import { Identifiers, TypeUrls } from "@spine-event-engine/core";
 import { ProjectStateSchema } from "@spine-event-engine/server-test-fixtures/entity/project_states_pb.js";
 import { ShardIndex, UniformAcrossAllShards } from "@spine-event-engine/server";
-import { DeliveryClient, RemoteDelivery } from "../src/index.js";
+import { projectInboxInput } from "../test-fixtures/project-inbox-input.js";
+import { DeliveryClient, RemoteDelivery, RemoteInbox } from "../src/index.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -286,12 +287,12 @@ it("resumes delivery on the same application node after the server restarts", as
   await replacement.start();
   expect(replacement.baseUrl).toBe(endpoint);
 
-  await command(alpha, { command: "write", signalId: "after-restart" });
+  const reader = DeliveryClient.connectTo(endpoint);
+  clients.push(reader);
+  await new RemoteInbox(reader).receive(projectInboxInput("after-restart", ShardIndex.single()));
   await eventually(() => {
     expect(deliveries.filter((id) => id === "after-restart")).toHaveLength(1);
   });
-  const reader = DeliveryClient.connectTo(endpoint);
-  clients.push(reader);
   await eventuallyAsync(async () => {
     expect(await reader.newestPending(ShardIndex.single())).toBeUndefined();
     expect((await reader.shardSnapshot())[0]?.status).toBe("NOT_PICKED");

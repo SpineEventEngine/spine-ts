@@ -1,12 +1,6 @@
-import { Time } from "@spine-event-engine/core/time";
-
-import { create } from "@bufbuild/protobuf";
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
-import { CommandContextSchema, CommandSchema } from "@spine-event-engine/proto";
-import { AnyPacker, Identifiers, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
-import { CreateProjectSchema } from "@spine-event-engine/server-test-fixtures/entity/project_commands_pb.js";
-import { ProjectStateSchema } from "@spine-event-engine/server-test-fixtures/entity/project_states_pb.js";
 import { createManagedProjectContext } from "./managed-project-context.mjs";
+import { projectInboxInput } from "./project-inbox-input.ts";
 import {
   Application,
   EnvironmentType,
@@ -110,24 +104,9 @@ process.on("message", async (frame) => {
   }
   if (!isWrite(frame)) return;
   try {
-    const signal = SignalEnvelopes.command({
-      schema: CreateProjectSchema,
-      message: create(CreateProjectSchema, { id: frame.signalId, name: frame.signalId }),
-      context: create(CommandContextSchema),
-    });
-    await environment.delivery.inbox.receive({
-      inboxId: {
-        targetId: Identifiers.pack("string", frame.signalId),
-        targetTypeUrl: TypeUrls.derive(ProjectStateSchema),
-      },
-      signalId: signal.id.uuid,
-      signal: AnyPacker.pack(CommandSchema, signal),
-      label: "HANDLE_COMMAND",
-      status: "TO_DELIVER",
-      shard: new ShardIndex(frame.shardIndex ?? 0, shardCount),
-      whenReceived: Time.currentTime(),
-      version: 1n,
-    });
+    await environment.delivery.inbox.receive(
+      projectInboxInput(frame.signalId, new ShardIndex(frame.shardIndex ?? 0, shardCount)),
+    );
     process.send({ type: "result", id: frame.id });
   } catch {
     process.send({ type: "error", id: frame.id });
