@@ -67,6 +67,10 @@ export const ShardObserving: Readonly<{
    * @returns The service and its mutation and lifecycle hooks.
    */
   create(state: InMemoryDeliveryState, reminderMs: number): ShardObservingHandle {
+    if (!Number.isSafeInteger(reminderMs) || reminderMs <= 0)
+      throw new RangeError(
+        "Work reminder interval must be a positive number of whole milliseconds.",
+      );
     return new WorkPublisher(state, reminderMs);
   },
 });

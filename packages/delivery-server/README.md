@@ -65,7 +65,7 @@ same slot; rows and sessions from the exited process were in memory and are lost
 ## 🧩 Embed the handlers
 
 Use `InMemoryDelivery.create()` when an application provides the Connect router and
-listener itself. Register the inbox, guarded worker mutations, shard, and managed-session
+listener itself. Register the inbox, guarded worker mutations, shard, managed-session, and work observation
 handlers on the router as shown below. The application manages the network listener and its lifecycle.
 
 An embedded consumer must declare and install direct dependencies on
@@ -83,6 +83,7 @@ import {
   GuardedInboxService,
   InboxService,
   ManagedShardService,
+  ShardObservingService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 
@@ -97,10 +98,11 @@ const transport = createRouterTransport((router) => {
   router.service(GuardedInboxService, delivery.guarded);
   router.service(ShardService, delivery.shards);
   router.service(ManagedShardService, delivery.managed);
+  router.service(ShardObservingService, delivery.observing);
 });
 void transport;
 
-// During application shutdown, cancel the core's session timers.
+// During application shutdown, close active work streams and cancel the core's timers.
 delivery.close();
 ```
 
@@ -110,7 +112,7 @@ If the shard still has pending work, subscribers can immediately try to take it.
 The work reminder interval controls how often the server repeats the notice
 while the shard is free.
 
-The standalone listener exposes Inbox, Shard, Shard Observing, Admin, and gRPC health services.
+The standalone listener exposes Inbox, Guarded Inbox, Shard, Managed Shard, Shard Observing, Admin, and gRPC health services.
 It binds only to the loopback address by default. An explicit non-loopback host
 is a caller-selected trusted-network deployment and should not be exposed
 directly to the public Internet.

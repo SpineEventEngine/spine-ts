@@ -239,6 +239,148 @@ describe("per-child mutation admission", () => {
     expect(applied).toEqual([1, 3]);
   });
 
+  it("retires an unreserved ticket in the parent when its barrier settles", async () => {
+    const ledger = new CapacityLedger(limits);
+    ledger.replace(0, "first");
+    const gate = new CapacityMutationGate({
+      reserve: (id, requested, _signal, phase) => {
+        ledger.reserve(id, requested, phase);
+        return Promise.resolve();
+      },
+      report: (id, usage, revision) => {
+        ledger.report(id, usage, revision);
+        return Promise.resolve();
+      },
+      cancel: (id) => {
+        ledger.cancel(id);
+        return Promise.resolve();
+      },
+    });
+    const skipped = ticket(0, "first", 1);
+    await gate.barrier(skipped);
+    await gate.barrier(skipped);
+    expect(() => {
+      ledger.reserve(skipped, growth);
+    }).toThrow(expect.objectContaining({ code: Code.FailedPrecondition }));
+    const next = ticket(0, "first", 2);
+    await gate.run(
+      next,
+      () => growth,
+      () => Promise.resolve(),
+      () => ({ usage: growth, revision: 1n }),
+    );
+    expect(ledger.usage()).toEqual(growth);
+  });
+
+  it("bounds future waiters while admitting an earlier missing ticket and duplicate", async () => {
+    const firstEntered = Promise.withResolvers<undefined>();
+    const releaseFirst = Promise.withResolvers<undefined>();
+    const operation = vi.fn(() => Promise.resolve(undefined));
+    const gate = new CapacityMutationGate({
+      reserve: () => Promise.resolve(),
+      report: () => Promise.resolve(),
+      cancel: () => Promise.resolve(),
+    });
+    const waiting = Array.from({ length: 100 }, (_, index) =>
+      gate.run(
+        ticket(0, "first", index + 2),
+        () => zero,
+        operation,
+        () => ({ usage: zero, revision: 0n }),
+      ),
+    );
+    await expect(
+      gate.run(
+        ticket(0, "first", 102),
+        () => zero,
+        operation,
+        () => ({ usage: zero, revision: 0n }),
+      ),
+    ).rejects.toMatchObject({ code: Code.ResourceExhausted });
+    const duplicate = gate.run(
+      ticket(0, "first", 2),
+      () => growth,
+      operation,
+      () => ({ usage: growth, revision: 1n }),
+    );
+    expect(duplicate).toBe(waiting[0]);
+    const first = gate.run(
+      ticket(0, "first", 1),
+      () => zero,
+      async () => {
+        firstEntered.resolve(undefined);
+        await releaseFirst.promise;
+      },
+      () => ({ usage: zero, revision: 0n }),
+    );
+    await firstEntered.promise;
+    releaseFirst.resolve(undefined);
+    await Promise.all([first, ...waiting]);
+    expect(operation).toHaveBeenCalledTimes(100);
+    await gate.barrier(ticket(0, "first", 102));
+    await gate.run(
+      ticket(0, "first", 103),
+      () => zero,
+      operation,
+      () => ({ usage: zero, revision: 0n }),
+    );
+  });
+
+  it("retires a queued cancellation in both the child and parent ledgers", async () => {
+    const ledger = new CapacityLedger(limits);
+    ledger.replace(0, "first");
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const gate = new CapacityMutationGate({
+      reserve: (id, requested, _signal, phase) => {
+        ledger.reserve(id, requested, phase);
+        return Promise.resolve();
+      },
+      report: (id, usage, revision) => {
+        ledger.report(id, usage, revision);
+        return Promise.resolve();
+      },
+      cancel: (id) => {
+        ledger.cancel(id);
+        return Promise.resolve();
+      },
+    });
+    const first = gate.run(
+      ticket(0, "first", 1),
+      () => zero,
+      async () => {
+        entered.resolve(undefined);
+        await release.promise;
+      },
+      () => ({ usage: zero, revision: 0n }),
+    );
+    await entered.promise;
+    const caller = new AbortController();
+    const skipped = ticket(0, "first", 2);
+    const second = gate.run(
+      skipped,
+      () => growth,
+      () => Promise.resolve(),
+      () => ({ usage: growth, revision: 1n }),
+      caller.signal,
+    );
+    caller.abort(new Error("queued request canceled"));
+    await expect(second).rejects.toThrow("queued request canceled");
+    await gate.barrier(skipped);
+    expect(() => {
+      ledger.reserve(skipped, growth);
+    }).toThrow(expect.objectContaining({ code: Code.FailedPrecondition }));
+    release.resolve(undefined);
+    await first;
+    await gate.run(
+      ticket(0, "first", 3),
+      () => growth,
+      () => Promise.resolve(),
+      () => ({ usage: growth, revision: 1n }),
+    );
+    expect(ledger.usage()).toEqual(growth);
+  });
+
   it.each([ticket(-1, "first", 1), ticket(0, "", 1), ticket(0, "first", 0)])(
     "rejects an invalid private mutation ticket before capacity admission",
     async (invalid) => {

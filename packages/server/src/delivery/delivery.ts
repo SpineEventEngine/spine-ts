@@ -188,6 +188,16 @@ export interface DeliveryRun {
   readonly failed: number;
 
   /**
+   * Reports a confirmed session release after the run.
+   */
+  readonly released?: true;
+
+  /**
+   * Preserves an unrecovered storage or session error for managed callers.
+   */
+  readonly terminalFailure?: Error;
+
+  /**
    * Lists ephemeral delivery failures.
    */
   readonly failures: readonly DeliveryFailure[];
@@ -419,7 +429,13 @@ export class Delivery {
       operation: options,
     });
     this.#managedAttempts.delete(shard.key());
-    if ((run.status === "DRAINED" || run.status === "STOPPED") && !this.#closing)
+    if (run.terminalFailure !== undefined) throw run.terminalFailure;
+    if (
+      run.released &&
+      (run.status === "DRAINED" || run.status === "STOPPED") &&
+      !this.#closing &&
+      !options.signal?.aborted
+    )
       await this.#observeAfterRelease(shard);
     switch (run.status) {
       case "DRAINED":
@@ -1107,6 +1123,8 @@ class DeliveryDrain {
 
   #confirmedLost = false;
 
+  #terminalFailure: Error | undefined;
+
   #failureLimitReached = false;
 
   #stopped = false;
@@ -1190,7 +1208,12 @@ class DeliveryDrain {
     }
     this.#reading = false;
     this.#stopHeartbeat();
-    return (await this.#release()) ? run : this.#complete("FAILED");
+    const released = await this.#release();
+    return Object.freeze({
+      ...(released ? run : this.#complete("FAILED")),
+      ...(released && !this.#confirmedLost ? { released: true as const } : {}),
+      ...(this.#terminalFailure !== undefined ? { terminalFailure: this.#terminalFailure } : {}),
+    });
   }
 
   /**
@@ -1462,7 +1485,7 @@ class DeliveryDrain {
       this.#messageOutcomes.set(message, { kind: "acknowledged", agent: false });
       this.input.options.onDuplicateRemoved?.(message);
     } catch (error) {
-      this.#recordFailure(message, error);
+      this.#recordStorageFailure(message, error);
       this.#blockedTargets.add(target);
     }
     return true;
@@ -1576,7 +1599,7 @@ class DeliveryDrain {
       await this.#acknowledgeWithRetry(message, acknowledgement);
     } catch (error) {
       acknowledgement.exhausted = true;
-      this.#recordFailure(message, error);
+      this.#recordStorageFailure(message, error);
       this.#blockedTargets.add(target);
     }
   }
@@ -1763,18 +1786,35 @@ class DeliveryDrain {
           this.#current,
           this.input.options.operation,
         );
-      } catch {
+      } catch (error) {
+        this.#terminalFailure ??=
+          error instanceof Error ? error : new Error("Shard validation failed.", { cause: error });
         this.#ownershipLost = true;
         this.stop();
         return false;
       }
       if (current === undefined) {
+        this.#terminalFailure ??= new Error("The delivery session expired or was replaced.");
         this.#ownershipLost = true;
         this.#confirmedLost = true;
         this.stop();
       } else this.#current = current;
       return current !== undefined;
     });
+  }
+
+  /**
+   * Marks the run with the error from an unsuccessful inbox update.
+   *
+   * @param message Identifies the row that could not be changed.
+   * @param error Supplies the storage failure for the caller.
+   */
+  #recordStorageFailure(message: InboxMessage, error: unknown): void {
+    this.#terminalFailure ??=
+      error instanceof Error
+        ? error
+        : new Error("Delivery storage operation failed.", { cause: error });
+    this.#recordFailure(message, error);
   }
 
   /**

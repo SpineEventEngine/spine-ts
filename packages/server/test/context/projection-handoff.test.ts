@@ -36,7 +36,7 @@ import type { DeliveryStrategy } from "../../src/delivery/delivery-builder.js";
 import { tenant } from "../tenant-fixture.js";
 
 describe("LocalProjectionInbox", () => {
-  it("stores and advertises a routed Projection on its configured shard", async () => {
+  it("stores a routed Projection input and notifies its configured shard observer", async () => {
     const delivery = new Delivery({
       context: { name: "Projects", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),

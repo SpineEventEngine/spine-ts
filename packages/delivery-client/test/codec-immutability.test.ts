@@ -156,7 +156,11 @@ describe("delivery codec and immutable snapshots", () => {
       value: "run",
     });
     if (pickup.kind !== "PICKED") throw new Error("Expected a managed session.");
-    const expected = DeliveryMessageCodec.encode(domainMessage("guarded-reply"));
+    const row = domainMessage("guarded-reply");
+    const expected = DeliveryMessageCodec.encode(row);
+    fake.reply(create(OptionalInboxMessageSchema, { message: expected }));
+    const original = await client.findOne(row.id);
+    if (original === undefined) throw new Error("Expected the stored inbox row.");
     const completed = clone(InboxMessageSchema, expected);
     completed.status = InboxMessageStatus.DELIVERED;
     completed.keepUntil = create(TimestampSchema, { seconds: 10n, nanos: 123 });
@@ -173,26 +177,29 @@ describe("delivery codec and immutable snapshots", () => {
 
     for (const message of [undefined, pending, changed, invalidDeadline]) {
       fake.reply(create(GuardedInboxResultSchema, { matched: true, message }));
-      await expect(client.acknowledgeGuarded(pickup.session, expected)).rejects.toBeInstanceOf(
+      await expect(client.acknowledgeGuarded(pickup.session, original)).rejects.toBeInstanceOf(
         DeliveryProtocolError,
       );
     }
     fake.reply(create(GuardedInboxResultSchema, { matched: true, message: completed }));
-    await expect(client.acknowledgeGuarded(pickup.session, missingUnknown)).rejects.toBeInstanceOf(
-      DeliveryProtocolError,
-    );
+    await expect(
+      client.acknowledgeGuarded(
+        pickup.session,
+        DeliveryMessageCodec.decode(missingUnknown, ShardIndex.single()),
+      ),
+    ).rejects.toBeInstanceOf(DeliveryProtocolError);
     fake.reply(create(GuardedInboxResultSchema, { matched: false, message: completed }));
-    await expect(client.acknowledgeGuarded(pickup.session, expected)).rejects.toBeInstanceOf(
+    await expect(client.acknowledgeGuarded(pickup.session, original)).rejects.toBeInstanceOf(
       DeliveryProtocolError,
     );
     fake.reply(create(GuardedInboxResultSchema, { matched: false }));
-    await expect(client.acknowledgeGuarded(pickup.session, expected)).resolves.toBeUndefined();
+    await expect(client.acknowledgeGuarded(pickup.session, original)).resolves.toBeUndefined();
     fake.reply(create(GuardedInboxResultSchema, { matched: true, message: completed }));
-    await expect(client.removeDuplicateGuarded(pickup.session, expected)).rejects.toBeInstanceOf(
+    await expect(client.removeDuplicateGuarded(pickup.session, original)).rejects.toBeInstanceOf(
       DeliveryProtocolError,
     );
     fake.reply(create(GuardedInboxResultSchema, { matched: false, message: completed }));
-    await expect(client.removeDeliveredGuarded(pickup.session, expected)).rejects.toBeInstanceOf(
+    await expect(client.removeDeliveredGuarded(pickup.session, original)).rejects.toBeInstanceOf(
       DeliveryProtocolError,
     );
   });

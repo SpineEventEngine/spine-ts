@@ -133,6 +133,8 @@ export class CapacityMutationGate {
         (this.#active?.ticket.sequence === ticket.sequence ? this.#active : undefined);
       if (existing !== undefined) return existing.promise as Promise<T>;
       if (signal?.aborted) throw CapacityMutationGate.#abort(signal);
+      if (this.#pending.size >= 100 && ticket.sequence !== this.#retiredThrough + 1n)
+        throw new ConnectError("Delivery mutation queue is full.", Code.ResourceExhausted);
       return this.#enqueue(ticket, growth, operation, snapshot, signal, refresh);
     } catch (error) {
       return Promise.reject(
@@ -196,6 +198,7 @@ export class CapacityMutationGate {
       ticket.sequence,
       new ConnectError("Delivery mutation ticket is retired.", Code.FailedPrecondition),
     );
+    await this.#cancelTicket(ticket);
   }
 
   /**
@@ -236,6 +239,7 @@ export class CapacityMutationGate {
    * Advances the contiguous sequence only after all earlier tickets retire.
    */
   #retire(sequence: bigint): void {
+    if (sequence <= this.#retiredThrough) return;
     this.#retiredGaps.add(sequence);
     while (this.#retiredGaps.delete(this.#retiredThrough + 1n)) this.#retiredThrough++;
   }

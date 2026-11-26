@@ -33,7 +33,6 @@ import { ShardIndex } from "@spine-event-engine/server";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 
-import { conditionalPickUp } from "@spine-event-engine/server/spi/delivery";
 import { DeliveryClient } from "../client/client.js";
 import { Code, ConnectError } from "@connectrpc/connect";
 import {
@@ -307,12 +306,7 @@ export class RemoteInbox implements DeliveryInbox {
     session?: DeliveryWorkSession,
   ): Promise<InboxMessage | undefined> {
     const remote = this.#session(session);
-    const wire = await this.client.acknowledgeGuarded(
-      remote,
-      DeliveryMessageCodec.readWire(message),
-      options,
-    );
-    return wire === undefined ? undefined : DeliveryMessageCodec.decode(wire, message.shard);
+    return this.client.acknowledgeGuarded(remote, message, options);
   }
 
   /**
@@ -330,11 +324,7 @@ export class RemoteInbox implements DeliveryInbox {
     options?: DeliveryOperationOptions,
     session?: DeliveryWorkSession,
   ): Promise<boolean> {
-    return this.client.removeDeliveredGuarded(
-      this.#session(session),
-      DeliveryMessageCodec.readWire(message),
-      options,
-    );
+    return this.client.removeDeliveredGuarded(this.#session(session), message, options);
   }
 
   /**
@@ -352,11 +342,7 @@ export class RemoteInbox implements DeliveryInbox {
     options?: DeliveryOperationOptions,
     session?: DeliveryWorkSession,
   ): Promise<boolean> {
-    return this.client.removeDuplicateGuarded(
-      this.#session(session),
-      DeliveryMessageCodec.readWire(message),
-      options,
-    );
+    return this.client.removeDuplicateGuarded(this.#session(session), message, options);
   }
 
   /**
@@ -641,9 +627,6 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
    */
   constructor(client: DeliveryClient) {
     this.#owner = new RemoteSessionOwner(client);
-    conditionalPickUp.register(this, (shard, worker, options) =>
-      this.#owner.pickUp(shard, worker, options),
-    );
     Object.freeze(this);
   }
 

@@ -152,7 +152,7 @@ export class ApplicationWorkObserver {
   /**
    * Reserves one place before pickup and coalesces repeated shard notices.
    *
-   * @param shard Selects the advertised shard.
+   * @param shard Identifies the shard in the work notice.
    */
   #offer(shard: ShardIndex): void {
     const key = shard.key();

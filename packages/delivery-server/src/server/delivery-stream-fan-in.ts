@@ -139,6 +139,7 @@ export class DeliveryStreamFanIn<T> {
     let delay = 0;
     while (!this.#controller.signal.aborted) {
       const endpoint = await this.#endpoint(slot);
+      if (this.#stopped()) return;
       if (endpoint === undefined) {
         if (this.mode === "admin") return;
         continue;
@@ -164,6 +165,15 @@ export class DeliveryStreamFanIn<T> {
       }
       delay = await this.#recover(endpoint, delay, started, establishment.reached);
     }
+  }
+
+  /**
+   * Re-reads terminal state after an asynchronous endpoint wait.
+   *
+   * @returns Whether the public subscriber has stopped.
+   */
+  #stopped(): boolean {
+    return this.#controller.signal.aborted;
   }
 
   /**

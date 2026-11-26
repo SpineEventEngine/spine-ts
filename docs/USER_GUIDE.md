@@ -689,7 +689,78 @@ for a complete example using the Orders Projections.
 
 All Bounded Contexts use the Delivery configured in `ServerEnvironment`. With local Delivery, posting waits for Inbox reception and scheduling. Delivery acknowledges an Agent input after its handler and save finish; a returned model Command can continue running afterward. With remote Delivery, posting returns after the remote Inbox accepts the signal. Processing may happen afterward on another application process. The built-in work stream notifies every connected node about free shards with pending rows and scans current work when a node connects or reconnects. It can remain idle without delaying startup.
 
-Use `DeliveryBuilder.remote({ endpoint })` from `@spine-event-engine/delivery-client` as the environment's `delivery` for built-in work observation. Set `notifications: { kind: "delivery-server", maxConcurrentDeliveries: 2 }` if each node should run at most two distinct shards at once. With no configured limit, distinct shards run concurrently. For an application queue, use `notifications: { kind: "custom", shardObserver }`. The observer receives the complete persisted Inbox row through `onMessage(message)` and initiates delivery through the application's queue consumer. It opens no built-in work stream. `DeliveryBuilder.local({ storageFactory, shardObserver })` configures the same observer with application-managed storage. Processes using local storage must share the Inbox, shard registry, and Entity storage for exclusive processing and durable state.
+With `DeliveryBuilder.remote({ endpoint })` from `@spine-event-engine/delivery-client`,
+each node can process different shards concurrently. To limit automatic pickups on
+each node, set `notifications: { kind: "delivery-server", maxConcurrentDeliveries: 2 }`.
+
+An application can use its queue to tell another node where work is waiting.
+For example, the queue item for shard 3 of 8 carries both numbers. On the
+writing node, the framework calls `onMessage` after storing the inbox row.
+On the receiving node, the queue consumer rebuilds the shard index and asks
+the framework to deliver it. Every node installs the same configuration.
+
+<!-- docs-snippet-path: packages/delivery-client/src/remote/delivery-builder.ts -->
+
+```ts
+import { DeliveryBuilder } from "@spine-event-engine/delivery-client";
+import {
+  Application,
+  EnvironmentType,
+  ServerEnvironment,
+  ShardIndex,
+} from "@spine-event-engine/server";
+import type { BoundedContextBuilder } from "@spine-event-engine/server";
+import type { StorageFactory } from "@spine-event-engine/storage";
+
+type QueueItem = { index: number; ofTotal: number };
+
+declare const storageFactory: StorageFactory;
+declare const orders: BoundedContextBuilder;
+declare const queue: {
+  publish(item: QueueItem): Promise<void>;
+  consume(handler: (item: QueueItem) => Promise<void>): Promise<void>;
+};
+
+const delivery = DeliveryBuilder.remote({
+  endpoint: "https://delivery.example.test",
+  notifications: {
+    kind: "custom",
+    shardObserver: {
+      onMessage(row) {
+        const { index, ofTotal } = row.shard;
+        return queue.publish({ index, ofTotal });
+      },
+    },
+  },
+});
+const environment = ServerEnvironment.newBuilder()
+  .under(EnvironmentType.Production, (settings) => {
+    settings.use({ delivery, storageFactory });
+  })
+  .build();
+const application = await Application.newBuilder()
+  .setServerEnvironment(environment)
+  .add(orders)
+  .build();
+
+try {
+  await queue.consume(async ({ index, ofTotal }) => {
+    const result = await environment.delivery.deliverMessagesFrom(new ShardIndex(index, ofTotal));
+    console.log("Delivery attempt", index, ofTotal, result.status);
+  });
+} finally {
+  await application.close();
+}
+```
+
+In this example the queue acknowledges an item when its handler resolves
+and applies its failure policy when the handler rejects. `busy` means another
+worker took the shard. `noWork` means the work was already gone. A storage
+error rejects the call. If publishing the queue item fails, the framework logs
+the observer error and preserves the stored row. The application decides how
+to find and resubmit missed work. A custom observer can also use
+`DeliveryBuilder.local({ storageFactory, shardObserver })` when all nodes
+share application-managed inbox, shard, and Entity storage.
 
 A failed Inbox write rejects the posting call. A custom observer failure after a successful write is logged once and does not reverse the stored row or start fallback processing. After a normal run releases its shard, the framework checks the newest pending row and calls the custom observer again if one remains. The application supplies any queue recovery policy.
 

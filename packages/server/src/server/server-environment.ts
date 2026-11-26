@@ -634,9 +634,10 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.#delivery = delivery;
     environmentDeliveryCores.set(this, delivery);
     this.#publicDelivery = deliveryControls.managed(delivery);
-    if (ports !== undefined && ports.local !== true) remoteObservedEnvironments.add(this);
-    if (ports?.source !== undefined && notifications?.kind !== "custom")
+    if (ports?.source !== undefined && observer === undefined) {
+      remoteObservedEnvironments.add(this);
       this.#installWorkObserver(this.#publicDelivery, ports.source, ports.endpoint ?? "");
+    }
   }
 
   /**
@@ -686,7 +687,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    * Notifies local Delivery that work for a shard may now be available.
    */
   #notifyDelivery(shard: import("../delivery/shard-index.js").ShardIndex): void {
-    if (ServerEnvironmentValues.openableDelivery(this.#remoteDelivery) === undefined) {
+    if (this.#workObserver === undefined && !environmentCustomObservers.has(this)) {
       this.#delivery?.wake(shard);
     }
   }

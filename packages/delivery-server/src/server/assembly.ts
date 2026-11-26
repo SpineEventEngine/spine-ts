@@ -14,6 +14,7 @@
 
 import { Time } from "@spine-event-engine/core/time";
 import type { ServiceImpl } from "@connectrpc/connect";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { ShardIndex } from "@spine-event-engine/proto/delivery";
 import {
   AdminService,
@@ -215,20 +216,21 @@ const DeliverySessionAssembly = Object.freeze({
     onStoredChange: (shard: ShardIndex) => void,
     onWorkChange: (shard: ShardIndex) => void,
   ) {
+    const now = configuration.now ?? (() => Time.currentTime());
     const sessions = new ShardSessionRuntime(
       state,
       admission,
-      () => Time.currentTime(),
+      now,
       configuration.processingTimeoutMs ?? 60_000,
       onShardTransition,
-      () => Time.monotonicTime(),
+      configuration.monotonicNow ?? (() => Time.monotonicTime()),
       () => configuration.onAutonomousExpiry?.(state.usageSnapshot()),
     );
     const guarded = new GuardedInboxRuntime(
       state,
       admission,
       sessions,
-      () => Time.currentTime(),
+      now,
       onStoredChange,
       onWorkChange,
     );
@@ -249,6 +251,16 @@ type DeliveryAssemblyConfiguration = Partial<
     | "maxTrackedShards"
   >
 > & {
+  /**
+   * Samples the wall clock for session and acknowledgement timestamps.
+   */
+  readonly now?: () => Timestamp;
+
+  /**
+   * Measures lease duration independently of wall-clock changes.
+   */
+  readonly monotonicNow?: () => number;
+
   /**
    * Reports exact usage and revision when a session expires without a caller request.
    */

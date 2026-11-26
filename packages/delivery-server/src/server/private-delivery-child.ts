@@ -295,20 +295,8 @@ export class PrivateDeliveryChild {
    */
   #inbox(): ServiceImpl<typeof InboxService> {
     return {
-      writeOne: (request, context) =>
-        this.#mutate(
-          context.requestHeader,
-          context.signal,
-          () => this.#growth([InboxMessages.required(request.message)]),
-          () => Promise.resolve(this.#assembly.inbox.writeOne(request, context)),
-        ),
-      writeMany: (request, context) =>
-        this.#mutate(
-          context.requestHeader,
-          context.signal,
-          () => this.#batchGrowth(request),
-          () => Promise.resolve(this.#assembly.inbox.writeMany(request, context)),
-        ),
+      writeOne: (request, context) => this.#writeOne(request, context),
+      writeMany: (request, context) => this.#writeMany(request, context),
       removeOne: (request, context) =>
         this.#mutate(
           context.requestHeader,
@@ -327,6 +315,48 @@ export class PrivateDeliveryChild {
       findManyInShard: this.#assembly.inbox.findManyInShard,
       newestMessageToDeliver: this.#assembly.inbox.newestMessageToDeliver,
     };
+  }
+
+  /**
+   * Refreshes a single write's shard growth after the parent's reservation reply.
+   *
+   * @param request Supplies the retained wire row.
+   * @param context Carries the caller signal and capacity ticket.
+   * @returns The original Inbox write result.
+   */
+  #writeOne(
+    request: Parameters<ServiceImpl<typeof InboxService>["writeOne"]>[0],
+    context: Parameters<ServiceImpl<typeof InboxService>["writeOne"]>[1],
+  ): ReturnType<ServiceImpl<typeof InboxService>["writeOne"]> {
+    const growth = () => this.#growth([InboxMessages.required(request.message)]);
+    return this.#mutate(
+      context.requestHeader,
+      context.signal,
+      growth,
+      () => Promise.resolve(this.#assembly.inbox.writeOne(request, context)),
+      growth,
+    );
+  }
+
+  /**
+   * Refreshes batch growth when an expiring session changed tracked shards.
+   *
+   * @param request Supplies the batch and full shard identity.
+   * @param context Carries the caller signal and capacity ticket.
+   * @returns The original Inbox batch result.
+   */
+  #writeMany(
+    request: Parameters<ServiceImpl<typeof InboxService>["writeMany"]>[0],
+    context: Parameters<ServiceImpl<typeof InboxService>["writeMany"]>[1],
+  ): ReturnType<ServiceImpl<typeof InboxService>["writeMany"]> {
+    const growth = () => this.#batchGrowth(request);
+    return this.#mutate(
+      context.requestHeader,
+      context.signal,
+      growth,
+      () => Promise.resolve(this.#assembly.inbox.writeMany(request, context)),
+      growth,
+    );
   }
 
   /**
@@ -382,6 +412,7 @@ export class PrivateDeliveryChild {
           context.signal,
           () => this.#pickupGrowth(request, "RAW"),
           () => Promise.resolve(source.pickShardRaw(request, context)),
+          () => this.#pickupGrowth(request, "RAW"),
         ),
       pickShardForDelivery: (request, context) =>
         this.#mutate(
@@ -389,6 +420,7 @@ export class PrivateDeliveryChild {
           context.signal,
           () => this.#pickupGrowth(request, "MANAGED"),
           () => Promise.resolve(source.pickShardForDelivery(request, context)),
+          () => this.#pickupGrowth(request, "MANAGED"),
         ),
       renewShardSession: (request, context) =>
         this.#sessionChange(request, context, (revision) =>

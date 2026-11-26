@@ -46,7 +46,7 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.close()));
 });
 
-it("streams a free pending shard to each real gRPC client and advertises service health", async () => {
+it("streams a free pending shard to each real gRPC client and reports service health", async () => {
   const server = new DeliveryServer({ port: 0 });
   servers.push(server);
   await server.start();

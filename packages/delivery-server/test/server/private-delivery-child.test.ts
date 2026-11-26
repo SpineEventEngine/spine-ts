@@ -36,9 +36,123 @@ import { domainMessage, encodedBytes } from "../core/domain-message.js";
 import { CapacityLedger } from "../../src/server/capacity-ledger.js";
 import { DeliveryConfig } from "../../src/server/config.js";
 import { PrivateCapacityListener } from "../../src/server/private-capacity-listener.js";
+import { PrivateCapacityClient } from "../../src/server/private-capacity-client.js";
 import { PrivateDeliveryChild } from "../../src/server/private-delivery-child.js";
 
 describe("private delivery child", () => {
+  it.each(["writeOne", "writeMany", "pickShardRaw"] as const)(
+    "refreshes tracked-shard growth after an expiring session during %s reservation",
+    async (method) => {
+      const configuration = {
+        ...DeliveryConfig.resolve({ host: "127.0.0.1", port: 0, maxTrackedShards: 1 }),
+        processingTimeoutMs: 30,
+      };
+      const ledger = new CapacityLedger(configuration);
+      ledger.replace(0, "first");
+      ledger.replace(1, "other");
+      const capacity = new PrivateCapacityListener(
+        ledger,
+        new Map([["Bearer capacity", { slot: 0, generation: "first" }]]),
+      );
+      await capacity.start();
+      const child = new PrivateDeliveryChild({
+        slot: 0,
+        generation: "first",
+        credential: "Bearer child",
+        capacityCredential: "Bearer capacity",
+        capacityBaseUrl: capacity.baseUrl,
+        configuration,
+      });
+      await child.start();
+      const sessions = new Http2SessionManager(child.baseUrl);
+      const transport = createGrpcTransport({ baseUrl: child.baseUrl, sessionManager: sessions });
+      const managed = createClient(ManagedShardService, transport);
+      const inbox = createClient(InboxService, transport);
+      const shard = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
+      const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run" });
+      const pickup = create(DeliveryShardPickupSchema, { shard, worker });
+      const headers = (sequence: number) => ({
+        headers: {
+          authorization: "Bearer child",
+          "x-spine-capacity-sequence": String(sequence),
+        },
+      });
+      const entered = Promise.withResolvers<undefined>();
+      const release = Promise.withResolvers<undefined>();
+      try {
+        await managed.pickShardRaw(pickup, headers(1));
+        // The original prototype method is invoked with the spied instance below.
+        // eslint-disable-next-line @typescript-eslint/unbound-method
+        const original = PrivateCapacityClient.prototype.reserve;
+        const phases: bigint[] = [];
+        const spy = vi
+          .spyOn(PrivateCapacityClient.prototype, "reserve")
+          .mockImplementation(async function (
+            this: PrivateCapacityClient,
+            ticket,
+            growth,
+            signal,
+            phase,
+          ) {
+            if (ticket.sequence === 2n) phases.push(phase ?? 0n);
+            await original.call(this, ticket, growth, signal, phase);
+            if (ticket.sequence === 2n) {
+              if (phase === 0n) {
+                entered.resolve(undefined);
+                await release.promise;
+              }
+            }
+          });
+        try {
+          const row = domainMessage("late-write", shard);
+          const pending =
+            method === "writeOne"
+              ? inbox.writeOne({ message: row }, headers(2))
+              : method === "writeMany"
+                ? inbox.writeMany({ shard, message: [row] }, headers(2))
+                : managed.pickShardRaw(pickup, headers(2));
+          const settled = pending.then(
+            () => ({ error: undefined }),
+            (error: unknown) => ({ error }),
+          );
+          await entered.promise;
+          await vi.waitFor(
+            () => {
+              expect(ledger.usage().shards).toBe(0);
+            },
+            { timeout: 2_000 },
+          );
+          ledger.reserve(
+            { slot: 1, generation: "other", sequence: 1n },
+            { rows: 0, bytes: 0, shards: 1 },
+          );
+          ledger.report(
+            { slot: 1, generation: "other", sequence: 1n },
+            { rows: 0, bytes: 0, shards: 1 },
+            1n,
+          );
+          release.resolve(undefined);
+          expect((await settled).error).toMatchObject({ code: Code.ResourceExhausted });
+          expect(phases).toEqual([0n, 1n]);
+          expect(ledger.usage().shards).toBe(1);
+          if (method !== "pickShardRaw") {
+            const found = await inbox.findOne(
+              { index: shard, uuid: "late-write" },
+              { headers: { authorization: "Bearer child" } },
+            );
+            expect(found.message).toBeUndefined();
+          }
+        } finally {
+          release.resolve(undefined);
+          spy.mockRestore();
+        }
+      } finally {
+        sessions.abort();
+        await child.close();
+        await capacity.close();
+      }
+    },
+  );
   it("keeps a retired child from binding a private port after shutdown", async () => {
     const configuration = DeliveryConfig.resolve({ port: 0 });
     const capacity = new PrivateCapacityListener(new CapacityLedger(configuration), new Map());

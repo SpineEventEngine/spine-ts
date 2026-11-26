@@ -1467,8 +1467,8 @@ const publishedModuleInventories = [
     packageName: "@spine-event-engine/server/spi/delivery",
     documentedModulePath: "packages/server/src/spi/delivery",
     sourcePath: join("packages", "server", "src", "spi", "delivery.ts"),
-    expectedDeclaredExports: ["conditionalPickUp", "InboxRetention"],
-    expectedDocumentedExports: ["conditionalPickUp", "InboxRetention"],
+    expectedDeclaredExports: ["InboxRetention"],
+    expectedDocumentedExports: ["InboxRetention"],
   },
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");

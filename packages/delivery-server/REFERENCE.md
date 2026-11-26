@@ -74,7 +74,7 @@ that shard during initial discovery. Taking the shard stops its reminders.
 ## Session lifetime and work reminders
 
 The standalone server uses `processingTimeoutSeconds` for session lifetime.
-In an embedded core, set `processingTimeoutMs`. The default is 60 seconds.
+In an embedded core, register `delivery.observing` for `ShardObservingService`. Set `reminderIntervalMs` for repeat notices and `processingTimeoutMs` for the lease. The default is 60 seconds.
 After a successful renewal the worker has another session lifetime to complete
 its work or renew again.
 

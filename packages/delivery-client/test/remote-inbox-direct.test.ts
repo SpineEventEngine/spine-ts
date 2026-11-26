@@ -176,16 +176,16 @@ describe("RemoteInbox direct behavior", () => {
       status: "DELIVERED",
       keepUntil: new Date(125_000),
     });
-    client.acknowledgeGuarded.mockResolvedValue(completedWire);
+    client.acknowledgeGuarded.mockResolvedValue(
+      DeliveryMessageCodec.decode(completedWire, pending.shard),
+    );
 
     const first = await inbox.markDelivered(pending, undefined, session);
     const second = await inbox.markDelivered(pending, undefined, session);
     expect(first?.keepUntil).toEqual(new Date(125_000));
     expect(second).toEqual(first);
     expect(client.acknowledgeGuarded).toHaveBeenCalledTimes(2);
-    expect(client.acknowledgeGuarded.mock.calls[0]?.[1]).toEqual(
-      DeliveryMessageCodec.readWire(pending),
-    );
+    expect(client.acknowledgeGuarded.mock.calls[0]?.[1]).toEqual(pending);
     expect(client.writeOne).not.toHaveBeenCalled();
     expect(client.findOne).not.toHaveBeenCalled();
   });
@@ -298,7 +298,7 @@ describe("RemoteInbox direct behavior", () => {
     const { inbox, session } = await guarded(client);
     const pending = read(domainMessage("pending"));
     client.acknowledgeGuarded.mockResolvedValue(
-      DeliveryMessageCodec.encode({
+      read({
         ...pending,
         status: "DELIVERED",
         keepUntil: new Date(5_000),
@@ -372,7 +372,7 @@ describe("RemoteInbox direct behavior", () => {
     const { inbox, session } = await guarded(client);
     const pending = read(domainMessage("pending"));
     client.acknowledgeGuarded.mockResolvedValue(
-      DeliveryMessageCodec.encode({
+      read({
         ...pending,
         status: "DELIVERED",
         keepUntil: new Date(5_000),
@@ -385,7 +385,7 @@ describe("RemoteInbox direct behavior", () => {
       expect.objectContaining({
         sessionId: "fixture-session",
       }),
-      DeliveryMessageCodec.readWire(pending),
+      pending,
       { timeoutMs: 50 },
     );
     expect(client.findOne).not.toHaveBeenCalled();
@@ -400,7 +400,7 @@ describe("RemoteInbox direct behavior", () => {
     await expect(inbox.removeDuplicate(duplicate, undefined, session)).resolves.toBe(true);
     expect(client.removeDuplicateGuarded).toHaveBeenCalledWith(
       expect.anything(),
-      DeliveryMessageCodec.readWire(duplicate),
+      duplicate,
       undefined,
     );
     expect(client.removeOne).not.toHaveBeenCalled();

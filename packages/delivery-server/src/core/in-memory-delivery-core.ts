@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import type { ServiceImpl } from "@connectrpc/connect";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import {
@@ -20,13 +19,10 @@ import {
   ManagedShardService,
   GuardedInboxService,
   ShardService,
+  ShardObservingService,
 } from "@spine-event-engine/proto/delivery-server";
 
-import { InboxHandlers } from "./inbox-service.js";
-import { GuardedInboxRuntime } from "./guarded-inbox-service.js";
-import { InMemoryDeliveryState } from "./in-memory-delivery-state.js";
-import { MutationAdmission } from "./mutation-admission.js";
-import { ShardSessionRuntime } from "./shard-service.js";
+import { DeliveryAssembly } from "../server/assembly.js";
 
 /**
  * Configures the listener-free in-memory delivery core.
@@ -38,6 +34,11 @@ export interface DeliveryCoreOptions {
    * Positive session lifetime in milliseconds; defaults to 60 seconds.
    */
   readonly processingTimeoutMs?: number;
+
+  /**
+   * Milliseconds between notices while a shard is free with pending work. Defaults to 10,000.
+   */
+  readonly reminderIntervalMs?: number;
 
   /**
    * Returns a deterministic full-precision Protobuf timestamp.
@@ -96,7 +97,12 @@ export interface DeliveryCore {
   readonly guarded: ServiceImpl<typeof GuardedInboxService>;
 
   /**
-   * Cancels pending expiry timers.
+   * Streams free shards with pending work to application nodes.
+   */
+  readonly observing: ServiceImpl<typeof ShardObservingService>;
+
+  /**
+   * Closes active work streams, rejects pending mutations, and cancels timers.
    */
   close(): void;
 }
@@ -129,24 +135,19 @@ export const InMemoryDelivery: Readonly<{
     const timeout = options.processingTimeoutMs ?? 60_000;
     if (!Number.isSafeInteger(timeout) || timeout <= 0)
       throw new RangeError("Processing timeout is invalid.");
-    const state = new InMemoryDeliveryState(options);
-    const admission = new MutationAdmission();
-    const now = options.now ?? (() => Time.currentTime());
-    const sessions = new ShardSessionRuntime(
-      state,
-      admission,
-      now,
-      timeout,
-      undefined,
-      options.monotonicNow ?? (() => Time.monotonicTime()),
-    );
-    const guarded = new GuardedInboxRuntime(state, admission, sessions, now);
+    const assembly = DeliveryAssembly.create(options);
     return Object.freeze({
-      inbox: InboxHandlers.create(state, admission),
-      shards: sessions.raw,
-      managed: sessions.managed,
-      guarded: guarded.service,
-      close: sessions.close.bind(sessions),
+      inbox: assembly.inbox,
+      shards: assembly.shards,
+      managed: assembly.managed,
+      guarded: assembly.guarded,
+      observing: assembly.observing,
+      close() {
+        assembly.closeAdmission();
+        assembly.closeObserving();
+        assembly.closeSessions();
+        assembly.closeAdmin();
+      },
     });
   },
 });

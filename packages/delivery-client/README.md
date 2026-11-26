@@ -85,9 +85,10 @@ a worker must still request pickup before processing a row.
 
 ## 👀 Shard state for Admin
 
-For an Admin view, keep a live observation stream open. A snapshot gives a
-separate point-in-time view; it must not replace newer live updates. Rebuild the
-live view when opening a new stream, and mark it stale if the stream fails.
+For a live Admin view, read updates as soon as the stream opens. It sends
+the known shards first and keeps sending changes. For a one-time report,
+use `shardSnapshot()` separately. Waiting for a snapshot before reading a live
+stream can fill the client buffer during the initial replay.
 
 <!-- docs-snippet-path: packages/delivery-client/src/client/client.ts -->
 
@@ -96,7 +97,6 @@ import { DeliveryClient, type RemoteShardObservation } from "@spine-event-engine
 
 declare const client: DeliveryClient;
 declare const shutdown: AbortSignal;
-declare function showSnapshot(rows: readonly RemoteShardObservation[]): void;
 declare function showLive(rows: ReadonlyMap<string, RemoteShardObservation>, stale: boolean): void;
 
 async function showAdmin(): Promise<void> {
@@ -104,8 +104,6 @@ async function showAdmin(): Promise<void> {
   showLive(live, true);
   const updates = client.observeShardUpdates({ signal: shutdown, timeoutMs: 5_000 });
   try {
-    const snapshot = await client.shardSnapshot({ signal: shutdown });
-    showSnapshot(snapshot);
     for await (const update of updates) {
       const key = `${update.shard.index}/${update.shard.ofTotal}`;
       live.set(key, update);
@@ -154,13 +152,17 @@ import {
   RemoteWorkRegistry,
 } from "@spine-event-engine/delivery-client";
 import { DeliveryBuilder } from "@spine-event-engine/server";
+import type { StorageFactory } from "@spine-event-engine/storage";
 
+declare const storageFactory: StorageFactory;
 const client = DeliveryClient.connectTo("http://127.0.0.1:8484");
 const delivery = new DeliveryBuilder()
+  .withStorageFactory(storageFactory)
   .withNode("orders-worker")
   .withInbox(new RemoteInbox(client))
   .withWorkRegistry(new RemoteWorkRegistry(client))
   .build();
+// When the worker has finished using delivery, close its connection.
 client.close();
 void delivery;
 ```

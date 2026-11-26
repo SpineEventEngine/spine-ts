@@ -16,15 +16,16 @@ compatibility guarantees.
 
 ## Delivery SPI
 
-Delivery adapters import `conditionalPickUp` from
-`@spine-event-engine/server/spi/delivery`. It registers or looks up an optional
-conditional-pickup capability for a `DeliveryWorkRegistry`; it is not part of
-the server root API and does not independently create delivery work.
+A work registry can implement `pickUpForWork(shard, worker, options)` to check
+for pending work and take the shard in one operation. It returns a session
+on success and distinguishes a busy shard from an empty one. With a registry
+that only supplies `pickUp`, the framework checks the inbox before pickup.
 
-The same SPI exports `InboxRetention.deadline(nowMs)`. Delivery adapters use it
-when marking a row delivered; it returns a `Date` five seconds after the supplied
-application time in milliseconds. Local storage and remote delivery use this
-one deadline policy without adding a public retention setting.
+With application storage, `InboxRetention.deadline(nowMs)` from
+`@spine-event-engine/server/spi/delivery` calculates the five-second retention
+deadline from application time. With remote storage, the Delivery server uses
+its clock when it first acknowledges the row. Retrying the acknowledgement
+returns the original deadline.
 
 ## Generated handler-registry SPI
 

@@ -162,6 +162,35 @@ describe("multi-process public Delivery endpoint", () => {
     }
   });
 
+  it("does not open a private stream when the public caller aborts during endpoint selection", async () => {
+    const pool = new DeliveryChildPool(2, DeliveryConfig.resolve({ port: 0 }));
+    await pool.start();
+    const open = vi.fn(() =>
+      (async function* () {
+        yield await Promise.resolve(
+          create(ShardedWorkAvailableSchema, {
+            shard: create(ShardIndexSchema, { index: 0, ofTotal: 2 }),
+          }),
+        );
+      })(),
+    );
+    const merge = new DeliveryStreamFanIn(pool, "work", open);
+    const caller = new AbortController();
+    const reader = merge
+      .observe(caller.signal, new AbortController().signal)
+      [Symbol.asyncIterator]();
+    try {
+      const pending = reader.next();
+      caller.abort();
+      await expect(pending).resolves.toMatchObject({ done: true });
+      expect(open).not.toHaveBeenCalled();
+    } finally {
+      caller.abort();
+      await reader.return?.();
+      await pool.close();
+    }
+  });
+
   it("fails global Admin while a missing slot leaves healthy work notices available", async () => {
     const pool = new DeliveryChildPool(2, DeliveryConfig.resolve({ port: 0 }));
     await pool.start();

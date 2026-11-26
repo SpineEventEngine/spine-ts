@@ -795,26 +795,27 @@ export class DeliveryClient {
    * raises `DeliveryOutcomeUnknownError` with its full message ID.
    *
    * @param session Supplies the managed session handle.
-   * @param expected Supplies the original wire row from a remote read.
+   * @param expected Supplies the original row returned by a remote read.
    * @param options Bounds or cancels the guarded mutation.
    * @returns The stored completion, or `undefined` for a stale row.
    */
   async acknowledgeGuarded(
     session: RemoteShardSession,
-    expected: WireInboxMessage,
+    expected: InboxMessage,
     options: DeliveryMutationOptions = {},
-  ): Promise<WireInboxMessage | undefined> {
+  ): Promise<InboxMessage | undefined> {
+    const original = DeliveryMessageCodec.readWire(expected);
     const result = await this.#guardedMutation(
       "ACKNOWLEDGE",
       session,
-      expected,
+      original,
       options,
       (request, call) => this.#guarded.acknowledge(request, call),
     );
     if (!result.matched) return undefined;
     if (result.message === undefined) throw DeliveryRequestCodec.protocol();
-    DeliveryMessageCodec.validateAcknowledgement(expected, result.message);
-    return DeliveryMessageCodec.copyWire(result.message);
+    DeliveryMessageCodec.validateAcknowledgement(original, result.message);
+    return DeliveryMessageCodec.decode(result.message, expected.shard);
   }
 
   /**
@@ -823,19 +824,19 @@ export class DeliveryClient {
    * raises `DeliveryOutcomeUnknownError` with its full message ID.
    *
    * @param session Supplies the managed session handle.
-   * @param expected Supplies the original wire row.
+   * @param expected Supplies the original row returned by a remote read.
    * @param options Bounds or cancels the guarded mutation.
    * @returns Whether the row matched or was already absent.
    */
-  removeDuplicateGuarded(
+  async removeDuplicateGuarded(
     session: RemoteShardSession,
-    expected: WireInboxMessage,
+    expected: InboxMessage,
     options: DeliveryMutationOptions = {},
   ): Promise<boolean> {
     return this.#guardedMutation(
       "REMOVE_DUPLICATE_GUARDED",
       session,
-      expected,
+      DeliveryMessageCodec.readWire(expected),
       options,
       (request, call) => this.#guarded.removePendingDuplicate(request, call),
     ).then((result) => result.matched);
@@ -847,19 +848,19 @@ export class DeliveryClient {
    * raises `DeliveryOutcomeUnknownError` with its full message ID.
    *
    * @param session Supplies the managed session handle.
-   * @param expected Supplies the original wire row.
+   * @param expected Supplies the original row returned by a remote read.
    * @param options Bounds or cancels the guarded mutation.
    * @returns Whether the row matched or was already absent.
    */
-  removeDeliveredGuarded(
+  async removeDeliveredGuarded(
     session: RemoteShardSession,
-    expected: WireInboxMessage,
+    expected: InboxMessage,
     options: DeliveryMutationOptions = {},
   ): Promise<boolean> {
     return this.#guardedMutation(
       "REMOVE_DELIVERED_GUARDED",
       session,
-      expected,
+      DeliveryMessageCodec.readWire(expected),
       options,
       (request, call) => this.#guarded.removeExpiredDelivered(request, call),
     ).then((result) => result.matched);

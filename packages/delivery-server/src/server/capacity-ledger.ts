@@ -259,6 +259,7 @@ export class CapacityLedger {
    * Compacts retired tickets as preceding sequences settle.
    */
   static #retire(slot: SlotUsage, sequence: bigint): void {
+    if (sequence <= slot.retiredThrough) return;
     slot.retiredGaps.add(sequence);
     while (slot.retiredGaps.delete(slot.retiredThrough + 1n)) slot.retiredThrough++;
   }

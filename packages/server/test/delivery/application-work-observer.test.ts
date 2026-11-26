@@ -39,7 +39,7 @@ class Notices {
   /**
    * Adds one advisory shard notice.
    *
-   * @param shard Selects the advertised shard.
+   * @param shard Identifies the shard in the work notice.
    */
   push(shard: ShardIndex): void {
     const resume = this.#resume;
@@ -147,15 +147,39 @@ describe("ApplicationWorkObserver", () => {
     await inbox.storage.write(row("cancelled-before-pickup", shard));
     const dispatched = vi.fn();
     core.setDispatcher(dispatched);
+    const observed = vi.fn();
+    core.setShardObserver(observed);
     const caller = new AbortController();
     caller.abort(new Error("caller stopped"));
     await expect(core.deliverMessagesFrom(shard, { signal: caller.signal })).resolves.toEqual({
       status: "stopped",
     });
     expect(dispatched).not.toHaveBeenCalled();
+    expect(observed).not.toHaveBeenCalled();
     core.beginStartupDrain();
     await expect(core.deliverMessagesFrom(shard)).resolves.toEqual({ status: "stopped" });
     await core.close();
+  });
+
+  it("rejects an unacknowledged run without invoking the observer or repeating the handler", async () => {
+    const { core, inbox } = delivery();
+    const shard = new ShardIndex(0, 2);
+    await inbox.storage.write(row("ack-retry-exhausted", shard));
+    const handled = vi.fn();
+    const observer = vi.fn();
+    core.setDispatcher(handled);
+    core.setShardObserver(observer);
+    const failure = new Error("Acknowledgement unavailable");
+    vi.spyOn(Inbox.prototype, "markDelivered").mockRejectedValue(failure);
+    try {
+      await expect(core.deliverMessagesFrom(shard)).rejects.toBe(failure);
+      expect(handled).toHaveBeenCalledOnce();
+      expect(observer).not.toHaveBeenCalled();
+      expect((await inbox.newestPending(shard))?.id.value).toBe("ack-retry-exhausted");
+    } finally {
+      vi.restoreAllMocks();
+      await core.close();
+    }
   });
 
   it("maps a controlled busy shard separately from a later completed run", async () => {

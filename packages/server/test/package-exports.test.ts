@@ -165,8 +165,8 @@ describe("@spine-event-engine/server package exports", () => {
       [
         "--input-type=module",
         "--eval",
-        `import { conditionalPickUp } from "@spine-event-engine/server/spi/delivery";
-         process.stdout.write(typeof conditionalPickUp.register);`,
+        `import { InboxRetention } from "@spine-event-engine/server/spi/delivery";
+         process.stdout.write(typeof InboxRetention.deadline);`,
       ],
       { cwd: new URL("..", import.meta.url), encoding: "utf8" },
     );

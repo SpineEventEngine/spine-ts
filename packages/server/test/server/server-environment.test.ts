@@ -228,6 +228,42 @@ describe("ServerEnvironment delivery lifecycle", () => {
     await environment.close();
   });
 
+  it("delivers a posted Event through an inline facility without a work stream", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const ports = new CoreDelivery({
+      context: { name: "SharedInbox", multitenant: false },
+      storageFactory,
+    });
+    const environment = environmentWith(EnvironmentType.Local, {
+      storageFactory,
+      delivery: {
+        open: () => undefined,
+        close: () => ports.close(),
+        inbox: ports.inbox,
+        workRegistry: ports.shards,
+      },
+    });
+    serverStatusRegistry();
+    const receive = vi.spyOn(ServerStatusProjection.prototype, "onServerStarted");
+    const context = await buildContext(
+      BoundedContext.singleTenant("InlineFacility").add(ServerStatusProjection),
+      environment,
+    );
+    await context.eventBus().post(
+      SignalEnvelopes.event({
+        context: create(EventContextSchema, {
+          producerId: Identifiers.pack("string", "source-node"),
+          version: create(VersionSchema, { number: 1 }),
+        }),
+        schema: ServerStartedSchema,
+        message: create(ServerStartedSchema, { id: "inline-delivery", name: "Test" }),
+      }),
+    );
+    await vi.waitFor(() => {
+      expect(receive).toHaveBeenCalledWith(expect.objectContaining({ id: "inline-delivery" }));
+    });
+  });
+
   it("logs one escaping local background Delivery failure", async () => {
     const logged = Promise.withResolvers<string>();
     const errors: string[] = [];
