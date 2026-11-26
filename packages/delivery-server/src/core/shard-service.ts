@@ -88,7 +88,7 @@ export class ShardSessionRuntime {
    * @param lifetimeMs Sets the positive session lifetime in milliseconds.
    * @param onTransition Publishes pickup and release changes.
    * @param monotonicNow Measures elapsed lease time independently of wall time.
-   * @param onAutonomousExpiry Reports retained usage after a timer releases a session.
+   * @param onAutonomousExpiry Reports retained usage when a timer or a request finds an expired session.
    */
   constructor(
     state: InMemoryDeliveryState,

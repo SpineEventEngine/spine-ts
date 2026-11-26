@@ -111,7 +111,7 @@ interface PreparedPickup {
 }
 
 /**
- * Provides a Node client for the frozen delivery-server gRPC API.
+ * Connects Node applications to the Delivery server's inbox, shard, and work observation services.
  */
 export class DeliveryClient {
   readonly #inbox: ReturnType<typeof createClient<typeof InboxService>>;
