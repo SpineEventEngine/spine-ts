@@ -309,6 +309,10 @@ export class Delivery {
 
   readonly #activeRuns = new Set<ActiveDeliveryRun>();
 
+  readonly #closeLookups = new AbortController();
+
+  readonly #managedInFlight = new Set<Promise<DeliveryAttempt>>();
+
   readonly #managedAttempts = new Map<string, Promise<DeliveryAttempt>>();
 
   #shardObserver: ((message: InboxMessage) => unknown) | undefined;
@@ -404,8 +408,10 @@ export class Delivery {
     if (active !== undefined) return active;
     const attempt = this.#executeManaged(shard, options);
     this.#managedAttempts.set(key, attempt);
+    this.#managedInFlight.add(attempt);
     void attempt
       .finally(() => {
+        this.#managedInFlight.delete(attempt);
         if (this.#managedAttempts.get(key) === attempt) this.#managedAttempts.delete(key);
       })
       .catch(() => undefined);
@@ -436,7 +442,7 @@ export class Delivery {
       !this.#closing &&
       !options.signal?.aborted
     )
-      await this.#observeAfterRelease(shard);
+      await this.#observeAfterRelease(shard, options);
     switch (run.status) {
       case "DRAINED":
         return Object.freeze({ status: "completed" });
@@ -459,12 +465,26 @@ export class Delivery {
    * Passes the newest late pending row to the configured custom observer.
    *
    * @param shard Selects the normally released shard.
+   * @param options Pass the original cancellation and read budget to the inbox.
    */
-  async #observeAfterRelease(shard: ShardIndex): Promise<void> {
+  async #observeAfterRelease(
+    shard: ShardIndex,
+    options: import("./delivery-ports.js").DeliveryOperationOptions,
+  ): Promise<void> {
     const observer = this.#shardObserver;
     if (observer === undefined) return;
-    const pending = await this.inbox.newestPending(shard);
-    if (pending !== undefined && !this.#closing) this.observePersisted(pending);
+    const shutdown = this.#closeLookups.signal;
+    const signal = options.signal ? AbortSignal.any([options.signal, shutdown]) : shutdown;
+    let pending: InboxMessage | undefined;
+    try {
+      pending = await this.inbox.newestPending(shard, { ...options, signal });
+    } catch (error) {
+      if (shutdown.aborted) return;
+      throw error;
+    }
+    if (shutdown.aborted) return;
+    signal.throwIfAborted();
+    if (pending !== undefined) this.observePersisted(pending);
   }
 
   /**
@@ -503,13 +523,17 @@ export class Delivery {
    */
   async whenIdle(): Promise<void> {
     const failures: unknown[] = [];
-    while (this.#activeRuns.size > 0) {
+    while (this.#activeRuns.size > 0 || this.#managedInFlight.size > 0) {
       const active = [...this.#activeRuns];
-      const settled = await Promise.allSettled(active.map(({ completed }) => completed));
+      const settled = await Promise.allSettled([
+        ...active.map(({ completed }) => completed),
+        ...this.#managedInFlight,
+      ]);
       settled.forEach((outcome, index) => {
         const failure = active[index]?.releaseFailure;
         if (failure !== undefined) failures.push(failure);
-        if (outcome.status === "rejected") failures.push(outcome.reason);
+        if (outcome.status === "rejected" && !failures.includes(outcome.reason))
+          failures.push(outcome.reason);
       });
     }
     if (failures.length === 1) throw failures[0];
@@ -526,24 +550,25 @@ export class Delivery {
     if (this.#closeAttempt !== undefined) return this.#closeAttempt;
     this.beginClose();
     const active = this.#closingRuns ?? [];
-    this.#closeAttempt = Promise.allSettled(active.map(({ completed }) => completed)).then(
-      async (settled) => {
-        const failures: unknown[] = [];
-        settled.forEach((result, index) => {
-          const releaseFailure = active[index]?.releaseFailure;
-          if (releaseFailure !== undefined) failures.push(releaseFailure);
-          if (result.status === "rejected") failures.push(result.reason);
-        });
-        const storage = await Promise.allSettled([
-          this.inbox instanceof Inbox ? this.inbox.storage.close() : Promise.resolve(),
-          this.shards instanceof ShardedWorkRegistry ? this.shards.close() : Promise.resolve(),
-        ]);
-        for (const result of storage)
-          if (result.status === "rejected") failures.push(result.reason);
-        if (failures.length === 1) throw failures[0];
-        if (failures.length) throw new AggregateError(failures, "Delivery close failed.");
-      },
-    );
+    this.#closeAttempt = Promise.allSettled([
+      ...active.map(({ completed }) => completed),
+      ...this.#managedInFlight,
+    ]).then(async (settled) => {
+      const failures: unknown[] = [];
+      settled.forEach((result, index) => {
+        const releaseFailure = active[index]?.releaseFailure;
+        if (releaseFailure !== undefined) failures.push(releaseFailure);
+        if (result.status === "rejected" && !failures.includes(result.reason))
+          failures.push(result.reason);
+      });
+      const storage = await Promise.allSettled([
+        this.inbox instanceof Inbox ? this.inbox.storage.close() : Promise.resolve(),
+        this.shards instanceof ShardedWorkRegistry ? this.shards.close() : Promise.resolve(),
+      ]);
+      for (const result of storage) if (result.status === "rejected") failures.push(result.reason);
+      if (failures.length === 1) throw failures[0];
+      if (failures.length) throw new AggregateError(failures, "Delivery close failed.");
+    });
     return this.#closeAttempt;
   }
 
@@ -555,6 +580,7 @@ export class Delivery {
   beginClose(): void {
     if (this.#closing) return;
     this.#closing = true;
+    this.#closeLookups.abort();
     this.#closingRuns ??= [...this.#activeRuns];
     for (const active of this.#closingRuns) active.drain?.stop();
   }
@@ -986,7 +1012,10 @@ export class Delivery {
         if (pickup.kind === "NO_WORK") return result("NO_WORK");
         session = pickup.kind === "PICKED" ? pickup.session : undefined;
       } else {
-        if (options.managed && (await this.inbox.newestPending(shard)) === undefined)
+        if (
+          options.managed &&
+          (await this.inbox.newestPending(shard, options.operation)) === undefined
+        )
           return result("NO_WORK");
         session = await this.shards.pickUp(shard, worker, options.operation);
       }

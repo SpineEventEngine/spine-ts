@@ -16,6 +16,12 @@ compatibility guarantees.
 
 ## Delivery SPI
 
+A standalone `DeliveryBuilder.build()` returns a `Delivery`. Call
+`delivery.run({ shard, onMessage })` and supply the handler for this run.
+After the framework has built an Application, `environment.delivery` returns
+an `ApplicationDelivery`. Its `deliverMessagesFrom(shard)` uses the handlers
+already registered for that Application.
+
 A work registry can implement `pickUpForWork(shard, worker, options)` to check
 for pending work and take the shard in one operation. It returns a session
 on success and distinguishes a busy shard from an empty one. With a registry

@@ -27,7 +27,10 @@ import {
 } from "../delivery/application-work-observer.js";
 import type { InboxMessage } from "../delivery/inbox.js";
 import { deliveryTenant } from "../delivery/delivery-tenant.js";
-import type { Delivery as PublicDelivery, DeliveryStrategy } from "../delivery/delivery-builder.js";
+import type {
+  ApplicationDelivery as PublicDelivery,
+  DeliveryStrategy,
+} from "../delivery/delivery-builder.js";
 import { emitServerInfo, emitServerWarning } from "./server-log.js";
 import { managedDeliveryGate } from "./managed-delivery-gate.js";
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";

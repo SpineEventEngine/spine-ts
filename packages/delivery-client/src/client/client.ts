@@ -30,6 +30,7 @@ import {
   GuardedInboxResultSchema,
   type GuardedInboxResult,
   DeliveryShardPickupSchema,
+  type DeliveryShardPickup,
   DeliveryShardPickupOutcomeSchema as PickupOutcomeSchema,
   type DeliveryShardPickupOutcome,
   DeliverySessionHandleSchema,
@@ -88,6 +89,26 @@ export type {
   RemoteShardSession,
   DeliveryManagedPickupOutcome,
 } from "./types.js";
+
+/**
+ * Captures the shard and worker used to validate every reply to this pickup.
+ */
+interface PreparedPickup {
+  /**
+   * The detached request reused on retry.
+   */
+  readonly request: DeliveryShardPickup;
+
+  /**
+   * The requested shard.
+   */
+  readonly shard: ShardIndex;
+
+  /**
+   * The worker identity sent in the request.
+   */
+  readonly worker: DeliveryWorkerId;
+}
 
 /**
  * Provides a Node client for the frozen delivery-server gRPC API.
@@ -471,7 +492,7 @@ export class DeliveryClient {
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions = {},
   ): Promise<RemoteShardSession | undefined> {
-    const result = await this.#pickUp(shardIndex, workerId, options, "RAW");
+    const result = await this.#pickUp(this.#preparePickup(shardIndex, workerId), options, "RAW");
     return result.kind === "PICKED" ? result.session : undefined;
   }
 
@@ -502,7 +523,12 @@ export class DeliveryClient {
       controller.abort(new Error("Managed pickup timed out."));
     }, timeoutMs);
     try {
-      return await this.#recoverManagedPickup(shardIndex, workerId, options, deadline, controller);
+      return await this.#recoverManagedPickup(
+        this.#preparePickup(shardIndex, workerId),
+        options,
+        deadline,
+        controller,
+      );
     } finally {
       clearTimeout(timer);
       options.signal?.removeEventListener("abort", abort);
@@ -513,16 +539,14 @@ export class DeliveryClient {
   /**
    * Recovers one ambiguous managed pickup under its original deadline.
    *
-   * @param shardIndex Identifies the unchanged requested shard.
-   * @param workerId Identifies the unchanged worker run.
+   * @param pickup Holds the validated request and its original identity.
    * @param options Supplies caller operation settings.
    * @param deadline Ends the total operation in monotonic milliseconds.
    * @param controller Links caller, client closure, and deadline cancellation.
    * @returns A definitive pickup result.
    */
   async #recoverManagedPickup(
-    shardIndex: ShardIndex,
-    workerId: DeliveryWorkerId,
+    pickup: PreparedPickup,
     options: DeliveryMutationOptions,
     deadline: number,
     controller: AbortController,
@@ -531,16 +555,10 @@ export class DeliveryClient {
     let ambiguousCount = 0;
     for (;;) {
       this.#checkPickupCancellation(controller, options.signal, unknown);
-      const remaining = this.#pickupRemaining(deadline, shardIndex, unknown);
+      const remaining = this.#pickupRemaining(deadline, pickup.shard, unknown);
       const started = Time.monotonicTime();
       try {
-        return await this.#attemptManaged(
-          shardIndex,
-          workerId,
-          options,
-          controller.signal,
-          remaining,
-        );
+        return await this.#attemptManaged(pickup, options, controller.signal, remaining);
       } catch (error) {
         unknown = await this.#handleUnknownPickup(
           error,
@@ -575,23 +593,20 @@ export class DeliveryClient {
   /**
    * Repeats the same worker and shard with the time left from the first call.
    *
-   * @param shardIndex Identifies the unchanged shard.
-   * @param workerId Identifies the unchanged worker.
+   * @param pickup Holds the validated request and its original identity.
    * @param options Supplies the original call settings.
    * @param signal Cancels this attempt with the whole operation.
    * @param remaining Bounds this attempt within the original deadline.
    * @returns One definitive remote pickup result.
    */
   #attemptManaged(
-    shardIndex: ShardIndex,
-    workerId: DeliveryWorkerId,
+    pickup: PreparedPickup,
     options: DeliveryMutationOptions,
     signal: AbortSignal,
     remaining: number,
   ): Promise<DeliveryManagedPickupOutcome> {
     return this.#pickUp(
-      shardIndex,
-      workerId,
+      pickup,
       {
         ...options,
         signal,
@@ -676,31 +691,44 @@ export class DeliveryClient {
   }
 
   /**
+   * Creates a detached request before any pickup RPC can run.
+   *
+   * @param shardIndex Identifies the shard to acquire.
+   * @param workerId Identifies this processing run.
+   * @returns The wire request and the identity to expect in the reply.
+   */
+  #preparePickup(shardIndex: ShardIndex, workerId: DeliveryWorkerId): PreparedPickup {
+    const shard = DeliveryShardCodec.encode(shardIndex);
+    const worker = DeliveryShardCodec.encodeWorker(workerId);
+    const request = create(DeliveryShardPickupSchema, { shard, worker });
+    DeliveryRequestCodec.requestBytes(DeliveryShardPickupSchema, request);
+    return {
+      request,
+      shard: DeliveryShardCodec.decode(shard),
+      worker: DeliveryShardCodec.decodeWorker(worker),
+    };
+  }
+
+  /**
    * Performs a typed raw or managed pickup.
    */
   async #pickUp(
-    shardIndex: ShardIndex,
-    workerId: DeliveryWorkerId,
+    pickup: PreparedPickup,
     options: DeliveryMutationOptions,
     kind: "RAW" | "MANAGED",
   ): Promise<DeliveryManagedPickupOutcome> {
-    const request = create(DeliveryShardPickupSchema, {
-      shard: DeliveryShardCodec.encode(shardIndex),
-      worker: DeliveryShardCodec.encodeWorker(workerId),
-    });
-    DeliveryRequestCodec.requestBytes(DeliveryShardPickupSchema, request);
     const response = await this.#mutation<DeliveryShardPickupOutcome>(
       kind === "RAW" ? "PICK_UP_SHARD" : "PICK_UP_FOR_DELIVERY",
-      [DeliveryShardCodec.snapshot(shardIndex)],
+      [DeliveryShardCodec.snapshot(pickup.shard)],
       options,
       (signal, timeoutMs) => {
         const call = DeliveryRequestCodec.callOptions(signal, timeoutMs);
         return kind === "RAW"
-          ? this.#managed.pickShardRaw(request, call)
-          : this.#managed.pickShardForDelivery(request, call);
+          ? this.#managed.pickShardRaw(pickup.request, call)
+          : this.#managed.pickShardForDelivery(pickup.request, call);
       },
     );
-    return this.#decodePickup(response, shardIndex, workerId);
+    return this.#decodePickup(response, pickup.shard, pickup.worker);
   }
 
   /**

@@ -288,6 +288,7 @@ export class DeliveryChildPool {
     try {
       child = this.forkChild(DeliveryChildPool.#entry(), [], {
         stdio: ["ignore", "ignore", "ignore", "ipc"],
+        execArgv: DeliveryChildPool.#childExecArgv(process.execArgv),
       });
     } catch {
       this.#credentials.delete(capacityCredential);
@@ -310,6 +311,34 @@ export class DeliveryChildPool {
       ready: false,
       baseUrl: undefined,
     };
+  }
+
+  /**
+   * Removes flags that describe the parent's stdin or evaluation entry point.
+   *
+   * @param args Supplies the parent Node execution flags.
+   * @returns Compatible flags, including instrumentation, for a file-backed child.
+   */
+  static #childExecArgv(args: readonly string[]): string[] {
+    const compatible: string[] = [];
+    for (let index = 0; index < args.length; index++) {
+      const arg = args[index];
+      if (arg === undefined) continue;
+      if (["--input-type", "--eval", "--print", "-e", "-p"].includes(arg)) {
+        index++;
+        continue;
+      }
+      if (
+        arg.startsWith("--input-type=") ||
+        arg.startsWith("--eval=") ||
+        arg.startsWith("--print=") ||
+        /^-[ep].+/.test(arg) ||
+        ["--check", "-c", "--interactive", "-i", "--test"].includes(arg)
+      )
+        continue;
+      compatible.push(arg);
+    }
+    return compatible;
   }
 
   /**

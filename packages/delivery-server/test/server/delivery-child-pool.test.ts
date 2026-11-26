@@ -26,6 +26,41 @@ import { DeliveryChildPool } from "../../src/server/delivery-child-pool.js";
 import { DeliveryConfig } from "../../src/server/config.js";
 
 describe("forked delivery children", () => {
+  it.each([
+    ["--input-type=module", "--eval", "void 0"],
+    ["--input-type", "module", "-e", "void 0"],
+    ["--eval=void 0"],
+    ["-evoid 0"],
+    ["--print=1"],
+    ["-p", "1"],
+    ["--check"],
+  ])("starts a real child with parent entry flags %j", async (...entryFlags) => {
+    const original = [...process.execArgv];
+    process.execArgv.push(...entryFlags, "--trace-warnings");
+    let childFlags: readonly string[] | undefined;
+    const pool = new DeliveryChildPool(
+      1,
+      DeliveryConfig.resolve({ port: 0 }),
+      (entry, args, options) => {
+        childFlags = options.execArgv;
+        return fork(entry, args, options);
+      },
+    );
+    try {
+      await pool.start();
+      await vi.waitFor(
+        () => {
+          expect(pool.endpoint(0).pid).toBeGreaterThan(0);
+        },
+        { timeout: 1_500 },
+      );
+      expect(childFlags).toContain("--trace-warnings");
+      for (const flag of entryFlags) expect(childFlags).not.toContain(flag);
+    } finally {
+      process.execArgv.splice(0, process.execArgv.length, ...original);
+      await pool.close();
+    }
+  });
   it("rejects an invalid fixed process count and a start after terminal close", async () => {
     const configuration = DeliveryConfig.resolve({ port: 0 });
     for (const count of [0, -1, 1.5]) {

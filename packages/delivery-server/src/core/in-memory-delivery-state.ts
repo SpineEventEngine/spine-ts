@@ -339,9 +339,7 @@ export class InMemoryDeliveryState {
     const all = new Map<string, ShardIndex>();
     for (const [key, bucket] of this.#buckets) all.set(key, bucket.shard);
     for (const [key, record] of this.shards) all.set(key, record.shard);
-    yield* [...all.values()]
-      .sort((a, b) => a.ofTotal - b.ofTotal || a.index - b.index)
-      .map(DeliveryShards.copy);
+    yield* [...all.values()].sort((a, b) => DeliveryShards.compare(a, b)).map(DeliveryShards.copy);
   }
 
   /**

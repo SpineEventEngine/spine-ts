@@ -375,7 +375,7 @@ export class ShardSessionRuntime {
     if (current === undefined) return undefined;
     const active = SessionValues.requireActive(current);
     if (this.#elapsed(shard, active.sessionId) >= this.#lifetimeMs) {
-      this.#release(shard);
+      this.#expire(shard);
       return undefined;
     }
     return active;
@@ -391,6 +391,16 @@ export class ShardSessionRuntime {
     this.#timers.delete(key);
     this.#leaseStarts.delete(key);
     if (this.#state.release(shard) !== undefined) this.#onTransition?.(shard);
+  }
+
+  /**
+   * Releases an expired session and reports its revised retained usage.
+   *
+   * @param shard Identifies the session that elapsed.
+   */
+  #expire(shard: ShardIndex): void {
+    this.#release(shard);
+    this.#onAutonomousExpiry?.();
   }
 
   /**
@@ -439,8 +449,7 @@ export class ShardSessionRuntime {
           const live = this.#state.session(shard);
           if (live?.sessionId !== id) return;
           if (this.#elapsed(shard, id) >= this.#lifetimeMs) {
-            this.#release(shard);
-            this.#onAutonomousExpiry?.();
+            this.#expire(shard);
           } else this.#schedule(shard, id, false);
         })
         .catch(() => {

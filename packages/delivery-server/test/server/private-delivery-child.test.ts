@@ -40,6 +40,67 @@ import { PrivateCapacityClient } from "../../src/server/private-capacity-client.
 import { PrivateDeliveryChild } from "../../src/server/private-delivery-child.js";
 
 describe("private delivery child", () => {
+  it("reports expiry discovered while planning a rejected acknowledgement", async () => {
+    let elapsed = 0;
+    const configuration = {
+      ...DeliveryConfig.resolve({ host: "127.0.0.1", port: 0, maxTrackedShards: 1 }),
+      processingTimeoutMs: 1_000,
+      monotonicNow: () => elapsed,
+    };
+    const ledger = new CapacityLedger(configuration);
+    ledger.replace(0, "first");
+    ledger.replace(1, "second");
+    const capacity = new PrivateCapacityListener(
+      ledger,
+      new Map([["Bearer capacity", { slot: 0, generation: "first" }]]),
+    );
+    await capacity.start();
+    const child = new PrivateDeliveryChild({
+      slot: 0,
+      generation: "first",
+      credential: "Bearer child",
+      capacityCredential: "Bearer capacity",
+      capacityBaseUrl: capacity.baseUrl,
+      configuration,
+    });
+    await child.start();
+    const sessions = new Http2SessionManager(child.baseUrl);
+    const transport = createGrpcTransport({ baseUrl: child.baseUrl, sessionManager: sessions });
+    const inbox = createClient(InboxService, transport);
+    const managed = createClient(ManagedShardService, transport);
+    const guarded = createClient(GuardedInboxService, transport);
+    const shard = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
+    const row = domainMessage("expiring-guard", shard);
+    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run" });
+    const headers = (sequence: number) => ({
+      headers: { authorization: "Bearer child", "x-spine-capacity-sequence": String(sequence) },
+    });
+    try {
+      await inbox.writeOne({ message: row }, headers(1));
+      const picked = await managed.pickShardForDelivery(
+        create(DeliveryShardPickupSchema, { shard, worker }),
+        headers(2),
+      );
+      if (picked.result.case !== "pickedUp") throw new Error("Expected managed pickup.");
+      await inbox.removeOne({ message: row }, headers(3));
+      expect(ledger.usage()).toEqual({ rows: 0, bytes: 0, shards: 1 });
+      elapsed = 1_001;
+      await expect(
+        guarded.acknowledge({ session: picked.result.value, expected: row }, headers(4)),
+      ).rejects.toMatchObject({ code: Code.FailedPrecondition });
+      await vi.waitFor(() => {
+        expect(ledger.usage()).toEqual({ rows: 0, bytes: 0, shards: 0 });
+      });
+      const next = { slot: 1, generation: "second", sequence: 1n };
+      ledger.reserve(next, { rows: 0, bytes: 0, shards: 1 });
+      ledger.report(next, { rows: 0, bytes: 0, shards: 1 }, 1n);
+      expect(ledger.usage().shards).toBe(1);
+    } finally {
+      sessions.abort();
+      await child.close();
+      await capacity.close();
+    }
+  });
   it.each(["writeOne", "writeMany", "pickShardRaw"] as const)(
     "refreshes tracked-shard growth after an expiring session during %s reservation",
     async (method) => {

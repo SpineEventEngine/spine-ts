@@ -72,7 +72,7 @@ export interface DeliveryControls {
    * @param core Actual retained Delivery runtime.
    * @returns The controlled facade for that same runtime.
    */
-  managed(core: CoreDelivery): Delivery;
+  managed(core: CoreDelivery): ApplicationDelivery;
 
   /**
    * Returns the count of physical shard runs admitted through this delivery.
@@ -109,8 +109,8 @@ export const deliveryControls: DeliveryControls = Object.freeze({
   waker(delivery: Delivery): ((shard: ShardIndex) => void) | undefined {
     return controlledDeliveryWakers.get(delivery);
   },
-  managed(core: CoreDelivery): Delivery {
-    return new BuiltDelivery(core);
+  managed(core: CoreDelivery): ApplicationDelivery {
+    return new BoundApplicationDelivery(core);
   },
   activeRunCount(delivery: Delivery): number {
     return activeCounts.get(delivery)?.() ?? 0;
@@ -289,7 +289,12 @@ export interface Delivery {
    * @returns The terminal finite-run result.
    */
   run(options: DeliveryRunOptions): Promise<DeliveryResult>;
+}
 
+/**
+ * Runs deliveries using the handlers registered in an Application.
+ */
+export interface ApplicationDelivery extends Delivery {
   /**
    * Starts or joins delivery from one shard using registered application handlers.
    *
@@ -595,20 +600,6 @@ class BuiltDelivery implements Delivery {
   readonly #core: CoreDelivery;
 
   /**
-   * Starts or joins a managed shard attempt using this delivery's handlers.
-   *
-   * @param shard Selects the shard to try.
-   * @param options Cancels the run on caller request or shutdown.
-   * @returns Its definitive managed outcome.
-   */
-  deliverMessagesFrom(
-    shard: ShardIndex,
-    options?: import("./delivery-ports.js").DeliveryOperationOptions,
-  ): Promise<DeliveryAttempt> {
-    return this.#core.deliverMessagesFrom(shard, options);
-  }
-
-  /**
    * Captures the configured core without changing its run lifetime.
    *
    * @param core Complete configured Delivery core.
@@ -639,6 +630,37 @@ class BuiltDelivery implements Delivery {
    */
   run(options: DeliveryRunOptions): Promise<DeliveryResult> {
     return this.#core.run(options);
+  }
+}
+
+/**
+ * Provides the shard entry point after the environment installs its handlers.
+ */
+class BoundApplicationDelivery extends BuiltDelivery implements ApplicationDelivery {
+  readonly #deliver: CoreDelivery["deliverMessagesFrom"];
+
+  /**
+   * Creates the application facade over the runtime with registered handlers.
+   *
+   * @param core Holds the application's installed dispatchers.
+   */
+  constructor(core: CoreDelivery) {
+    super(core);
+    this.#deliver = core.deliverMessagesFrom.bind(core);
+  }
+
+  /**
+   * Starts or joins a managed shard attempt using this delivery's handlers.
+   *
+   * @param shard Selects the shard to try.
+   * @param options Cancels the run on caller request or shutdown.
+   * @returns Its definitive managed outcome.
+   */
+  deliverMessagesFrom(
+    shard: ShardIndex,
+    options?: import("./delivery-ports.js").DeliveryOperationOptions,
+  ): Promise<DeliveryAttempt> {
+    return this.#deliver(shard, options);
   }
 }
 

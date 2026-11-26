@@ -66,7 +66,9 @@ describe("DeliveryMonitor delivery", () => {
   it("builds Delivery from explicit storage without a process environment", () => {
     EnvironmentTests.use(EnvironmentType.Production);
     try {
-      expect(build().build().node).toBeTruthy();
+      const delivery = build().build();
+      expect(delivery).not.toHaveProperty("deliverMessagesFrom");
+      expect(delivery.node).toBeTruthy();
       expect(() => new DeliveryBuilder().build()).toThrow(/storage factory/i);
     } finally {
       EnvironmentTests.reset();

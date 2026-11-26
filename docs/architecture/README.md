@@ -779,17 +779,17 @@ of failed processing. Managed repository infrastructure errors propagate while
 their Inbox rows remain `TO_DELIVER`. A custom reception action that completes
 normally also completes delivery and is followed by delivered acknowledgement.
 A successful handler with failed acknowledgement gets finite
-acknowledgement-only retries. The supervisor
-rescans pending shards every 10 seconds by default, separately from the
-60-second stale-session threshold and the configurable Delivery server
-session lifetime, which defaults to 60 seconds. These [recovery timers](../../packages/delivery-server/REFERENCE.md#session-lifetime-and-work-reminders)
-do not guarantee a delivery or takeover deadline. The ordinary Delivery
-supervisor adds no persisted attempts, quarantine, receipts, markers, or dead-letter storage.
-Callback snapshots copy `Date` values
-and `Any.value` bytes. The package exposes no raw worker callback API; replay
-stays behind validated endpoints. Local posting handoffs cover command rows,
-projection subscriber rows, and process-manager event rows. Ordinary Command
-handlers and projection subscribers wait for the exact received row to replay;
+acknowledgement-only retries. If these fail, a managed delivery attempt rejects.
+With server observation, the Delivery server repeats a notice while its shard
+is free and still has work. The reminder defaults to 10 seconds. A worker that
+has taken the shard renews a separate session, which defaults to 60 seconds.
+If the session expires with work remaining, the server immediately offers the
+shard again. [Recovery settings](../../packages/delivery-server/REFERENCE.md#session-lifetime-and-work-reminders)
+
+With direct local delivery, posting can wait for the exact Command or
+Projection input to reach its handler. With server observation or an
+application-supplied observer, posting can return after the inbox write. A
+worker then processes the row on this node or another application node. For Agents,
 an original Agent input still `TO_DELIVER` may be redelivered after interruption
 and create a new model call. Saved model calls do not replay from pending
 attributes or history.

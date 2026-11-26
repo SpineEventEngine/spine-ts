@@ -53,6 +53,25 @@ import { DeliveryParentProxy } from "../../src/server/delivery-parent-proxy.js";
 import { DeliveryStreamFanIn } from "../../src/server/delivery-stream-fan-in.js";
 
 describe("multi-process public Delivery endpoint", () => {
+  it.each([1, 2])("orders Admin shards by total then index with %s process(es)", async (count) => {
+    const server = new DeliveryServer({ port: 0, processCount: count });
+    await server.start();
+    const sessions = new Http2SessionManager(server.baseUrl);
+    const transport = createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: sessions });
+    const inbox = createClient(InboxService, transport);
+    const admin = createClient(AdminService, transport);
+    const smallerTotal = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    const largerTotal = create(ShardIndexSchema, { index: 0, ofTotal: 3 });
+    try {
+      await inbox.writeOne({ message: domainMessage("total-three", largerTotal) });
+      await inbox.writeOne({ message: domainMessage("total-two", smallerTotal) });
+      const snapshot = await admin.getShardInfo({});
+      expect(snapshot.shards.map((item) => item.index)).toEqual([smallerTotal, largerTotal]);
+    } finally {
+      sessions.abort();
+      await server.close();
+    }
+  });
   it("rejects a private Admin stream that never acknowledged subscription", async () => {
     const pool = new DeliveryChildPool(1, DeliveryConfig.resolve({ port: 0 }));
     await pool.start();

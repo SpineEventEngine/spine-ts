@@ -437,6 +437,60 @@ describe("ApplicationWorkObserver", () => {
     await core.close();
   });
 
+  it.each(["caller", "shutdown"] as const)(
+    "waits for the late-row lookup during %s cancellation",
+    async (reason) => {
+      const { core, inbox } = delivery();
+      const shard = new ShardIndex(0, 2);
+      const message = row("slow-late-lookup", shard);
+      await inbox.storage.write(message);
+      const notify = vi.fn();
+      core.setDispatcher(() => undefined);
+      core.setShardObserver(notify);
+      const caller = new AbortController();
+      const reading = Promise.withResolvers<undefined>();
+      const lookup = Promise.withResolvers<typeof message>();
+      const find = vi
+        .spyOn(Inbox.prototype, "newestPending")
+        .mockResolvedValueOnce(message)
+        .mockImplementationOnce(() => {
+          reading.resolve(undefined);
+          return lookup.promise;
+        });
+      try {
+        const processing = core.deliverMessagesFrom(shard, {
+          signal: caller.signal,
+          timeoutMs: 1000,
+        });
+        await reading.promise;
+        const done = vi.fn();
+        const idle = core.whenIdle().finally(done);
+        const completed = Promise.allSettled([processing, idle]);
+        const closed = reason === "shutdown" ? core.close() : undefined;
+        if (reason === "caller") caller.abort(new Error("Queue consumer stopped."));
+        await Promise.resolve();
+        expect(done).not.toHaveBeenCalled();
+        expect(find).toHaveBeenLastCalledWith(shard, {
+          signal: expect.objectContaining({ aborted: true }) as AbortSignal,
+          timeoutMs: 1000,
+        });
+        lookup.resolve(message);
+        const outcomes = await completed;
+        if (reason === "caller") {
+          expect(outcomes.map((item) => item.status)).toEqual(["rejected", "rejected"]);
+        } else {
+          await closed;
+          expect(outcomes.map((item) => item.status)).toEqual(["fulfilled", "fulfilled"]);
+        }
+        expect(notify).not.toHaveBeenCalled();
+      } finally {
+        find.mockRestore();
+        lookup.resolve(message);
+        await core.close();
+      }
+    },
+  );
+
   it("reports a post-release lookup error and admits a later empty attempt", async () => {
     const { core, inbox } = delivery();
     const shard = new ShardIndex(0, 2);

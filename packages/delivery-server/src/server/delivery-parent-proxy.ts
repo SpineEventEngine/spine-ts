@@ -36,6 +36,7 @@ import {
   type ShardInfoList,
   type SubscriptionResponse,
 } from "@spine-event-engine/proto/delivery-server";
+import { DeliveryShards } from "../core/wire-values.js";
 import type { InboxMessage, ShardIndex } from "@spine-event-engine/proto/delivery";
 import * as privateProto from "@spine-event-engine/proto/generated/spine/delivery/session/private_delivery_pb.js";
 
@@ -335,11 +336,7 @@ export class DeliveryParentProxy {
     this.#assertCurrent(endpoints);
     const shards = replies
       .flatMap((reply) => reply.shards)
-      .sort(
-        (a, b) =>
-          (a.index?.index ?? 0) - (b.index?.index ?? 0) ||
-          (a.index?.ofTotal ?? 0) - (b.index?.ofTotal ?? 0),
-      );
+      .sort((a, b) => DeliveryShards.compare(a.index, b.index));
     if (shards.length > MAX_DELIVERY_RESPONSE_SHARDS)
       throw new ConnectError("Global Admin snapshot is too large.", Code.ResourceExhausted);
     const response = create(ShardInfoListSchema, { shards });

@@ -12,10 +12,10 @@ This reference describes the public in-memory Delivery server API. Read the
 ## Public entry points
 
 `InMemoryDelivery.create(options)` returns `DeliveryCore` with Connect handler
-implementations `inbox`, `guarded`, `shards`, and `managed`. The caller registers these handlers and
-provides the network lifecycle. Call `close()` on the core during shutdown to
-cancel session timers. For a listener with work observation, Admin,
-and health, start a `DeliveryServer`.
+implementations `inbox`, `guarded`, `shards`, `managed`, and `observing`.
+Register `observing` for `ShardObservingService` so application nodes can receive work notices.
+The caller supplies the network listener. Call `close()` to finish streams and cancel
+timers. The standalone `DeliveryServer` also provides the Admin and health services.
 
 `DeliveryServer` is the standalone lifecycle owner. Its constructor validates
 and resolves configuration exactly once. `start()` is idempotent and concurrent
@@ -74,7 +74,7 @@ that shard during initial discovery. Taking the shard stops its reminders.
 ## Session lifetime and work reminders
 
 The standalone server uses `processingTimeoutSeconds` for session lifetime.
-In an embedded core, register `delivery.observing` for `ShardObservingService`. Set `reminderIntervalMs` for repeat notices and `processingTimeoutMs` for the lease. The default is 60 seconds.
+In an embedded core, register `delivery.observing` for `ShardObservingService`. Set `reminderIntervalMs` for repeat notices and `processingTimeoutMs` for the lease. Their defaults are 10 seconds and 60 seconds respectively.
 After a successful renewal the worker has another session lifetime to complete
 its work or renew again.
 

@@ -13,6 +13,7 @@
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
+import { MAX_PENDING_DELIVERY_MUTATIONS } from "./limits.js";
 
 /**
  * A finite FIFO boundary for all state-changing delivery operations.
@@ -46,7 +47,7 @@ export class MutationAdmission {
     if (this.#closed)
       return Promise.reject(new ConnectError("Delivery server is closed.", Code.Unavailable));
     if (signal?.aborted) return Promise.reject(this.#abortError(signal));
-    if (this.#pending.length >= 100)
+    if (this.#pending.length >= MAX_PENDING_DELIVERY_MUTATIONS)
       return Promise.reject(
         new ConnectError("Delivery mutation queue is full.", Code.ResourceExhausted),
       );

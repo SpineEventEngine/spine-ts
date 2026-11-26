@@ -131,6 +131,7 @@ export {
   DeliveryBuilder,
   DeliveryMonitor,
   type Delivery,
+  type ApplicationDelivery,
   type DeliveryResult,
   type DeliveryRunOptions,
   type DeliveryStrategy,

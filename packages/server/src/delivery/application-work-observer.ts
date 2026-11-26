@@ -15,7 +15,7 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { ILogLayer } from "loglayer";
 
-import { deliveryControls, type Delivery } from "./delivery-builder.js";
+import { deliveryControls, type ApplicationDelivery } from "./delivery-builder.js";
 import type { ShardIndex } from "./shard-index.js";
 import { emitServerError } from "../server/server-log.js";
 
@@ -64,7 +64,7 @@ export class ApplicationWorkObserver {
    */
   constructor(
     private readonly source: ApplicationWorkSource,
-    private readonly delivery: Delivery,
+    private readonly delivery: ApplicationDelivery,
     private readonly endpoint: string,
     private readonly logger: ILogLayer | undefined,
     private readonly maxConcurrentDeliveries: number | undefined,

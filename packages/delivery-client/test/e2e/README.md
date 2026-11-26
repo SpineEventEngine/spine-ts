@@ -26,11 +26,11 @@ then starts two independent Node applications. Each application imports only
 package-root delivery APIs and generated descriptors; parent observation uses
 the generated Admin and health descriptors over a separate HTTP/2 session.
 
-The success scenario asserts exclusive pickup and release, exact ordinary and
-stale-takeover Admin sequences, exactly 20 post-ACK updates, final shard state,
-health, and replacement-supervisor delivery. A deliberate failure scenario
-proves process/stream cleanup and same-port reuse while preserving the primary
-failure.
+The suite checks exclusive pickup, release, and the final state shown by Admin.
+Admin may combine rapid changes to the same shard into one update. The test
+therefore allows intermediate updates to vary. It also checks service health,
+delivery on a replacement application node, and cleanup after a deliberate
+failure by starting another server on the same port.
 
 Stale takeover uses a one-second processing timeout. The test observes the
 stall admission time, proves no survivor dispatch during a deliberate 500 ms
@@ -40,7 +40,4 @@ seconds.
 
 ## ⚠️ Limits
 
-The test uses bounded IPC control/result frames. It is test support, not a
-production supervisor or persistence adapter. The topology is TypeScript-to-TypeScript only; it does
-not establish live JVM interoperability. Redis, Hazelcast, durable recovery,
-public-network hardening, and a human admin UI are outside this test suite.
+The test uses IPC to drive its two TypeScript application processes and inspect their results. Both applications connect to the same TypeScript Delivery server on loopback.

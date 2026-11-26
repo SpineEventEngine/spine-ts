@@ -46,6 +46,11 @@ export const MAX_DELIVERY_RPC_BYTES = 4_194_304;
 export const MAX_DELIVERY_BATCH_MESSAGES = 100;
 
 /**
+ * Limits waiting state mutations before admission in either server mode.
+ */
+export const MAX_PENDING_DELIVERY_MUTATIONS = 100;
+
+/**
  * Limits encoded Inbox payload bytes.
  */
 export const MAX_INBOX_PAYLOAD_BYTES = 1_048_576;

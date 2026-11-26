@@ -711,6 +711,7 @@ const expectedServerExports = [
   "DeliveryStage",
   "DeliveryStatistics",
   "DeliveryOperationOptions",
+  "ApplicationDelivery",
   "ApplicationWorkSource",
   "DeliveryAttempt",
   "DeliveryNotifications",

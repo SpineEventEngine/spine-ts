@@ -206,6 +206,23 @@ describe("RemoteWorkRegistry", () => {
     );
   });
 
+  it("keeps the original worker identity when a caller changes its object during recovery", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    const worker = { nodeId: "node", value: "worker" };
+    fake.fail(new Error("pickup reply lost"));
+    fake.replyPickup();
+    const pickup = client.pickUpForDelivery(ShardIndex.single(), worker);
+    worker.value = "another-run";
+    await expect(pickup).resolves.toMatchObject({
+      kind: "PICKED",
+      session: { worker: { value: "worker" } },
+    });
+    expect(fake.unary).toHaveBeenCalledTimes(2);
+    expect(fake.unary.mock.calls[1]?.[4]).toEqual(fake.unary.mock.calls[0]?.[4]);
+    client.close();
+  });
+
   it("stops ambiguous pickup recovery at the original deadline", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport, { retryBackoffMs: 1_000 });

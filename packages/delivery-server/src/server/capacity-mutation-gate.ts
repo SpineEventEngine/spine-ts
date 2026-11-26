@@ -14,6 +14,7 @@
 
 import { Code, ConnectError } from "@connectrpc/connect";
 import { Time } from "@spine-event-engine/core/time";
+import { MAX_PENDING_DELIVERY_MUTATIONS } from "../core/limits.js";
 
 import type { CapacityTicket, CapacityUsage } from "./capacity-ledger.js";
 
@@ -133,7 +134,10 @@ export class CapacityMutationGate {
         (this.#active?.ticket.sequence === ticket.sequence ? this.#active : undefined);
       if (existing !== undefined) return existing.promise as Promise<T>;
       if (signal?.aborted) throw CapacityMutationGate.#abort(signal);
-      if (this.#pending.size >= 100 && ticket.sequence !== this.#retiredThrough + 1n)
+      if (
+        this.#pending.size >= MAX_PENDING_DELIVERY_MUTATIONS &&
+        ticket.sequence !== this.#retiredThrough + 1n
+      )
         throw new ConnectError("Delivery mutation queue is full.", Code.ResourceExhausted);
       return this.#enqueue(ticket, growth, operation, snapshot, signal, refresh);
     } catch (error) {
