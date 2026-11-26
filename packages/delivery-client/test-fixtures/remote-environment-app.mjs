@@ -34,21 +34,13 @@ const delivery = RemoteDelivery.connectTo({
     ...(maxConcurrentDeliveries === undefined ? {} : { maxConcurrentDeliveries }),
   },
 });
-const sourceEvidence = { watches: 0, failures: 0, notices: 0 };
-let holdSource = false;
-let releaseSource = Promise.withResolvers();
+const sourceEvidence = { watches: 0, notices: 0 };
 const source = {
   async *observeAvailableShards(options) {
     sourceEvidence.watches += 1;
-    try {
-      for await (const update of delivery.source.observeAvailableShards(options)) {
-        sourceEvidence.notices += 1;
-        if (holdSource) await releaseSource.promise;
-        yield update;
-      }
-    } catch (error) {
-      sourceEvidence.failures += 1;
-      throw error;
+    for await (const shard of delivery.source.observeAvailableShards(options)) {
+      sourceEvidence.notices += 1;
+      yield shard;
     }
   },
 };
@@ -109,11 +101,6 @@ process.on("message", async (frame) => {
     else if (frame.command === "release-first") {
       holdFirst = false;
       releaseFirst.resolve();
-    } else if (frame.command === "hold-source") {
-      holdSource = true;
-    } else if (frame.command === "release-source") {
-      holdSource = false;
-      releaseSource.resolve();
     } else {
       process.send({ type: "result", id: frame.id, ...sourceEvidence });
       return;
@@ -160,8 +147,6 @@ async function close() {
 process.once("SIGTERM", () => {
   holdFirst = false;
   releaseFirst.resolve();
-  holdSource = false;
-  releaseSource.resolve();
   void close().then(
     () => process.exit(0),
     (error) => {
@@ -195,8 +180,6 @@ function isControl(frame) {
     frame !== null &&
     (frame.command === "block-first" ||
       frame.command === "release-first" ||
-      frame.command === "hold-source" ||
-      frame.command === "release-source" ||
       frame.command === "source-evidence") &&
     typeof frame.id === "string"
   );

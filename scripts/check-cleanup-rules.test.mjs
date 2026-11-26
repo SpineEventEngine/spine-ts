@@ -8,6 +8,7 @@ import {
   baselineObservesStructureEntry,
   checkCleanupRules,
   movedChatBaselinePath,
+  runCleanupCheck,
 } from "./check-cleanup-rules.mjs";
 
 const scriptPath = new URL("./check-cleanup-rules.mjs", import.meta.url).pathname;
@@ -111,6 +112,10 @@ function run(command, args, cwd) {
 }
 
 function runChecker(repoRoot) {
+  return runCleanupCheck(repoRoot);
+}
+
+function runCheckerCli(repoRoot) {
   return spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot], {
     encoding: "utf8",
     timeout: 10_000,
@@ -171,6 +176,8 @@ describe("check-cleanup-rules", () => {
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("Cleanup enforcement checks passed.");
+    const cli = runCheckerCli(repoRoot);
+    expect({ status: cli.status, stdout: cli.stdout, stderr: cli.stderr }).toEqual(result);
   });
 
   it("handles tracked-file lists larger than Node's default sync buffer", () => {
@@ -199,6 +206,8 @@ describe("check-cleanup-rules", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("tracked generated files under package src");
     expect(result.stderr).toContain("package test files under src");
+    const cli = runCheckerCli(repoRoot);
+    expect({ status: cli.status, stdout: cli.stdout, stderr: cli.stderr }).toEqual(result);
   });
 
   it("rejects generated output that is tracked or not ignored", () => {

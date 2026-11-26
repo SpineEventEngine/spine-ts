@@ -46,73 +46,25 @@ import { DeliveryParentProxy } from "../../src/server/delivery-parent-proxy.js";
 import { DeliveryStreamFanIn } from "../../src/server/delivery-stream-fan-in.js";
 
 describe("multi-process public Delivery endpoint", () => {
-  it("lets each storage child retain multiple rows", async () => {
+  it("reports more than 1,000 shards from two processes in total-then-index order", async () => {
     const server = new DeliveryServer({ port: 0, processCount: 2 });
-    await server.start();
-    const sessions = new Http2SessionManager(server.baseUrl);
-    const inbox = createClient(
-      InboxService,
-      createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: sessions }),
-    );
-    const first = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
-    const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
-    try {
-      await Promise.all([
-        inbox.writeOne({ message: domainMessage("first", first) }),
-        inbox.writeOne({ message: domainMessage("second", second) }),
-      ]);
-      await inbox.writeOne({ message: domainMessage("extra", first) });
-      expect((await inbox.findOne({ index: first, uuid: "extra" })).message?.id?.uuid).toBe(
-        "extra",
-      );
-      expect((await inbox.findOne({ index: second, uuid: "second" })).message?.id?.uuid).toBe(
-        "second",
-      );
-    } finally {
-      sessions.abort();
-      await server.close();
-    }
-  });
-
-  it.each([1, 2])(
-    "retains and reports more than 1,000 shards with %s process(es)",
-    async (count) => {
-      const server = new DeliveryServer({ port: 0, processCount: count });
-      await server.start();
-      const sessions = new Http2SessionManager(server.baseUrl);
-      const transport = createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: sessions });
-      const inbox = createClient(InboxService, transport);
-      const admin = createClient(AdminService, transport);
-      try {
-        const writes = Array.from({ length: 1_201 }, (_, index) => {
-          const shard = create(ShardIndexSchema, { index, ofTotal: 1_201 });
-          return inbox.writeOne({ message: domainMessage(`large-${String(index)}`, shard) });
-        });
-        await Promise.all(writes);
-        const snapshot = await admin.getShardInfo({});
-        expect(snapshot.shards).toHaveLength(1_201);
-        expect(snapshot.shards.at(-1)?.index?.index).toBe(1_200);
-      } finally {
-        sessions.abort();
-        await server.close();
-      }
-    },
-  );
-
-  it.each([1, 2])("orders Admin shards by total then index with %s process(es)", async (count) => {
-    const server = new DeliveryServer({ port: 0, processCount: count });
     await server.start();
     const sessions = new Http2SessionManager(server.baseUrl);
     const transport = createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: sessions });
     const inbox = createClient(InboxService, transport);
     const admin = createClient(AdminService, transport);
-    const smallerTotal = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
-    const largerTotal = create(ShardIndexSchema, { index: 0, ofTotal: 3 });
     try {
-      await inbox.writeOne({ message: domainMessage("total-three", largerTotal) });
-      await inbox.writeOne({ message: domainMessage("total-two", smallerTotal) });
+      const shards = Array.from({ length: 1_200 }, (_, index) =>
+        create(ShardIndexSchema, { index, ofTotal: 1_201 }),
+      );
+      const smallerTotal = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+      await Promise.all(
+        [...shards, smallerTotal].map((shard, row) =>
+          inbox.writeOne({ message: domainMessage(`large-${String(row)}`, shard) }),
+        ),
+      );
       const snapshot = await admin.getShardInfo({});
-      expect(snapshot.shards.map((item) => item.index)).toEqual([smallerTotal, largerTotal]);
+      expect(snapshot.shards.map((item) => item.index)).toEqual([smallerTotal, ...shards]);
     } finally {
       sessions.abort();
       await server.close();

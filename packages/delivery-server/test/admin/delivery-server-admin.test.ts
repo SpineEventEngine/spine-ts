@@ -57,8 +57,8 @@ describe("DeliveryServer Admin", () => {
     const admin = createClient(AdminService, transport);
     const inbox = createClient(InboxService, transport);
     const shards = createClient(ManagedShardService, transport);
-    const first = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
-    const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    const first = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    const second = create(ShardIndexSchema, { index: 0, ofTotal: 3 });
     const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
     try {
       await inbox.writeOne(create(WriteMessageSchema, { message: message("first", second) }));

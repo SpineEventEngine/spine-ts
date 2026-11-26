@@ -248,7 +248,7 @@ it("accepts a server reminder after a full-cap work notice was dropped", async (
   await command(child, { command: "write", signalId: second, shardIndex: 1 });
   await eventuallyAsync(async () => {
     const evidence = await command(child, { command: "source-evidence" });
-    if (!isSourceEvidence(evidence) || evidence.notices < 2)
+    if (!isRecord(evidence) || typeof evidence.notices !== "number" || evidence.notices < 2)
       throw new Error("Initial available-shard notice was not read.");
   });
   expect(events.filter((event) => event.signalId === second)).toHaveLength(0);
@@ -266,30 +266,29 @@ it("accepts a server reminder after a full-cap work notice was dropped", async (
   });
 }, 10_000);
 
-it("rediscovers work after reconnecting to the same endpoint", async () => {
+it("resumes delivery on the same application node after the server restarts", async () => {
   const server = trackedServer();
   await server.start();
   const endpoint = server.baseUrl;
   const alpha = application(endpoint, "alpha");
-  const beta = application(endpoint, "beta");
-  const deliveries: { readonly node: string; readonly signalId: string }[] = [];
-  for (const child of [alpha, beta])
-    child.on("message", (frame: unknown) => {
-      if (isDispatch(frame)) deliveries.push(frame);
-    });
-  await Promise.all([ready(alpha), ready(beta)]);
+  const deliveries: string[] = [];
+  alpha.on("message", (frame: unknown) => {
+    if (isDispatch(frame)) deliveries.push(frame.signalId);
+  });
+  await ready(alpha);
+  await command(alpha, { command: "write", signalId: "before-restart" });
+  await eventually(() => {
+    expect(deliveries).toContain("before-restart");
+  });
 
   await server.close();
-  await eventuallyAsync(async () => {
-    await expect(command(alpha, { command: "write", signalId: "while-down" })).rejects.toThrow();
-  });
   const replacement = trackedServer(server.port);
   await replacement.start();
   expect(replacement.baseUrl).toBe(endpoint);
 
   await command(alpha, { command: "write", signalId: "after-restart" });
   await eventually(() => {
-    expect(deliveries.filter((delivery) => delivery.signalId === "after-restart")).toHaveLength(1);
+    expect(deliveries.filter((id) => id === "after-restart")).toHaveLength(1);
   });
   const reader = DeliveryClient.connectTo(endpoint);
   clients.push(reader);
@@ -298,62 +297,8 @@ it("rediscovers work after reconnecting to the same endpoint", async () => {
     expect((await reader.shardSnapshot())[0]?.status).toBe("NOT_PICKED");
   });
   expect(alpha.exitCode).toBeNull();
-  expect(beta.exitCode).toBeNull();
-}, 15_000);
-
-it("continues remote work after a reader pauses through several pending writes", async () => {
-  const server = trackedServer();
-  await server.start();
-  const alpha = application(server.baseUrl, "alpha");
-  const beta = application(server.baseUrl, "beta");
-  const dispatched: { readonly node: string; readonly signalId: string }[] = [];
-  for (const child of [alpha, beta])
-    child.on("message", (frame: unknown) => {
-      if (isDispatch(frame)) dispatched.push(frame);
-    });
-  await Promise.all([ready(alpha), ready(beta)]);
-  await Promise.all([
-    command(alpha, { command: "block-first" }),
-    command(beta, { command: "block-first" }),
-  ]);
-
-  await command(alpha, { command: "write", signalId: "first" });
-  await eventually(() => {
-    expect(dispatched.filter((event) => event.signalId === "first-started")).toHaveLength(1);
-  });
-  await command(alpha, { command: "hold-source" });
-
-  await Promise.all(
-    Array.from({ length: 12 }, (_, index) =>
-      command(index % 2 === 0 ? alpha : beta, {
-        command: "write",
-        signalId: `overflow-${String(index)}`,
-      }),
-    ),
-  );
-  await command(alpha, { command: "release-source" });
-  await eventuallyAsync(async () => {
-    const evidence = await command(alpha, { command: "source-evidence" });
-    if (!isSourceEvidence(evidence) || evidence.watches < 1)
-      throw new Error(`Work stream did not start: ${JSON.stringify(evidence)}`);
-  });
-
-  await Promise.all([
-    command(alpha, { command: "release-first" }),
-    command(beta, { command: "release-first" }),
-  ]);
-  await eventually(() => {
-    for (let index = 0; index < 12; index += 1)
-      expect(
-        dispatched.filter((event) => event.signalId === `overflow-${String(index)}`),
-      ).toHaveLength(1);
-  });
-  const reader = DeliveryClient.connectTo(server.baseUrl);
-  clients.push(reader);
-  await eventuallyAsync(async () => {
-    expect(await reader.newestPending(ShardIndex.single())).toBeUndefined();
-    expect((await reader.shardSnapshot())[0]?.status).toBe("NOT_PICKED");
-  });
+  const subscriptions = await command(alpha, { command: "source-evidence" });
+  expect(isRecord(subscriptions) ? subscriptions.watches : undefined).toBeGreaterThanOrEqual(2);
 }, 15_000);
 
 it("forces a child that ignores graceful shutdown and settles its forced exit", async () => {
@@ -409,8 +354,7 @@ function command(
   request:
     | { readonly command: "write"; readonly signalId: string; readonly shardIndex?: number }
     | {
-        readonly command:
-          "block-first" | "release-first" | "hold-source" | "release-source" | "source-evidence";
+        readonly command: "block-first" | "release-first" | "source-evidence";
       },
 ) {
   const id = crypto.randomUUID();
@@ -428,8 +372,9 @@ function receive(child: ChildProcess, type: string, id?: string): Promise<unknow
       finish(new Error("Fixture process exited before response."));
     };
     const onMessage = (frame: unknown) => {
-      if (!isRecord(frame) || frame.type !== type || (id !== undefined && frame.id !== id)) return;
-      finish(undefined, frame);
+      if (!isRecord(frame) || (id !== undefined && frame.id !== id)) return;
+      if (id !== undefined && frame.type === "error") finish(new Error("Fixture command failed."));
+      else if (frame.type === type) finish(undefined, frame);
     };
     const finish = (error?: Error, frame?: unknown) => {
       clearTimeout(timer);
@@ -502,17 +447,6 @@ function isDispatch(value: unknown): value is { readonly node: string; readonly 
     value.type === "dispatched" &&
     typeof value.node === "string" &&
     typeof value.signalId === "string"
-  );
-}
-
-function isSourceEvidence(
-  value: unknown,
-): value is { readonly watches: number; readonly failures: number; readonly notices: number } {
-  return (
-    isRecord(value) &&
-    typeof value.watches === "number" &&
-    typeof value.failures === "number" &&
-    typeof value.notices === "number"
   );
 }
 

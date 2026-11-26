@@ -347,24 +347,42 @@ function parseDebtKey(key) {
   return { rule, file, name };
 }
 
+/**
+ * Checks TSDoc and returns the command-line output and exit status.
+ *
+ * @param repoRoot Checkout to inspect.
+ * @param writeObserved Whether to update observed debt partitions.
+ * @returns Exit status and the text written to standard output and error.
+ */
+export function runTsdocCheck(repoRoot, writeObserved = false) {
+  try {
+    if (writeObserved) {
+      writeDebt(repoRoot);
+      return { status: 0, stdout: "TSDoc debt partitions written.\n", stderr: "" };
+    }
+    const failures = checkTsdoc(repoRoot);
+    return failures.length > 0
+      ? { status: 1, stdout: "", stderr: formatFailures(failures) }
+      : { status: 0, stdout: "TSDoc enforcement checks passed.\n", stderr: "" };
+  } catch (error) {
+    return {
+      status: 1,
+      stdout: "",
+      stderr: `${escapeDetail(error instanceof Error ? error.message : String(error))}\n`,
+    };
+  }
+}
+
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const args = process.argv.slice(2);
-    const repoRoot = readRepoRoot(args);
-    if (args.includes("--write-debt")) {
-      writeDebt(repoRoot);
-      console.log("TSDoc debt partitions written.");
-      process.exit(0);
-    }
-    const failures = checkTsdoc(repoRoot);
-    if (failures.length > 0) {
-      printFailures(failures);
-      process.exit(1);
-    }
-    console.log("TSDoc enforcement checks passed.");
+    const result = runTsdocCheck(readRepoRoot(args), args.includes("--write-debt"));
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    if (result.status !== 0) process.exitCode = result.status;
   } catch (error) {
     console.error(escapeDetail(error instanceof Error ? error.message : String(error)));
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
 
@@ -1501,11 +1519,13 @@ function compareText(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function printFailures(failures) {
-  for (const failure of failures)
-    console.error(
-      `${failure.rule}: ${escapeDetail(failure.file)} :: ${escapeDetail(failure.name)}`,
-    );
+function formatFailures(failures) {
+  return failures
+    .map(
+      (failure) =>
+        `${failure.rule}: ${escapeDetail(failure.file)} :: ${escapeDetail(failure.name)}\n`,
+    )
+    .join("");
 }
 
 /* eslint-disable no-control-regex -- diagnostics must escape control-path characters. */
