@@ -189,9 +189,8 @@ describe("spineProtoModule", () => {
       dependencies: [],
       moduleExport: "spineProtoModule",
     });
-    expect(manifest.protoFiles).toHaveLength(68);
+    expect(manifest.protoFiles).toHaveLength(67);
     expect(manifest.protoFiles).toContain("spine/delivery/session/managed_sessions.proto");
-    expect(manifest.protoFiles).toContain("spine/delivery/session/private_delivery.proto");
     expect(manifest.generationId).toEqual(expect.stringMatching(/\S/u));
     expect(
       JSON.parse(
@@ -242,11 +241,6 @@ describe("spineProtoModule", () => {
       ...schemaNames(clientSchemas),
       ...schemaNames(deliverySchemas),
       ...schemaNames(deliveryServerSchemas),
-      "spine.delivery.session.CapacityReport",
-      "spine.delivery.session.CapacityReservation",
-      "spine.delivery.session.CapacitySnapshot",
-      "spine.delivery.session.CapacityTicket",
-      "spine.delivery.session.CapacityUsage",
       ...schemaNames(catchUpSchemas),
       ...schemaNames(entitySchemas),
       ...schemaNames(entityStateKeySchemas),

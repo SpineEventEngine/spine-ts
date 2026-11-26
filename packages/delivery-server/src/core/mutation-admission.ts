@@ -13,10 +13,9 @@
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
-import { MAX_PENDING_DELIVERY_MUTATIONS } from "./limits.js";
 
 /**
- * A finite FIFO boundary for all state-changing delivery operations.
+ * A FIFO boundary for all state-changing delivery operations.
  */
 export class MutationAdmission {
   #pending: { readonly admit: () => void; readonly reject: (error: Error) => void }[] = [];
@@ -47,25 +46,7 @@ export class MutationAdmission {
     if (this.#closed)
       return Promise.reject(new ConnectError("Delivery server is closed.", Code.Unavailable));
     if (signal?.aborted) return Promise.reject(this.#abortError(signal));
-    if (this.#pending.length >= MAX_PENDING_DELIVERY_MUTATIONS)
-      return Promise.reject(
-        new ConnectError("Delivery mutation queue is full.", Code.ResourceExhausted),
-      );
     return this.#enqueue(signal, commit);
-  }
-
-  /**
-   * Queues a server lifecycle mutation behind admitted caller operations.
-   *
-   * Session expiry must not be lost when the caller queue is at capacity.
-   * @typeParam T The committed result type.
-   * @param commit Performs the lifecycle mutation.
-   * @returns Resolves after the ordered commit.
-   */
-  runSystem<T>(commit: () => T): Promise<T> {
-    if (this.#closed)
-      return Promise.reject(new ConnectError("Delivery server is closed.", Code.Unavailable));
-    return this.#enqueue(undefined, commit);
   }
 
   /**

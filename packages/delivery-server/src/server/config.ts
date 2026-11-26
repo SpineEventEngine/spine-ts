@@ -15,7 +15,6 @@
 import {
   DEFAULT_DELIVERY_STATE_LIMITS,
   MAX_DELIVERY_LIMIT,
-  MAX_DELIVERY_RESPONSE_SHARDS,
   MAX_DELIVERY_RPC_BYTES,
   DeliveryLimits,
   type DeliveryStateLimits,
@@ -177,14 +176,6 @@ const DeliveryConfigSupport = Object.freeze({
         1,
         MAX_DELIVERY_LIMIT,
         "retained byte limit",
-      ),
-      maxTrackedShards: DeliveryConfig.number(
-        options.maxTrackedShards,
-        "MAX_TRACKED_SHARDS",
-        DEFAULT_DELIVERY_STATE_LIMITS.maxTrackedShards,
-        1,
-        MAX_DELIVERY_RESPONSE_SHARDS,
-        "tracked shard limit",
       ),
     });
   },

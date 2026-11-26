@@ -188,11 +188,6 @@ export const MAX_DELIVERY_BATCH_MESSAGES = 100;
 export const MAX_DELIVERY_RPC_BYTES: 4194304 = 4_194_304;
 
 /**
- * Maximum shard observations accepted from the in-memory delivery server.
- */
-export const MAX_DELIVERY_TRACKED_SHARDS = 1_000;
-
-/**
  * Maximum combined UTF-8 bytes of one worker and node identity.
  */
 export const MAX_DELIVERY_WORKER_BYTES = 128;

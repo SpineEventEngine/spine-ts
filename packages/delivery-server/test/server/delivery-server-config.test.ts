@@ -34,12 +34,6 @@ describe("DeliveryServer configuration", () => {
     expect(() => new DeliveryServer({ maxRetainedMessages: 0 })).toThrow(
       "Delivery server retained message limit is invalid.",
     );
-    expect(() => new DeliveryServer({ maxTrackedShards: 1_001 })).toThrow(
-      "Delivery server tracked shard limit is invalid.",
-    );
-    expect(() => InMemoryDelivery.create({ maxTrackedShards: 1_001 })).toThrow(
-      "Delivery server maxTrackedShards is invalid.",
-    );
     expect(() => InMemoryDelivery.create({ maxRetainedMessages: 0 })).toThrow(
       "Delivery server maxRetainedMessages is invalid.",
     );

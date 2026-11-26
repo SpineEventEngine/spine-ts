@@ -27,7 +27,7 @@ interface StartChildMessage {
   readonly kind: "start";
 
   /**
-   * Supplies the fixed route and private capacity endpoint.
+   * Supplies the fixed route and private listener credential.
    */
   readonly options: PrivateDeliveryChildOptions;
 }
@@ -77,10 +77,7 @@ class PrivateDeliveryChildProcess {
   async #open(options: PrivateDeliveryChildOptions): Promise<void> {
     if (this.#child !== undefined || this.#closing !== undefined) return;
     try {
-      const child = new PrivateDeliveryChild(options, () => {
-        process.exitCode = 1;
-        void this.#close();
-      });
+      const child = new PrivateDeliveryChild(options);
       this.#child = child;
       await child.start();
       process.send?.({ kind: "ready", baseUrl: child.baseUrl });

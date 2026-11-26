@@ -12,16 +12,10 @@
  * the License.
  */
 
-import { createServer } from "node:http2";
-
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
-import {
-  connectNodeAdapter,
-  createGrpcTransport,
-  Http2SessionManager,
-} from "@connectrpc/connect-node";
+import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import {
   AdminService,
   DeliveryShardPickupSchema,
@@ -41,7 +35,6 @@ import {
   ShardIndexSchema,
   WorkerIdSchema,
 } from "@spine-event-engine/proto/delivery";
-import { PrivateChildService } from "@spine-event-engine/proto/generated/spine/delivery/session/private_delivery_pb.js";
 import { describe, expect, it, vi } from "vitest";
 
 import { domainMessage } from "../core/domain-message.js";
@@ -53,6 +46,58 @@ import { DeliveryParentProxy } from "../../src/server/delivery-parent-proxy.js";
 import { DeliveryStreamFanIn } from "../../src/server/delivery-stream-fan-in.js";
 
 describe("multi-process public Delivery endpoint", () => {
+  it("lets each storage child apply writes under its local row limit", async () => {
+    const server = new DeliveryServer({ port: 0, processCount: 2, maxRetainedMessages: 1 });
+    await server.start();
+    const sessions = new Http2SessionManager(server.baseUrl);
+    const inbox = createClient(
+      InboxService,
+      createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: sessions }),
+    );
+    const first = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
+    const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    try {
+      await Promise.all([
+        inbox.writeOne({ message: domainMessage("first", first) }),
+        inbox.writeOne({ message: domainMessage("second", second) }),
+      ]);
+      await expect(
+        inbox.writeOne({ message: domainMessage("extra", first) }),
+      ).rejects.toMatchObject({ code: Code.ResourceExhausted });
+      expect((await inbox.findOne({ index: second, uuid: "second" })).message?.id?.uuid).toBe(
+        "second",
+      );
+    } finally {
+      sessions.abort();
+      await server.close();
+    }
+  });
+
+  it.each([1, 2])(
+    "retains and reports more than 1,000 shards with %s process(es)",
+    async (count) => {
+      const server = new DeliveryServer({ port: 0, processCount: count });
+      await server.start();
+      const sessions = new Http2SessionManager(server.baseUrl);
+      const transport = createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: sessions });
+      const inbox = createClient(InboxService, transport);
+      const admin = createClient(AdminService, transport);
+      try {
+        const writes = Array.from({ length: 1_201 }, (_, index) => {
+          const shard = create(ShardIndexSchema, { index, ofTotal: 1_201 });
+          return inbox.writeOne({ message: domainMessage(`large-${String(index)}`, shard) });
+        });
+        await Promise.all(writes);
+        const snapshot = await admin.getShardInfo({});
+        expect(snapshot.shards).toHaveLength(1_201);
+        expect(snapshot.shards.at(-1)?.index?.index).toBe(1_200);
+      } finally {
+        sessions.abort();
+        await server.close();
+      }
+    },
+  );
+
   it.each([1, 2])("orders Admin shards by total then index with %s process(es)", async (count) => {
     const server = new DeliveryServer({ port: 0, processCount: count });
     await server.start();
@@ -541,47 +586,6 @@ describe("multi-process public Delivery endpoint", () => {
     }
   });
 
-  it("rejects new operations and aborts an in-flight child call when the proxy closes", async () => {
-    const pool = new DeliveryChildPool(2, DeliveryConfig.resolve({ port: 0 }));
-    await pool.start();
-    const proxy = new DeliveryParentProxy(pool);
-    const row = domainMessage("closing-row", create(ShardIndexSchema, { index: 0, ofTotal: 2 }));
-    const entered = Promise.withResolvers<undefined>();
-    const reserve = pool.ledger.reserve.bind(pool.ledger);
-    const spy = vi.spyOn(pool.ledger, "reserve").mockImplementation((ticket, growth, phase) => {
-      if (ticket.slot === 0) {
-        entered.resolve(undefined);
-        throw new ConnectError("Private reserve unavailable.", Code.Unavailable);
-      }
-      reserve(ticket, growth, phase);
-    });
-    const context = { signal: new AbortController().signal, timeoutMs: () => undefined } as never;
-    try {
-      const inFlight = proxy
-        .inbox()
-        .writeOne(create(WriteMessageSchema, { message: row }), context);
-      await entered.promise;
-      proxy.close();
-      await expect(inFlight).rejects.toBeDefined();
-      await expect(
-        proxy.inbox().writeOne(create(WriteMessageSchema, { message: row }), context),
-      ).rejects.toMatchObject({ code: Code.Unavailable });
-      if (row.id === undefined) throw new Error("Inbox fixture identity is missing.");
-      await expect(proxy.inbox().findOne(row.id, context)).rejects.toMatchObject({
-        code: Code.Unavailable,
-      });
-      expect(() => proxy.observing().observeAll(create(EmptySchema), context)).toThrow(
-        expect.objectContaining({ code: Code.Unavailable }),
-      );
-      expect(() => proxy.admin().subscribeToShardUpdates(create(EmptySchema), context)).toThrow(
-        expect.objectContaining({ code: Code.Unavailable }),
-      );
-    } finally {
-      spy.mockRestore();
-      proxy.close();
-      await pool.close();
-    }
-  });
   it("routes two shards and replays both to each late work subscriber", async () => {
     const server = new DeliveryServer({ host: "127.0.0.1", port: 0, processCount: 2 });
     await server.start();
@@ -688,69 +692,6 @@ describe("multi-process public Delivery endpoint", () => {
     }
   });
 
-  it("enforces one global row limit across competing child writes", async () => {
-    const server = new DeliveryServer({ port: 0, processCount: 2, maxRetainedMessages: 1 });
-    await server.start();
-    const sessions = new Http2SessionManager(server.baseUrl);
-    const transport = createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: sessions });
-    const inbox = createClient(InboxService, transport);
-    try {
-      const writes = await Promise.allSettled(
-        [0, 1].map((index) =>
-          inbox.writeOne({
-            message: domainMessage(
-              `competing-${String(index)}`,
-              create(ShardIndexSchema, { index, ofTotal: 2 }),
-            ),
-          }),
-        ),
-      );
-      expect(writes.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-      expect(writes.filter((result) => result.status === "rejected")).toHaveLength(1);
-      const snapshot = await createClient(AdminService, transport).getShardInfo(
-        create(EmptySchema),
-      );
-      expect(snapshot.shards).toHaveLength(1);
-    } finally {
-      sessions.abort();
-      await server.close();
-    }
-  });
-
-  it("lets a healthy slot read and write while another slot's report is unsettled", async () => {
-    const pool = new DeliveryChildPool(2, DeliveryConfig.resolve({ port: 0 }));
-    await pool.start();
-    const proxy = new DeliveryParentProxy(pool);
-    const context = { signal: new AbortController().signal, timeoutMs: () => undefined } as never;
-    const entered = Promise.withResolvers<undefined>();
-    const report = pool.ledger.report.bind(pool.ledger);
-    const reportSpy = vi
-      .spyOn(pool.ledger, "report")
-      .mockImplementation((ticket, usage, revision) => {
-        if (ticket.slot === 0) {
-          entered.resolve(undefined);
-          throw new ConnectError("Private report unavailable.", Code.Unavailable);
-        }
-        report(ticket, usage, revision);
-      });
-    const a = domainMessage("unsettled-a", create(ShardIndexSchema, { index: 0, ofTotal: 2 }));
-    const b = domainMessage("healthy-b", create(ShardIndexSchema, { index: 1, ofTotal: 2 }));
-    try {
-      const uncertain = proxy.inbox().writeOne(create(WriteMessageSchema, { message: a }), context);
-      await entered.promise;
-      await proxy.inbox().writeOne(create(WriteMessageSchema, { message: b }), context);
-      if (b.id === undefined) throw new Error("Inbox fixture identity is missing.");
-      const found = await proxy.inbox().findOne(b.id, context);
-      expect(found.message?.id?.uuid).toBe("healthy-b");
-      reportSpy.mockRestore();
-      await uncertain;
-    } finally {
-      reportSpy.mockRestore();
-      proxy.close();
-      await pool.close();
-    }
-  });
-
   it("rejects an old generation's release after a replacement grants the shard", async () => {
     const pool = new DeliveryChildPool(2, DeliveryConfig.resolve({ port: 0 }));
     await pool.start();
@@ -791,174 +732,6 @@ describe("multi-process public Delivery endpoint", () => {
         );
       expect(competing.result?.case).toBe("busy");
     } finally {
-      proxy.close();
-      await pool.close();
-    }
-  });
-
-  it("keeps a renewal when a later public release enters before capacity admission", async () => {
-    const pool = new DeliveryChildPool(2, DeliveryConfig.resolve({ port: 0 }));
-    await pool.start();
-    const proxy = new DeliveryParentProxy(pool);
-    const context = { signal: new AbortController().signal, timeoutMs: () => undefined } as never;
-    const shard = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
-    const worker = (value: string) =>
-      create(WorkerIdSchema, { nodeId: { value: "replica" }, value });
-    const reserve = pool.ledger.reserve.bind(pool.ledger);
-    const entered = Promise.withResolvers<undefined>();
-    let blocked = true;
-    const reserveSpy = vi
-      .spyOn(pool.ledger, "reserve")
-      .mockImplementation((ticket, growth, phase) => {
-        if (ticket.slot === 0 && ticket.sequence === 2n && blocked) {
-          entered.resolve(undefined);
-          throw new ConnectError("Private reserve unavailable.", Code.Unavailable);
-        }
-        reserve(ticket, growth, phase);
-      });
-    try {
-      const first = pickedHandle(
-        await proxy
-          .managed()
-          .pickShardRaw(
-            create(DeliveryShardPickupSchema, { shard, worker: worker("same") }),
-            context,
-          ),
-      );
-      const renewal = proxy.managed().renewShardSession(first, context);
-      await entered.promise;
-      const stale = proxy.managed().releaseShardSession(first, context);
-      await new Promise((resolve) => {
-        setTimeout(resolve, 20);
-      });
-      blocked = false;
-      await renewal;
-      await stale;
-      const competing = await proxy
-        .managed()
-        .pickShardRaw(
-          create(DeliveryShardPickupSchema, { shard, worker: worker("rival") }),
-          context,
-        );
-      expect(competing.result?.case).toBe("busy");
-    } finally {
-      blocked = false;
-      reserveSpy.mockRestore();
-      proxy.close();
-      await pool.close();
-    }
-  });
-
-  it("retries the barrier after lost replies without repeating a committed write", async () => {
-    const pool = new DeliveryChildPool(1, DeliveryConfig.resolve({ port: 0 }));
-    await pool.start();
-    const child = pool.endpoint(0);
-    const privateSessions = new Http2SessionManager(child.baseUrl);
-    const transport = createGrpcTransport({
-      baseUrl: child.baseUrl,
-      sessionManager: privateSessions,
-    });
-    const inbox = createClient(InboxService, transport);
-    const control = createClient(PrivateChildService, transport);
-    const writes: string[] = [];
-    const barriers: bigint[] = [];
-    const settled = Promise.withResolvers<undefined>();
-    const relay = createServer(
-      connectNodeAdapter({
-        routes(router) {
-          router.service(InboxService, {
-            async writeOne(request, context) {
-              writes.push(request.message?.id?.uuid ?? "");
-              await inbox.writeOne(request, { headers: context.requestHeader });
-              throw new ConnectError("Reply lost after commit.", Code.Unavailable);
-            },
-          });
-          router.service(PrivateChildService, {
-            async barrier(request, context) {
-              barriers.push(request.sequence);
-              if (barriers.length < 3)
-                throw new ConnectError("Barrier unavailable.", Code.Unavailable);
-              const response = await control.barrier(request, { headers: context.requestHeader });
-              settled.resolve(undefined);
-              return response;
-            },
-          });
-        },
-      }),
-    );
-    const proxy = new DeliveryParentProxy(pool);
-    try {
-      await new Promise<void>((resolve) => relay.listen(0, "127.0.0.1", resolve));
-      const address = relay.address();
-      if (address === null || typeof address === "string") throw new Error("Missing relay port.");
-      vi.spyOn(pool, "endpoint").mockReturnValue({
-        ...child,
-        baseUrl: `http://127.0.0.1:${String(address.port)}`,
-      });
-      const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
-      const row = domainMessage("one-committed-write", shard);
-      if (row.id === undefined) throw new Error("Missing InboxMessage ID.");
-      const context = { signal: new AbortController().signal, timeoutMs: () => undefined } as never;
-      await expect(
-        proxy.inbox().writeOne(create(WriteMessageSchema, { message: row }), context),
-      ).rejects.toMatchObject({ code: Code.Unavailable });
-      await settled.promise;
-      const found = await inbox.findOne(row.id, { headers: { authorization: child.credential } });
-      expect(found.message).toEqual(row);
-      expect(writes).toEqual([row.id.uuid]);
-      expect(barriers).toEqual([1n, 1n, 1n]);
-    } finally {
-      proxy.close();
-      privateSessions.abort();
-      await new Promise<void>((resolve) =>
-        relay.close(() => {
-          resolve();
-        }),
-      );
-      await pool.close();
-    }
-  });
-
-  it("forwards a deadline and retires its ticket before later same-slot work", async () => {
-    const pool = new DeliveryChildPool(2, DeliveryConfig.resolve({ port: 0 }));
-    await pool.start();
-    const proxy = new DeliveryParentProxy(pool);
-    const shard = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
-    const row = domainMessage("deadline-row", shard);
-    const reserve = pool.ledger.reserve.bind(pool.ledger);
-    const entered = Promise.withResolvers<undefined>();
-    let blocked = true;
-    const spy = vi.spyOn(pool.ledger, "reserve").mockImplementation((ticket, growth, phase) => {
-      if (ticket.slot === 0 && blocked) {
-        entered.resolve(undefined);
-        throw new ConnectError("Private reserve unavailable.", Code.Unavailable);
-      }
-      reserve(ticket, growth, phase);
-    });
-    const signal = new AbortController();
-    const deadline = { signal: signal.signal, timeoutMs: () => 60 } as never;
-    const normal = { signal: new AbortController().signal, timeoutMs: () => undefined } as never;
-    try {
-      const cancelled = new AbortController();
-      cancelled.abort();
-      await expect(
-        proxy.inbox().writeOne(create(WriteMessageSchema, { message: row }), {
-          signal: cancelled.signal,
-          timeoutMs: () => undefined,
-        } as never),
-      ).rejects.toMatchObject({ code: Code.Canceled });
-      const expired = proxy
-        .inbox()
-        .writeOne(create(WriteMessageSchema, { message: row }), deadline);
-      await entered.promise;
-      await expect(expired).rejects.toMatchObject({ code: Code.DeadlineExceeded });
-      blocked = false;
-      await proxy.inbox().writeOne(create(WriteMessageSchema, { message: row }), normal);
-      if (row.id === undefined) throw new Error("Inbox fixture identity is missing.");
-      expect((await proxy.inbox().findOne(row.id, normal)).message?.id?.uuid).toBe("deadline-row");
-    } finally {
-      blocked = false;
-      spy.mockRestore();
       proxy.close();
       await pool.close();
     }

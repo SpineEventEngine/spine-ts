@@ -693,9 +693,10 @@ With `DeliveryBuilder.remote({ endpoint })` from `@spine-event-engine/delivery-c
 each node can process different shards concurrently. To limit automatic pickups on
 each node, set `notifications: { kind: "delivery-server", maxConcurrentDeliveries: 2 }`.
 
-An application can use its queue to tell another node where work is waiting.
-For example, the queue item for shard 3 of 8 carries both numbers. On the
-writing node, the framework calls `onMessage` after storing the inbox row.
+An application that already uses an external message service can use it to
+tell another node where work is waiting. The application supplies the
+`queue` publisher and consumer in this example. The item for shard 3 of 8
+carries both numbers. On the writing node, the framework calls `onMessage` after storing the inbox row.
 On the receiving node, the queue consumer rebuilds the shard index and asks
 the framework to deliver it. Every node installs the same configuration.
 
@@ -753,16 +754,23 @@ try {
 }
 ```
 
-In this example the queue acknowledges an item when its handler resolves
-and applies its failure policy when the handler rejects. `busy` means another
-worker took the shard. `noWork` means the work was already gone. A storage
-error rejects the call. If publishing the queue item fails, the framework logs
-the observer error and preserves the stored row. The application decides how
-to find and resubmit missed work. A custom observer can also use
+When the inbox write succeeds, the observer publishes the shard number and
+shard count to the application's queue. A consumer on any application node
+can receive that item and call `deliverMessagesFrom()`. In this example the
+queue acknowledges the item when the consumer returns. A `busy` result means
+another worker took the shard. A `noWork` result means it was already empty.
+If delivery throws a storage error, the queue applies its failure policy.
+
+If the inbox write fails, the posting call rejects. If the write succeeds
+and publishing to the queue fails, the framework logs the observer error.
+The row is already in the inbox. The application decides how to send the
+missed notification. After a normal delivery run releases its shard, the
+framework checks for rows that arrived late. If any are waiting, it passes
+the newest pending row to the observer.
+
+A custom observer can also use
 `DeliveryBuilder.local({ storageFactory, shardObserver })` when all nodes
 share application-managed inbox, shard, and Entity storage.
-
-A failed Inbox write rejects the posting call. A custom observer failure after a successful write is logged once and does not reverse the stored row or start fallback processing. After a normal run releases its shard, the framework checks the newest pending row and calls the custom observer again if one remains. The application supplies any queue recovery policy.
 
 Durable delivery stores pending and delivered Inbox rows. A shard lease prevents
 concurrent delivery, but a handler effect and the delivered transition are not

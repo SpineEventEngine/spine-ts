@@ -20,10 +20,7 @@ import { fileURLToPath } from "node:url";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { Time } from "@spine-event-engine/core/time";
 
-import { CapacityLedger, type CapacityTicket } from "./capacity-ledger.js";
 import type { DeliveryConfiguration } from "./config.js";
-import { PrivateCapacityListener } from "./private-capacity-listener.js";
-import type { ChildCredential } from "./private-capacity-service.js";
 import type { PrivateDeliveryChildOptions } from "./private-delivery-child.js";
 
 /**
@@ -57,7 +54,7 @@ export interface DeliveryChildEndpoint {
 }
 
 /**
- * Keeps the live fork, private credentials, and sequence for one route slot.
+ * Keeps the live fork and private credential for one route slot.
  */
 interface SlotProcess {
   /**
@@ -76,11 +73,6 @@ interface SlotProcess {
   readonly credential: string;
 
   /**
-   * Authenticates child capacity reports to the parent listener.
-   */
-  readonly capacityCredential: string;
-
-  /**
    * Provides the IPC lifecycle channel and process exit events.
    */
   readonly process: ChildProcess;
@@ -96,11 +88,6 @@ interface SlotProcess {
   ready: boolean;
 
   /**
-   * Correlates one capacity mutation at a time within this generation.
-   */
-  sequence: bigint;
-
-  /**
    * Identifies the authenticated loopback listener after readiness.
    */
   baseUrl: string | undefined;
@@ -112,15 +99,9 @@ interface SlotProcess {
 type ChildFork = (entry: string, args: readonly string[], options: ForkOptions) => ChildProcess;
 
 /**
- * Keeps a fixed set of volatile child slots alive behind one private capacity ledger.
+ * Keeps a fixed set of volatile child slots alive.
  */
 export class DeliveryChildPool {
-  readonly #ledger: CapacityLedger;
-
-  readonly #credentials = new Map<string, ChildCredential>();
-
-  readonly #capacity: PrivateCapacityListener;
-
   readonly #slots = new Map<number, SlotProcess>();
 
   readonly #children = new Set<ChildProcess>();
@@ -139,7 +120,7 @@ export class DeliveryChildPool {
    * Creates a fixed number of child slots without binding or forking.
    *
    * @param processCount Selects the explicit positive child count.
-   * @param configuration Preserves global retained-state and session settings.
+   * @param configuration Supplies each child's local retained-state and session settings.
    * @param forkChild Starts child processes through Node's fork operation.
    */
   constructor(
@@ -149,21 +130,10 @@ export class DeliveryChildPool {
   ) {
     if (!Number.isSafeInteger(processCount) || processCount < 1)
       throw new RangeError("Delivery child process count is invalid.");
-    this.#ledger = new CapacityLedger(configuration);
-    this.#capacity = new PrivateCapacityListener(this.#ledger, this.#credentials);
   }
 
   /**
-   * Returns the global committed and reserved capacity ledger.
-   *
-   * @returns The ledger shared by all child slots.
-   */
-  get ledger(): CapacityLedger {
-    return this.#ledger;
-  }
-
-  /**
-   * Starts the parent capacity listener and one child in every fixed slot.
+   * Starts one child in every fixed slot.
    *
    * @returns Completion after each initial child starts or reports failure.
    */
@@ -194,23 +164,6 @@ export class DeliveryChildPool {
   }
 
   /**
-   * Creates a correlated mutation sequence for the current child generation.
-   *
-   * @param slot Identifies the target child slot.
-   * @param expected Refuses a ticket after a selected generation changes.
-   * @returns A ticket accepted only by the current child generation.
-   */
-  ticket(slot: number, expected?: DeliveryChildEndpoint): CapacityTicket {
-    const endpoint = this.endpoint(slot);
-    if (expected !== undefined && endpoint.generation !== expected.generation)
-      throw new ConnectError("Delivery child generation changed.", Code.Unavailable);
-    const current = this.#slots.get(slot);
-    if (current === undefined)
-      throw new ConnectError("Delivery child slot is unavailable.", Code.Unavailable);
-    return { slot, generation: endpoint.generation, sequence: ++current.sequence };
-  }
-
-  /**
    * Checks that an asynchronous response still came from the live generation.
    *
    * @param endpoint Identifies the child that started the request.
@@ -235,7 +188,7 @@ export class DeliveryChildPool {
   }
 
   /**
-   * Stops restarts, asks every child to close, and releases the private listener.
+   * Stops restarts and asks every child to close.
    *
    * @returns Completion after all children exit.
    */
@@ -245,10 +198,9 @@ export class DeliveryChildPool {
   }
 
   /**
-   * Binds the private parent capacity service before launching child slots.
+   * Launches every child slot.
    */
   async #startOnce(): Promise<void> {
-    await this.#capacity.start();
     await Promise.all(Array.from({ length: this.processCount }, (_, slot) => this.#spawn(slot)));
   }
 
@@ -263,17 +215,13 @@ export class DeliveryChildPool {
     if (current === undefined) return;
     this.#slots.set(slot, current);
     await this.#awaitReady(current, {
-      slot,
-      generation: current.generation,
       credential: current.credential,
-      capacityCredential: current.capacityCredential,
-      capacityBaseUrl: this.#capacity.baseUrl,
       configuration: this.configuration,
     });
   }
 
   /**
-   * Creates one private credential set and a Node fork for a slot.
+   * Creates one private credential and a Node fork for a slot.
    *
    * @param slot Identifies the fixed route slot.
    * @returns The launched process, or undefined after a failed fork.
@@ -281,9 +229,6 @@ export class DeliveryChildPool {
   #fork(slot: number): SlotProcess | undefined {
     const generation = randomUUID();
     const credential = `Bearer ${randomUUID()}`;
-    const capacityCredential = `Bearer ${randomUUID()}`;
-    this.#ledger.replace(slot, generation);
-    this.#credentials.set(capacityCredential, { slot, generation });
     let child: ChildProcess;
     try {
       child = this.forkChild(DeliveryChildPool.#entry(), [], {
@@ -291,8 +236,6 @@ export class DeliveryChildPool {
         execArgv: DeliveryChildPool.#childExecArgv(process.execArgv),
       });
     } catch {
-      this.#credentials.delete(capacityCredential);
-      this.#ledger.replace(slot, randomUUID());
       this.#scheduleFailedStart(slot, 1);
       return undefined;
     }
@@ -304,9 +247,7 @@ export class DeliveryChildPool {
       slot,
       generation,
       credential,
-      capacityCredential,
       process: child,
-      sequence: 0n,
       started: Time.monotonicTime(),
       ready: false,
       baseUrl: undefined,
@@ -398,7 +339,7 @@ export class DeliveryChildPool {
   }
 
   /**
-   * Invalidates capacity and credentials for a departed generation.
+   * Invalidates a departed generation.
    *
    * @param current Identifies the process whose exit was observed.
    */
@@ -407,8 +348,6 @@ export class DeliveryChildPool {
     this.#slots.delete(current.slot);
     if (current.process.pid === undefined) this.#children.delete(current.process);
     for (const listener of this.#changes) listener(current.slot);
-    this.#credentials.delete(current.capacityCredential);
-    this.#ledger.replace(current.slot, randomUUID());
     if (this.#close !== undefined) return;
     if (current.ready) {
       this.#retryDelay.delete(current.slot);
@@ -449,7 +388,7 @@ export class DeliveryChildPool {
   }
 
   /**
-   * Stops replacement and waits for every reached child and listener to close.
+   * Stops replacement and waits for every reached child to close.
    */
   async #closeOnce(): Promise<void> {
     for (let slot = 0; slot < this.processCount; slot++)
@@ -458,7 +397,6 @@ export class DeliveryChildPool {
     this.#restartTimers.clear();
     await Promise.all([...this.#children].map((child) => this.#stopChild(child)));
     await this.#start?.catch(() => undefined);
-    await this.#capacity.close();
   }
 
   /**

@@ -75,21 +75,15 @@ packages/delivery-server/test/public-api.test.ts` (1 file, 2 tests);
 ## Security correction implementation
 
 - Added finite safe defaults and validated configuration for retained Inbox
-  messages (10,000), serialized retained bytes (32 MiB), and tracked shards
-  (1,000). Single and batch writes are admitted atomically against all three
-  budgets; over-capacity operations return `RESOURCE_EXHAUSTED` without a
+  messages (10,000) and serialized retained bytes (32 MiB). Single and
+  batch writes are admitted atomically against both budgets; over-capacity operations return `RESOURCE_EXHAUSTED` without a
   partial write.
 - Canonicalized server-side persisted-record validation to the delivery-client
   decoder boundary: complete identity/inbox/signal fields, valid timestamps and
   supported label/status enums, Command/Event payload, and a 1 MiB serialized
   payload limit. Batches have a server-side maximum of 100 records.
-- Capped Admin snapshots and manual expiration responses at 1,000 shard
-  observations, matching the maximum tracked-shard configuration and keeping
-  response work below the existing 4 MiB RPC ceiling. Persisted worker/node IDs
-  together are capped at 128 UTF-8 bytes so one expiration response cannot
-  exceed that ceiling through session strings.
 - Focused tests passed for poison direct-service requests, invalid mixed-batch
-  atomicity, message/byte/shard capacity, and session shard capacity. Affected
+  atomicity and retained message and byte limits. Affected
   style, reliability, API, and security reviews remain required.
 
 ## Final correction batch
@@ -99,8 +93,7 @@ packages/delivery-server/test/public-api.test.ts` (1 file, 2 tests);
   over-ceiling page fails with `RESOURCE_EXHAUSTED` and instructions to request
   a smaller page, without silent shortening or a new cursor contract.
 - Released message-free shard records are pruned immediately or after their
-  final message is removed. The server core, listener, Admin/expiration output,
-  and client decoder share the 1,000 tracked-shard ceiling.
+  final message is removed.
 - Write and remove batches validate the 1..100 length before any record work.
   Defaults are centralized, public core options declare their own ranges, and
   invalid core/listener configuration fails synchronously.

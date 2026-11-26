@@ -27,7 +27,6 @@ import {
 import type { ShardIndex } from "@spine-event-engine/proto/delivery";
 
 import type { InMemoryDeliveryState } from "../core/in-memory-delivery-state.js";
-import { MAX_DELIVERY_RESPONSE_SHARDS } from "../core/limits.js";
 import { DeliveryShards } from "../core/wire-values.js";
 
 /**
@@ -186,7 +185,7 @@ const AdminSnapshots: Readonly<{
   // prettier-ignore
 
   /**
-   * Produces a bounded deterministic shard snapshot.
+   * Produces a complete deterministic shard snapshot.
    */
   snapshot: (state: InMemoryDeliveryState) => ReturnType<typeof create<typeof ShardInfoListSchema>>;
 
@@ -219,9 +218,9 @@ const AdminSnapshots: Readonly<{
 }> = Object.freeze({
   snapshot: (state: InMemoryDeliveryState): ReturnType<typeof create<typeof ShardInfoListSchema>> =>
     create(ShardInfoListSchema, {
-      shards: [...state.knownShards()]
-        .slice(0, MAX_DELIVERY_RESPONSE_SHARDS)
-        .map((shard) => create(ShardInfoSchema, AdminSnapshots.observation(state, shard))),
+      shards: [...state.knownShards()].map((shard) =>
+        create(ShardInfoSchema, AdminSnapshots.observation(state, shard)),
+      ),
     }),
 
   observation: (state: InMemoryDeliveryState, shard: ShardIndex) => {

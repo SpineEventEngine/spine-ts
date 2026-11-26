@@ -26,10 +26,7 @@ import {
 } from "@spine-event-engine/proto/delivery-server";
 
 import { AdminPublisher, type AdminPublisherHandle } from "../admin/admin-service.js";
-import {
-  InMemoryDeliveryState,
-  type DeliveryResourceUsage,
-} from "../core/in-memory-delivery-state.js";
+import { InMemoryDeliveryState } from "../core/in-memory-delivery-state.js";
 import { InboxHandlers } from "../core/inbox-service.js";
 import { GuardedInboxRuntime } from "../core/guarded-inbox-service.js";
 import { MutationAdmission } from "../core/mutation-admission.js";
@@ -45,7 +42,7 @@ export interface DeliveryAssembly {
   // prettier-ignore
 
   /**
-   * Provides the canonical retained state for private child capacity accounting.
+   * Provides the canonical retained state for local service handlers.
    */
   readonly state: InMemoryDeliveryState;
 
@@ -65,7 +62,7 @@ export interface DeliveryAssembly {
   readonly managed: ServiceImpl<typeof ManagedShardService>;
 
   /**
-   * Captures session revisions at private child request receipt.
+   * Exposes session revision operations used by local service handlers.
    */
   readonly sessionRuntime: ShardSessionRuntime;
 
@@ -73,11 +70,6 @@ export interface DeliveryAssembly {
    * Serves session-guarded Inbox acknowledgement and cleanup.
    */
   readonly guarded: ServiceImpl<typeof GuardedInboxService>;
-
-  /**
-   * Plans an exact guarded acknowledgement for private capacity admission.
-   */
-  readonly guardedRuntime: GuardedInboxRuntime;
 
   /**
    * Streams advisory notifications for free pending shards.
@@ -182,7 +174,6 @@ const DeliveryAssemblyWiring = Object.freeze({
       managed: sessions.managed,
       sessionRuntime: sessions,
       guarded: guarded.service,
-      guardedRuntime: guarded,
       admin: admin.service,
       observing: observing.service,
       closeAdmission: admission.close.bind(admission),
@@ -224,7 +215,6 @@ const DeliverySessionAssembly = Object.freeze({
       configuration.processingTimeoutMs ?? 60_000,
       onShardTransition,
       configuration.monotonicNow ?? (() => Time.monotonicTime()),
-      () => configuration.onAutonomousExpiry?.(state.usageSnapshot()),
     );
     const guarded = new GuardedInboxRuntime(
       state,
@@ -244,11 +234,7 @@ const DeliverySessionAssembly = Object.freeze({
 type DeliveryAssemblyConfiguration = Partial<
   Pick<
     DeliveryConfiguration,
-    | "processingTimeoutMs"
-    | "reminderIntervalMs"
-    | "maxRetainedMessages"
-    | "maxRetainedBytes"
-    | "maxTrackedShards"
+    "processingTimeoutMs" | "reminderIntervalMs" | "maxRetainedMessages" | "maxRetainedBytes"
   >
 > & {
   /**
@@ -260,14 +246,6 @@ type DeliveryAssemblyConfiguration = Partial<
    * Measures lease duration independently of wall-clock changes.
    */
   readonly monotonicNow?: () => number;
-
-  /**
-   * Reports exact usage and revision when a session expires without a caller request.
-   */
-  readonly onAutonomousExpiry?: (snapshot: {
-    readonly revision: bigint;
-    readonly usage: DeliveryResourceUsage;
-  }) => void;
 };
 
 /**

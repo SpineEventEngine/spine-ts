@@ -66,23 +66,25 @@ describe("DeliveryClient shard observation", () => {
     expect(fake.unary).toHaveBeenCalledTimes(2);
   });
 
-  it("rejects an Admin snapshot above the requested public collection bound", async () => {
+  it("returns every shard from a large Admin snapshot", async () => {
     const fake = transport();
+    const ofTotal = 1_201;
     fake.reply(
       create(ShardInfoListSchema, {
-        shards: Array.from({ length: 1_001 }, () =>
+        shards: Array.from({ length: ofTotal }, (_, index) =>
           create(ShardInfoSchema, {
-            index: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+            index: create(ShardIndexSchema, { index, ofTotal }),
             status: ShardStatus.NOT_PICKED,
-            messages: 0,
+            messages: 1,
           }),
         ),
       }),
     );
 
-    await expect(
-      DeliveryClient.usingTransport(fake.transport).shardSnapshot(),
-    ).rejects.toBeInstanceOf(DeliveryProtocolError);
+    const snapshot = await DeliveryClient.usingTransport(fake.transport).shardSnapshot();
+    expect(snapshot.map(({ shard }) => shard.index)).toEqual(
+      Array.from({ length: ofTotal }, (_, index) => index),
+    );
   });
 
   it("yields only validated Admin updates after exactly one successful ACK", async () => {

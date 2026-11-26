@@ -21,7 +21,7 @@ import { InboxService } from "@spine-event-engine/proto/delivery-server";
 import { ShardIndexSchema } from "@spine-event-engine/proto/delivery";
 import { describe, expect, it, vi } from "vitest";
 
-import { domainMessage, encodedBytes } from "../core/domain-message.js";
+import { domainMessage } from "../core/domain-message.js";
 import { DeliveryChildPool } from "../../src/server/delivery-child-pool.js";
 import { DeliveryConfig } from "../../src/server/config.js";
 
@@ -72,20 +72,6 @@ describe("forked delivery children", () => {
     expect(() => pool.endpoint(0)).toThrow("unavailable");
     await pool.close();
     await expect(pool.start()).rejects.toThrow("closed");
-  });
-
-  it("refuses a ticket from an earlier process generation", async () => {
-    const pool = new DeliveryChildPool(1, DeliveryConfig.resolve({ port: 0 }));
-    await pool.start();
-    try {
-      const selected = pool.endpoint(0);
-      expect(() => pool.ticket(0, { ...selected, generation: "retired" })).toThrow(
-        "generation changed",
-      );
-      expect(pool.ticket(0, selected).sequence).toBe(1n);
-    } finally {
-      await pool.close();
-    }
   });
 
   it("reaps a delayed startup-failed child during shutdown", async () => {
@@ -183,11 +169,9 @@ describe("forked delivery children", () => {
         {
           headers: {
             authorization: second.credential,
-            "x-spine-capacity-sequence": "1",
           },
         },
       );
-      expect(pool.ledger.usage()).toEqual({ rows: 1, bytes: encodedBytes(row), shards: 1 });
       process.kill(first.pid, "SIGKILL");
       const found = await inbox.findOne(
         { index: shard, uuid: row.id.uuid },

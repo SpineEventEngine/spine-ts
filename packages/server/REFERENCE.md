@@ -1941,7 +1941,40 @@ configuration does not authenticate requests or select a remote topology.
 
 `ServerEnvironmentDelivery` supplies an optional remote facility with `open()`,
 `inbox`, and `workRegistry` ports. Setup opens it once before creating the
-shared Delivery; failure closes acquired facilities. Its optional `source` streams available remote shards after application readiness.
+shared Delivery. If setup fails, the environment closes the facilities it opened.
+The built-in remote facility supplies a work stream that starts after application readiness.
+
+Application code can also supply just the storage operations. For example,
+this configuration uses the application's inbox and shard registry. A successful
+write wakes delivery on the writing node. The application needs a work stream
+or a custom observer if it wants to notify another node.
+
+<!-- docs-snippet-path: packages/server/src/server/server-environment.ts -->
+
+```ts
+import type {
+  DeliveryInbox,
+  DeliveryWorkRegistry,
+  ServerEnvironmentDelivery,
+} from "@spine-event-engine/server";
+
+declare const inbox: DeliveryInbox;
+declare const workRegistry: DeliveryWorkRegistry;
+declare function openStorage(): Promise<void>;
+declare function closeStorage(): Promise<void>;
+
+const delivery: ServerEnvironmentDelivery = {
+  open: openStorage,
+  close: closeStorage,
+  inbox,
+  workRegistry,
+};
+```
+
+If application code installs a custom observer, that observer decides how to
+notify another node. A failed callback is logged after the write. The framework
+keeps the stored row and leaves recovery to the application.
+
 A local facility can supply a custom observer and application storage. Local Delivery uses the environment's configured storage
 factory for its shared Inbox and work registry; the default factory is in-memory.
 Contexts register recipients with the same Delivery and never close that shared

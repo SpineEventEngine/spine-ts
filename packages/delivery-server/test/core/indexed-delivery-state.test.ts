@@ -23,6 +23,23 @@ const first = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
 const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
 
 describe("indexed delivery state", () => {
+  it("discovers more than 1,000 shards while preserving row and byte safeguards", () => {
+    const state = new InMemoryDeliveryState({ maxRetainedMessages: 1_201 });
+    const rows = Array.from({ length: 1_201 }, (_, index) => {
+      const shard = create(ShardIndexSchema, { index, ofTotal: 1_201 });
+      const message = domainMessage(`row-${String(index)}`, shard);
+      return { message, bytes: encodedBytes(message) };
+    });
+    state.putAll(rows);
+    expect([...state.knownShards()]).toHaveLength(1_201);
+    expect([...state.pendingShards()]).toHaveLength(1_201);
+    expect(state.usage().rows).toBe(1_201);
+    const extra = domainMessage("extra", first);
+    expect(() => state.putAll([{ message: extra, bytes: encodedBytes(extra) }])).toThrow(
+      ConnectError,
+    );
+  });
+
   it("orders one shard by full time, version, then UTF-8 ID without reading unrelated rows", () => {
     const state = new InMemoryDeliveryState();
     const rows = [

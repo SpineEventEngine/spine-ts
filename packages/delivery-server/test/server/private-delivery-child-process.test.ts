@@ -19,11 +19,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DeliveryConfig } from "../../src/server/config.js";
 
 const options = {
-  slot: 0,
-  generation: "first",
   credential: "Bearer slot",
-  capacityCredential: "Bearer capacity",
-  capacityBaseUrl: "http://127.0.0.1:1234",
   configuration: DeliveryConfig.resolve({ port: 0 }),
 };
 
@@ -45,13 +41,11 @@ async function startChildProcess() {
     baseUrl: "http://127.0.0.1:4321",
   };
   const construct = vi.fn();
-  let fatal: (() => void) | undefined;
   vi.resetModules();
   vi.doMock("../../src/server/private-delivery-child.js", () => ({
     PrivateDeliveryChild: class {
-      constructor(config: typeof options, onFatal: () => void) {
+      constructor(config: typeof options) {
         construct(config);
-        fatal = onFatal;
       }
 
       readonly start = listener.start;
@@ -64,7 +58,7 @@ async function startChildProcess() {
 
   vi.stubGlobal("process", ipc);
   await import("../../src/server/private-delivery-child-process.js");
-  return { ipc, events, send, disconnect, listener, construct, fail: () => fatal?.() };
+  return { ipc, events, send, disconnect, listener, construct };
 }
 
 afterEach(() => {
@@ -117,19 +111,5 @@ describe("private Delivery child process lifecycle", () => {
     expect(send.mock.calls).toEqual([[{ kind: "failed", message: "Error: listener failed" }]]);
     expect(listener.close).toHaveBeenCalledOnce();
     expect(disconnect).toHaveBeenCalledOnce();
-  });
-
-  it("ends the process when a running listener reports a fatal error", async () => {
-    const { ipc, events, send, disconnect, listener, fail } = await startChildProcess();
-    events.emit("message", { kind: "start", options });
-    await vi.waitFor(() => {
-      expect(send).toHaveBeenCalledOnce();
-    });
-    fail();
-    await vi.waitFor(() => {
-      expect(disconnect).toHaveBeenCalledOnce();
-    });
-    expect(ipc.exitCode).toBe(1);
-    expect(listener.close).toHaveBeenCalledOnce();
   });
 });

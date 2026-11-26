@@ -631,8 +631,9 @@ describe("in-memory delivery core response loss", () => {
     ).resolves.toBeDefined();
   });
 
-  it("observes 101 committed expired shard sessions", async () => {
+  it("releases every inactive session in a large shard group through the public client", async () => {
     let now = 0;
+    const ofTotal = 1_201;
     const core = InMemoryDelivery.create({ now: () => timestampFromDate(new Date(now)) });
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
@@ -640,14 +641,21 @@ describe("in-memory delivery core response loss", () => {
         router.service(ManagedShardService, core.managed);
       }),
     );
-    for (let index = 0; index < 101; index += 1) {
-      await client.pickUp(new ShardIndex(index, 101), {
-        nodeId: "node",
-        value: `worker-${String(index)}`,
-      });
+    try {
+      for (let index = 0; index < ofTotal; index++) {
+        await client.pickUp(new ShardIndex(index, ofTotal), {
+          nodeId: "node",
+          value: `worker-${String(index)}`,
+        });
+      }
+      now = 1;
+      const released = await client.releaseExpired(1);
+      expect(new Set(released.map(({ shard }) => shard.index)).size).toBe(ofTotal);
+      await expect(client.releaseExpired(1)).resolves.toEqual([]);
+    } finally {
+      client.close();
+      core.close();
     }
-    now = 1;
-    await expect(client.releaseExpired(1)).resolves.toHaveLength(101);
   });
 
   it("classifies an oversized post-commit expiration response as unknown", async () => {

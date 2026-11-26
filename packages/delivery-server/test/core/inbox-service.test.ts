@@ -125,7 +125,7 @@ describe("in-memory Inbox", () => {
     expect((await core.inbox.findOne(id("safe", shard), context)).message).toBeUndefined();
   });
 
-  it("rejects retained message, byte, and shard capacity atomically", async () => {
+  it("rejects retained message and byte capacity atomically", async () => {
     const messages = InMemoryDelivery.create({ maxRetainedMessages: 1 });
     await expect(
       messages.inbox.writeMany(
@@ -142,19 +142,6 @@ describe("in-memory Inbox", () => {
     await expect(
       bytes.inbox.writeOne(
         create(WriteMessageSchema, { message: message("bytes", 1, 1) }),
-        context,
-      ),
-    ).rejects.toMatchObject({ code: Code.ResourceExhausted });
-
-    const shards = InMemoryDelivery.create({ maxTrackedShards: 1 });
-    const other = create(ShardIndexSchema, { index: 0, ofTotal: 3 });
-    await shards.inbox.writeOne(
-      create(WriteMessageSchema, { message: message("first", 1, 1) }),
-      context,
-    );
-    await expect(
-      shards.inbox.writeOne(
-        create(WriteMessageSchema, { message: message("second", 1, 1, other) }),
         context,
       ),
     ).rejects.toMatchObject({ code: Code.ResourceExhausted });

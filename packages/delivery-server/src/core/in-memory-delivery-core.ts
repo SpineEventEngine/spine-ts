@@ -63,11 +63,6 @@ export interface DeliveryCoreOptions {
    * Maximum retained serialized record bytes; integer from 1 through 2,147,483,647.
    */
   readonly maxRetainedBytes?: number;
-
-  /**
-   * Maximum tracked shards; integer from 1 through 1,000.
-   */
-  readonly maxTrackedShards?: number;
 }
 
 /**

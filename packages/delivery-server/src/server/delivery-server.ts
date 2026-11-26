@@ -96,13 +96,6 @@ export interface DeliveryServerOptions {
   readonly maxRetainedBytes?: number;
 
   /**
-   * Maximum distinct shards retained by messages or pickup sessions. The
-   * explicit option overrides `MAX_TRACKED_SHARDS`; the default is `1_000`.
-   * Accepts integers from 1 through `1_000`.
-   */
-  readonly maxTrackedShards?: number;
-
-  /**
    * Application-owned logger reserved for component-local records. The component
    * does not retain or close the supplied logger.
    */

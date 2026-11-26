@@ -634,47 +634,28 @@ describe("RemoteWorkRegistry", () => {
     await expect(client.renew(session)).rejects.toBeInstanceOf(DeliveryProtocolError);
   });
 
-  it("accepts response collections above the former artificial bound", async () => {
+  it("reads every released session across a large shard group", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
-    const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
+    const ofTotal = 1_201;
     const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
     fake.reply(
       create(ExpiredSessionsReleasedSchema, {
-        shard: Array.from({ length: 101 }, () =>
+        shard: Array.from({ length: ofTotal }, (_, index) =>
           create(ExpiredSessionSchema, {
-            shard,
+            shard: create(ShardIndexSchema, { index, ofTotal }),
             worker,
-            whenPicked: { seconds: 1n, nanos: 0 },
-            whenReleased: { seconds: 2n, nanos: 0 },
+            whenPicked: { seconds: 1n },
+            whenReleased: { seconds: 2n },
           }),
         ),
       }),
     );
 
-    await expect(client.releaseExpired(1)).resolves.toHaveLength(101);
-  });
-
-  it("rejects expiration responses above the shared tracked-shard bound", async () => {
-    const fake = transport();
-    const client = DeliveryClient.usingTransport(fake.transport);
-    const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
-    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
-    fake.reply(
-      create(ExpiredSessionsReleasedSchema, {
-        shard: Array.from({ length: 1_001 }, () =>
-          create(ExpiredSessionSchema, {
-            shard,
-            worker,
-            whenPicked: { seconds: 0n },
-            whenReleased: { seconds: 1n },
-          }),
-        ),
-      }),
+    const sessions = await client.releaseExpired(1);
+    expect(sessions.map(({ shard }) => shard.index)).toEqual(
+      Array.from({ length: ofTotal }, (_, index) => index),
     );
-    await expect(client.releaseExpired(1)).rejects.toMatchObject({
-      operation: "RELEASE_EXPIRED",
-    });
   });
 
   it("reports ambiguous shard mutation outcomes without retry or diagnostics", async () => {

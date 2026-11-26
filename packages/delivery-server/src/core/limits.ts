@@ -13,8 +13,7 @@
  */
 
 /**
- * Delivery-server resource limits. They deliberately remain well below the
- * 4 MiB delivery RPC ceiling, so one bounded shard response can be encoded.
+ * Delivery-server resource limits for retained rows and encoded bytes.
  */
 export interface DeliveryStateLimits {
   // prettier-ignore
@@ -28,11 +27,6 @@ export interface DeliveryStateLimits {
    * Limits retained serialized bytes.
    */
   readonly maxRetainedBytes: number;
-
-  /**
-   * Limits tracked shards.
-   */
-  readonly maxTrackedShards: number;
 }
 
 /**
@@ -46,11 +40,6 @@ export const MAX_DELIVERY_RPC_BYTES = 4_194_304;
 export const MAX_DELIVERY_BATCH_MESSAGES = 100;
 
 /**
- * Limits waiting state mutations before admission in either server mode.
- */
-export const MAX_PENDING_DELIVERY_MUTATIONS = 100;
-
-/**
  * Limits encoded Inbox payload bytes.
  */
 export const MAX_INBOX_PAYLOAD_BYTES = 1_048_576;
@@ -61,12 +50,7 @@ export const MAX_INBOX_PAYLOAD_BYTES = 1_048_576;
 export const MAX_INBOX_RECORD_BYTES: number = MAX_DELIVERY_RPC_BYTES - 64;
 
 /**
- * Limits shards in a delivery response.
- */
-export const MAX_DELIVERY_RESPONSE_SHARDS = 1_000;
-
-/**
- * Keeps one bounded 1,000-session expiration response below the 4 MiB RPC ceiling.
+ * Limits encoded worker identities carried in session responses.
  */
 export const MAX_DELIVERY_WORKER_BYTES = 128;
 
@@ -81,7 +65,6 @@ export const MAX_DELIVERY_LIMIT = 2_147_483_647;
 export const DEFAULT_DELIVERY_STATE_LIMITS: DeliveryStateLimits = Object.freeze({
   maxRetainedMessages: 10_000,
   maxRetainedBytes: 32 * 1_024 * 1_024,
-  maxTrackedShards: MAX_DELIVERY_RESPONSE_SHARDS,
 });
 
 /**
@@ -104,15 +87,9 @@ export const DeliveryLimits: Readonly<{
       maxRetainedMessages:
         options.maxRetainedMessages ?? DEFAULT_DELIVERY_STATE_LIMITS.maxRetainedMessages,
       maxRetainedBytes: options.maxRetainedBytes ?? DEFAULT_DELIVERY_STATE_LIMITS.maxRetainedBytes,
-      maxTrackedShards: options.maxTrackedShards ?? DEFAULT_DELIVERY_STATE_LIMITS.maxTrackedShards,
     };
     DeliveryLimits.require(limits.maxRetainedMessages, MAX_DELIVERY_LIMIT, "maxRetainedMessages");
     DeliveryLimits.require(limits.maxRetainedBytes, MAX_DELIVERY_LIMIT, "maxRetainedBytes");
-    DeliveryLimits.require(
-      limits.maxTrackedShards,
-      MAX_DELIVERY_RESPONSE_SHARDS,
-      "maxTrackedShards",
-    );
     return Object.freeze(limits);
   },
 

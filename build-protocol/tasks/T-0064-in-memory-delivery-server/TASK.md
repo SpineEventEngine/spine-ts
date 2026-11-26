@@ -164,13 +164,12 @@ blocker.
 - One package-private state owner contains detached wire snapshots in a
   message map and shard records in a shard map. Reads snapshot synchronously;
   pages/newest sort detached arrays bounded by stored state.
-- All Inbox and Shard mutations use one FIFO admission executor with at most
-  100 pending waiters. Validation and detachment happen before enqueueing.
+- All Inbox and Shard mutations use one FIFO admission executor.
+  Validation and detachment happen before enqueueing.
 - Abort before admission removes/skips the waiter and commits nothing.
   Admission is the linearization point: the abort listener is removed and a
   synchronous no-`await` critical section commits atomically even if the
-  response is later lost. Saturation fails before admission with
-  `RESOURCE_EXHAUSTED`.
+  response is later lost.
 - No timer, per-shard promise, completed waiter, duplicate counter map, generic
   storage factory, or durable state is retained. Constructing a new core loses
   all state intentionally.
@@ -216,8 +215,8 @@ packages, examples, and protected/unrelated files remain excluded.
    values, and actual-transition counts.
 3. Implement strict paging/newest plus the millisecond-anchor client correction
    and lossless/fail-closed boundary cases.
-4. Implement atomic batches and bounded admission, covering pre-/queued abort,
-   post-admission abort, queue capacity, and no torn read/count state.
+4. Implement atomic batches and ordered admission, covering pre-/queued abort,
+   post-admission abort, and no torn read/count state.
 5. Implement high-contention exclusive pickup and frozen release behavior.
 6. Prove automatic equality/+1/zero and manual equality/below-bound expiration
    with a deterministic clock.

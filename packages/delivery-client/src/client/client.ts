@@ -52,7 +52,6 @@ import type { InboxMessage as WireInboxMessage } from "@spine-event-engine/proto
 import {
   DeliveryOutcomeUnknownError,
   MAX_DELIVERY_RPC_BYTES,
-  MAX_DELIVERY_TRACKED_SHARDS,
   type DeliveryClientOptions,
   type DeliveryFindOneOptions,
   type DeliveryMutationOptions,
@@ -239,7 +238,6 @@ export class DeliveryClient {
       this.#admin.getShardInfo(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
     DeliveryRequestCodec.responseBytes(ShardInfoListSchema, response);
-    if (response.shards.length > MAX_DELIVERY_TRACKED_SHARDS) throw DeliveryRequestCodec.protocol();
     return Object.freeze(
       response.shards.map((value) => DeliveryShardCodec.decodeObservation(value)),
     );
@@ -984,8 +982,6 @@ export class DeliveryClient {
     );
     try {
       DeliveryRequestCodec.responseBytes(ExpiredSessionsReleasedSchema, response);
-      if (response.shard.length > MAX_DELIVERY_TRACKED_SHARDS)
-        throw DeliveryRequestCodec.protocol();
       return Object.freeze(response.shard.map((value) => DeliveryShardCodec.decodeReleased(value)));
     } catch {
       throw new DeliveryOutcomeUnknownError("RELEASE_EXPIRED", "ALL_SHARDS");

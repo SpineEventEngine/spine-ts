@@ -19,7 +19,7 @@ pnpm add @spine-event-engine/delivery-server@snapshot
 
 - ✅ Coordinates inbox work and shard ownership between trusted Node processes.
 - ✅ Starts as a standalone command or embeds in another Node server.
-- ✅ Bounds retained messages, retained bytes, and tracked shards.
+- ✅ Limits the total number and encoded size of stored inbox rows.
 - ✅ Provides administration and gRPC health endpoints for local operations.
 
 ## 🚀 Run a local server
@@ -52,15 +52,16 @@ then defaults.
 | Work reminder     | `WORK_REMINDER_SECONDS`    | 10 seconds  |
 | Retained messages | `MAX_RETAINED_MESSAGES`    | 10,000      |
 | Retained bytes    | `MAX_RETAINED_BYTES`       | 32 MiB      |
-| Tracked shards    | `MAX_TRACKED_SHARDS`       | 1,000       |
 | Child processes   | `DELIVERY_PROCESS_COUNT`   | 1           |
 
 Set `processCount: 2` when constructing `DeliveryServer`, or set
 `DELIVERY_PROCESS_COUNT=2` for the executable. The public listener stays in the
 parent process. It routes shard number `s` to child `s % 2`, while each child
-keeps the full shard identity. The retained row, byte, and shard limits apply
-across both children. If a child exits, the parent starts a replacement in the
-same slot; rows and sessions from the exited process were in memory and are lost.
+keeps the full shard identity. For example, the parent forwards a write for
+shard 3 to subprocess 1. Subprocess 1 writes to its inbox and returns the
+result. Each subprocess applies the row and byte settings to the rows it stores.
+If a subprocess exits, the parent starts a replacement in the same slot.
+The exited process loses its in-memory rows and sessions.
 
 ## 🧩 Embed the handlers
 
@@ -91,7 +92,6 @@ const delivery = InMemoryDelivery.create({
   processingTimeoutMs: 30_000,
   maxRetainedMessages: 10_000,
   maxRetainedBytes: 32 * 1024 * 1024,
-  maxTrackedShards: 1_000,
 });
 const transport = createRouterTransport((router) => {
   router.service(InboxService, delivery.inbox);

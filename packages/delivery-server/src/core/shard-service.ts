@@ -30,7 +30,7 @@ import type { ShardIndex, WorkerId } from "@spine-event-engine/proto/delivery";
 import { Time } from "@spine-event-engine/core/time";
 
 import { InMemoryDeliveryState, type ShardRecord } from "./in-memory-delivery-state.js";
-import { MAX_DELIVERY_RESPONSE_SHARDS, MAX_DELIVERY_WORKER_BYTES } from "./limits.js";
+import { MAX_DELIVERY_WORKER_BYTES } from "./limits.js";
 import { MutationAdmission } from "./mutation-admission.js";
 import { DeliveryShards, DeliveryWorkers } from "./wire-values.js";
 
@@ -61,8 +61,6 @@ export class ShardSessionRuntime {
 
   readonly #onTransition: ((shard: ShardIndex) => void) | undefined;
 
-  readonly #onAutonomousExpiry: (() => void) | undefined;
-
   readonly #timers = new Map<string, ReturnType<typeof setTimeout>>();
 
   readonly #leaseStarts = new Map<string, { id: string; started: number }>();
@@ -88,7 +86,6 @@ export class ShardSessionRuntime {
    * @param lifetimeMs Sets the positive session lifetime in milliseconds.
    * @param onTransition Publishes pickup and release changes.
    * @param monotonicNow Measures elapsed lease time independently of wall time.
-   * @param onAutonomousExpiry Reports retained usage when a timer or a request finds an expired session.
    */
   constructor(
     state: InMemoryDeliveryState,
@@ -97,7 +94,6 @@ export class ShardSessionRuntime {
     lifetimeMs: number,
     onTransition?: (shard: ShardIndex) => void,
     monotonicNow: () => number = () => Time.monotonicTime(),
-    onAutonomousExpiry?: () => void,
   ) {
     if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs <= 0 || lifetimeMs > 315_576_000_000_000)
       throw new RangeError("Delivery session lifetime is invalid.");
@@ -107,7 +103,6 @@ export class ShardSessionRuntime {
     this.#monotonicNow = monotonicNow;
     this.#lifetimeMs = lifetimeMs;
     this.#onTransition = onTransition;
-    this.#onAutonomousExpiry = onAutonomousExpiry;
     this.raw = this.#rawService();
     this.managed = this.#managedService();
   }
@@ -171,8 +166,8 @@ export class ShardSessionRuntime {
   }
 
   /**
-   * Updates only the revision observed before a private capacity wait, so a
-   * queued request cannot apply to a later revision of the same session.
+   * Updates only the revision observed before local admission, so a queued
+   * request cannot apply to a later revision of the same session.
    *
    * @param request Supplies the session handle.
    * @param signal Cancels before admission.
@@ -192,8 +187,8 @@ export class ShardSessionRuntime {
   }
 
   /**
-   * Removes only the revision observed before a private capacity wait, so a
-   * delayed release cannot clear a session renewed while it was queued.
+   * Removes only the revision observed before local admission, so a delayed
+   * release cannot clear a session renewed while it was queued.
    *
    * @param request Supplies the session handle.
    * @param signal Cancels before admission.
@@ -375,7 +370,7 @@ export class ShardSessionRuntime {
     if (current === undefined) return undefined;
     const active = SessionValues.requireActive(current);
     if (this.#elapsed(shard, active.sessionId) >= this.#lifetimeMs) {
-      this.#expire(shard);
+      this.#release(shard);
       return undefined;
     }
     return active;
@@ -394,16 +389,6 @@ export class ShardSessionRuntime {
   }
 
   /**
-   * Releases an expired session and reports its revised retained usage.
-   *
-   * @param shard Identifies the session that elapsed.
-   */
-  #expire(shard: ShardIndex): void {
-    this.#release(shard);
-    this.#onAutonomousExpiry?.();
-  }
-
-  /**
    * Scans current records at the request's exact inactivity threshold.
    */
   #releaseInactive(period: { seconds: bigint; nanos: number }) {
@@ -411,7 +396,6 @@ export class ShardSessionRuntime {
     const threshold = period.seconds * 1_000_000_000n + BigInt(period.nanos);
     const released = [];
     for (const record of this.#state.shards.values()) {
-      if (released.length === MAX_DELIVERY_RESPONSE_SHARDS) break;
       const retained = this.#state.session(record.shard);
       if (retained === undefined) continue;
       const session = SessionValues.requireActive(retained);
@@ -445,11 +429,11 @@ export class ShardSessionRuntime {
     const timer = setTimeout(() => {
       if (this.#closed) return;
       void this.#admission
-        .runSystem(() => {
+        .run(undefined, () => {
           const live = this.#state.session(shard);
           if (live?.sessionId !== id) return;
           if (this.#elapsed(shard, id) >= this.#lifetimeMs) {
-            this.#expire(shard);
+            this.#release(shard);
           } else this.#schedule(shard, id, false);
         })
         .catch(() => {
@@ -496,7 +480,7 @@ export class ShardSessionRuntime {
 }
 
 /**
- * Validates pickup inputs before a private capacity request.
+ * Validates pickup inputs before local session admission.
  */
 export const DeliverySessionInputs: Readonly<{
   /**

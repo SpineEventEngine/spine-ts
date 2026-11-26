@@ -21,7 +21,6 @@ import {
   type ServiceImpl,
 } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { Time } from "@spine-event-engine/core/time";
 import {
   AdminService,
   ExpiredSessionsReleasedSchema,
@@ -38,12 +37,10 @@ import {
 } from "@spine-event-engine/proto/delivery-server";
 import { DeliveryShards } from "../core/wire-values.js";
 import type { InboxMessage, ShardIndex } from "@spine-event-engine/proto/delivery";
-import * as privateProto from "@spine-event-engine/proto/generated/spine/delivery/session/private_delivery_pb.js";
 
 import { InboxMessages, InboxShards } from "../core/inbox-service.js";
 import { DeliverySessionInputs } from "../core/shard-service.js";
-import { MAX_DELIVERY_RESPONSE_SHARDS, MAX_DELIVERY_RPC_BYTES } from "../core/limits.js";
-import type { CapacityTicket } from "./capacity-ledger.js";
+import { MAX_DELIVERY_RPC_BYTES } from "../core/limits.js";
 import { DeliveryChildPool, type DeliveryChildEndpoint } from "./delivery-child-pool.js";
 import { DeliveryStreamFanIn } from "./delivery-stream-fan-in.js";
 
@@ -83,7 +80,7 @@ export class DeliveryParentProxy {
   /**
    * Creates public service handlers over a started fixed child pool.
    *
-   * @param pool Supplies ready private endpoints and global capacity accounting.
+   * @param pool Supplies ready private endpoints.
    */
   constructor(private readonly pool: DeliveryChildPool) {}
 
@@ -112,13 +109,13 @@ export class DeliveryParentProxy {
     return {
       writeOne: (request, context) => {
         const row = InboxMessages.required(request.message).message;
-        return this.#mutate(this.#slot(row.id?.index), context.signal, (transport, headers) =>
+        return this.#call(this.#slot(row.id?.index), context.signal, (transport, headers) =>
           createClient(InboxService, transport).writeOne(request, this.#forward(context, headers)),
         );
       },
       writeMany: (request, context) => {
         const shard = this.#batchShard(request);
-        return this.#mutate(this.#slot(shard), context.signal, (transport, headers) =>
+        return this.#call(this.#slot(shard), context.signal, (transport, headers) =>
           createClient(InboxService, transport).writeMany(request, this.#forward(context, headers)),
         );
       },
@@ -132,13 +129,13 @@ export class DeliveryParentProxy {
     return {
       removeOne: (request, context) => {
         const row = InboxMessages.required(request.message).message;
-        return this.#mutate(this.#slot(row.id?.index), context.signal, (transport, headers) =>
+        return this.#call(this.#slot(row.id?.index), context.signal, (transport, headers) =>
           createClient(InboxService, transport).removeOne(request, this.#forward(context, headers)),
         );
       },
       removeMany: (request, context) => {
         const shard = this.#batchShard(request);
-        return this.#mutate(this.#slot(shard), context.signal, (transport, headers) =>
+        return this.#call(this.#slot(shard), context.signal, (transport, headers) =>
           createClient(InboxService, transport).removeMany(
             request,
             this.#forward(context, headers),
@@ -149,7 +146,7 @@ export class DeliveryParentProxy {
   }
 
   /**
-   * Routes Inbox reads without reserving mutation capacity.
+   * Routes Inbox reads to their storage child.
    */
   #inboxReads(): Pick<
     ServiceImpl<typeof InboxService>,
@@ -157,18 +154,18 @@ export class DeliveryParentProxy {
   > {
     return {
       findOne: (request, context) =>
-        this.#read(this.#slot(request.index), context.signal, (transport, headers) =>
+        this.#call(this.#slot(request.index), context.signal, (transport, headers) =>
           createClient(InboxService, transport).findOne(request, this.#forward(context, headers)),
         ),
       findManyInShard: (request, context) =>
-        this.#read(this.#slot(request.shard), context.signal, (transport, headers) =>
+        this.#call(this.#slot(request.shard), context.signal, (transport, headers) =>
           createClient(InboxService, transport).findManyInShard(
             request,
             this.#forward(context, headers),
           ),
         ),
       newestMessageToDeliver: (request, context) =>
-        this.#read(this.#slot(request), context.signal, (transport, headers) =>
+        this.#call(this.#slot(request), context.signal, (transport, headers) =>
           createClient(InboxService, transport).newestMessageToDeliver(
             request,
             this.#forward(context, headers),
@@ -271,7 +268,7 @@ export class DeliveryParentProxy {
     const endpoints = this.#allEndpoints();
     const replies = await Promise.all(
       endpoints.map((endpoint) =>
-        this.#mutate(
+        this.#call(
           endpoint.slot,
           context.signal,
           (transport, headers) =>
@@ -285,11 +282,6 @@ export class DeliveryParentProxy {
     );
     this.#assertCurrent(endpoints);
     const shard = replies.flatMap((reply) => reply.shard);
-    if (shard.length > MAX_DELIVERY_RESPONSE_SHARDS)
-      throw new ConnectError(
-        "Global released-session response is too large.",
-        Code.ResourceExhausted,
-      );
     const response = create(ExpiredSessionsReleasedSchema, { shard });
     if (toBinary(ExpiredSessionsReleasedSchema, response).byteLength > MAX_DELIVERY_RPC_BYTES)
       throw new ConnectError(
@@ -321,7 +313,7 @@ export class DeliveryParentProxy {
     const endpoints = this.#allEndpoints();
     const replies = await Promise.all(
       endpoints.map((endpoint) =>
-        this.#read(
+        this.#call(
           endpoint.slot,
           context.signal,
           (transport, headers) =>
@@ -337,8 +329,6 @@ export class DeliveryParentProxy {
     const shards = replies
       .flatMap((reply) => reply.shards)
       .sort((a, b) => DeliveryShards.compare(a.index, b.index));
-    if (shards.length > MAX_DELIVERY_RESPONSE_SHARDS)
-      throw new ConnectError("Global Admin snapshot is too large.", Code.ResourceExhausted);
     const response = create(ShardInfoListSchema, { shards });
     if (toBinary(ShardInfoListSchema, response).byteLength > MAX_DELIVERY_RPC_BYTES)
       throw new ConnectError("Global Admin snapshot is too large.", Code.ResourceExhausted);
@@ -405,7 +395,7 @@ export class DeliveryParentProxy {
   }
 
   /**
-   * Rejects a mixed-shard batch before any child receives a mutation ticket.
+   * Rejects a mixed-shard batch before forwarding it to a child.
    */
   #batchShard(request: {
     shard?: ShardIndex | undefined;
@@ -450,12 +440,10 @@ export class DeliveryParentProxy {
   }
 
   /**
-   * Authenticates one child call and optionally correlates a mutation ticket.
+   * Authenticates one child call.
    */
-  #headers(endpoint: DeliveryChildEndpoint, ticket?: CapacityTicket): Headers {
-    const headers = new Headers({ authorization: endpoint.credential });
-    if (ticket !== undefined) headers.set("x-spine-capacity-sequence", String(ticket.sequence));
-    return headers;
+  #headers(endpoint: DeliveryChildEndpoint): Headers {
+    return new Headers({ authorization: endpoint.credential });
   }
 
   /**
@@ -505,99 +493,39 @@ export class DeliveryParentProxy {
   }
 
   /**
-   * Reads a targeted slot and discards a reply from a retired generation.
+   * Forwards a call to one slot and discards a reply from a retired generation.
    *
    * @typeParam T The child response type.
    */
-  async #read<T>(
+  async #call<T>(
     slot: number,
     signal: AbortSignal,
     call: (transport: ChildTransport, headers: Headers) => Promise<T>,
     expected?: DeliveryChildEndpoint,
   ): Promise<T> {
     this.#requireOpen();
+    this.#requireActiveCall(signal);
     const connection = this.#connection(slot);
     if (expected !== undefined && connection.endpoint.generation !== expected.generation)
       throw new ConnectError("Delivery child generation changed.", Code.Unavailable);
     const result = await call(connection.transport, this.#headers(connection.endpoint));
-    if (!this.pool.current(connection.endpoint) || this.#closed.signal.aborted || signal.aborted)
+    this.#requireActiveCall(signal);
+    if (!this.pool.current(connection.endpoint) || this.#closed.signal.aborted)
       throw new ConnectError("Delivery child generation changed.", Code.Unavailable);
     return result;
   }
 
   /**
-   * Issues the child's next ticket at parent receipt and settles an uncertain reply.
+   * Rejects a canceled caller before and after a child call.
    *
-   * @typeParam T The child response type.
+   * @param signal Carries the public caller's cancellation.
    */
-  async #mutate<T>(
-    slot: number,
-    signal: AbortSignal,
-    call: (transport: ChildTransport, headers: Headers) => Promise<T>,
-    expected?: DeliveryChildEndpoint,
-  ): Promise<T> {
-    this.#requireOpen();
+  #requireActiveCall(signal: AbortSignal): void {
     if (signal.aborted) throw new ConnectError("Delivery request was cancelled.", Code.Canceled);
-    const connection = this.#connection(slot);
-    if (expected !== undefined && connection.endpoint.generation !== expected.generation)
-      throw new ConnectError("Delivery child generation changed.", Code.Unavailable);
-    const ticket = this.pool.ticket(slot, expected);
-    try {
-      const result = await call(connection.transport, this.#headers(connection.endpoint, ticket));
-      if (!this.pool.current(connection.endpoint))
-        throw new ConnectError("Delivery child generation changed.", Code.Unavailable);
-      return result;
-    } catch (error) {
-      void this.#settle(connection, ticket);
-      throw error;
-    }
   }
 
   /**
-   * Uses a correlated child barrier before releasing a slot's next ticket.
-   */
-  async #settle(connection: ChildConnection, ticket: CapacityTicket): Promise<void> {
-    let delay = 0;
-    const client = createClient(privateProto.PrivateChildService, connection.transport);
-    while (!this.#closed.signal.aborted && this.pool.current(connection.endpoint)) {
-      const started = Time.monotonicTime();
-      try {
-        await client.barrier(
-          { slot: BigInt(ticket.slot), generation: ticket.generation, sequence: ticket.sequence },
-          { headers: this.#headers(connection.endpoint), signal: this.#closed.signal },
-        );
-        return;
-      } catch {
-        if (!this.pool.current(connection.endpoint)) return;
-        const observed = Math.max(1, Math.ceil(Time.monotonicTime() - started));
-        delay = delay === 0 ? observed : Math.min(delay * 2, Number.MAX_SAFE_INTEGER);
-        await this.#pause(delay);
-      }
-    }
-  }
-
-  /**
-   * Waits through all Node timer slices or returns on terminal closure.
-   */
-  async #pause(delay: number): Promise<void> {
-    while (delay > 0 && !this.#closed.signal.aborted) {
-      const slice = Math.min(delay, 2_147_483_647);
-      await new Promise<void>((resolve) => {
-        const finish = () => {
-          clearTimeout(timer);
-          this.#closed.signal.removeEventListener("abort", finish);
-          resolve();
-        };
-        const timer = setTimeout(finish, slice);
-        this.#closed.signal.addEventListener("abort", finish, { once: true });
-        if (this.#closed.signal.aborted) finish();
-      });
-      delay -= slice;
-    }
-  }
-
-  /**
-   * Validates a typed pickup before issuing its child capacity ticket.
+   * Validates a typed pickup before forwarding it to its child.
    *
    * @typeParam T The typed pickup result.
    */
@@ -611,7 +539,7 @@ export class DeliveryParentProxy {
   ): Promise<T> {
     const shard = DeliverySessionInputs.requireShard(request.shard);
     DeliverySessionInputs.requireWorker(request.worker);
-    return this.#mutate(this.#slot(shard), context.signal, call);
+    return this.#call(this.#slot(shard), context.signal, call);
   }
 
   /**
@@ -624,11 +552,7 @@ export class DeliveryParentProxy {
     signal: AbortSignal,
     call: (transport: ChildTransport, headers: Headers) => Promise<T>,
   ): Promise<T> {
-    return this.#mutate(
-      this.#slot(DeliverySessionInputs.requireShard(request.shard)),
-      signal,
-      call,
-    );
+    return this.#call(this.#slot(DeliverySessionInputs.requireShard(request.shard)), signal, call);
   }
 
   /**
@@ -648,6 +572,6 @@ export class DeliveryParentProxy {
     const shard = DeliverySessionInputs.requireShard(request.session?.shard);
     if (row.id?.index?.index !== shard.index || row.id.index.ofTotal !== shard.ofTotal)
       throw new ConnectError("Inbox row shard differs from session.", Code.InvalidArgument);
-    return this.#mutate(this.#slot(shard), signal, call);
+    return this.#call(this.#slot(shard), signal, call);
   }
 }

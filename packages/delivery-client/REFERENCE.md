@@ -74,6 +74,13 @@ live, the server returns the same session ID. After releasing the shard, a new
 run receives a fresh session ID. A delayed release from the first run leaves
 the second run active.
 
+`releaseExpired(inactivityMs)` asks the server to release every session that
+has been idle for that long. If the releases succeed but the reply is lost
+or exceeds the 4 MiB response limit, the client throws
+`DeliveryOutcomeUnknownError`. For example, a second call can return an empty
+list because the first call already released the sessions. A shard snapshot
+shows which sessions are active now. It cannot reconstruct the earlier list.
+
 Pickup and release reports expose Protobuf `Timestamp` values in `whenPicked`
 and `whenReleased`. Admin observations expose the same precision in
 `lastPicked` when populated. A caller can convert a timestamp to a JavaScript

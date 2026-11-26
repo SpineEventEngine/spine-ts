@@ -40,24 +40,25 @@ which override defaults. Invalid values throw before a listener is created:
   default 4194304;
 - `processingTimeoutSeconds` / `SHARD_PROCESSING_TIMEOUT`: integer
   seconds of inactivity before the server expires a session, default 60;
-- retained message/byte limits: integer 1–2147483647; defaults 10000 and
-  33554432;
-- tracked shards: integer 1–1000; default 1000.
+- retained message/byte limits: integer 1–2147483647; defaults 10000 and 33554432.
 
 The core accepts pages of 1–1000 messages, mutation batches of 1–100 messages,
 payloads no larger than 1 MiB, and request/response bodies no larger than 4
-MiB. Capacity is finite: an operation that would exceed retained messages,
-bytes, or shards fails atomically with `RESOURCE_EXHAUSTED`; it is not partially
-accepted or silently shortened.
+MiB. A write that would exceed the total stored rows or encoded bytes fails
+with `RESOURCE_EXHAUSTED`. The server stores a batch only if the whole batch fits.
 
 With `processCount` greater than one, the public endpoint runs in a parent
 process and starts that many homogeneous child processes. Shard number `s`
-routes to child `s % processCount`; the child keeps the full shard identity.
+routes to subprocess `s % processCount`. The public endpoint forwards each
+shard-specific gRPC call there. That subprocess handles the read, write,
+pickup, renewal, or release and returns its result.
 The parent combines Admin snapshots and streams work notices from all healthy
-children. Global retained-state limits still apply across the children. A
-restarting child makes its targeted shards temporarily unavailable, while
-healthy children continue serving their shards. Its in-memory rows and
-sessions are lost when it exits.
+children. Each storage subprocess applies the row and byte settings to its
+local inbox. For example, with two subprocesses and a row limit of 10,000,
+each can store 10,000 rows if the rows fit within its byte limit. When a
+subprocess exits, it loses its in-memory rows and sessions. Its shards are
+temporarily unavailable while its replacement starts. The other subprocess
+continues serving its shards.
 
 ## Work reminder interval
 
@@ -86,10 +87,12 @@ A successful pickup by another worker stops those reminders.
 
 ## Delivery semantics
 
-Mutations pass a FIFO admission boundary with 100 waiting slots. Aborting before
-admission commits nothing. Admission is the linearization point: once admitted,
-the synchronous mutation can commit even if the caller aborts or loses its
-response.
+In a single process, writes run in the order they enter the server's queue.
+In a multi-process server, each storage subprocess handles the writes routed
+to it in local admission order. Writes handled by different subprocesses can run at the same
+time. Canceling a queued write before it starts prevents that write from
+changing the inbox. Once it starts, it can finish even if the caller
+disconnects before receiving the reply.
 
 The JVM `InboxService.FindManyInShard` page RPC uses an exclusive timestamp
 bound. Reads are live and do not promise a snapshot across pages. Distinct
@@ -98,6 +101,11 @@ is reported as unsafe continuation.
 A session expires when elapsed time reaches its lifetime. Explicit inactivity
 release also includes sessions exactly at the requested age. For example, a
 request specifying 500 microseconds leaves a 499-microsecond session active.
+
+A raw pickup can open a session on an empty shard. The process serving that
+shard keeps a session record and an expiry timer until release or expiry.
+Each additional live session consumes memory even when the inbox contains
+zero rows. Queued writes also use memory while they wait for execution.
 
 Ordinary renewal and release use the shard, worker, and session ID from the
 grant. A release from a previous pickup leaves the newer session active, even

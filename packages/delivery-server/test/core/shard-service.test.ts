@@ -37,26 +37,27 @@ const rival = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run-2"
 const request = create(DeliveryShardPickupSchema, { shard, worker });
 
 describe("typed Shard sessions", () => {
-  it("reports autonomous release of an otherwise empty tracked shard", async () => {
-    vi.useFakeTimers();
+  it("releases more than 1,000 eligible sessions without truncation", async () => {
+    let now = create(TimestampSchema, { seconds: 1n });
+    const core = InMemoryDelivery.create({ now: () => now });
     try {
-      const expired = vi.fn();
-      const assembly = DeliveryAssembly.create({
-        processingTimeoutMs: 10,
-        onAutonomousExpiry: expired,
-      });
-      pickedHandle(await assembly.managed.pickShardRaw(request, context));
-      expect(assembly.state.usage().shards).toBe(1);
-      await vi.advanceTimersByTimeAsync(11);
-      expect(expired).toHaveBeenCalledOnce();
-      expect(expired).toHaveBeenCalledWith({
-        revision: 2n,
-        usage: { rows: 0, bytes: 0, shards: 0 },
-      });
-      expect(assembly.state.usage().shards).toBe(0);
-      assembly.closeSessions();
+      for (let index = 0; index < 1_201; index++) {
+        const at = create(ShardIndexSchema, { index, ofTotal: 1_201 });
+        const result = await core.managed.pickShardRaw(
+          create(DeliveryShardPickupSchema, { shard: at, worker }),
+          context,
+        );
+        expect(result.result?.case).toBe("pickedUp");
+      }
+      now = create(TimestampSchema, { seconds: 3n });
+      const released = await core.shards.releaseSessions(
+        create(ReleaseExpiredSessionsSchema, { inactivityPeriod: { seconds: 1n } }),
+        context,
+      );
+      expect(released.shard).toHaveLength(1_201);
+      expect(released.shard?.at(-1)?.shard?.index).toBe(1_200);
     } finally {
-      vi.useRealTimers();
+      core.close();
     }
   });
 
@@ -244,6 +245,18 @@ describe("typed Shard sessions", () => {
     ).rejects.toMatchObject({ code: Code.InvalidArgument });
     await expect(
       core.managed.pickShardRaw(
+        create(DeliveryShardPickupSchema, {
+          shard,
+          worker: create(WorkerIdSchema, {
+            nodeId: { value: "node" },
+            value: "w".repeat(125),
+          }),
+        }),
+        context,
+      ),
+    ).rejects.toMatchObject({ code: Code.InvalidArgument });
+    await expect(
+      core.managed.pickShardRaw(
         create(DeliveryShardPickupSchema, { shard: invalidShard, worker }),
         context,
       ),
@@ -270,34 +283,6 @@ describe("typed Shard sessions", () => {
     await expect(core.managed.pickShardRaw(request, context)).rejects.toThrow(
       "Delivery clock returned an invalid timestamp.",
     );
-    core.close();
-  });
-
-  it("enforces tracked-shard capacity and frees it after a raw release", async () => {
-    const core = InMemoryDelivery.create({ maxTrackedShards: 1 });
-    const other = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
-    const first = pickedHandle(await core.managed.pickShardRaw(request, context));
-    await expect(
-      core.managed.pickShardRaw(
-        create(DeliveryShardPickupSchema, {
-          shard: other,
-          worker,
-        }),
-        context,
-      ),
-    ).rejects.toMatchObject({ code: Code.ResourceExhausted });
-    await core.managed.releaseShardSession(first, context);
-    expect(
-      (
-        await core.managed.pickShardRaw(
-          create(DeliveryShardPickupSchema, {
-            shard: other,
-            worker,
-          }),
-          context,
-        )
-      ).result?.case,
-    ).toBe("pickedUp");
     core.close();
   });
 

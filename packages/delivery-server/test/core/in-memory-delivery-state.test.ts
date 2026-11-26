@@ -45,7 +45,7 @@ describe("InMemoryDeliveryState", () => {
   });
 
   it("prunes a released shard after its last retained message is removed", () => {
-    const state = new InMemoryDeliveryState({ maxTrackedShards: 1 });
+    const state = new InMemoryDeliveryState();
     const first = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
     const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
     const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });

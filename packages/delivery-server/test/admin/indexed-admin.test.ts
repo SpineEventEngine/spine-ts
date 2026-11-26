@@ -192,3 +192,18 @@ it("replays more than 100 known shards without consuming the bounded live buffer
   await stream.return?.();
   publisher.close();
 });
+
+it("includes more than 1,000 known shards in a complete snapshot", async () => {
+  const state = new InMemoryDeliveryState();
+  const rows = Array.from({ length: 1_201 }, (_, index) => {
+    const at = create(ShardIndexSchema, { index, ofTotal: 1_201 });
+    const message = domainMessage(`snapshot-${String(index)}`, at);
+    return { message, bytes: encodedBytes(message) };
+  });
+  state.putAll(rows);
+  const publisher = AdminPublisher.create(state);
+  const snapshot = await publisher.service.getShardInfo(create(EmptySchema), context);
+  expect(snapshot.shards).toHaveLength(1_201);
+  expect(snapshot.shards?.at(-1)?.index?.index).toBe(1_200);
+  publisher.close();
+});

@@ -85,11 +85,6 @@ export interface DeliveryResourceUsage {
    * Counts encoded bytes retained by Inbox records.
    */
   readonly bytes: number;
-
-  /**
-   * Counts shards retained by records or sessions.
-   */
-  readonly shards: number;
 }
 
 /**
@@ -114,13 +109,9 @@ export class InMemoryDeliveryState {
 
   readonly #buckets = new Map<string, ShardBucket>();
 
-  readonly #trackedKeys = new Set<string>();
-
   readonly #limits: DeliveryStateLimits;
 
   #retainedBytes = 0;
-
-  #revision = 0n;
 
   /**
    * Creates empty state.
@@ -134,33 +125,13 @@ export class InMemoryDeliveryState {
   /**
    * Returns exact retained resources without copying unrelated shards.
    *
-   * @returns The current row, encoded-byte, and tracked-shard totals.
+   * @returns The current row and encoded-byte totals.
    */
   usage(): DeliveryResourceUsage {
     return {
       rows: this.messages.size,
       bytes: this.#retainedBytes,
-      shards: this.#trackedKeys.size,
     };
-  }
-
-  /**
-   * Captures exact usage and its state transition order together.
-   *
-   * @returns A snapshot for generation-fenced global capacity reports.
-   */
-  usageSnapshot(): { readonly revision: bigint; readonly usage: DeliveryResourceUsage } {
-    return { revision: this.#revision, usage: this.usage() };
-  }
-
-  /**
-   * Checks whether rows or a session currently retain one full shard identity.
-   *
-   * @param shard Identifies the shard to inspect.
-   * @returns Whether it consumes tracked-shard capacity.
-   */
-  tracks(shard: ShardIndex): boolean {
-    return this.#trackedKeys.has(DeliveryShards.key(shard));
   }
 
   /**
@@ -177,16 +148,13 @@ export class InMemoryDeliveryState {
       final.set(DeliveryMessages.key(candidate.message), candidate);
     let rows = this.messages.size;
     let bytes = this.#retainedBytes;
-    const newlyTracked = new Set<string>();
     for (const [key, candidate] of final) {
       const prior = this.messages.get(key);
       if (prior === undefined) rows++;
       else bytes -= this.#messageBytes.get(key) ?? 0;
       bytes += candidate.bytes;
-      const shard = DeliveryShards.key(this.#requiredShard(candidate.message));
-      if (!this.#trackedKeys.has(shard)) newlyTracked.add(shard);
     }
-    return { rows, bytes, shards: this.#trackedKeys.size + newlyTracked.size };
+    return { rows, bytes };
   }
 
   /**
@@ -209,7 +177,6 @@ export class InMemoryDeliveryState {
       final.set(key, candidate);
     }
     for (const [key, candidate] of final) this.#replace(key, candidate.message, candidate.bytes);
-    if (final.size > 0) this.#revision++;
     return inserted;
   }
 
@@ -229,7 +196,6 @@ export class InMemoryDeliveryState {
     this.#messageBytes.delete(key);
     this.#removeFromBucket(current);
     this.#pruneBucket(DeliveryShards.key(this.#requiredShard(current)));
-    this.#revision++;
     return true;
   }
 
@@ -360,7 +326,6 @@ export class InMemoryDeliveryState {
     kind: "RAW" | "MANAGED",
     revision = 1,
   ): void {
-    this.#ensureShardCapacity(shard);
     this.shards.set(DeliveryShards.key(shard), {
       shard: DeliveryShards.copy(shard),
       worker: DeliveryWorkers.copy(worker),
@@ -369,8 +334,6 @@ export class InMemoryDeliveryState {
       kind,
       revision,
     });
-    this.#trackedKeys.add(DeliveryShards.key(shard));
-    this.#revision++;
   }
 
   /**
@@ -391,21 +354,15 @@ export class InMemoryDeliveryState {
       });
     else {
       this.shards.delete(key);
-      this.#trackedKeys.delete(key);
     }
-    this.#revision++;
     return record;
   }
 
   #ensureCapacity(
     candidates: readonly { readonly message: InboxMessage; readonly bytes: number }[],
   ): void {
-    const { rows, bytes, shards } = this.projectedUsage(candidates);
-    if (
-      rows > this.#limits.maxRetainedMessages ||
-      bytes > this.#limits.maxRetainedBytes ||
-      shards > this.#limits.maxTrackedShards
-    ) {
+    const { rows, bytes } = this.projectedUsage(candidates);
+    if (rows > this.#limits.maxRetainedMessages || bytes > this.#limits.maxRetainedBytes) {
       throw new ConnectError("Delivery retained-state capacity is full.", Code.ResourceExhausted);
     }
   }
@@ -431,7 +388,6 @@ export class InMemoryDeliveryState {
     DeliveryRowOrder.insert(bucket.ordered, detached);
     if (detached.status === InboxMessageStatus.TO_DELIVER)
       DeliveryRowOrder.insert(bucket.pending, detached);
-    this.#trackedKeys.add(shardKey);
   }
 
   #removeFromBucket(message: InboxMessage): void {
@@ -443,18 +399,10 @@ export class InMemoryDeliveryState {
       DeliveryRowOrder.remove(bucket.pending, message);
   }
 
-  #ensureShardCapacity(shard: ShardIndex): void {
-    const key = DeliveryShards.key(shard);
-    if (this.#trackedKeys.has(key)) return;
-    if (this.#trackedKeys.size >= this.#limits.maxTrackedShards)
-      throw new ConnectError("Delivery tracked-shard capacity is full.", Code.ResourceExhausted);
-  }
-
   #pruneBucket(key: string): void {
     if (this.#buckets.get(key)?.ordered.length !== 0) return;
     this.#buckets.delete(key);
     if (this.shards.get(key)?.worker === undefined) this.shards.delete(key);
-    if (!this.shards.has(key)) this.#trackedKeys.delete(key);
   }
 
   #requiredShard(message: InboxMessage): ShardIndex {
