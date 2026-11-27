@@ -13,15 +13,13 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import {
   AdminService,
-  DeliveryShardPickupSchema,
   Health,
   InboxService,
-  ManagedShardService,
   ReleaseExpiredSessionsSchema,
   ShardedWorkAvailableSchema,
   ShardObservingService,
@@ -37,7 +35,6 @@ import {
 import { describe, expect, it, vi } from "vitest";
 
 import { domainMessage } from "../core/domain-message.js";
-import { pickedHandle } from "../session-fixtures.js";
 import { DeliveryServer } from "../../src/index.js";
 import { DeliveryChildPool } from "../../src/server/delivery-child-pool.js";
 import { DeliveryConfig } from "../../src/server/config.js";
@@ -360,8 +357,7 @@ describe("multi-process public Delivery endpoint", () => {
     const sessions = new Http2SessionManager(server.baseUrl);
     const transport = createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: sessions });
     const inbox = createClient(InboxService, transport);
-    const admin = createClient(AdminService, transport);
-    const managed = createClient(ManagedShardService, transport);
+    const shards = createClient(ShardService, transport);
     const smaller = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
     const larger = create(ShardIndexSchema, { index: 1, ofTotal: 3 });
     const first = domainMessage("same-uuid", smaller);
@@ -370,16 +366,9 @@ describe("multi-process public Delivery endpoint", () => {
     try {
       await inbox.writeOne({ message: second });
       await inbox.writeOne({ message: first });
-      const snapshot = await admin.getShardInfo({});
-      expect(snapshot.shards.map((info) => info.index)).toEqual([smaller, larger]);
-
-      const session = pickedHandle(await managed.pickShardForDelivery({ shard: smaller, worker }));
-      await expect(managed.markDelivered({ session, id: second.id })).rejects.toMatchObject({
-        code: Code.InvalidArgument,
-      });
-      await expect(managed.markDelivered({ session, id: first.id })).resolves.toMatchObject({
-        matched: true,
-      });
+      expect((await shards.pickShard({ shard: smaller, worker })).value?.case).toBe("pickedUp");
+      expect((await shards.pickShard({ shard: larger, worker })).value?.case).toBe("pickedUp");
+      await inbox.writeOne({ message: { ...first, status: InboxMessageStatus.DELIVERED } });
       expect((await inbox.newestMessageToDeliver(larger)).message).toEqual(second);
       expect((await inbox.newestMessageToDeliver(smaller)).message).toBeUndefined();
     } finally {
@@ -388,72 +377,37 @@ describe("multi-process public Delivery endpoint", () => {
     }
   });
 
-  it("routes positive inbox, managed, and global release calls across slots", async () => {
-    const server = new DeliveryServer({ host: "127.0.0.1", port: 0, processCount: 2 });
+  it("routes Inbox batches, shard pickup, and global release across slots", async () => {
+    const server = new DeliveryServer({ port: 0, processCount: 2 });
     await server.start();
     const sessions = new Http2SessionManager(server.baseUrl);
     const transport = createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: sessions });
     const inbox = createClient(InboxService, transport);
-    const managed = createClient(ManagedShardService, transport);
     const shards = createClient(ShardService, transport);
     const first = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
     const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
-    const worker = (value: string) =>
-      create(WorkerIdSchema, { nodeId: { value: "replica" }, value });
+    const worker = create(WorkerIdSchema, { nodeId: { value: "replica" }, value: "worker" });
     const a = domainMessage("positive-a", first);
     const b = domainMessage("positive-b", second);
     const c = domainMessage("positive-c", second, 1);
     try {
       await inbox.writeMany({ shard: second, message: [b, c] });
       await inbox.writeOne({ message: a });
-      expect(
-        (await inbox.findManyInShard({ shard: second, pageSize: 2 })).message.map(
-          (row) => row.id?.uuid,
-        ),
-      ).toEqual([b.id?.uuid, c.id?.uuid]);
-      expect((await inbox.newestMessageToDeliver(second)).message?.id?.uuid).toBe(c.id?.uuid);
-      const handle = pickedHandle(
-        await managed.pickShardForDelivery({ shard: second, worker: worker("positive") }),
-      );
-      const acknowledged = await managed.markDelivered({ session: handle, id: c.id });
-      expect(acknowledged.matched).toBe(true);
-      expect(acknowledged.whenKeepUntil).toBeDefined();
-      expect((await managed.removeDuplicate({ session: handle, id: b.id })).matched).toBe(true);
-      await managed.releaseShardSession(handle);
-      await inbox.removeOne({ message: c });
+      expect((await shards.pickShard({ shard: first, worker })).value?.case).toBe("pickedUp");
+      expect((await shards.pickShard({ shard: second, worker })).value?.case).toBe("pickedUp");
+      await inbox.writeMany({
+        shard: second,
+        message: [{ ...c, status: InboxMessageStatus.DELIVERED }],
+      });
+      await inbox.removeMany({ shard: second, message: [b] });
+      expect((await inbox.newestMessageToDeliver(second)).message).toBeUndefined();
+      await shards.releaseSession({ shard: first, worker });
+      const released = await shards.releaseSessions({ inactivityPeriod: { seconds: 0n } });
+      expect(released.shard.map((entry) => entry.shard?.index)).toEqual([1]);
       await inbox.removeMany({ shard: first, message: [a] });
+      await inbox.removeMany({ shard: second, message: [c] });
       expect((await inbox.findManyInShard({ shard: first, pageSize: 2 })).message).toEqual([]);
       expect((await inbox.findManyInShard({ shard: second, pageSize: 2 })).message).toEqual([]);
-      const expired = domainMessage("positive-expired", first, 0, 0, InboxMessageStatus.DELIVERED);
-      expired.keepUntil = create(TimestampSchema, { seconds: 1n, nanos: 0 });
-      const pending = domainMessage("positive-pending", first);
-      await inbox.writeMany({ shard: first, message: [expired, pending] });
-      const cleanup = pickedHandle(
-        await managed.pickShardForDelivery({ shard: first, worker: worker("cleanup") }),
-      );
-      await managed.removeExpiredDelivered(cleanup);
-      expect((await inbox.findOne(expired.id ?? {})).message).toBeUndefined();
-      expect((await managed.removeDuplicate({ session: cleanup, id: pending.id })).matched).toBe(
-        true,
-      );
-      await managed.releaseShardSession(cleanup);
-      const rawA = pickedHandle(
-        await managed.pickShardRaw({ shard: first, worker: worker("raw-a") }),
-      );
-      const rawB = pickedHandle(
-        await managed.pickShardRaw({ shard: second, worker: worker("raw-b") }),
-      );
-      await expect(
-        shards.releaseSession({ shard: first, worker: rawA.worker }),
-      ).rejects.toMatchObject({
-        code: Code.FailedPrecondition,
-      });
-      await new Promise((resolve) => setTimeout(resolve, 2));
-      const released = await shards.releaseSessions({
-        inactivityPeriod: { seconds: 0n, nanos: 1_000 },
-      });
-      expect(released.shard.map((session) => session.shard?.index).sort()).toEqual([0, 1]);
-      expect(rawB.sessionId).not.toBe(rawA.sessionId);
     } finally {
       sessions.abort();
       await server.close();
@@ -561,7 +515,7 @@ describe("multi-process public Delivery endpoint", () => {
       const joined = await Promise.all([nextFrame(right), nextFrame(right)]);
       expect(joined.map((item) => item.shard?.index).sort()).toEqual([0, 1]);
       const updates = admin.subscribeToShardUpdates(create(EmptySchema))[Symbol.asyncIterator]();
-      expect((await nextFrame(updates)).value.case).toBe("created");
+      expect((await nextFrame(updates)).value?.case).toBe("created");
       expect((await createClient(Health, transport).check({ service: "" })).status).toBeDefined();
       await Promise.all([left.return?.(), right.return?.(), updates.return?.()]);
     } finally {
@@ -595,7 +549,13 @@ describe("multi-process public Delivery endpoint", () => {
         context,
       );
       expect((await notice).shard?.index).toBe(1);
-      await expect(admin.next()).rejects.toMatchObject({ code: Code.Unavailable });
+      try {
+        const buffered = await admin.next();
+        expect(buffered).toMatchObject({ value: { value: { case: "update" } } });
+        await expect(admin.next()).rejects.toMatchObject({ code: Code.Unavailable });
+      } catch (error) {
+        expect(error).toMatchObject({ code: Code.Unavailable });
+      }
       await vi.waitFor(() => {
         expect(pool.endpoint(0).generation).not.toBe(first.generation);
       });
@@ -644,7 +604,7 @@ describe("multi-process public Delivery endpoint", () => {
     }
   });
 
-  it("rejects an old generation's release after a replacement grants the shard", async () => {
+  it("leaves a replacement child's shard intact after an old worker releases", async () => {
     const pool = new DeliveryChildPool(2, DeliveryConfig.resolve({ port: 0 }));
     await pool.start();
     const proxy = new DeliveryParentProxy(pool);
@@ -653,36 +613,21 @@ describe("multi-process public Delivery endpoint", () => {
     const worker = (value: string) =>
       create(WorkerIdSchema, { nodeId: { value: "replica" }, value });
     try {
-      const old = pickedHandle(
-        await proxy
-          .managed()
-          .pickShardRaw(
-            create(DeliveryShardPickupSchema, { shard, worker: worker("old") }),
-            context,
-          ),
-      );
+      await proxy.shards().pickShard({ shard, worker: worker("old") } as never, context);
       const endpoint = pool.endpoint(0);
       process.kill(endpoint.pid, "SIGKILL");
       await vi.waitFor(() => {
         expect(pool.endpoint(0).generation).not.toBe(endpoint.generation);
       });
-      const fresh = pickedHandle(
-        await proxy
-          .managed()
-          .pickShardRaw(
-            create(DeliveryShardPickupSchema, { shard, worker: worker("fresh") }),
-            context,
-          ),
-      );
-      expect(fresh.sessionId).not.toBe(old.sessionId);
-      await proxy.managed().releaseShardSession(old, context);
-      const competing = await proxy
-        .managed()
-        .pickShardRaw(
-          create(DeliveryShardPickupSchema, { shard, worker: worker("rival") }),
-          context,
-        );
-      expect(competing.result?.case).toBe("busy");
+      expect(
+        (await proxy.shards().pickShard({ shard, worker: worker("fresh") } as never, context)).value
+          ?.case,
+      ).toBe("pickedUp");
+      await proxy.shards().releaseSession({ shard, worker: worker("old") } as never, context);
+      expect(
+        (await proxy.shards().pickShard({ shard, worker: worker("rival") } as never, context)).value
+          ?.case,
+      ).toBe("alreadyPickedUp");
     } finally {
       proxy.close();
       await pool.close();

@@ -44,21 +44,6 @@ export interface ShardRecord {
    * Records the latest pickup or renewal with full timestamp precision.
    */
   readonly whenLastPicked: Timestamp | undefined;
-
-  /**
-   * Identifies one fresh pickup across its renewals.
-   */
-  readonly sessionId?: string;
-
-  /**
-   * Distinguishes raw and work-aware pickup behavior.
-   */
-  readonly kind?: "RAW" | "MANAGED";
-
-  /**
-   * Changes on each renewal to guard replacement of the current record.
-   */
-  readonly revision?: number;
 }
 
 /**
@@ -229,46 +214,6 @@ export class InMemoryDeliveryState {
   }
 
   /**
-   * Marks the retained pending message delivered and removes its pending tree entry.
-   *
-   * @param current Pending message held by the server.
-   * @param deadline First retention deadline computed by the server.
-   */
-  markDelivered(current: InboxMessage, deadline: Timestamp): void {
-    const shard = this.#requiredShard(current);
-    this.#buckets
-      .get(DeliveryShards.key(shard))
-      ?.pending.eraseElementByKey(DeliveryRowOrder.key(current));
-    current.status = InboxMessageStatus.DELIVERED;
-    current.keepUntil = deadline;
-  }
-
-  /**
-   * Removes delivered messages whose retention has ended in the requested shard.
-   *
-   * @param shard Selects the shard being drained.
-   * @param now Supplies the server time at cleanup.
-   * @returns Whether any stored message was removed.
-   */
-  removeExpiredDelivered(shard: ShardIndex, now: Timestamp): boolean {
-    const bucket = this.#buckets.get(DeliveryShards.key(shard));
-    if (bucket === undefined || bucket.ordered.size() === bucket.pending.size()) return false;
-    const expired: InboxMessage[] = [];
-    for (const [, message] of bucket.ordered) {
-      if (message.status !== InboxMessageStatus.DELIVERED) continue;
-      const until = message.keepUntil;
-      if (
-        until === undefined ||
-        until.seconds < now.seconds ||
-        (until.seconds === now.seconds && until.nanos <= now.nanos)
-      ) {
-        expired.push(message);
-      }
-    }
-    return this.deleteMany(shard, expired).changed;
-  }
-
-  /**
    * Finds the last pending row in delivery order for one shard.
    *
    * @param shard Identifies the shard.
@@ -307,25 +252,12 @@ export class InMemoryDeliveryState {
    * @param shard Identifies the shard.
    * @param worker Identifies the worker.
    * @param whenPicked Records the pickup time.
-   * @param sessionId Identifies the fresh pickup.
-   * @param kind Distinguishes raw and managed pickup.
-   * @param revision Changes on renewal.
    */
-  setSession(
-    shard: ShardIndex,
-    worker: WorkerId,
-    whenPicked: Timestamp,
-    sessionId: string,
-    kind: "RAW" | "MANAGED",
-    revision = 1,
-  ): void {
+  setSession(shard: ShardIndex, worker: WorkerId, whenPicked: Timestamp): void {
     this.shards.set(DeliveryShards.key(shard), {
       shard: DeliveryShards.copy(shard),
       worker: DeliveryWorkers.copy(worker),
       whenLastPicked: whenPicked,
-      sessionId,
-      kind,
-      revision,
     });
   }
 
@@ -339,15 +271,11 @@ export class InMemoryDeliveryState {
     const key = DeliveryShards.key(shard);
     const record = this.shards.get(key);
     if (record?.worker === undefined) return undefined;
-    if (this.#buckets.has(key))
-      this.shards.set(key, {
-        shard: record.shard,
-        worker: undefined,
-        whenLastPicked: record.whenLastPicked,
-      });
-    else {
-      this.shards.delete(key);
-    }
+    this.shards.set(key, {
+      shard: record.shard,
+      worker: undefined,
+      whenLastPicked: record.whenLastPicked,
+    });
     return record;
   }
 
@@ -391,7 +319,6 @@ export class InMemoryDeliveryState {
   #pruneBucket(key: string): void {
     if (this.#buckets.get(key)?.ordered.size() !== 0) return;
     this.#buckets.delete(key);
-    if (this.shards.get(key)?.worker === undefined) this.shards.delete(key);
   }
 
   #requiredShard(message: InboxMessage): ShardIndex {

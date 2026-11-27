@@ -24,7 +24,9 @@ import {
 } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import {
-  DeliveryShardPickupSchema,
+  PickUpShardSchema,
+  ReleaseShardSchema,
+  ReleaseExpiredSessionsSchema,
   RemoveMessageSchema,
   WriteMessageSchema,
 } from "@spine-event-engine/proto/delivery-server";
@@ -37,7 +39,6 @@ import {
 } from "@spine-event-engine/proto/delivery";
 import { DeliveryAssembly } from "../../src/server/assembly.js";
 import { DeliveryConfig } from "../../src/server/config.js";
-import { pickedHandle } from "../session-fixtures.js";
 
 const context = { signal: new AbortController().signal } as never;
 const shard = create(ShardIndexSchema, { index: 2, ofTotal: 4 });
@@ -46,26 +47,31 @@ const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worke
 afterEach(() => vi.useRealTimers());
 
 describe("ShardObservingService", () => {
-  it("reoffers pending work when a quiet held session expires on its own", async () => {
+  it("reoffers pending work after explicit inactivity release", async () => {
     vi.useFakeTimers();
     const assembly = DeliveryAssembly.create({ processingTimeoutMs: 50 });
     await assembly.inbox.writeOne(
       create(WriteMessageSchema, { message: message("expires") }),
       context,
     );
-    const picked = await assembly.managed.pickShardForDelivery(
-      create(DeliveryShardPickupSchema, { shard, worker }),
+    const picked = await assembly.shards.pickShard(
+      create(PickUpShardSchema, { shard, worker }),
       context,
     );
-    expect(picked.result?.case).toBe("pickedUp");
+    expect(picked.value?.case).toBe("pickedUp");
     const stream = assembly.observing
       .observeAll(create(EmptySchema), context)
       [Symbol.asyncIterator]();
     const next = stream.next();
     await vi.advanceTimersByTimeAsync(51);
+    await assembly.shards.releaseSessions(
+      create(ReleaseExpiredSessionsSchema, {
+        inactivityPeriod: { seconds: 0n, nanos: 50_000_000 },
+      }),
+      context,
+    );
     await expect(next).resolves.toMatchObject({ value: { shard } });
     await stream.return?.();
-    assembly.closeSessions();
     assembly.closeObserving();
   });
 
@@ -148,16 +154,12 @@ describe("ShardObservingService", () => {
   it("stays silent while held, then reports pending work on release", async () => {
     const assembly = DeliveryAssembly.create();
     await assembly.inbox.writeOne(create(WriteMessageSchema, { message: message("one") }), context);
-    const pickup = await assembly.managed.pickShardRaw(
-      create(DeliveryShardPickupSchema, { shard, worker }),
-      context,
-    );
-    const handle = pickedHandle(pickup);
+    await assembly.shards.pickShard(create(PickUpShardSchema, { shard, worker }), context);
     const stream = assembly.observing
       .observeAll(create(EmptySchema), context)
       [Symbol.asyncIterator]();
     const next = stream.next();
-    await assembly.managed.releaseShardSession(handle, context);
+    await assembly.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
     await expect(next).resolves.toMatchObject({ value: { shard } });
     await stream.return?.();
     assembly.closeObserving();
@@ -172,11 +174,7 @@ describe("ShardObservingService", () => {
       .observeAll(create(EmptySchema), context)
       [Symbol.asyncIterator]();
     await expect(stream.next()).resolves.toMatchObject({ value: { shard } });
-    const pickup = await assembly.managed.pickShardRaw(
-      create(DeliveryShardPickupSchema, { shard, worker }),
-      context,
-    );
-    const handle = pickedHandle(pickup);
+    await assembly.shards.pickShard(create(PickUpShardSchema, { shard, worker }), context);
     const afterPickup = stream.next();
     let settled = false;
     void afterPickup.then(() => {
@@ -184,7 +182,7 @@ describe("ShardObservingService", () => {
     });
     await vi.advanceTimersByTimeAsync(10_000);
     expect(settled).toBe(false);
-    await assembly.managed.releaseShardSession(handle, context);
+    await assembly.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
     await expect(afterPickup).resolves.toMatchObject({ value: { shard } });
     await assembly.inbox.removeOne(create(RemoveMessageSchema, { message: first }), context);
     const afterRemoval = stream.next();
@@ -237,10 +235,7 @@ describe("ShardObservingService", () => {
       create(WriteMessageSchema, { message: message("removed", removed) }),
       context,
     );
-    await assembly.managed.pickShardRaw(
-      create(DeliveryShardPickupSchema, { shard: busy, worker }),
-      context,
-    );
+    await assembly.shards.pickShard(create(PickUpShardSchema, { shard: busy, worker }), context);
     await assembly.inbox.removeOne(
       create(RemoveMessageSchema, { message: message("removed", removed) }),
       context,

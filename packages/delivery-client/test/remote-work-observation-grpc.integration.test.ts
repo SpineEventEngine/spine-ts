@@ -65,64 +65,6 @@ afterEach(async () => {
   if (failures.length > 0) throw new AggregateError(failures, "Fixture cleanup failed.");
 });
 
-it("fences an expired blocked owner before its delayed commit can disturb a replacement", async () => {
-  const server = trackedServer();
-  await server.start();
-  const alpha = application(server.baseUrl, "alpha");
-  const beta = application(server.baseUrl, "beta");
-  const events: { readonly node: string; readonly signalId: string }[] = [];
-  for (const child of [alpha, beta])
-    child.on("message", (frame: unknown) => {
-      if (isDispatch(frame)) events.push(frame);
-    });
-  await Promise.all([ready(alpha), ready(beta)]);
-  await Promise.all([
-    command(alpha, { command: "block-first" }),
-    command(beta, { command: "block-first" }),
-  ]);
-  await command(alpha, { command: "write", signalId: "first" });
-  await eventually(() => {
-    expect(events.filter((event) => event.signalId === "first-started")).toHaveLength(1);
-  });
-  const owner = events.find((event) => event.signalId === "first-started")?.node;
-  const replacement = owner === "alpha" ? beta : alpha;
-  await command(replacement, { command: "release-first" });
-  const admin = DeliveryClient.connectTo(server.baseUrl);
-  clients.push(admin);
-  await eventuallyAsync(async () => {
-    await expect(admin.releaseExpired(1)).resolves.toHaveLength(1);
-  });
-  await command(replacement, { command: "write", signalId: "wake" });
-  await eventually(() => {
-    expect(
-      events.filter((event) => event.node !== owner && event.signalId === "committed-first"),
-    ).toHaveLength(1);
-  });
-  await Promise.all([
-    command(alpha, { command: "release-first" }),
-    command(beta, { command: "release-first" }),
-  ]);
-  await eventually(() => {
-    expect(
-      events.filter((event) => event.node === owner && event.signalId === "resumed-first"),
-    ).toHaveLength(1);
-    if (!events.some((event) => event.node === owner && event.signalId === "fenced"))
-      throw new Error(`Missing owner fence event: ${JSON.stringify(events)}`);
-  });
-  expect(
-    events.filter((event) => event.node === owner && event.signalId === "committed-first"),
-  ).toHaveLength(0);
-  expect(replacement.exitCode).toBeNull();
-  const reader = DeliveryClient.connectTo(server.baseUrl);
-  clients.push(reader);
-  await eventuallyAsync(async () => {
-    expect(await reader.newestPending(ShardIndex.single())).toBeUndefined();
-    expect((await reader.shardSnapshot())[0]?.status).toBe("NOT_PICKED");
-  });
-  expect(alpha.exitCode).toBeNull();
-  expect(beta.exitCode).toBeNull();
-}, 10_000);
-
 it("fans out one real work notice through two remote ServerEnvironment assemblies", async () => {
   const server = trackedServer();
   await server.start();

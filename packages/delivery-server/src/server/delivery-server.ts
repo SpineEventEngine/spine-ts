@@ -22,7 +22,6 @@ import {
   AdminService,
   Health,
   InboxService,
-  ManagedShardService,
   ShardObservingService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
@@ -241,7 +240,6 @@ export class DeliveryServer {
       closeAdmin: () => {
         this.#assembly?.closeAdmin();
         this.#assembly?.closeObserving();
-        this.#assembly?.closeSessions();
       },
       closeNetwork: async () => {
         try {
@@ -286,7 +284,7 @@ export class DeliveryServer {
    * Builds the public listener after its service handlers are ready.
    */
   #createServer(
-    core: Pick<DeliveryAssembly, "inbox" | "shards" | "managed" | "observing" | "admin">,
+    core: Pick<DeliveryAssembly, "inbox" | "shards" | "observing" | "admin">,
   ): http2.Http2Server {
     const server = http2.createServer(
       connectNodeAdapter({
@@ -294,7 +292,6 @@ export class DeliveryServer {
           const health = HealthHandlers.create(() => this.#serving);
           router.service(InboxService, core.inbox);
           router.service(ShardService, core.shards);
-          router.service(ManagedShardService, core.managed);
           router.service(ShardObservingService, core.observing);
           router.service(AdminService, core.admin);
           router.service(Health, health);
@@ -313,9 +310,7 @@ export class DeliveryServer {
   /**
    * Constructs single-process handlers or starts fixed private child slots.
    */
-  async #services(): Promise<
-    Pick<DeliveryAssembly, "inbox" | "shards" | "managed" | "observing" | "admin">
-  > {
+  async #services(): Promise<Pick<DeliveryAssembly, "inbox" | "shards" | "observing" | "admin">> {
     if (this.#processCount === 1) {
       const core = DeliveryAssembly.create(this.#configuration);
       this.#assembly = core;
@@ -329,7 +324,6 @@ export class DeliveryServer {
     return {
       inbox: proxy.inbox(),
       shards: proxy.shards(),
-      managed: proxy.managed(),
       observing: proxy.observing(),
       admin: proxy.admin(),
     };

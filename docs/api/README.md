@@ -708,7 +708,7 @@ signal for the same recipient. Framework delivery handles `HANDLE_COMMAND`,
 `DeliveryBuilder.remote({ endpoint })` from `@spine-event-engine/delivery-client`
 opens the Delivery server work stream after startup. For example, if one node
 takes shard 3, a new Command written to that shard produces no work notice
-while the worker holds it. Release or expiry makes pending work visible to all
+while the worker holds it. Releasing the shard makes pending work visible to all
 subscribers. Newly connected nodes discover available work on connection.
 The default reminder for a free shard is 10 seconds. Distinct shards can run
 concurrently on each node. Set `notifications: { kind: "delivery-server",
@@ -729,16 +729,15 @@ the row delivered; a custom monitor may repeat failed processing.
 Any selected reception action that completes normally leads to delivered
 acknowledgement; a rejected action leaves the row `TO_DELIVER` and propagates.
 Managed repository infrastructure failures propagate and leave the row pending.
-After successful processing, a failed acknowledgement is retried without
-deliberate handler rerun. Exhausted acknowledgement blocks later messages for
-that target in the current run; a later run can retry. Shard coordination
-protects concurrent workers, not
-endpoint effects. Therefore a
-lost acknowledgement can redeliver after a handler runs, and downstream effects
-must be idempotent. The delivery model has no persisted attempt history,
-exhaustion, claims, quarantine, receipts, markers, or dead-letter storage.
-The package does not expose a raw worker callback API; framework delivery
-uses the framework's validated endpoints. Managed remote delivery renews its session during long callbacks and fences each acknowledgement and cleanup mutation.
+With application-managed storage, a failed acknowledgement can be retried
+without invoking the handler again during that attempt. With remote storage,
+the application worker processes a page and sends changed inbox messages in
+`WriteMany`. It then sends the duplicates and expired completions it found in
+`RemoveMany`. If saving a page fails, the worker releases the shard and
+reports the error. For example, a handler may already have saved a new Entity
+state while its inbox message still says `TO_DELIVER`. A later delivery can
+invoke the handler again.
+
 `InboxReadOptions.limit` remains the page-size control for a single ordered
 inbox read. Supply a positive safe integer. For example, `limit: 2000` asks
 for up to 2,000 rows.
@@ -746,7 +745,7 @@ for up to 2,000 rows.
 inbox page after a previous message: message ID, receive time, and version.
 `ShardedWorkRegistryOptions.leaseMs` sets the application-storage lease
 in milliseconds and accepts a positive safe integer. When acknowledging a
-message, the framework checks that its saved contents still match the original
+message in application-managed storage, the framework checks that its saved contents still match the original
 read. Repeating a successful acknowledgement preserves its first retention deadline.
 
 Event import and aggregate importers are removed from the active plan by

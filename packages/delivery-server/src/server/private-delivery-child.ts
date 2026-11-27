@@ -19,7 +19,6 @@ import { connectNodeAdapter } from "@connectrpc/connect-node";
 import {
   AdminService,
   InboxService,
-  ManagedShardService,
   ShardObservingService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
@@ -109,7 +108,6 @@ export class PrivateDeliveryChild {
   #routes(router: ConnectRouter): void {
     router.service(InboxService, this.#assembly.inbox);
     router.service(ShardService, this.#assembly.shards);
-    router.service(ManagedShardService, this.#assembly.managed);
     router.service(AdminService, this.#assembly.admin);
     router.service(ShardObservingService, this.#assembly.observing);
   }
@@ -159,7 +157,6 @@ export class PrivateDeliveryChild {
       this.#assembly.closeAdmission();
       this.#assembly.closeAdmin();
       this.#assembly.closeObserving();
-      this.#assembly.closeSessions();
       try {
         await this.#start;
       } catch {

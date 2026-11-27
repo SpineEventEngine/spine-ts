@@ -1,8 +1,17 @@
 /*
- * Copyright (c) 2000-2026 TeamDev. All rights reserved.
- * TeamDev PROPRIETARY and CONFIDENTIAL.
- * Use is subject to license terms.
+ * Copyright 2026 CodeMatters, Lda.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions
+ * and limitations under the License.
  */
+
 syntax = "proto3";
 
 package spine.delivery;
@@ -54,12 +63,12 @@ service InboxService {
 service ShardService {
 
     // Picks up the shard for processing.
-    rpc PickShard(PickUpShard) returns (LiquorPickUpOutcome);
+    rpc PickShard(PickUpShard) returns (DeliveryPickUpOutcome);
 
     // Releases the shard after its processing is done.
     rpc ReleaseSession(ReleaseShard) returns (google.protobuf.Empty);
 
-    // Releases sessions which were picked up earlier that the configured inactivity period.
+    // Releases sessions that were picked up earlier than the configured inactivity period.
     rpc ReleaseSessions(ReleaseExpiredSessions) returns (ExpiredSessionsReleased);
 }
 
@@ -72,8 +81,8 @@ service ShardObservingService {
     // The stream stays open and silent while all shards are busy or contain no pending messages.
     // If nobody picks up a shard, the server repeats the notice after the configured interval
     // (10 seconds by default). Further writes do not postpone that reminder.
-    // Pickup or removal of the last pending message stops reminders. On release or session expiry,
-    // the server reports the shard immediately if work remains. Reconnecting discovers current work.
+    // Pickup or removal of the last pending message stops reminders. When ReleaseSession or
+    // ReleaseSessions frees the shard, the server reports any pending work. Reconnecting discovers it too.
     // A notice grants no session. At pickup the shard may already be busy or empty.
     rpc ObserveAll(google.protobuf.Empty) returns (stream ShardedWorkAvailable);
 }

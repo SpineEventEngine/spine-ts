@@ -28,7 +28,6 @@ export { DeliveryBuilder } from "./remote/delivery-builder.js";
 
 export type {
   DeliveryClientOptions,
-  DeliveryManagedPickupOutcome,
   DeliveryFindOneOptions,
   DeliveryMutationOptions,
   DeliveryReadPageOptions,

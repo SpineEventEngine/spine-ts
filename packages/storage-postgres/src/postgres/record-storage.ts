@@ -559,8 +559,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns Whether a pending inbox message changed.
    */
   markInboxDelivered(id: I, deadline: Timestamp): Promise<Timestamp | undefined> {
-    this.requireInbox();
-    return this.using(async (client) => {
+    return this.mutateInbox(async (client) => {
       const changed = await client.query<{ when_keep_until: bigint | string | null }>(
         `UPDATE ${this.qualified()} SET "status" = $2, "when_keep_until" = $3 ` +
           `WHERE "ID" = $1 AND "status" = $4 RETURNING "when_keep_until"`,
@@ -594,8 +593,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns True when removed or absent; false when already delivered.
    */
   removePendingInbox(id: I): Promise<boolean> {
-    this.requireInbox();
-    return this.using(async (client) => {
+    return this.mutateInbox(async (client) => {
       const removed = await client.query(
         `DELETE FROM ${this.qualified()} WHERE "ID" = $1 AND "status" = $2`,
         [this.id(id), this.historyColumn("status", InboxMessageStatus.TO_DELIVER)],
@@ -616,8 +614,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns Whether the provider applied the cleanup predicate.
    */
   removeExpiredInbox(shard: ShardIndex, now: Timestamp): Promise<boolean> {
-    this.requireInbox();
-    return this.using(async (client) => {
+    return this.mutateInbox(async (client) => {
       await client.query(
         `DELETE FROM ${this.qualified()} WHERE "shard_index" = $1 AND "shard_total" = $2 ` +
           `AND "status" = $3 AND ("when_keep_until" IS NULL OR "when_keep_until" <= $4)`,
@@ -633,11 +630,16 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
-   * Validates the generated inbox layout before updating status or retention columns.
+   * Executes an inbox mutation while the record handle and its factory are open.
+   *
+   * @param work Issues the SQL for this inbox operation.
+   * @typeParam T The operation result.
+   * @returns The result from the admitted database operation.
    */
-  private requireInbox(): void {
+  private mutateInbox<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     if (!this.isInboxLayout())
       throw new TypeError("Inbox mutation requires the framework inbox record layout.");
+    return this.admit(() => this.using(work));
   }
 
   /**

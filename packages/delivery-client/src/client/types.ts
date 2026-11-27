@@ -13,7 +13,7 @@
  */
 
 import { ShardIndex } from "@spine-event-engine/server";
-import type { Duration, Timestamp } from "@bufbuild/protobuf/wkt";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 /**
  * Stable public worker identity represented by the frozen `WorkerId` wire type.
@@ -55,62 +55,10 @@ export interface RemoteShardSession {
   readonly worker: DeliveryWorkerId;
 
   /**
-   * Reports full-precision pickup or renewal wall time. A pickup reply may
-   * sample after the server stores the session, so Admin can report an earlier
-   * time. This timestamp is advisory; `sessionId` identifies authority.
+   * Reports the full-precision pickup reply time.
    */
   readonly whenPicked: Timestamp;
-
-  /**
-   * Identifies this pickup across renewals and excludes later pickups.
-   * A previously issued handle remains valid after a completed renewal of
-   * this same session.
-   */
-  readonly sessionId: string;
-
-  /**
-   * Gives the positive server lifetime between successful renewals.
-   */
-  readonly lifetime: Duration;
 }
-
-/**
- * Reports one definitive work-aware pickup result.
- */
-export type DeliveryManagedPickupOutcome =
-  | Readonly<{
-      /**
-       * Reports that a session was granted or recovered.
-       */
-      readonly kind: "PICKED";
-
-      /**
-       * Carries the complete granted session.
-       */
-      readonly session: RemoteShardSession;
-    }>
-  | Readonly<{
-      /**
-       * Reports that another session currently holds the shard.
-       */
-      readonly kind: "BUSY";
-
-      /**
-       * Identifies the current worker.
-       */
-      readonly worker: DeliveryWorkerId;
-
-      /**
-       * Reports the retained pickup or renewal time without granting authority.
-       */
-      readonly whenPicked: Timestamp;
-    }>
-  | Readonly<{
-      /**
-       * Reports that the free shard has no pending work.
-       */
-      readonly kind: "NO_WORK";
-    }>;
 
 /**
  * A detached observation of a session released for inactivity.
@@ -233,13 +181,9 @@ export class DeliveryOutcomeUnknownError extends Error {
     | "REMOVE_ONE"
     | "REMOVE_MANY"
     | "PICK_UP_SHARD"
-    | "PICK_UP_FOR_DELIVERY"
-    | "RENEW_SHARD"
     | "RELEASE_SHARD"
     | "RELEASE_EXPIRED"
-    | "ACKNOWLEDGE"
-    | "REMOVE_DUPLICATE"
-    | "REMOVE_EXPIRED_DELIVERED";
+    ;
 
   /**
    * Identifies the observation required to reconcile the mutation outcome.
@@ -282,12 +226,7 @@ const DeliveryOutcomeValues = Object.freeze({
   message(operation: DeliveryOutcomeUnknownError["operation"]): string {
     if (operation === "WRITE_ONE" || operation === "WRITE_MANY")
       return "Delivery write outcome is unknown.";
-    if (
-      operation === "REMOVE_ONE" ||
-      operation === "REMOVE_MANY" ||
-      operation === "REMOVE_DUPLICATE" ||
-      operation === "REMOVE_EXPIRED_DELIVERED"
-    )
+    if (operation === "REMOVE_ONE" || operation === "REMOVE_MANY")
       return "Delivery removal outcome is unknown.";
     return "Delivery shard operation outcome is unknown.";
   },
@@ -326,13 +265,7 @@ const DeliveryOutcomeValues = Object.freeze({
    * @returns Whether shard observation is required.
    */
   shardOperation(operation: DeliveryOutcomeUnknownError["operation"]): boolean {
-    return (
-      operation === "PICK_UP_SHARD" ||
-      operation === "PICK_UP_FOR_DELIVERY" ||
-      operation === "RENEW_SHARD" ||
-      operation === "RELEASE_SHARD" ||
-      operation === "REMOVE_EXPIRED_DELIVERED"
-    );
+    return operation === "PICK_UP_SHARD" || operation === "RELEASE_SHARD";
   },
 });
 

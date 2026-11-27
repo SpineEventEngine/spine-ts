@@ -33,8 +33,6 @@ import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import {
   OptionalInboxMessageSchema,
   PageOfMessagesSchema,
-  InboxWorkResultSchema,
-  DeliverySessionHandleSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
   InboxMessageIdSchema,
@@ -42,15 +40,9 @@ import {
   InboxLabel,
   InboxMessageStatus,
   ShardIndexSchema,
-  WorkerIdSchema,
 } from "@spine-event-engine/proto/delivery";
 import { describe, expect, it } from "vitest";
-import {
-  DeliveryClient,
-  DeliveryPagingError,
-  DeliveryProtocolError,
-  RemoteWorkRegistry,
-} from "../src/index.js";
+import { DeliveryClient, DeliveryPagingError, DeliveryProtocolError } from "../src/index.js";
 import { RemoteInbox } from "../src/remote/adapters.js";
 import {
   DeliveryMessageCodec,
@@ -74,6 +66,18 @@ describe("delivery codec and immutable snapshots", () => {
     expect(wire.whenReceived).toEqual(whenReceived);
     expect(DeliveryMessageCodec.decode(wire, ShardIndex.single()).whenReceived).toEqual(
       whenReceived,
+    );
+  });
+
+  it("retains exact completion nanos on an unchanged write and honors a changed Date", () => {
+    const wire = DeliveryMessageCodec.encode(domainMessage("retained-nanos"));
+    wire.status = InboxMessageStatus.DELIVERED;
+    wire.keepUntil = create(TimestampSchema, { seconds: 12n, nanos: 345_678_901 });
+    const row = DeliveryMessageCodec.decode(wire, ShardIndex.single());
+    expect(DeliveryMessageCodec.encode(row).keepUntil).toEqual(wire.keepUntil);
+    row.keepUntil?.setTime(13_000);
+    expect(DeliveryMessageCodec.encode(row).keepUntil).toEqual(
+      create(TimestampSchema, { seconds: 13n, nanos: 0 }),
     );
   });
 
@@ -107,73 +111,6 @@ describe("delivery codec and immutable snapshots", () => {
     fake.reply(create(EmptySchema));
     await expect(client.removeOne(current)).resolves.toBeUndefined();
     expect(fake.unary.mock.calls.at(-1)?.[0]).toMatchObject({ name: "RemoveOne" });
-  });
-
-  it("cleans the session shard and removes a pending duplicate by ID", async () => {
-    const fake = transport();
-    const client = DeliveryClient.usingTransport(fake.transport);
-    const inbox = new RemoteInbox(client);
-    const registry = new RemoteWorkRegistry(client);
-    fake.replyPickup();
-    const session = await registry.pickUp(
-      ShardIndex.single(),
-      create(WorkerIdSchema, {
-        nodeId: { value: "node" },
-        value: "run",
-      }),
-    );
-    if (session === undefined) throw new Error("Expected a managed session.");
-    const pending = domainMessage("pending-duplicate");
-    const readPending = DeliveryMessageCodec.decode(
-      DeliveryMessageCodec.encode(pending),
-      ShardIndex.single(),
-    );
-    fake.reply(create(EmptySchema));
-    await expect(
-      inbox.removeExpiredDelivered(ShardIndex.single(), undefined, session),
-    ).resolves.toBe(true);
-    fake.reply(create(InboxWorkResultSchema, { matched: true }));
-    await expect(inbox.removeDuplicate(readPending, undefined, session)).resolves.toBe(true);
-    expect(fake.unary.mock.calls.map((call) => (call[0] as { name: string }).name)).toEqual([
-      "PickShardForDelivery",
-      "RemoveExpiredDelivered",
-      "RemoveDuplicate",
-    ]);
-  });
-
-  it("acknowledges the inbox ID from a page in one RPC", async () => {
-    const fake = transport();
-    const client = DeliveryClient.usingTransport(fake.transport);
-    fake.replyPickup();
-    const pickup = await client.pickUpForDelivery(ShardIndex.single(), {
-      nodeId: "node",
-      value: "run",
-    });
-    if (pickup.kind !== "PICKED") throw new Error("Expected a managed session.");
-    const pending = domainMessage("c58e2dc3-e0f8-4ba4-a728-a19c9ec0dbe1");
-    fake.reply(create(PageOfMessagesSchema, { message: [DeliveryMessageCodec.encode(pending)] }));
-    const [item] = await client.readPage(ShardIndex.single());
-    if (item === undefined) throw new Error("Expected a pending inbox message.");
-    fake.reply(
-      create(InboxWorkResultSchema, {
-        matched: true,
-        whenKeepUntil: { seconds: 15n },
-      }),
-    );
-    expect((await client.markDelivered(pickup.session, item.id)).whenKeepUntil).toMatchObject({
-      seconds: 15n,
-    });
-    expect(fake.unary.mock.calls.map(([method]) => (method as { name: string }).name)).toEqual([
-      "PickShardForDelivery",
-      "FindManyInShard",
-      "MarkDelivered",
-    ]);
-    const request: unknown = fake.unary.mock.calls.at(-1)?.[4];
-    expect(request).toMatchObject({
-      id: { uuid: item.id.value },
-      session: { sessionId: pickup.session.sessionId },
-    });
-    expect(request).not.toHaveProperty("expected");
   });
 
   it("validates an empty-filter read cursor and caller cancellation before remote I/O", async () => {
@@ -326,38 +263,6 @@ describe("delivery codec and immutable snapshots", () => {
 
   it("rejects an invalid local retention deadline before a remote write", () => {
     expect(() => DeliveryRequestCodec.expiry(new Date(Number.NaN))).toThrow(TypeError);
-  });
-
-  it("keeps typed remote pickup validation on protocol errors", () => {
-    const worker = { nodeId: { value: "node" }, value: "worker" };
-    const whenPicked = { seconds: 1n, nanos: 0 };
-    expect(() => {
-      DeliveryShardCodec.decodePicked(
-        create(DeliverySessionHandleSchema, { whenPicked }),
-        ShardIndex.single(),
-        { nodeId: "node", value: "worker" },
-      );
-    }).toThrow(DeliveryProtocolError);
-    expect(() => {
-      DeliveryShardCodec.decodePicked(
-        create(DeliverySessionHandleSchema, { worker }),
-        ShardIndex.single(),
-        { nodeId: "node", value: "worker" },
-      );
-    }).toThrow(DeliveryProtocolError);
-    expect(() => {
-      DeliveryShardCodec.decodePicked(
-        create(DeliverySessionHandleSchema, {
-          worker,
-          whenPicked,
-          shard: { index: 1, ofTotal: 2 },
-          sessionId: "session",
-          lifetime: { seconds: 60n },
-        }),
-        ShardIndex.single(),
-        { nodeId: "node", value: "worker" },
-      );
-    }).toThrow(DeliveryProtocolError);
   });
 
   it("bounds call options", () => {

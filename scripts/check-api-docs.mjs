@@ -413,7 +413,6 @@ const expectedDeliveryClientExports = [
   "DeliveryClient",
   "DeliveryClientOptions",
   "DeliveryFindOneOptions",
-  "DeliveryManagedPickupOutcome",
   "DeliveryMutationOptions",
   "DeliveryOutcomeUnknownError",
   "DeliveryPagingError",

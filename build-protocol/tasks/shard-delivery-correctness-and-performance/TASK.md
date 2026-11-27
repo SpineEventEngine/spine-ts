@@ -11,7 +11,7 @@ inbox mutation, repository history and concurrent delivery are high risk.
   a free shard contains pending messages. Stay silent while idle or while a worker
   holds the shard. Repeat unclaimed work after the configured interval, ten seconds
   by default. Further writes do not postpone reminders. Check again on release,
-  expiry and reconnect. Keep the Admin gRPC contract and report actual stored counts.
+  release of inactive sessions and reconnect. Keep the Admin gRPC contract and report actual stored counts.
 - A node may process different shards concurrently. Only server notifications accept
   an optional per-node concurrency limit. Concurrent calls on one node for the same
   shard share one run. A joining caller may stop waiting independently.
@@ -34,18 +34,18 @@ inbox mutation, repository history and concurrent delivery are high risk.
 - Maintain ordered trees for stored and pending messages in each in-memory shard.
   Order by receive seconds, nanoseconds, inbox counter and UUID. The counter is
   field 10 of the upstream InboxMessage. Admin counts retained completions too.
-- Recover an uncertain pickup with the same run identity. Use a fresh identity for
-  each independent run. Preserve Protobuf timestamp precision, managed session
-  expiry and renewal. Only the current worker can change a shard under its session.
-- A worker reads pages. Mark a successfully handled message delivered by its exact
-  inbox ID from the page. Keep the first retention deadline on retry. Remove the
-  snapshot-comparison service, wire copies and acknowledgement re-reads. A caller
-  waiting for a completed local dispatch receives its result.
-- Delete expired delivered messages by shard, stored status and retention deadline
-  with one storage call and one database operation. A missing deadline qualifies
-  only for a delivered message. In SQL, use a predicate DELETE. Pending duplicate
-  removal has a separate purpose. Datastore has no native delete by this predicate.
-  Its single-operation cleanup is an unresolved provider requirement.
+- Use JVM's ordinary shard pickup and release. A repeat pickup by the same
+  worker refreshes its pickup time. A release from a different worker leaves
+  the current pickup intact. Preserve Protobuf seconds and nanoseconds.
+- The application worker reads inbox pages, dispatches pending messages, marks
+  successful deliveries and sets their retention deadlines. For a remote
+  inbox it writes the changed messages through `InboxService.WriteMany` and
+  sends selected duplicates and expired completions through `RemoveMany`.
+  Report completion of a message after its storage operation succeeds.
+- In application-managed SQL storage, delete expired delivered messages by
+  shard, stored status and retention deadline in one database operation.
+  Datastore cannot express this predicate in one deletion. Its corresponding
+  cleanup remains an unresolved provider requirement.
 - Use exact numeric receive time for Datastore ordering. Fetch only the newest
   matching message when one is requested. Continue pages using the same total
   order, including timestamps inside one native Datastore microsecond.
@@ -68,19 +68,14 @@ input set. Their ordinary persistence, optional Process Manager Event history an
 the immediate cause on output envelopes remain independent of this feature.
 See [core-jvm issue #1744](https://github.com/SpineEventEngine/core-jvm/issues/1744).
 
-## Public API proposals awaiting a human decision
+## Delivery gRPC contract
 
-The server work stream through `ShardObservingService.ObserveAll` was
-explicitly requested. Apply the build protocol's rule on new mechanisms to
-the following separate proposals before changing the Delivery API:
-
-- The branch uses `ManagedShardService` for worker operations and includes
-  `PickShardRaw` for taking even an empty shard. The proposal is to use the
-  existing shard and inbox services and remove the extra empty-shard RPC.
-- The worker currently sends one removal per pending duplicate. The proposal
-  is to submit the duplicates identified on one page together, with one shard
-  session. The existing general batch removal does not check the session or
-  require the stored messages to be pending.
+Use the JVM Delivery server's Inbox, Shard, Admin and health contracts. The
+one additional public RPC is `ShardObservingService.ObserveAll`. Pickup,
+same-worker refresh and worker-checked release use the JVM shard messages.
+The Delivery server stores what the application sends. It does not decide
+whether a handler succeeded, which pending message is a duplicate, or which
+delivered messages the application should remove.
 
 ## Acceptance
 

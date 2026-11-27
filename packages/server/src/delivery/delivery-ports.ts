@@ -148,37 +148,12 @@ export interface DeliveryWorkRegistry {
   readonly sessionKind: DeliveryWorkSession["kind"];
 
   /**
-   * Tries managed pickup and distinguishes a busy shard from an empty one.
-   *
-   * @param shard Selects the shard to acquire.
-   * @param worker Identifies this independent processing run.
-   * @param options Propagates cancellation and a delivery deadline.
-   * @returns A granted session, a busy shard, or a shard without pending work.
-   */
-  pickUpForWork?(
-    shard: ShardIndex,
-    worker: WorkerId,
-    options?: DeliveryOperationOptions,
-  ): Promise<
-    | { readonly kind: "PICKED"; readonly session: DeliveryWorkSession }
-    | { readonly kind: "BUSY" | "NO_WORK" }
-  >;
-
-  /**
    * Creates a distinct worker identity for one independent remote run.
    *
    * @param worker Supplies the configured node identity.
    * @returns The worker identity used throughout this run.
    */
   workerForRun?(worker: WorkerId): WorkerId;
-
-  /**
-   * Returns the cadence for renewing one remote session during a handler.
-   *
-   * @param session Supplies the acquired session.
-   * @returns Milliseconds between renewal attempts, when required.
-   */
-  renewalIntervalMs?(session: DeliveryWorkSession): number | undefined;
 
   /**
    * Acquires one shard work fence when it is available.

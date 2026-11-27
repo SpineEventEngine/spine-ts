@@ -25,7 +25,6 @@ import {
   AdminService,
   ExpiredSessionsReleasedSchema,
   InboxService,
-  ManagedShardService,
   ShardService,
   ShardInfoListSchema,
   ShardObservingService,
@@ -183,89 +182,23 @@ export class DeliveryParentProxy {
   }
 
   /**
-   * Creates typed raw and managed shard routes.
-   *
-   * @returns The session-handle service handlers.
-   */
-  managed(): ServiceImpl<typeof ManagedShardService> {
-    return {
-      pickShardRaw: (request, context) =>
-        this.#pickup(request, context, (transport, headers) =>
-          createClient(ManagedShardService, transport).pickShardRaw(
-            request,
-            this.#forward(context, headers),
-          ),
-        ),
-      pickShardForDelivery: (request, context) =>
-        this.#pickup(request, context, (transport, headers) =>
-          createClient(ManagedShardService, transport).pickShardForDelivery(
-            request,
-            this.#forward(context, headers),
-          ),
-        ),
-      renewShardSession: (request, context) =>
-        this.#sessionMutation(request, context.signal, (transport, headers) =>
-          createClient(ManagedShardService, transport).renewShardSession(
-            request,
-            this.#forward(context, headers),
-          ),
-        ),
-      releaseShardSession: (request, context) =>
-        this.#sessionMutation(request, context.signal, (transport, headers) =>
-          createClient(ManagedShardService, transport).releaseShardSession(
-            request,
-            this.#forward(context, headers),
-          ),
-        ),
-      ...this.#inboxWork(),
-    };
-  }
-
-  /**
-   * Routes each inbox change to the storage subprocess serving the session's shard.
-   *
-   * @returns The three inbox operations that require a managed session.
-   */
-  #inboxWork(): Pick<
-    ServiceImpl<typeof ManagedShardService>,
-    "markDelivered" | "removeDuplicate" | "removeExpiredDelivered"
-  > {
-    return {
-      markDelivered: (request, context) =>
-        this.#workMutation(request, context.signal, (transport, headers) =>
-          createClient(ManagedShardService, transport).markDelivered(
-            request,
-            this.#forward(context, headers),
-          ),
-        ),
-      removeDuplicate: (request, context) =>
-        this.#workMutation(request, context.signal, (transport, headers) =>
-          createClient(ManagedShardService, transport).removeDuplicate(
-            request,
-            this.#forward(context, headers),
-          ),
-        ),
-      removeExpiredDelivered: (request, context) =>
-        this.#sessionMutation(request, context.signal, (transport, headers) =>
-          createClient(ManagedShardService, transport).removeExpiredDelivered(
-            request,
-            this.#forward(context, headers),
-          ),
-        ),
-    };
-  }
-
-  /**
-   * Creates the frozen raw shard surface with global explicit release.
+   * Creates the JVM shard surface with global explicit expiry release.
    *
    * @returns Raw shard handlers.
    */
   shards(): ServiceImpl<typeof ShardService> {
     return {
-      pickShard: () =>
-        Promise.reject(new ConnectError("Use typed shard pickup.", Code.FailedPrecondition)),
-      releaseSession: () =>
-        Promise.reject(new ConnectError("Use typed session release.", Code.FailedPrecondition)),
+      pickShard: (request, context) =>
+        this.#pickup(request, context, (transport, headers) =>
+          createClient(ShardService, transport).pickShard(request, this.#forward(context, headers)),
+        ),
+      releaseSession: (request, context) =>
+        this.#pickup(request, context, (transport, headers) =>
+          createClient(ShardService, transport).releaseSession(
+            request,
+            this.#forward(context, headers),
+          ),
+        ),
       releaseSessions: (request, context) => this.#globalRelease(request, context),
     };
   }
@@ -549,42 +482,5 @@ export class DeliveryParentProxy {
     const shard = DeliverySessionInputs.requireShard(request.shard);
     DeliverySessionInputs.requireWorker(request.worker);
     return this.#call(this.#slot(shard), context.signal, call);
-  }
-
-  /**
-   * Routes a typed session change to the shard's fixed child.
-   *
-   * @typeParam T The session response.
-   */
-  #sessionMutation<T>(
-    request: { shard?: ShardIndex | undefined },
-    signal: AbortSignal,
-    call: (transport: ChildTransport, headers: Headers) => Promise<T>,
-  ): Promise<T> {
-    return this.#call(this.#slot(DeliverySessionInputs.requireShard(request.shard)), signal, call);
-  }
-
-  /**
-   * Routes an inbox ID mutation to the fixed child for its live session.
-   *
-   * @typeParam T The mutation result.
-   * @param request Session and complete inbox message ID.
-   * @param signal Cancels the forwarded call.
-   * @param call Invokes the child's managed service.
-   * @returns The child's result.
-   */
-  #workMutation<T>(
-    request: {
-      session?: { shard?: ShardIndex | undefined } | undefined;
-      id?: { index?: ShardIndex | undefined } | undefined;
-    },
-    signal: AbortSignal,
-    call: (transport: ChildTransport, headers: Headers) => Promise<T>,
-  ): Promise<T> {
-    const messageShard = InboxShards.required(request.id?.index);
-    const shard = DeliverySessionInputs.requireShard(request.session?.shard);
-    if (messageShard.index !== shard.index || messageShard.ofTotal !== shard.ofTotal)
-      throw new ConnectError("Inbox message shard differs from session.", Code.InvalidArgument);
-    return this.#call(this.#slot(shard), signal, call);
   }
 }

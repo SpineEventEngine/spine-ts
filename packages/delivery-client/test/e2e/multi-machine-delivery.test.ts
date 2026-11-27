@@ -22,6 +22,7 @@ import {
   HealthCheckRequestSchema,
   HealthCheckResponse_ServingStatus,
   ShardStatus,
+  ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 import { spawn, type ChildProcess } from "node:child_process";
 import { EventEmitter, once } from "node:events";
@@ -172,6 +173,11 @@ describe("TS-to-TS multi-machine delivery", () => {
       ).toHaveLength(0);
       killed.kill("SIGKILL");
       await once(killed, "exit");
+      await delay(STALE_MS);
+      await createClient(
+        ShardService,
+        createGrpcTransport({ baseUrl, sessionManager: adminSessions }),
+      ).releaseSessions({ inactivityPeriod: { seconds: 1n } });
       await eventually(() => {
         expect(
           dispatched.filter((frame) => frame.signalId === "stall" && frame.node !== stalled.node),

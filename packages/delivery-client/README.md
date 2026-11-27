@@ -38,10 +38,10 @@ client.close();
 void shards;
 ```
 
-Read operations can use the configured retry policy. If a managed pickup reply
-is lost, `pickUpForDelivery()` retries with the same worker and run ID within
-the original deadline. For a lost inbox write reply, read the affected message to
-learn whether the write succeeded before deciding what to do next.
+Read operations can use the configured retry policy. A mutation can succeed
+on the server even if its reply is lost. For example, after a disconnected
+inbox write, read the message to see whether the server stored it.
+
 Inbox receive times and the `sinceWhen` query field use Protobuf `Timestamp` values,
 preserving seconds and nanoseconds. `readPage` calls the JVM
 `InboxService.FindManyInShard` RPC with an exclusive timestamp bound.
@@ -49,14 +49,19 @@ preserving seconds and nanoseconds. `readPage` calls the JVM
 <!-- docs-snippet-path: packages/delivery-client/src/client/client.ts -->
 
 ```ts
-import { DeliveryOutcomeUnknownError } from "@spine-event-engine/delivery-client";
+import { DeliveryClient, DeliveryOutcomeUnknownError } from "@spine-event-engine/delivery-client";
+import type { InboxMessage } from "@spine-event-engine/server";
+
+declare const client: DeliveryClient;
+declare const message: InboxMessage;
 
 try {
-  // await client.writeOne(message);
+  await client.writeOne(message);
 } catch (error) {
-  if (error instanceof DeliveryOutcomeUnknownError) {
-    // Read the fact named by error.reconciliation; do not repeat the mutation.
-  }
+  if (!(error instanceof DeliveryOutcomeUnknownError)) throw error;
+  const stored = await client.findOne(message.id);
+  if (stored === undefined) throw error;
+  console.log("The inbox contains the message", stored.id.value);
 }
 ```
 
@@ -159,7 +164,6 @@ through its own queue. For a complete publisher and consumer example, see
 
 ## ⚠️ Design for redelivery
 
-A session renewal permits the worker to continue processing its shard.
 If a connection fails after a handler saves its result but before the inbox message
 is acknowledged, another worker may invoke that handler again. Keep this case
 in mind when a handler calls an external service.

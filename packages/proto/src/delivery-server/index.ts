@@ -20,6 +20,5 @@ export * from "../../generated/spine/delivery/admin/admin_service_pb.js";
 export * from "../../generated/spine/delivery/commands_pb.js";
 export * from "../../generated/spine/delivery/events_pb.js";
 export * from "../../generated/spine/delivery/message_delivery_pb.js";
-export * from "../../generated/spine/delivery/session/managed_sessions_pb.js";
 export * from "../../generated/spine/delivery/pick_up_outcome_pb.js";
 export * from "../../generated/spine/delivery/rejections_pb.js";

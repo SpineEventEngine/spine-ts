@@ -129,7 +129,7 @@ it("reads the complete page when its encoded size exceeds four MiB", async () =>
   const tinyRequest = DeliveryClient.connectTo(server.baseUrl, { maxOutboundMessageBytes: 1 });
   clients.push(tinyRequest);
   await expect(
-    tinyRequest.pickUpForDelivery(ShardIndex.single(), { nodeId: "worker", value: "run" }),
+    tinyRequest.pickUp(ShardIndex.single(), { nodeId: "worker", value: "run" }),
   ).rejects.toMatchObject({
     name: "DeliveryOutcomeUnknownError",
     cause: { code: Code.ResourceExhausted },

@@ -18,8 +18,8 @@ import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-no
 import { describe, expect, it } from "vitest";
 import {
   InboxService,
-  ManagedShardService,
-  DeliveryShardPickupSchema,
+  ShardService,
+  PickUpShardSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 
@@ -47,7 +47,7 @@ describe("private delivery child", () => {
     const sessions = new Http2SessionManager(child.baseUrl);
     const transport = createGrpcTransport({ baseUrl: child.baseUrl, sessionManager: sessions });
     const inbox = createClient(InboxService, transport);
-    const managed = createClient(ManagedShardService, transport);
+    const shards = createClient(ShardService, transport);
     const shard = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
     const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run" });
     const headers = { headers: { authorization: "Bearer child" } };
@@ -62,11 +62,8 @@ describe("private delivery child", () => {
       expect((await inbox.findOne({ index: shard, uuid: "two" }, headers)).message?.id?.uuid).toBe(
         "two",
       );
-      const pickup = await managed.pickShardForDelivery(
-        create(DeliveryShardPickupSchema, { shard, worker }),
-        headers,
-      );
-      expect(pickup.result.case).toBe("pickedUp");
+      const pickup = await shards.pickShard(create(PickUpShardSchema, { shard, worker }), headers);
+      expect(pickup.value.case).toBe("pickedUp");
     } finally {
       sessions.abort();
       await child.close();

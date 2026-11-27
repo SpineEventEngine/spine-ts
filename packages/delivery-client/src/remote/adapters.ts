@@ -28,16 +28,18 @@ import type {
   InboxMessageId,
   InboxReadOptions,
 } from "@spine-event-engine/server";
-import type { InboxMessageInput } from "@spine-event-engine/server/spi/delivery";
+import {
+  InboxRetention,
+  deliveryPortAccess,
+  type InboxMessageInput,
+} from "@spine-event-engine/server/spi/delivery";
 import { ShardIndex } from "@spine-event-engine/server";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 
-import { DeliveryClient, deliveryClientAccess } from "../client/client.js";
-import { Code, ConnectError } from "@connectrpc/connect";
+import { DeliveryClient } from "../client/client.js";
 import {
   DeliveryPagingError,
-  DeliveryOutcomeUnknownError,
   DeliveryProtocolError,
   type DeliveryWorkerId,
   type RemoteShardSession,
@@ -51,35 +53,15 @@ interface RemoteInboxPage {
 }
 
 /**
- * Shares session bindings between the Inbox and registry adapters of one client.
- */
-const RemoteSessionBindings = Object.freeze({
-  /**
-   * Stores weak client-local session maps.
-   */
-  cache: new WeakMap<DeliveryClient, WeakMap<DeliveryWorkSession, RemoteShardSession>>(),
-
-  /**
-   * Returns the session map shared by adapters using one delivery client.
-   *
-   * @param client Identifies the remote connection.
-   * @returns The client-local session map.
-   */
-  get(client: DeliveryClient): WeakMap<DeliveryWorkSession, RemoteShardSession> {
-    let bindings = RemoteSessionBindings.cache.get(client);
-    if (bindings === undefined) {
-      bindings = new WeakMap();
-      RemoteSessionBindings.cache.set(client, bindings);
-    }
-    return bindings;
-  },
-});
-
-/**
  * Adapts a delivery-server client to the server-owned inbox port.
  */
 export class RemoteInbox implements DeliveryInbox {
   // prettier-ignore
+
+  readonly #pages = new WeakMap<DeliveryWorkSession, {
+    writes: InboxMessage[];
+    removals: InboxMessage[];
+  }>();
 
   /**
    * Remote inbox work requires an exclusive remote shard session.
@@ -92,7 +74,76 @@ export class RemoteInbox implements DeliveryInbox {
    * @param client Sends inbox calls to the delivery server.
    */
   constructor(private readonly client: DeliveryClient) {
+    Object.defineProperty(this, deliveryPortAccess, {
+      value: (
+        messages: readonly InboxMessage[],
+        session: DeliveryWorkSession,
+        options: DeliveryOperationOptions | undefined,
+        process: (isRecent?: (message: InboxMessage) => boolean) => Promise<boolean>,
+        onWritesStored: () => void,
+      ) => this.#applyPage(messages, session, options, process, onWritesStored),
+    });
     Object.freeze(this);
+  }
+
+  /**
+   * Runs one page and flushes changed rows before removals.
+   *
+   * @param messages Supplies the page read from InboxService.
+   * @param session Identifies the current worker session.
+   * @param options Carries cancellation for the batch RPCs.
+   * @param process Dispatches the page with full-precision retention checks.
+   * @param onWritesStored Reports durable completion writes before removals.
+   * @returns Whether processing continued through the complete page.
+   * @internal
+   */
+  async #applyPage(
+    messages: readonly InboxMessage[],
+    session: DeliveryWorkSession,
+    options: DeliveryOperationOptions | undefined,
+    process: (isRecent?: (message: InboxMessage) => boolean) => Promise<boolean>,
+    onWritesStored: () => void,
+  ): Promise<boolean> {
+    const now = Time.currentTime();
+    const nowNs = now.seconds * 1_000_000_000n + BigInt(now.nanos);
+    const removals = messages.filter((message) => {
+      if (message.status !== "DELIVERED") return false;
+      const deadline = DeliveryMessageCodec.retentionDeadline(message);
+      return (
+        deadline === undefined || nowNs > deadline.seconds * 1_000_000_000n + BigInt(deadline.nanos)
+      );
+    });
+    const page = { writes: [] as InboxMessage[], removals };
+    this.#pages.set(session, page);
+    try {
+      if (
+        !(await process((message) => {
+          const deadline = DeliveryMessageCodec.retentionDeadline(message);
+          return (
+            deadline !== undefined &&
+            deadline.seconds * 1_000_000_000n + BigInt(deadline.nanos) > nowNs
+          );
+        }))
+      )
+        return false;
+      if (page.writes.length > 0) {
+        await this.client.writeMany(page.writes, options);
+        onWritesStored();
+      }
+      if (page.removals.length > 0) await this.client.removeMany(page.removals, options);
+      return true;
+    } finally {
+      this.#pages.delete(session);
+    }
+  }
+
+  /**
+   * Returns the current page for one session.
+   */
+  #page(session: DeliveryWorkSession | undefined) {
+    const page = session === undefined ? undefined : this.#pages.get(session);
+    if (page === undefined) throw new DeliveryProtocolError();
+    return page;
   }
 
   /**
@@ -284,393 +335,139 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Completes the current inbox message by ID under the live session.
+   * Records the completed message for the page's batch write.
    *
    * @param message Supplies the pending message from the current page.
    * @param options Bounds or cancels the mutation.
    * @param session Supplies the current local exclusive session.
-   * @returns The completion with its first stored deadline, or `undefined` when
-   * the ID is absent.
-   * An unknown outcome raises `DeliveryOutcomeUnknownError` for reconciliation.
+   * @returns The staged completion with its first deadline. Storage completes
+   * when the page's WriteMany call succeeds.
    */
-  async markDelivered(
+  markDelivered(
     message: InboxMessage,
     options?: DeliveryOperationOptions,
     session?: DeliveryWorkSession,
   ): Promise<InboxMessage | undefined> {
-    const remote = this.#session(session);
-    const { matched, whenKeepUntil } = await this.client.markDelivered(remote, message.id, options);
-    if (!matched) return undefined;
-    const completed = { ...message, status: "DELIVERED" as const };
-    if (whenKeepUntil === undefined) delete completed.keepUntil;
-    else completed.keepUntil = DeliveryShardCodec.date(whenKeepUntil);
-    return Object.freeze(completed);
+    const now = Time.currentTime();
+    const completed = {
+      ...message,
+      status: "DELIVERED" as const,
+      keepUntil: InboxRetention.deadline(DeliveryShardCodec.date(now).getTime()),
+    };
+    const seconds = now.seconds + BigInt(Math.floor(InboxRetention.durationMs / 1_000));
+    const nanos = now.nanos + (InboxRetention.durationMs % 1_000) * 1_000_000;
+    const deadline = create(TimestampSchema, {
+      seconds: seconds + BigInt(Math.floor(nanos / 1_000_000_000)),
+      nanos: nanos % 1_000_000_000,
+    });
+    DeliveryMessageCodec.retainWire(message, completed, deadline);
+    this.#page(session).writes.push(completed);
+    return Promise.resolve(Object.freeze(completed));
   }
 
   /**
-   * Removes expired delivered inbox messages for the current shard session.
-   *
-   * @param shard Selects the current shard.
-   * @param options Bounds or cancels the managed mutation.
-   * @param session Supplies the current local exclusive session.
-   * @returns True after the server applies its shard predicate.
-   */
-  async removeExpiredDelivered(
-    shard: ShardIndex,
-    options?: DeliveryOperationOptions,
-    session?: DeliveryWorkSession,
-  ): Promise<boolean> {
-    const remote = this.#session(session);
-    if (remote.shard.index !== shard.index || remote.shard.ofTotal !== shard.ofTotal)
-      throw new TypeError("Inbox cleanup shard differs from session.");
-    await this.client.removeExpiredDelivered(remote, options);
-    return true;
-  }
-
-  /**
-   * Removes a pending duplicate by ID under the live session.
+   * Records a pending duplicate for removal after page completion writes.
    *
    * @param message Supplies the pending message from the current page.
    * @param options Bounds or cancels the mutation.
    * @param session Supplies the current local exclusive session.
-   * @returns Whether the pending message was removed or its ID was already absent. An unknown outcome
-   * raises `DeliveryOutcomeUnknownError` for reconciliation.
+   * @returns Whether removal was staged. Storage completes when the page's
+   * RemoveMany call succeeds.
    */
-  async removeDuplicate(
+  removeDuplicate(
     message: InboxMessage,
     options?: DeliveryOperationOptions,
     session?: DeliveryWorkSession,
   ): Promise<boolean> {
-    return this.client.removeDuplicate(this.#session(session), message.id, options);
-  }
-
-  /**
-   * Requires the handle issued to this client for a framework session.
-   *
-   * @param session Supplies the local exclusive fence.
-   * @returns Its current remote handle.
-   */
-  #session(session: DeliveryWorkSession | undefined): RemoteShardSession {
-    const handle =
-      session === undefined ? undefined : RemoteSessionBindings.get(this.client).get(session);
-    if (handle === undefined) throw new DeliveryProtocolError();
-    return handle;
+    this.#page(session).removals.push(message);
+    return Promise.resolve(true);
   }
 }
 
 /**
- * Adapts remote exclusive shard sessions to the server work registry.
+ * Adapts remote shard sessions to the server work registry.
  */
-class RemoteSessionOwner {
-  // prettier-ignore
-
+export class RemoteWorkRegistry implements DeliveryWorkRegistry {
   /**
-   * Maps local sessions to their latest confirmed remote handles.
+   * The session kind returned by the remote shard service.
    */
+  readonly sessionKind = "EXCLUSIVE" as const;
+
   readonly #sessions = new WeakMap<ExclusiveDeliveryWorkSession, RemoteShardSession>();
 
-  readonly #pendingRenewals = new WeakMap<
-    ExclusiveDeliveryWorkSession,
-    Promise<{ handle: RemoteShardSession; sentAt: number }>
-  >();
-
-  readonly #knownLiveUntil = new WeakMap<ExclusiveDeliveryWorkSession, number>();
-
-  readonly #releaseOnly = new WeakMap<ExclusiveDeliveryWorkSession, RemoteShardSession>();
-
-  readonly #terminal = new WeakSet<ExclusiveDeliveryWorkSession>();
-
   /**
-   * Creates a registry backed by the supplied delivery client.
+   * Creates the registry over a delivery client.
    *
-   * @param client Sends shard operations to the delivery server.
+   * @param client Sends shard RPCs to the Delivery server.
    */
   constructor(private readonly client: DeliveryClient) {}
 
   /**
-   * Acquires a shard for the supplied complete worker identity.
+   * Creates a distinct worker identity for one concurrent run.
    *
-   * @param shardIndex Identifies the shard to acquire.
-   * @param worker Identifies the worker requesting work.
-   * @param options Bounds or cancels the remote mutation.
-   * @returns A local exclusive session, or `undefined` when unavailable.
+   * @param worker Supplies the configured application node.
+   * @returns A worker ID for one run.
+   */
+  workerForRun(worker: WorkerId): WorkerId {
+    const configuredNode = RemoteValues.worker(worker).nodeId;
+    return create(WorkerIdSchema, { nodeId: { value: configuredNode }, value: randomUUID() });
+  }
+
+  /**
+   * Acquires one shard for one worker.
+   *
+   * @param shardIndex Identifies the requested shard.
+   * @param worker Identifies the worker requesting it.
+   * @param options Bounds or cancels the remote call.
+   * @returns A session, or `undefined` while another worker holds the shard.
    */
   async pickUp(
     shardIndex: ShardIndex,
     worker: WorkerId,
     options?: DeliveryOperationOptions,
   ): Promise<ExclusiveDeliveryWorkSession | undefined> {
-    const result = await this.pickUpForWork(shardIndex, worker, options);
-    return result.kind === "PICKED" ? result.session : undefined;
-  }
-
-  /**
-   * Returns a managed grant or the server's definitive refusal reason.
-   *
-   * @param shardIndex Selects the shard to acquire.
-   * @param worker Identifies this independent run.
-   * @param options Bounds or cancels the remote mutation.
-   * @returns The granted session, busy, or no-work result.
-   */
-  async pickUpForWork(
-    shardIndex: ShardIndex,
-    worker: WorkerId,
-    options?: DeliveryOperationOptions,
-  ): Promise<
-    | { readonly kind: "PICKED"; readonly session: ExclusiveDeliveryWorkSession }
-    | { readonly kind: "BUSY" | "NO_WORK" }
-  > {
-    const operation = {
-      ...(options?.signal === undefined ? {} : { signal: options.signal }),
-      ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
-    };
-    const pickup = await this.client.pickUpForDelivery(
-      shardIndex,
-      RemoteValues.worker(worker),
-      operation,
-    );
-    if (pickup.kind !== "PICKED") return { kind: pickup.kind };
-    const remote = pickup.session;
-    const sentAt = deliveryClientAccess.pickupSentAt(remote);
+    const remote = await this.client.pickUp(shardIndex, RemoteValues.worker(worker), options);
+    if (remote === undefined) return undefined;
     const session = RemoteValues.freeze({
       kind: "EXCLUSIVE" as const,
       shard: DeliveryShardCodec.snapshot(shardIndex),
     });
     this.#sessions.set(session, remote);
-    this.#knownLiveUntil.set(session, sentAt + RemoteValues.lifetimeMs(remote));
-    RemoteSessionBindings.get(this.client).set(session, remote);
-    return { kind: "PICKED", session };
+    return session;
   }
 
   /**
-   * Removes a previously acquired exclusive session.
+   * Removes the session when this registry recorded its pickup.
    *
-   * @param session Supplies the local session to release.
-   * @param options Bounds or cancels the remote mutation.
-   * @returns Whether this registry released a known session.
+   * @param session Identifies the locally recorded pickup.
+   * @param options Bounds or cancels the remote call.
+   * @returns Whether this registry released the session.
    */
   async release(
     session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
   ): Promise<boolean> {
     if (session.kind !== "EXCLUSIVE") return false;
-    const remote = this.#sessions.get(session) ?? this.#releaseOnly.get(session);
+    const remote = this.#sessions.get(session);
     if (remote === undefined) return false;
-    this.#terminal.add(session);
     this.#sessions.delete(session);
-    this.#knownLiveUntil.delete(session);
-    this.#releaseOnly.delete(session);
-    RemoteSessionBindings.get(this.client).delete(session);
-    const latest = await this.#pendingRenewals.get(session)?.catch(() => undefined);
-    await this.client.release(latest?.handle ?? remote, options);
+    await this.client.release(remote, options);
     return true;
   }
 
   /**
-   * Validates the local handle by renewing the matching remote session.
+   * Returns the local session while this registry has not released it. The
+   * server's current shard record is not read by this check.
    *
-   * @param session Supplies the locally issued exclusive session.
-   * @param options Bounds or cancels the renewal.
-   * @returns The retained session, or `undefined` when validation fails.
-   */
-  async validateOwnership(
-    session: DeliveryWorkSession,
-    options?: DeliveryOperationOptions,
-  ): Promise<ExclusiveDeliveryWorkSession | undefined> {
-    if (session.kind !== "EXCLUSIVE") return undefined;
-    const remote = this.#sessions.get(session);
-    if (remote === undefined || this.#terminal.has(session)) return undefined;
-    const previous = this.#pendingRenewals.get(session);
-    const renewal = this.#renew(session, remote, previous, options);
-    this.#pendingRenewals.set(session, renewal);
-    try {
-      const { handle: renewed, sentAt } = await renewal;
-      if (this.#terminal.has(session)) return undefined;
-      if (Time.monotonicTime() >= sentAt + RemoteValues.lifetimeMs(renewed)) {
-        this.#invalidate(session);
-        return undefined;
-      }
-      this.#sessions.set(session, renewed);
-      this.#knownLiveUntil.set(session, sentAt + RemoteValues.lifetimeMs(renewed));
-      RemoteSessionBindings.get(this.client).set(session, renewed);
-      return session;
-    } catch (error) {
-      this.#onFailedRenewal(session, error);
-      if (error instanceof ConnectError && error.code === Code.FailedPrecondition) return undefined;
-      throw error;
-    }
-  }
-
-  /**
-   * Clears the processing handle and retains an uncertain session for release.
-   *
-   * @param session Supplies the local session.
-   * @param error Supplies the failed renewal outcome.
-   */
-  #onFailedRenewal(session: ExclusiveDeliveryWorkSession, error: unknown): void {
-    if (this.#terminal.has(session)) return;
-    const releaseOnly =
-      error instanceof DeliveryOutcomeUnknownError ? this.#sessions.get(session) : undefined;
-    this.#invalidate(session);
-    if (releaseOnly === undefined) return;
-    this.#releaseOnly.set(session, releaseOnly);
-  }
-
-  /**
-   * Sends a renewal only before the previous confirmed lease deadline.
-   *
-   * @param session Supplies the local session.
-   * @param remote Supplies its last confirmed handle.
-   * @param previous Serializes an earlier renewal, when present.
-   * @param options Bounds or cancels the renewal.
-   * @returns The renewed handle and original send time.
-   */
-  async #renew(
-    session: ExclusiveDeliveryWorkSession,
-    remote: RemoteShardSession,
-    previous: Promise<{ handle: RemoteShardSession; sentAt: number }> | undefined,
-    options?: DeliveryOperationOptions,
-  ): Promise<{ handle: RemoteShardSession; sentAt: number }> {
-    const prior = previous === undefined ? undefined : await previous;
-    const latest = prior?.handle ?? remote;
-    const deadline =
-      prior === undefined
-        ? this.#knownLiveUntil.get(session)
-        : prior.sentAt + RemoteValues.lifetimeMs(latest);
-    if (this.#terminal.has(session)) return { handle: latest, sentAt: prior?.sentAt ?? 0 };
-    if (deadline === undefined || Time.monotonicTime() >= deadline)
-      throw new ConnectError("Delivery session lifetime elapsed.", Code.FailedPrecondition);
-    const sentAt = Time.monotonicTime();
-    const handle = await this.client.renew(latest, options);
-    return { handle, sentAt };
-  }
-
-  /**
-   * Returns one third of the server lifetime for an active remote session.
-   *
-   * @param session Supplies the local exclusive session.
-   * @returns The renewal interval, when its handle remains current.
-   */
-  renewalIntervalMs(session: DeliveryWorkSession): number | undefined {
-    if (session.kind !== "EXCLUSIVE" || this.#terminal.has(session)) return undefined;
-    const remote = this.#sessions.get(session);
-    return remote === undefined ? undefined : RemoteValues.lifetimeMs(remote) / 3;
-  }
-
-  /**
-   * Removes a session from local validation state.
-   *
-   * @param session Supplies the session to invalidate.
-   */
-  #invalidate(session: ExclusiveDeliveryWorkSession): void {
-    this.#terminal.add(session);
-    this.#sessions.delete(session);
-    this.#knownLiveUntil.delete(session);
-    this.#releaseOnly.delete(session);
-    RemoteSessionBindings.get(this.client).delete(session);
-  }
-}
-
-/**
- * Adapts one per-registry remote session owner to the server work-registry port.
- */
-export class RemoteWorkRegistry implements DeliveryWorkRegistry {
-  // prettier-ignore
-
-  /**
-   * Identifies the exclusive session model used by the remote registry.
-   */
-  readonly sessionKind = "EXCLUSIVE" as const;
-
-  readonly #owner: RemoteSessionOwner;
-
-  /**
-   * Creates a registry backed by the supplied delivery client.
-   *
-   * @param client Sends shard operations to the delivery server.
-   */
-  constructor(client: DeliveryClient) {
-    this.#owner = new RemoteSessionOwner(client);
-    Object.freeze(this);
-  }
-
-  /**
-   * Creates a fresh worker identity for one independent asynchronous run.
-   *
-   * @param worker Supplies the configured application node.
-   * @returns The configured node ID and a new UUID for this run.
-   */
-  workerForRun(worker: WorkerId): WorkerId {
-    const configuredNode = RemoteValues.worker(worker).nodeId;
-    const value = randomUUID();
-    return create(WorkerIdSchema, { nodeId: { value: configuredNode }, value });
-  }
-
-  /**
-   * Returns one third of the acquired server lifetime.
-   *
-   * @param session Supplies the acquired local session.
-   * @returns Its renewal interval, when still active.
-   */
-  renewalIntervalMs(session: DeliveryWorkSession): number | undefined {
-    return this.#owner.renewalIntervalMs(session);
-  }
-
-  /**
-   * Acquires a remote shard for a complete worker identity.
-   *
-   * @param shardIndex Identifies the shard to acquire.
-   * @param worker Identifies the worker requesting the shard.
-   * @param options Bounds or cancels the remote operation.
-   * @returns The acquired exclusive session, or `undefined` when unavailable.
-   */
-  pickUp(
-    shardIndex: ShardIndex,
-    worker: WorkerId,
-    options?: DeliveryOperationOptions,
-  ): Promise<ExclusiveDeliveryWorkSession | undefined> {
-    return this.#owner.pickUp(shardIndex, worker, options);
-  }
-
-  /**
-   * Returns the server's busy and no-work outcomes to managed callers.
-   *
-   * @param shardIndex Selects the shard to acquire.
-   * @param worker Identifies this independent run.
-   * @param options Bounds or cancels the remote operation.
-   * @returns A managed session, a busy shard, or a shard without pending work.
-   */
-  pickUpForWork(
-    shardIndex: ShardIndex,
-    worker: WorkerId,
-    options?: DeliveryOperationOptions,
-  ): ReturnType<RemoteSessionOwner["pickUpForWork"]> {
-    return this.#owner.pickUpForWork(shardIndex, worker, options);
-  }
-
-  /**
-   * Removes a remote shard session owned by this registry.
-   *
-   * @param session Identifies the session to release.
-   * @param options Bounds or cancels the remote operation.
-   * @returns Whether the registry recognized and released the session.
-   */
-  release(session: DeliveryWorkSession, options?: DeliveryOperationOptions): Promise<boolean> {
-    return this.#owner.release(session, options);
-  }
-
-  /**
-   * Validates current remote ownership before a guarded side effect.
-   *
-   * @param session Supplies the exclusive session to validate.
-   * @param options Bounds or cancels the authoritative observation.
-   * @returns The retained session, or `undefined` when validation fails.
+   * @param session Identifies the session to check.
+   * @returns The session while still recorded locally.
    */
   validateOwnership(
     session: DeliveryWorkSession,
-    options?: DeliveryOperationOptions,
   ): Promise<ExclusiveDeliveryWorkSession | undefined> {
-    return this.#owner.validateOwnership(session, options);
+    return Promise.resolve(
+      session.kind === "EXCLUSIVE" && this.#sessions.has(session) ? session : undefined,
+    );
   }
 }
 
@@ -678,16 +475,6 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
  * Groups immutable remote-adapter value operations.
  */
 const RemoteValues = Object.freeze({
-  /**
-   * Converts a positive session Duration to milliseconds.
-   *
-   * @param session Supplies the server-issued handle.
-   * @returns Its full-precision lifetime in milliseconds.
-   */
-  lifetimeMs(session: RemoteShardSession): number {
-    return Number(session.lifetime.seconds) * 1_000 + session.lifetime.nanos / 1_000_000;
-  },
-
   /**
    * Creates a detached message with a generated inbox identity.
    *

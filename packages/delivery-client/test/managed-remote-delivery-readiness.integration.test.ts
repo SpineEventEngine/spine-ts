@@ -27,7 +27,6 @@ import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   InboxService,
   ShardService,
-  ManagedShardService,
   ShardObservingService,
   AdminService,
 } from "@spine-event-engine/proto/delivery-server";
@@ -458,7 +457,7 @@ class GatedDeliveryListener {
         routes: (router) => {
           router.service(InboxService, this.#assembly.inbox);
           router.service(ShardService, this.#assembly.shards);
-          router.service(ManagedShardService, this.#assembly.managed);
+          router.service(ShardService, this.#assembly.shards);
 
           router.service(AdminService, this.#assembly.admin);
           router.service(ShardObservingService, {
@@ -492,7 +491,6 @@ class GatedDeliveryListener {
     this.#assembly.closeAdmission();
     this.#assembly.closeAdmin();
     this.#assembly.closeObserving();
-    this.#assembly.closeSessions();
     for (const session of this.#sessions) session.close();
     const server = this.#server;
     if (server?.listening) await closeListener(server);

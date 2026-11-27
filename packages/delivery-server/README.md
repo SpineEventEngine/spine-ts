@@ -48,7 +48,7 @@ then defaults.
 | Listener port    | `PORT`                      | `8484`               |
 | Inbound size     | `MAX_INBOUND_MESSAGE_SIZE`  | gRPC framing maximum |
 | Outbound size    | `MAX_OUTBOUND_MESSAGE_SIZE` | gRPC framing maximum |
-| Session lifetime | `SHARD_PROCESSING_TIMEOUT`  | 60 seconds           |
+| Stale pickup age | `SHARD_PROCESSING_TIMEOUT`  | Disabled             |
 | Work reminder    | `WORK_REMINDER_SECONDS`     | 10 seconds           |
 | Child processes  | `DELIVERY_PROCESS_COUNT`    | 1                    |
 
@@ -64,7 +64,7 @@ The exited process loses its in-memory messages and sessions.
 ## 🧩 Embed the handlers
 
 Use `InMemoryDelivery.create()` when an application provides the Connect router and
-listener itself. Register the inbox, shard, managed-session, and work observation
+listener itself. Register the inbox, shard, and work observation
 handlers on the router as shown below. The application manages the network listener and its lifecycle.
 
 An embedded consumer must declare and install direct dependencies on
@@ -80,7 +80,6 @@ import { createRouterTransport } from "@connectrpc/connect";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
 import {
   InboxService,
-  ManagedShardService,
   ShardObservingService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
@@ -91,7 +90,6 @@ const delivery = InMemoryDelivery.create({
 const transport = createRouterTransport((router) => {
   router.service(InboxService, delivery.inbox);
   router.service(ShardService, delivery.shards);
-  router.service(ManagedShardService, delivery.managed);
   router.service(ShardObservingService, delivery.observing);
 });
 void transport;
@@ -100,13 +98,14 @@ void transport;
 delivery.close();
 ```
 
-The example gives a picked-up shard a 30-second session. The default is 60
-seconds. The server expires the session if the worker stops renewing it.
-If the shard still has pending work, subscribers can immediately try to take it.
-The work reminder interval controls how often the server repeats the notice
-while the shard is free.
+In the example, another worker can pick up a shard when more than 30 seconds
+have passed since the recorded pickup. By default, age alone does not allow
+a takeover. Releasing a shard with pending messages makes it available to
+work-stream subscribers. The reminder interval controls when the server
+repeats that notice.
 
-The standalone listener exposes Inbox, Shard, Managed Shard, Shard Observing, Admin, and gRPC health services.
+The standalone listener exposes Inbox, Shard, Shard Observing, Admin, and gRPC health services.
+
 It binds only to the loopback address by default. An explicit non-loopback host
 is a caller-selected trusted-network deployment and should not be exposed
 directly to the public Internet.

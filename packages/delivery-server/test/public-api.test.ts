@@ -29,7 +29,6 @@ describe("InMemoryDelivery", () => {
 
     expect(core.inbox).toBeDefined();
     expect(core.shards).toBeDefined();
-    expect(core.managed).toBeDefined();
     core.close();
   });
 });

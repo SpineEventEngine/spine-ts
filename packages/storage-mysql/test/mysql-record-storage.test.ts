@@ -2042,6 +2042,15 @@ describe("MysqlRecordStorage", () => {
     expect(cleanup).toHaveLength(1);
     expect(cleanup[0]?.sql).toContain("when_keep_until IS NULL OR when_keep_until<=?");
     expect(cleanup[0]?.values?.slice(0, 3)).toEqual([2, 4, InboxMessageStatus.DELIVERED]);
+
+    storage.close();
+    const statementsBefore = calls.length;
+    const now = create(TimestampSchema, { seconds: 100n });
+    const shard = create(ShardIndexSchema, { index: 2, ofTotal: 4 });
+    await expect(storage.markInboxDelivered("ack", now)).rejects.toThrow(/closed/i);
+    await expect(storage.removePendingInbox("ack")).rejects.toThrow(/closed/i);
+    await expect(storage.removeExpiredInbox(shard, now)).rejects.toThrow(/closed/i);
+    expect(calls).toHaveLength(statementsBefore);
   });
 
   it("compares authoritative inbox status and deadline before a payload replacement", async () => {

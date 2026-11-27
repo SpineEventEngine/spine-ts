@@ -12,11 +12,9 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
 import {
   AnySchema,
-  type Duration,
-  DurationSchema,
   Int32ValueSchema,
   Int64ValueSchema,
   StringValueSchema,
@@ -33,7 +31,7 @@ import {
   type ExpiredSession,
   type ShardInfo,
   type ShardInfoUpdate,
-  type DeliverySessionHandle,
+  type ShardPickedUp,
   ShardStatus,
 } from "@spine-event-engine/proto/delivery-server";
 import {
@@ -130,23 +128,6 @@ const DeliveryValues = Object.freeze({
       throw new TypeError(`${name} is invalid.`);
     return value;
   },
-
-  /**
-   * Checks a positive lifetime within Protobuf Duration bounds.
-   *
-   * @param value Supplies the lifetime to check.
-   * @returns Whether the lifetime is valid.
-   */
-  validLifetime(value: Duration): boolean {
-    return (
-      value.seconds >= 0n &&
-      value.seconds <= 315_576_000_000n &&
-      Number.isInteger(value.nanos) &&
-      value.nanos >= 0 &&
-      value.nanos < 1_000_000_000 &&
-      (value.seconds !== 0n || value.nanos !== 0)
-    );
-  },
 });
 
 const DeliveryTargetIds = Object.freeze({
@@ -193,6 +174,23 @@ type DeliveryMessageCodecApi = Readonly<{
    * @returns The validated wire message.
    */
   encode(message: InboxMessage): WireInboxMessage;
+
+  /**
+   * Copies the exact received wire envelope when changing a page row's status.
+   *
+   * @param source Supplies the row decoded from InboxService.
+   * @param changed Supplies the row with its new delivery status.
+   * @param deadline Supplies the full-precision retention deadline.
+   */
+  retainWire(source: InboxMessage, changed: InboxMessage, deadline: Timestamp): void;
+
+  /**
+   * Reads the full-precision deadline from the received wire row.
+   *
+   * @param message Supplies the decoded row.
+   * @returns The deadline, when one was stored.
+   */
+  retentionDeadline(message: InboxMessage): Timestamp | undefined;
 
   /**
    * Decodes an inbox message and confirms its expected shard.
@@ -306,6 +304,13 @@ type DeliveryMessageCodecApi = Readonly<{
 /**
  * Encodes and decodes inbox messages without exposing mutable wire values.
  */
+const deliveryWireSnapshots = new WeakMap<InboxMessage, WireInboxMessage>();
+
+const deliveryDeadlines = new WeakMap<InboxMessage, Timestamp>();
+
+/**
+ * Encodes and decodes Inbox messages with detached wire snapshots.
+ */
 const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
   // prettier-ignore
 
@@ -356,9 +361,16 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
       throw new TypeError("Delivery inbox message shard is invalid.");
     const target = DeliveryMessageCodec.target(message.inboxId);
     const whenReceived = DeliveryRequestCodec.timestamp(message.whenReceived);
-    const keepUntil =
-      message.keepUntil === undefined ? undefined : DeliveryRequestCodec.expiry(message.keepUntil);
+    const keepUntil = DeliveryMessageCodec.retentionDeadline(message);
     DeliveryValues.validateSignalVersion(message);
+    const retained = deliveryWireSnapshots.get(message);
+    if (retained !== undefined) {
+      const wire = clone(InboxMessageSchema, retained);
+      wire.status = DeliveryMessageCodec.status(message.status);
+      if (keepUntil === undefined) delete wire.keepUntil;
+      else wire.keepUntil = keepUntil;
+      return wire;
+    }
     return create(InboxMessageSchema, {
       id: create(InboxMessageIdSchema, { uuid: id, index: shard }),
       signalId: create(InboxSignalIdSchema, { value: message.signalId }),
@@ -408,7 +420,26 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
       version: BigInt(message.version),
       ...(keepUntil === undefined ? {} : { keepUntil }),
     });
+    deliveryWireSnapshots.set(decoded, clone(InboxMessageSchema, message));
     return decoded;
+  },
+
+  retainWire(source: InboxMessage, changed: InboxMessage, deadline: Timestamp): void {
+    const wire = deliveryWireSnapshots.get(source);
+    if (wire !== undefined) deliveryWireSnapshots.set(changed, wire);
+    deliveryDeadlines.set(changed, create(TimestampSchema, deadline));
+  },
+
+  retentionDeadline(message: InboxMessage): Timestamp | undefined {
+    if (message.keepUntil === undefined) return undefined;
+    const deadline =
+      deliveryDeadlines.get(message) ?? deliveryWireSnapshots.get(message)?.keepUntil;
+    if (
+      deadline !== undefined &&
+      DeliveryShardCodec.date(deadline).getTime() === message.keepUntil.getTime()
+    )
+      return create(TimestampSchema, deadline);
+    return create(TimestampSchema, DeliveryRequestCodec.expiry(message.keepUntil));
   },
 
   /**
@@ -701,7 +732,7 @@ type DeliveryShardCodecApi = Readonly<{
    * @returns The immutable exclusive session.
    */
   decodePicked(
-    value: DeliverySessionHandle,
+    value: ShardPickedUp,
     expectedShard: ShardIndex,
     expectedWorker: DeliveryWorkerId,
   ): RemoteShardSession;
@@ -852,18 +883,11 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
    * @returns The immutable exclusive session.
    */
   decodePicked(
-    value: DeliverySessionHandle,
+    value: ShardPickedUp,
     expectedShard: ShardIndex,
     expectedWorker: DeliveryWorkerId,
   ): RemoteShardSession {
-    if (
-      value.shard === undefined ||
-      value.worker === undefined ||
-      value.whenPicked === undefined ||
-      value.lifetime === undefined ||
-      !value.sessionId.trim() ||
-      !DeliveryValues.validLifetime(value.lifetime)
-    )
+    if (value.shard === undefined || value.worker === undefined || value.whenPicked === undefined)
       throw DeliveryRequestCodec.protocol();
     const shard = DeliveryShardCodec.decode(value.shard);
     const worker = DeliveryShardCodec.decodeWorker(value.worker);
@@ -879,8 +903,6 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
       shard,
       worker,
       whenPicked: DeliveryShardCodec.timestamp(value.whenPicked),
-      sessionId: value.sessionId,
-      lifetime: DeliveryValues.freeze(create(DurationSchema, value.lifetime)),
     });
   },
 

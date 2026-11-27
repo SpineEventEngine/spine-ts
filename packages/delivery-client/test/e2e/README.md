@@ -32,11 +32,12 @@ therefore allows intermediate updates to vary. It also checks service health,
 delivery on a replacement application node, and cleanup after a deliberate
 failure by starting another server on the same port.
 
-Stale takeover uses a one-second processing timeout. The test observes the
-stall admission time, proves no survivor dispatch during a deliberate 500 ms
-sub-threshold window, requires takeover no earlier than the one-second expiry
-with a 100 ms scheduling tolerance, and bounds completion to less than five
-seconds.
+The test pauses one application inside its handler and checks that the other
+application leaves the shard alone. It kills the paused process, waits for
+the assignment to become at least one second old, then calls
+`ShardService.ReleaseSessions` with a one-second inactivity period. The
+Delivery server reports the free shard on its work stream. The surviving
+application picks it up and delivers the pending message.
 
 ## ⚠️ Limits
 

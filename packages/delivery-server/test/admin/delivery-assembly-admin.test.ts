@@ -18,7 +18,8 @@ import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 
 import {
-  DeliveryShardPickupSchema,
+  PickUpShardSchema,
+  ReleaseShardSchema,
   RemoveMessageSchema,
   ShardStatus,
   WriteMessageSchema,
@@ -33,13 +34,12 @@ import {
 
 import { DeliveryAssembly } from "../../src/server/assembly.js";
 import { domainMessage as message } from "../core/domain-message.js";
-import { pickedHandle } from "../session-fixtures.js";
 
 const context = { signal: new AbortController().signal } as never;
 const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
 
 describe("delivery assembly Admin projection", () => {
-  it("tracks actual counts and prunes released message-free shards from snapshots", async () => {
+  it("tracks actual counts and retains the last pickup on released empty shards", async () => {
     const assembly = DeliveryAssembly.create();
     const first = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
     const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
@@ -49,11 +49,11 @@ describe("delivery assembly Admin projection", () => {
     await assembly.inbox.writeOne(create(WriteMessageSchema, { message: firstMessage }), context);
     await assembly.inbox.writeOne(create(WriteMessageSchema, { message: firstMessage }), context);
     await assembly.inbox.removeOne(create(RemoveMessageSchema, { message: missing }), context);
-    const pickup = await assembly.managed.pickShardRaw(
-      create(DeliveryShardPickupSchema, { shard: second, worker }),
+    await assembly.shards.pickShard(create(PickUpShardSchema, { shard: second, worker }), context);
+    await assembly.shards.releaseSession(
+      create(ReleaseShardSchema, { shard: second, worker }),
       context,
     );
-    await assembly.managed.releaseShardSession(pickedHandle(pickup), context);
 
     const snapshot = assembly.admin.getShardInfo(create(EmptySchema), context) as ShardInfoList;
     expect(snapshot).toMatchObject({
@@ -63,9 +63,39 @@ describe("delivery assembly Admin projection", () => {
           status: ShardStatus.NOT_PICKED,
           messages: 1,
         },
+        {
+          index: second,
+          status: ShardStatus.NOT_PICKED,
+          messages: 0,
+        },
       ],
     });
-    expect(snapshot.shards).toHaveLength(1);
+    expect(snapshot.shards[1]?.lastPicked).toBeDefined();
+    const replay = assembly.admin
+      .subscribeToShardUpdates(create(EmptySchema), context)
+      [Symbol.asyncIterator]();
+    await replay.next();
+    await replay.next();
+    await expect(replay.next()).resolves.toMatchObject({
+      value: { value: { case: "update", value: { index: second, newMessagesCount: 0 } } },
+    });
+    await replay.return?.();
+  });
+
+  it("retains an empty shard's last pickup after its final message is removed", async () => {
+    const assembly = DeliveryAssembly.create();
+    const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
+    const stored = message("last", shard);
+    await assembly.inbox.writeOne(create(WriteMessageSchema, { message: stored }), context);
+    await assembly.shards.pickShard(create(PickUpShardSchema, { shard, worker }), context);
+    await assembly.inbox.removeOne(create(RemoveMessageSchema, { message: stored }), context);
+    await assembly.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
+    await assembly.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
+    const snapshot = assembly.admin.getShardInfo(create(EmptySchema), context) as ShardInfoList;
+    expect(snapshot.shards).toMatchObject([
+      { index: shard, status: ShardStatus.NOT_PICKED, messages: 0 },
+    ]);
+    expect(snapshot.shards[0]?.lastPicked).toBeDefined();
   });
 
   it("replays the current shard after ACK and later publishes its changed stored count", async () => {

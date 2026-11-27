@@ -65,25 +65,17 @@ For example, a slow dashboard can read an initial replay of 500 shards.
 An explicit setup timeout ends at acknowledgement. A later disconnect follows
 the caller's reconnect settings.
 
-`pickUpForDelivery()` requests a shard with pending work.
-If a managed pickup has an uncertain outcome, the client repeats it using the
-same worker and run ID within the original deadline. A grant, a busy shard, an
-empty shard, or a definitive error ends the attempt. Repeated transport failures
-increase the delay between tries. Closing the client or cancelling the call
-also ends a wait between requests. Retry waits count toward the caller’s operation
-deadline. The worker measures a granted session’s lifetime from the pickup
-request that returned the grant.
-`pickUp()` also permits deliberately taking an empty shard.
-A successful TS pickup returns a session handle for one worker and shard.
-The handle carries a session ID and the lifetime set by the server. Keep that
-handle when calling `renew()` or `release()`. If a worker misses the reply to
-its managed pickup of shard 4, it can repeat that pickup with the same run ID. While the original session is
-live, the server returns the same session ID. After releasing the shard, a new
-run receives a fresh session ID. A delayed release from the first run leaves
-the second run active. If a renewal reply is lost, the worker stops processing
-and can still send a release for its original session. If the server still
-has that session, the release frees the shard. If another worker has taken
-its place, the release leaves that worker’s session active.
+`pickUp(shard, worker)` sends JVM's `ShardService.PickShard`. Suppose
+two application nodes receive a notice for shard 3. The first worker to pick
+it up can read its inbox. If the other worker tries, the gRPC reply names
+the worker already processing it. The TS client returns `undefined` to that
+second caller. Between the notice and pickup the shard may have
+become empty. The first worker can then release it after reading an empty page.
+
+A repeat pickup by the same worker refreshes the recorded pickup time.
+`release(session)` sends the shard and worker to `ShardService.ReleaseSession`.
+If shard 3 has since passed to another worker, the server leaves that worker
+in place. The RPC returns an empty reply in either case.
 
 `releaseExpired(inactivityMs)` asks the server to release every session that
 has been idle for that long. If the releases succeed but the reply is lost
@@ -97,40 +89,39 @@ and `whenReleased`. Admin observations expose the same precision in
 `lastPicked` when populated. A caller can convert a timestamp to a JavaScript
 `Date` for display. Keep the original seconds and nanoseconds for comparisons.
 
-## Worker acknowledgement and cleanup
+## Application delivery and inbox storage
 
-A worker takes a shard and reads its inbox messages a page at a time. Each
-message contains the signal, its recipient and its inbox ID. After a handler
-succeeds, the worker uses its live session to mark that inbox ID delivered.
-For example, when a page contains two Commands, the worker already has both
-IDs. Each successful acknowledgement starts that message's five-second
-retention period on the server. Retrying it preserves the original deadline.
-For code using the transport client directly, `client.markDelivered(session, message.id)`
-returns `matched` and, when present, the original `whenKeepUntil` timestamp.
-Only the session and the inbox ID travel back to the server.
+Suppose a page from `FindManyInShard` contains three inbox messages for the
+same Aggregate. The first carries a new Command. The second carries another
+copy of that Command. The third is a completed delivery whose retention
+deadline has passed. The application worker processes the page as follows.
 
-Workers renew while handlers run. With the default 60-second session, a
-healthy worker renews every 20 seconds. If its connection fails, the server
-can grant the shard to another worker after expiry. An Entity write already
-sent by the first handler may still complete. A handler that calls an external
-system needs to account for a repeated Command.
+1. It calls the Aggregate's handler for the first Command. After success, it
+   sets that inbox message's status to `DELIVERED` and calculates its
+   retention deadline using the application clock.
+2. It recognizes the second copy from the typed Command ID and recipient. It
+   sets that inbox message aside for deletion. It also sets aside the expired
+   completion. Neither message needs another handler call.
+3. The worker sends the changed inbox message to `InboxService.WriteMany`.
+   After that write succeeds, it sends the two inbox messages to `InboxService.RemoveMany`.
+   It skips a call when its batch is empty. The Delivery server applies the
+   writes and deletions it receives.
 
-Each delivery read requests one bounded logical shard page. Status filtering
-advances through bounded raw pages by their last received timestamp within one
-total read deadline, including pages containing only excluded statuses. The
-caller's `AbortSignal` also covers that complete multi-page collection, including
-later pages. The read is live: inserts behind the timestamp position require a later fresh
-scan. The application worker checks each pending message against the delivered messages it read on the page and the messages it acknowledged within the five-second retention period. If it finds a duplicate for the same recipient, it removes that pending inbox ID and continues with the next message.
-When cleanup runs, the server removes the delivered messages in that shard
-whose retention deadlines have passed. A pending Command stays in the inbox.
-A delivered message on a quiet shard can remain visible to Admin until the
-next cleanup.
+If the write succeeds and the deletion fails, the first inbox message
+remains delivered. The worker reports the deletion error. The second copy
+can still be present when another worker reads the shard. The retained
+completion gives that worker evidence that the Command was already handled.
+
+If the application stops after the handler succeeds but before the inbox
+write reaches the server, the stored Command can still appear pending. A
+later worker can deliver it again. Pickup coordinates workers. It does not
+combine an Entity write and an inbox write into one database transaction.
 
 ## Remote delivery in an environment
 
 `DeliveryBuilder.remote({ endpoint, clientOptions?, notifications? })` creates an unopened `ServerEnvironmentDelivery`. `RemoteDelivery.connectTo()` provides the same remote facility. `open()` constructs the client, Inbox adapter, and work registry before publishing them. It does not ask Admin for a readiness snapshot; an idle work stream cannot delay application startup. Concurrent opens share an attempt. A closed facility cannot reopen.
 
-Built-in notifications open `ShardObservingService.ObserveAll` after endpoints are ready. Every connected application node receives current free shards with pending messages when it connects or reconnects. A disconnected reader reopens with the established increasing reconnect delay, starting at 100 milliseconds and rising to 30 seconds; an unsupported method ends that reader with the original gRPC status. The server repeats an available shard after its configured reminder interval, 10 seconds by default, while it remains free and unclaimed. A write to a busy shard is observed after release or expiry. Admin snapshots and updates report state for administration; they do not trigger application work.
+Built-in notifications open `ShardObservingService.ObserveAll` after endpoints are ready. Every connected application node receives current free shards with pending messages when it connects or reconnects. A disconnected reader reopens with the established increasing reconnect delay, starting at 100 milliseconds and rising to 30 seconds; an unsupported method ends that reader with the original gRPC status. The server repeats an available shard after its configured reminder interval, 10 seconds by default, while it remains free and unclaimed. A write to a busy shard becomes visible to subscribers when a release frees the shard with work still pending. Admin snapshots and updates report state for administration; they do not trigger application work.
 
 By default, distinct shards can run simultaneously on one node. An application can set `maxConcurrentDeliveries` when configuring remote notifications. For example, if the limit is two and the node already has two deliveries in progress, it skips the next notice. The server's later reminder can offer a still-free shard again. Calls for the same shard on one node share the active delivery attempt. If a second caller cancels its wait or reaches its deadline, that caller receives `stopped`. The first caller can still finish the delivery. Another node may compete for the shard, while the Delivery server grants one live session. The result of `deliverMessagesFrom(shard)` is `completed`, `busy`, `noWork`, or `stopped`; an unrecovered read, processing, release, or post-release lookup error rejects the call. A stream notice is advisory, and only the retained message and current session permit processing.
 
@@ -143,7 +134,7 @@ consumer calls `environment.delivery.deliverMessagesFrom(shard)`. A callback
 failure is logged after the successful write, and the application decides how
 to recover its notification.
 
-Environment shutdown cancels the work reader, waits for admitted runs, and closes the client HTTP/2 session. A failure in a close phase remains retryable. A handler effect and Inbox acknowledgement remain separate operations; a lost acknowledgement may cause redelivery after session expiry. An Entity write already in progress can still finish after another worker takes the shard.
+Environment shutdown cancels the work reader, waits for admitted runs, and closes the client HTTP/2 session. A failure in a close phase remains retryable. A handler effect and Inbox acknowledgement remain separate operations; a lost acknowledgement may cause redelivery on a later pickup. An Entity write already in progress can still finish after another worker takes the shard.
 
 Retained messages in the current page or recent-delivery cache suppress the same
 Command or Event ID at the same typed Inbox target until `keep_until`. Remote pagination

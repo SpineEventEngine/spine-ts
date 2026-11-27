@@ -28,7 +28,6 @@ import {
   AdminService,
   InboxService,
   ShardService,
-  ManagedShardService,
   ShardObservingService,
 } from "@spine-event-engine/proto/delivery-server";
 import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
@@ -321,7 +320,7 @@ class DeliveryListener {
         routes: (router) => {
           router.service(InboxService, this.#assembly.inbox);
           router.service(ShardService, this.#assembly.shards);
-          router.service(ManagedShardService, this.#assembly.managed);
+          router.service(ShardService, this.#assembly.shards);
 
           router.service(ShardObservingService, this.#assembly.observing);
           router.service(AdminService, this.#assembly.admin);
@@ -341,7 +340,6 @@ class DeliveryListener {
     this.#assembly.closeAdmission();
     this.#assembly.closeAdmin();
     this.#assembly.closeObserving();
-    this.#assembly.closeSessions();
     for (const session of this.#sessions) session.close();
     if (this.#server?.listening)
       await new Promise<void>((resolve) => {

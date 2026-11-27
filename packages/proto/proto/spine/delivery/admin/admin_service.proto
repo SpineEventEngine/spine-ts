@@ -1,8 +1,17 @@
 /*
- * Copyright (c) 2000-2026 TeamDev. All rights reserved.
- * TeamDev PROPRIETARY and CONFIDENTIAL.
- * Use is subject to license terms.
+ * Copyright 2026 CodeMatters, Lda.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions
+ * and limitations under the License.
  */
+
 syntax = "proto3";
 
 package spine.delivery;
@@ -20,25 +29,29 @@ import "google/protobuf/empty.proto";
 
 import "spine/server/delivery/delivery.proto";
 
-// Acts as a backend implementation for `AdminService`
+// Acts as a backend implementation for `AdminService`.
 service AdminService {
 
-    // Gets an information about shards on Liquor server.
+    // Gets information about shards on the Delivery server: every shard that has a session
+    // record or holds messages. A shard whose index is not set is left out.
     rpc GetShardInfo(google.protobuf.Empty) returns (ShardInfoList);
 
     // Subscribes to the updates of shard info.
     //
     // The first received `SubscriptionResponse` is an acknowledgement of a successfully created
-    // subscription and contains only the `created` filed set. All other responses contain
+    // subscription and contains only the `created` field set. All other responses contain
     // `ShardInfoUpdate`. It is guaranteed that the acknowledgement is sent only once as a first
     // response and never repeated again. Also, it is impossible that any update comes
     // before the acknowledgement.
     //
     // Users should consider the subscription as created only after receiving the acknowledgement
-    // in the `SubscriptionResponse`. All changes in the system occurred before the subscription
-    // acknowledgement is not tracked by this call.
+    // in the `SubscriptionResponse`. Right after the acknowledgement, the subscriber receives
+    // the current state of every shard that has a session record or holds messages, which
+    // reflects the changes made before. A shard whose index is not set is never sent.
     //
-    // Each update is sent as a single `ShardInfoUpdate`.
+    // Each update is sent as a single `ShardInfoUpdate`, which carries the full current state of
+    // its shard. The updates of each shard are throttled, so that the changes made within
+    // a short interval arrive as one update with their final state.
     //
     rpc SubscribeToShardUpdates(google.protobuf.Empty) returns (stream SubscriptionResponse);
 }
@@ -77,7 +90,7 @@ message ShardInfoList {
     repeated ShardInfo shards = 1;
 }
 
-// Information about shard status on the Liquor server.
+// Information about shard status on the Delivery server.
 message ShardInfo {
 
     // Index of the shard.

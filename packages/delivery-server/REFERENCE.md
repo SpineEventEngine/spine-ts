@@ -12,7 +12,7 @@ This reference describes the public in-memory Delivery server API. Read the
 ## Public entry points
 
 `InMemoryDelivery.create(options)` returns `DeliveryCore` with Connect handler
-implementations `inbox`, `shards`, `managed`, and `observing`.
+implementations `inbox`, `shards`, and `observing`.
 Register `observing` for `ShardObservingService` so application nodes can receive work notices.
 The caller supplies the network listener. Call `close()` to finish streams and cancel
 timers. The standalone `DeliveryServer` also provides the Admin and health services.
@@ -40,8 +40,8 @@ which override defaults. Invalid values throw before a listener is created:
   received in one gRPC message. `maxOutboundMessageBytes` /
   `MAX_OUTBOUND_MESSAGE_SIZE` controls the bytes sent. Both accept integers
   from 1 to 4,294,967,295. The default is the upper end of the transport's range.
-- `processingTimeoutSeconds` / `SHARD_PROCESSING_TIMEOUT` sets the session
-  lifetime. It defaults to 60 seconds.
+- `processingTimeoutSeconds` / `SHARD_PROCESSING_TIMEOUT` sets the age after which another worker
+  can take over on pickup. Zero, the default, disables takeover by age.
 
 The in-memory inbox keeps two balanced trees per shard. One orders all stored
 messages, the other orders messages waiting for delivery. They use receive
@@ -79,16 +79,17 @@ that shard during initial discovery. Taking the shard stops its reminders.
 
 ## Session lifetime and work reminders
 
-The standalone server uses `processingTimeoutSeconds` for session lifetime.
-In an embedded core, register `delivery.observing` for `ShardObservingService`. Set `reminderIntervalMs` for repeat notices and `processingTimeoutMs` for the lease. Their defaults are 10 seconds and 60 seconds respectively.
-After a successful renewal the worker has another session lifetime to complete
-its work or renew again.
+The standalone server accepts `processingTimeoutSeconds`. An embedded
+server accepts `processingTimeoutMs`. By default a shard stays assigned
+until release. For example, an operator can use JVM's `ReleaseSessions`
+to release assignments that have been inactive for at least an hour.
+Releasing shard 4 makes a pending Command there visible to subscribers.
+If nobody takes it, the server repeats the notice after ten seconds by default.
 
-Suppose a worker takes shard 4 at noon and immediately loses its connection.
-At 12:01 the default session expires. If a Command is still waiting there,
-the server offers shard 4 to connected subscribers. If nobody takes it,
-subscribers receive the next reminder ten seconds later by default.
-A successful pickup by another worker stops those reminders.
+If the standalone server is configured with a processing timeout of 60
+seconds, a competing pickup can take over once **more than** 60 seconds have
+passed since the recorded pickup. The work reminder interval applies to a
+free shard. It does not set a deadline for a handler.
 
 ## Delivery semantics
 
@@ -107,27 +108,27 @@ message. The TS worker includes that instant again, asks for a larger page
 when needed, and skips the messages it already visited using their inbox
 counters and UUIDs. It uses the same RPC for both reads.
 
-A session expires when elapsed time reaches its lifetime. Explicit inactivity
-release also includes sessions exactly at the requested age. For example, a
-request specifying 500 microseconds leaves a 499-microsecond session active.
+`ShardService.PickShard` takes a free shard, including an empty shard.
+Repeating pickup with the same worker refreshes the recorded time. If a
+different worker asks for the shard while that assignment is current, the
+response identifies the worker that already has it.
 
-A raw pickup can open a session on an empty shard. The process serving that
-shard keeps a session record and an expiry timer until release or expiry.
-Each additional live session consumes memory even when the inbox contains
-zero messages. Queued writes also use memory while they wait for execution.
-
-Ordinary renewal and release use the shard, worker, and session ID from the
-grant. A release from a previous pickup leaves the newer session active, even
-when both pickups used the same worker ID. The server records the pickup time
-and samples the clock again for a successful pickup reply, following JVM
-Delivery. The reported times can therefore differ slightly. The session ID
-identifies the pickup across those clock readings and subsequent renewals.
+`ReleaseSession` takes a shard and a worker. For example, if worker East
+finishes after worker West has taken over, releasing East's assignment leaves
+West in place. The operation returns an empty reply. `ReleaseSessions`
+accepts an inactivity period. A period of 500 microseconds includes an
+assignment exactly 500 microseconds old and leaves a younger one active.
 
 The Admin `messages` count includes every stored inbox message for the shard.
 For example, after the worker acknowledges the only Command, Admin still shows
 one message. The work stream stays silent because that message is already delivered.
 When the framework removes the retained message during a later drain, the stored
 count falls to zero.
+
+A shard that was picked up previously keeps its last pickup time in Admin.
+For example, pick up an empty shard and release it. A newly opened dashboard
+can still show that shard as free, with zero messages and its last pickup time.
+The work stream stays silent because the inbox has no pending messages there.
 
 An Admin subscription sends its acknowledgement, the current state of known
 shards, and subsequent changes. Changes within 25 milliseconds can be combined

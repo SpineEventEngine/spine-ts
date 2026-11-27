@@ -37,44 +37,41 @@ describe("InMemoryDeliveryState", () => {
         }),
       },
     ]);
-    state.setSession(
-      shard,
-      worker,
-      { $typeName: "google.protobuf.Timestamp", seconds: 0n, nanos: 42 },
-      "session-1",
-      "RAW",
-    );
+    state.setSession(shard, worker, {
+      $typeName: "google.protobuf.Timestamp",
+      seconds: 0n,
+      nanos: 42,
+    });
     state.release(shard);
     const record = state.shards.get("0/1");
     expect(record?.worker).toBeUndefined();
     expect(record?.whenLastPicked).toMatchObject({ seconds: 0n, nanos: 42 });
   });
 
-  it("prunes a released shard after its last retained message is removed", () => {
+  it("retains a released shard after its last retained message is removed", () => {
     const state = new InMemoryDeliveryState();
     const first = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
     const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
     const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
     const message = domainMessage("message", first);
     state.putAll([{ message }]);
-    state.setSession(
-      first,
-      worker,
-      { $typeName: "google.protobuf.Timestamp", seconds: 0n, nanos: 42 },
-      "session-1",
-      "RAW",
-    );
+    state.setSession(first, worker, {
+      $typeName: "google.protobuf.Timestamp",
+      seconds: 0n,
+      nanos: 42,
+    });
     state.release(first);
     state.delete(message);
-    expect(state.shards.has("0/2")).toBe(false);
+    expect(state.shards.get("0/2")).toMatchObject({
+      worker: undefined,
+      whenLastPicked: { seconds: 0n, nanos: 42 },
+    });
     expect(() => {
-      state.setSession(
-        second,
-        worker,
-        { $typeName: "google.protobuf.Timestamp", seconds: 0n, nanos: 43 },
-        "session-2",
-        "RAW",
-      );
+      state.setSession(second, worker, {
+        $typeName: "google.protobuf.Timestamp",
+        seconds: 0n,
+        nanos: 43,
+      });
     }).not.toThrow();
   });
 

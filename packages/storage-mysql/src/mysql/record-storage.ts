@@ -535,8 +535,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @returns Whether a pending inbox message changed.
    */
   markInboxDelivered(id: I, deadline: Timestamp): Promise<Timestamp | undefined> {
-    this.requireInbox();
-    return this.using(async (connection) => {
+    return this.mutateInbox(async (connection) => {
       const [result] = await connection.execute<ResultSetHeader>(
         `UPDATE \`${this.table.tableName}\` SET status=?, when_keep_until=? WHERE ID=? AND status=?`,
         [
@@ -566,8 +565,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @returns True when removed or absent; false when already delivered.
    */
   removePendingInbox(id: I): Promise<boolean> {
-    this.requireInbox();
-    return this.using(async (connection) => {
+    return this.mutateInbox(async (connection) => {
       const [removed] = await connection.execute<ResultSetHeader>(
         `DELETE FROM \`${this.table.tableName}\` WHERE ID=? AND status=?`,
         [this.idKey(id), this.queryValue("status", InboxMessageStatus.TO_DELIVER)] as never,
@@ -589,8 +587,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @returns Whether the provider applied the cleanup predicate.
    */
   removeExpiredInbox(shard: ShardIndex, now: Timestamp): Promise<boolean> {
-    this.requireInbox();
-    return this.using(async (connection) => {
+    return this.mutateInbox(async (connection) => {
       await connection.execute(
         `DELETE FROM \`${this.table.tableName}\` WHERE shard_index=? AND shard_total=? ` +
           `AND status=? AND (when_keep_until IS NULL OR when_keep_until<=?)`,
@@ -606,11 +603,18 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   }
 
   /**
-   * Validates the generated inbox layout before updating status or retention columns.
+   * Executes an inbox mutation while the record handle and its factory are open.
+   *
+   * @param work Issues the SQL for this inbox operation.
+   * @typeParam T The operation result.
+   * @returns The result from the admitted database operation.
    */
-  private requireInbox(): void {
+  private mutateInbox<T>(
+    work: (connection: import("mysql2/promise").PoolConnection) => Promise<T>,
+  ): Promise<T> {
     if (!this.isInboxLayout())
       throw new TypeError("Inbox mutation requires the framework inbox record layout.");
+    return this.admit(() => this.using(work));
   }
 
   /**

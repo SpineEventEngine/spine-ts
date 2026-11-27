@@ -13,11 +13,11 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { DurationSchema, EmptySchema } from "@bufbuild/protobuf/wkt";
+import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { ShardIndex } from "@spine-event-engine/server";
 import {
-  DeliveryShardPickupOutcomeSchema,
-  DeliverySessionHandleSchema,
+  DeliveryPickUpOutcomeSchema,
+  ShardPickedUpSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
   ShardInfoListSchema,
@@ -578,23 +578,21 @@ describe("DeliveryClient shard observation", () => {
       await expect(client.shardSnapshot()).rejects.toBeInstanceOf(DeliveryProtocolError);
     }
     fake.reply(
-      create(DeliveryShardPickupOutcomeSchema, {
-        result: { case: "pickedUp", value: create(DeliverySessionHandleSchema) },
+      create(DeliveryPickUpOutcomeSchema, {
+        value: { case: "pickedUp", value: create(ShardPickedUpSchema) },
       }),
     );
     await expect(client.pickUp(ShardIndex.single(), worker)).rejects.toBeInstanceOf(
       DeliveryProtocolError,
     );
     fake.reply(
-      create(DeliveryShardPickupOutcomeSchema, {
-        result: {
+      create(DeliveryPickUpOutcomeSchema, {
+        value: {
           case: "pickedUp",
-          value: create(DeliverySessionHandleSchema, {
+          value: create(ShardPickedUpSchema, {
             shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
             worker: create(WorkerIdSchema, { nodeId: { value: "wrong" }, value: "worker" }),
             whenPicked: { seconds: 1n, nanos: 0 },
-            sessionId: "fixture-session",
-            lifetime: { seconds: 60n, nanos: 0 },
           }),
         },
       }),
@@ -686,10 +684,8 @@ describe("DeliveryClient shard observation", () => {
         shard: ShardIndex.single(),
         worker: { nodeId: "node", value: "worker" },
         whenPicked: new Date("invalid") as never,
-        sessionId: "invalid-snapshot",
-        lifetime: create(DurationSchema, { seconds: 60n }),
       }),
-    ).rejects.toThrow("Delivery shard session is invalid.");
+    ).rejects.toThrow("Delivery client is closed.");
     expect(fake.unary).not.toHaveBeenCalled();
   });
 

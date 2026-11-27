@@ -768,24 +768,19 @@ preserves byte arrays used by packed Protobuf `Any` payloads.
 Aggregate latest-state, optional state history, and traceability event-journal
 storage use the shared entity-storage provider seam. Aggregate loading uses the
 latest persisted state; it never reconstructs state by snapshot-plus-replay.
-The framework persists pending and delivered `InboxMessage` rows directly
-through `RecordStorage`. Shard ownership is the only concurrent-delivery
-exclusion; it creates neither a per-message claim nor a separate dedup record.
-Delivered rows are the deduplication fact. Handler effects and the delivered-row
-compare-and-set are not transactional, so a lost acknowledgement can redeliver
-after restart and downstream handling must be idempotent. `DeliveryMonitor`
-defines reception-failure policy: its default marks a failed reception delivered
-and continues independent targets; applications may choose an immediate repeat
-of failed processing. Managed repository infrastructure errors propagate while
-their Inbox rows remain `TO_DELIVER`. A custom reception action that completes
-normally also completes delivery and is followed by delivered acknowledgement.
-A successful handler with failed acknowledgement gets finite
-acknowledgement-only retries. If these fail, a managed delivery attempt rejects.
-With server observation, the Delivery server repeats a notice while its shard
-is free and still has work. The reminder defaults to 10 seconds. A worker that
-has taken the shard renews a separate session, which defaults to 60 seconds.
-If the session expires with work remaining, the server immediately offers the
-shard again. [Recovery settings](../../packages/delivery-server/REFERENCE.md#session-lifetime-and-work-reminders)
+The framework stores pending and delivered `InboxMessage` records. With remote
+storage, the application worker reads a shard page, calls the handlers and
+sets a retention deadline on each newly delivered message. It sends those
+changes in one `WriteMany` call. It then sends the duplicate and expired inbox
+messages from the page in `RemoveMany`.
+
+An Entity write and the subsequent inbox write are separate. If the connection
+fails between them, a later worker can receive the same Command. The worker
+reports a storage error when it cannot save the processed page.
+
+Each remote node listens for free shards with pending work. The Delivery
+server repeats a notice for an unclaimed shard after ten seconds by default.
+Its pickup and release operations also serve ordinary JVM clients.
 
 With direct local delivery, posting can wait for the exact Command or
 Projection input to reach its handler. When the Delivery server stores the

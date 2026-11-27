@@ -16,15 +16,13 @@ import { describe, expect, it, vi } from "vitest";
 import { ShardIndex } from "@spine-event-engine/server";
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
-import { InboxWorkResultSchema } from "@spine-event-engine/proto/delivery-server";
 import { Time } from "@spine-event-engine/core/time";
 
-import { DeliveryPagingError, DeliveryProtocolError } from "../src/client/types.js";
+import { DeliveryPagingError } from "../src/client/types.js";
 import { DeliveryClient } from "../src/client/client.js";
-import { RemoteInbox, RemoteWorkRegistry } from "../src/remote/adapters.js";
+import { RemoteInbox } from "../src/remote/adapters.js";
 import { DeliveryMessageCodec } from "../src/wire/codec.js";
-import { domainMessage, echoPickup, transport } from "./shared-fixtures.js";
+import { domainMessage } from "./shared-fixtures.js";
 
 class Client {
   readonly writeOne = vi.fn<DeliveryClient["writeOne"]>();
@@ -32,32 +30,7 @@ class Client {
   readonly findOne = vi.fn<DeliveryClient["findOne"]>();
   readonly newestPending = vi.fn<DeliveryClient["newestPending"]>();
   readonly readPage = vi.fn<DeliveryClient["readPage"]>();
-  readonly markDelivered = vi.fn<DeliveryClient["markDelivered"]>();
-  readonly removeDuplicate = vi.fn<DeliveryClient["removeDuplicate"]>();
-  readonly pickUpForDelivery = vi.fn<DeliveryClient["pickUpForDelivery"]>();
   pageSize = 2;
-}
-
-/**
- * Creates matching remote adapters and one managed local session.
- *
- * @param client Supplies the recording client.
- * @returns The Inbox adapter and acquired session.
- */
-async function withSession(client: Client) {
-  const fake = transport();
-  const deliveryClient = DeliveryClient.usingTransport(fake.transport);
-  vi.spyOn(deliveryClient, "markDelivered").mockImplementation(client.markDelivered);
-  vi.spyOn(deliveryClient, "removeDuplicate").mockImplementation(client.removeDuplicate);
-  echoPickup(fake);
-  const inbox = new RemoteInbox(deliveryClient);
-  const registry = new RemoteWorkRegistry(deliveryClient);
-  const session = await registry.pickUp(
-    ShardIndex.single(),
-    create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run" }),
-  );
-  if (session === undefined) throw new Error("Expected a managed session.");
-  return { inbox, session };
 }
 
 /**
@@ -71,18 +44,6 @@ function read(message: ReturnType<typeof domainMessage>) {
 }
 
 describe("RemoteInbox direct behavior", () => {
-  it("keeps a definitive no-work pickup distinct from a granted session", async () => {
-    const client = new Client();
-    const registry = new RemoteWorkRegistry(client as never);
-    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run" });
-    client.pickUpForDelivery.mockResolvedValue({ kind: "NO_WORK" });
-    await expect(registry.pickUpForWork(ShardIndex.single(), worker)).resolves.toEqual({
-      kind: "NO_WORK",
-    });
-    await expect(registry.pickUp(ShardIndex.single(), worker)).resolves.toBeUndefined();
-    expect(client.pickUpForDelivery).toHaveBeenCalledTimes(2);
-  });
-
   it("returns the server's newest pending row without changing its exact shard identity", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
@@ -144,27 +105,6 @@ describe("RemoteInbox direct behavior", () => {
 
     expect(received.keepUntil).toBeUndefined();
     expect(client.writeOne.mock.calls[0]?.[0].keepUntil).toBeUndefined();
-  });
-
-  it("uses the first server deadline on retry", async () => {
-    const client = new Client();
-    const { inbox, session } = await withSession(client);
-    const pending = read(domainMessage("completed"));
-    client.markDelivered.mockResolvedValue(
-      create(InboxWorkResultSchema, {
-        matched: true,
-        whenKeepUntil: { seconds: 125n },
-      }),
-    );
-
-    const first = await inbox.markDelivered(pending, undefined, session);
-    const second = await inbox.markDelivered(pending, undefined, session);
-    expect(first?.keepUntil).toEqual(new Date(125_000));
-    expect(second).toEqual(first);
-    expect(client.markDelivered).toHaveBeenCalledTimes(2);
-    expect(client.markDelivered.mock.calls[0]?.[1]).toEqual(pending.id);
-    expect(client.writeOne).not.toHaveBeenCalled();
-    expect(client.findOne).not.toHaveBeenCalled();
   });
 
   it("returns complete tied-time pages without requiring another timestamp page", async () => {
@@ -259,17 +199,6 @@ describe("RemoteInbox direct behavior", () => {
     await expect(inbox.readMessage(first.id)).resolves.toBe(first);
   });
 
-  it("returns an absent result for a missing inbox ID without a raw write", async () => {
-    const client = new Client();
-    const { inbox, session } = await withSession(client);
-    const pending = read(domainMessage("pending"));
-    client.markDelivered.mockResolvedValue(create(InboxWorkResultSchema));
-
-    await expect(inbox.markDelivered(pending, undefined, session)).resolves.toBeUndefined();
-    expect(client.markDelivered).toHaveBeenCalledOnce();
-    expect(client.writeOne).not.toHaveBeenCalled();
-  });
-
   it("settles an in-flight read when its transport ignores cancellation or the total deadline", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
@@ -323,25 +252,5 @@ describe("RemoteInbox direct behavior", () => {
       }),
     ).rejects.toThrow("between pages");
     expect(client.readPage).toHaveBeenCalledTimes(1);
-  });
-
-  it("removes a pending duplicate only through the session", async () => {
-    const client = new Client();
-    const { inbox, session } = await withSession(client);
-    const duplicate = read(domainMessage("duplicate"));
-    client.removeDuplicate.mockResolvedValue(true);
-
-    await expect(inbox.removeDuplicate(duplicate, undefined, session)).resolves.toBe(true);
-    expect(client.removeDuplicate).toHaveBeenCalledWith(expect.anything(), duplicate.id, undefined);
-    expect(client.removeOne).not.toHaveBeenCalled();
-  });
-
-  it("rejects an unbound worker session before dispatch", async () => {
-    const client = new Client();
-    const inbox = new RemoteInbox(client as never);
-    const duplicate = read(domainMessage("duplicate"));
-    await expect(inbox.removeDuplicate(duplicate)).rejects.toBeInstanceOf(DeliveryProtocolError);
-    expect(client.removeDuplicate).not.toHaveBeenCalled();
-    expect(client.removeOne).not.toHaveBeenCalled();
   });
 });

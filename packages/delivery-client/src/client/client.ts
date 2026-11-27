@@ -25,14 +25,9 @@ import {
   InboxService,
   AdminService,
   ShardService,
-  ManagedShardService,
-  InboxWorkRequestSchema,
-  type InboxWorkResult,
-  DeliveryShardPickupSchema,
-  type DeliveryShardPickup,
-  type DeliveryShardPickupOutcome,
-  DeliverySessionHandleSchema,
-  type DeliverySessionHandle,
+  PickUpShardSchema,
+  type DeliveryPickUpOutcome,
+  ReleaseShardSchema,
   ShardObservingService,
   ReadMessagesSinceTimeSchema as ReadSinceTimeSchema,
   RemoveMessageSchema,
@@ -53,7 +48,6 @@ import {
   type ReleasedShardSession,
   type RemoteShardObservation,
   type RemoteShardSession,
-  type DeliveryManagedPickupOutcome,
 } from "./types.js";
 import { ShardObservationStream } from "./shard-observation.js";
 import { DeliveryMessageCodec, DeliveryRequestCodec, DeliveryShardCodec } from "../wire/codec.js";
@@ -74,28 +68,7 @@ export type {
   ReleasedShardSession,
   RemoteShardObservation,
   RemoteShardSession,
-  DeliveryManagedPickupOutcome,
 } from "./types.js";
-
-/**
- * Captures the shard and worker used to validate every reply to this pickup.
- */
-interface PreparedPickup {
-  /**
-   * The detached request reused on retry.
-   */
-  readonly request: DeliveryShardPickup;
-
-  /**
-   * The requested shard.
-   */
-  readonly shard: ShardIndex;
-
-  /**
-   * The worker identity sent in the request.
-   */
-  readonly worker: DeliveryWorkerId;
-}
 
 /**
  * Connects Node applications to the Delivery server's inbox, shard, and work observation services.
@@ -104,8 +77,6 @@ export class DeliveryClient {
   readonly #inbox: ReturnType<typeof createClient<typeof InboxService>>;
 
   readonly #shards: ReturnType<typeof createClient<typeof ShardService>>;
-
-  readonly #managed: ReturnType<typeof createClient<typeof ManagedShardService>>;
 
   readonly #admin: ReturnType<typeof createClient<typeof AdminService>>;
 
@@ -147,7 +118,6 @@ export class DeliveryClient {
     );
     this.#inbox = createClient(InboxService, transport);
     this.#shards = createClient(ShardService, transport);
-    this.#managed = createClient(ManagedShardService, transport);
     this.#admin = createClient(AdminService, transport);
     this.#observing = createClient(ShardObservingService, transport);
     this.#onCloseOwnedTransport = onCloseOwnedTransport;
@@ -460,477 +430,66 @@ export class DeliveryClient {
   }
 
   /**
-   * Acquires a shard once.
-   * @param shardIndex Identifies the shard to acquire.
-   * @param workerId Identifies the worker requesting exclusive ownership.
+   * Acquires a shard for one worker, including a repeat pickup by the same worker.
+   *
+   * @param shardIndex Identifies the requested shard.
+   * @param workerId Identifies the worker processing the shard.
    * @param options Bounds or cancels the mutation.
-   * @returns A detached exclusive session, or `undefined` when held elsewhere.
+   * @returns The session, or `undefined` when another worker holds the shard.
    */
   async pickUp(
     shardIndex: ShardIndex,
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions = {},
   ): Promise<RemoteShardSession | undefined> {
-    const result = await this.#pickUp(this.#preparePickup(shardIndex, workerId), options, "RAW");
-    return result.kind === "PICKED" ? result.session : undefined;
-  }
-
-  /**
-   * Acquires pending work or recovers the live managed session of the same worker.
-   *
-   * @param shardIndex Identifies the requested shard.
-   * @param workerId Identifies one stable processing run.
-   * @param options Bounds or cancels the mutation.
-   * @returns The complete managed outcome, including the handle on success.
-   */
-  async pickUpForDelivery(
-    shardIndex: ShardIndex,
-    workerId: DeliveryWorkerId,
-    options: DeliveryMutationOptions = {},
-  ): Promise<DeliveryManagedPickupOutcome> {
-    if (this.#closed) throw new Error("Delivery client is closed.");
-    if (options.signal?.aborted) throw options.signal.reason;
-    const timeoutMs = DeliveryRequestCodec.timeout(options.timeoutMs);
-    const deadline = timeoutMs === undefined ? Infinity : Time.monotonicTime() + timeoutMs;
-    const controller = new AbortController();
-    const abort = () => {
-      controller.abort(options.signal?.reason);
-    };
-    options.signal?.addEventListener("abort", abort, { once: true });
-    this.#activeReads.add(controller);
-    const cancelTimer = DeliveryTimers.after(() => {
-      controller.abort(new Error("Managed pickup timed out."));
-    }, timeoutMs);
-    try {
-      return await this.#recoverManagedPickup(
-        this.#preparePickup(shardIndex, workerId),
-        options,
-        deadline,
-        controller,
-      );
-    } finally {
-      cancelTimer?.();
-      options.signal?.removeEventListener("abort", abort);
-      this.#activeReads.delete(controller);
-    }
-  }
-
-  /**
-   * Recovers one ambiguous managed pickup under its original deadline.
-   *
-   * @param pickup Holds the validated request and its original identity.
-   * @param options Supplies caller operation settings.
-   * @param deadline Ends the total operation in monotonic milliseconds.
-   * @param controller Links caller, client closure, and deadline cancellation.
-   * @returns A definitive pickup result.
-   */
-  async #recoverManagedPickup(
-    pickup: PreparedPickup,
-    options: DeliveryMutationOptions,
-    deadline: number,
-    controller: AbortController,
-  ): Promise<DeliveryManagedPickupOutcome> {
-    let unknown: DeliveryOutcomeUnknownError | undefined;
-    let ambiguousCount = 0;
-    for (;;) {
-      this.#checkPickupCancellation(controller, options.signal, unknown);
-      const remaining = this.#pickupRemaining(deadline, pickup.shard, unknown);
-      const started = Time.monotonicTime();
-      try {
-        const result = await this.#attemptManaged(pickup, options, controller.signal, remaining);
-        if (result.kind === "PICKED") pickupSendTimes.set(result.session, started);
-        return result;
-      } catch (error) {
-        unknown = await this.#handleUnknownPickup(
-          error,
-          started,
-          deadline,
-          controller,
-          options.signal,
-          ++ambiguousCount,
-        );
-      }
-    }
-  }
-
-  /**
-   * Calculates remaining time or reports the last ambiguous pickup outcome.
-   *
-   * @param deadline Ends the total operation.
-   * @param shardIndex Identifies the requested shard in an initial timeout.
-   * @param unknown Supplies a previous ambiguous outcome, when present.
-   * @returns Remaining monotonic milliseconds.
-   */
-  #pickupRemaining(
-    deadline: number,
-    shardIndex: ShardIndex,
-    unknown: DeliveryOutcomeUnknownError | undefined,
-  ): number {
-    const remaining = deadline - Time.monotonicTime();
-    if (remaining > 0) return remaining;
-    throw unknown ?? new DeliveryOutcomeUnknownError("PICK_UP_FOR_DELIVERY", [shardIndex]);
-  }
-
-  /**
-   * Repeats the same worker and shard with the time left from the first call.
-   *
-   * @param pickup Holds the validated request and its original identity.
-   * @param options Supplies the original call settings.
-   * @param signal Cancels this attempt with the whole operation.
-   * @param remaining Bounds this attempt within the original deadline.
-   * @returns One definitive remote pickup result.
-   */
-  #attemptManaged(
-    pickup: PreparedPickup,
-    options: DeliveryMutationOptions,
-    signal: AbortSignal,
-    remaining: number,
-  ): Promise<DeliveryManagedPickupOutcome> {
-    return this.#pickUp(
-      pickup,
-      {
-        ...options,
-        signal,
-        ...(Number.isFinite(remaining) ? { timeoutMs: Math.max(1, Math.ceil(remaining)) } : {}),
-      },
-      "MANAGED",
-    );
-  }
-
-  /**
-   * Paces one ambiguous pickup or reports its terminating cause.
-   *
-   * @param error Supplies the failed attempt's outcome.
-   * @param started Marks when that attempt began.
-   * @param deadline Ends the whole operation.
-   * @param controller Tracks whole operation cancellation.
-   * @param caller Tracks caller cancellation.
-   * @param count Counts ambiguous attempts.
-   * @returns The ambiguous outcome when recovery may continue.
-   */
-  async #handleUnknownPickup(
-    error: unknown,
-    started: number,
-    deadline: number,
-    controller: AbortController,
-    caller: AbortSignal | undefined,
-    count: number,
-  ): Promise<DeliveryOutcomeUnknownError> {
-    if (!(error instanceof DeliveryOutcomeUnknownError)) throw error;
-    if (error.cause instanceof ConnectError && error.cause.code === Code.ResourceExhausted)
-      throw error;
-    this.#checkPickupCancellation(controller, caller, error);
-    const duration = Math.max(1, Math.ceil(Time.monotonicTime() - started));
-    try {
-      if (await this.#waitForPickupRecovery(deadline, controller.signal, count, duration))
-        throw error;
-    } catch (waitError) {
-      this.#checkPickupCancellation(controller, caller, error);
-      throw waitError;
-    }
-    return error;
-  }
-
-  /**
-   * Waits between uncertain pickups without crossing the original deadline.
-   *
-   * @param deadline Ends the total pickup operation in monotonic milliseconds.
-   * @param signal Cancels the wait when the operation stops.
-   * @param ambiguousCount Counts consecutive uncertain attempts.
-   * @param attemptDuration Measures the preceding attempt in milliseconds.
-   * @returns Whether the deadline prevents another attempt.
-   */
-  async #waitForPickupRecovery(
-    deadline: number,
-    signal: AbortSignal,
-    ambiguousCount: number,
-    attemptDuration: number,
-  ): Promise<boolean> {
-    const remaining = Math.max(0, deadline - Time.monotonicTime());
-    const base = Math.max(this.#retryBackoffMs, attemptDuration);
-    const delay =
-      ambiguousCount === 1
-        ? 0
-        : Math.min(Number.MAX_SAFE_INTEGER, base * 2 ** (ambiguousCount - 2));
-    const exhausted = delay >= remaining;
-    await DeliveryClient.#pause(exhausted ? remaining : delay, signal);
-    return exhausted;
-  }
-
-  /**
-   * Reports the first cause that ended a managed pickup operation.
-   *
-   * @param controller Tracks the linked operation cancellation.
-   * @param caller Tracks explicit caller cancellation.
-   * @param unknown Supplies the last ambiguous remote outcome.
-   */
-  #checkPickupCancellation(
-    controller: AbortController,
-    caller: AbortSignal | undefined,
-    unknown: DeliveryOutcomeUnknownError | undefined,
-  ): void {
-    if (!controller.signal.aborted) return;
-    if (caller?.aborted) throw caller.reason;
-    if (this.#closed) throw new Error("Delivery client is closed.");
-    if (unknown !== undefined) throw unknown;
-    throw controller.signal.reason;
-  }
-
-  /**
-   * Creates a detached request before any pickup RPC can run.
-   *
-   * @param shardIndex Identifies the shard to acquire.
-   * @param workerId Identifies this processing run.
-   * @returns The wire request and the identity to expect in the reply.
-   */
-  #preparePickup(shardIndex: ShardIndex, workerId: DeliveryWorkerId): PreparedPickup {
     const shard = DeliveryShardCodec.encode(shardIndex);
     const worker = DeliveryShardCodec.encodeWorker(workerId);
-    const request = create(DeliveryShardPickupSchema, { shard, worker });
-
-    return {
-      request,
-      shard: DeliveryShardCodec.decode(shard),
-      worker: DeliveryShardCodec.decodeWorker(worker),
-    };
-  }
-
-  /**
-   * Performs a typed raw or managed pickup.
-   */
-  async #pickUp(
-    pickup: PreparedPickup,
-    options: DeliveryMutationOptions,
-    kind: "RAW" | "MANAGED",
-  ): Promise<DeliveryManagedPickupOutcome> {
-    const response = await this.#mutation<DeliveryShardPickupOutcome>(
-      kind === "RAW" ? "PICK_UP_SHARD" : "PICK_UP_FOR_DELIVERY",
-      [DeliveryShardCodec.snapshot(pickup.shard)],
+    const request = create(PickUpShardSchema, { shard, worker });
+    const response = await this.#mutation<DeliveryPickUpOutcome>(
+      "PICK_UP_SHARD",
+      [DeliveryShardCodec.snapshot(shardIndex)],
       options,
-      (signal, timeoutMs) => {
-        const call = DeliveryRequestCodec.callOptions(signal, timeoutMs);
-        return kind === "RAW"
-          ? this.#managed.pickShardRaw(pickup.request, call)
-          : this.#managed.pickShardForDelivery(pickup.request, call);
-      },
+      (signal, timeoutMs) =>
+        this.#shards.pickShard(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
-    return this.#decodePickup(response, pickup.shard, pickup.worker);
-  }
-
-  /**
-   * Decodes one definitive typed pickup outcome.
-   *
-   * @param response Supplies the wire outcome.
-   * @param shardIndex Identifies the requested shard.
-   * @param workerId Identifies the requesting worker.
-   * @returns The detached pickup result.
-   */
-  #decodePickup(
-    response: DeliveryShardPickupOutcome,
-    shardIndex: ShardIndex,
-    workerId: DeliveryWorkerId,
-  ): DeliveryManagedPickupOutcome {
-    const result = (response as Partial<DeliveryShardPickupOutcome>).result;
-    if (result === undefined) throw DeliveryRequestCodec.protocol();
-    switch (result.case) {
+    switch (response.value.case) {
       case "pickedUp":
-        return Object.freeze({
-          kind: "PICKED" as const,
-          session: DeliveryShardCodec.decodePicked(result.value, shardIndex, workerId),
-        });
-      case "busy":
-        if (result.value.worker === undefined || result.value.whenPicked === undefined)
+        return DeliveryShardCodec.decodePicked(response.value.value, shardIndex, workerId);
+      case "alreadyPickedUp":
+        if (
+          response.value.value.shard === undefined ||
+          response.value.value.worker === undefined ||
+          response.value.value.whenPicked === undefined
+        )
           throw DeliveryRequestCodec.protocol();
-        return Object.freeze({
-          kind: "BUSY" as const,
-          worker: DeliveryShardCodec.decodeWorker(result.value.worker),
-          whenPicked: DeliveryShardCodec.timestamp(result.value.whenPicked),
-        });
-      case "noWork":
-        return Object.freeze({ kind: "NO_WORK" as const });
+        DeliveryShardCodec.decode(response.value.value.shard);
+        DeliveryShardCodec.decodeWorker(response.value.value.worker);
+        DeliveryShardCodec.timestamp(response.value.value.whenPicked);
+        return undefined;
       default:
         throw DeliveryRequestCodec.protocol();
     }
   }
 
   /**
-   * Updates only the live shard session identified by the supplied handle.
+   * Removes a shard session only if its recorded worker matches the session worker.
    *
-   * @param value Supplies the complete session handle.
-   * @param options Bounds or cancels the renewal.
-   * @returns The refreshed handle with the same session identity.
-   */
-  async renew(
-    value: RemoteShardSession,
-    options: DeliveryMutationOptions = {},
-  ): Promise<RemoteShardSession> {
-    const request = this.#encodeSession(value);
-    const response = await this.#mutation<DeliverySessionHandle>(
-      "RENEW_SHARD",
-      [DeliveryShardCodec.snapshot(value.shard)],
-      options,
-      (signal, timeoutMs) =>
-        this.#managed.renewShardSession(
-          request,
-          DeliveryRequestCodec.callOptions(signal, timeoutMs),
-        ),
-    );
-
-    const renewed = DeliveryShardCodec.decodePicked(response, value.shard, value.worker);
-    if (renewed.sessionId !== value.sessionId) throw DeliveryRequestCodec.protocol();
-    return renewed;
-  }
-
-  /**
-   * Removes only the live shard session identified by the supplied handle.
-   *
-   * @param value Supplies the complete session handle.
-   * @param options Bounds or cancels the release.
-   * @returns Completion after the matching session is released.
+   * @param value Supplies the shard and worker returned by pickup.
+   * @param options Bounds or cancels the mutation.
+   * @returns Completion after the remote release call.
    */
   async release(value: RemoteShardSession, options: DeliveryMutationOptions = {}): Promise<void> {
-    const request = this.#encodeSession(value);
+    const request = create(ReleaseShardSchema, {
+      shard: DeliveryShardCodec.encode(value.shard),
+      worker: DeliveryShardCodec.encodeWorker(value.worker),
+    });
     await this.#mutation(
       "RELEASE_SHARD",
       [DeliveryShardCodec.snapshot(value.shard)],
       options,
       (signal, timeoutMs) =>
-        this.#managed.releaseShardSession(
-          request,
-          DeliveryRequestCodec.callOptions(signal, timeoutMs),
-        ),
+        this.#shards.releaseSession(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
-  }
-
-  /**
-   * Marks the current inbox message at the given ID delivered under a managed session.
-   *
-   * @param session Supplies the managed session handle.
-   * @param id Identifies the inbox message from the current page.
-   * @param options Bounds or cancels the mutation.
-   * @returns Whether the ID was marked delivered and its first retention deadline when present.
-   */
-  async markDelivered(
-    session: RemoteShardSession,
-    id: InboxMessageId,
-    options: DeliveryMutationOptions = {},
-  ): Promise<InboxWorkResult> {
-    const result = await this.#workMutation("ACKNOWLEDGE", session, id, options, (request, call) =>
-      this.#managed.markDelivered(request, call),
-    );
-    if (result.whenKeepUntil !== undefined) DeliveryShardCodec.timestamp(result.whenKeepUntil);
-    return result;
-  }
-
-  /**
-   * Removes the current pending inbox message at the given ID.
-   *
-   * @param session Supplies the managed session handle.
-   * @param id Identifies the inbox message from the current page.
-   * @param options Bounds or cancels the mutation.
-   * @returns Whether the session-checked removal completed.
-   */
-  async removeDuplicate(
-    session: RemoteShardSession,
-    id: InboxMessageId,
-    options: DeliveryMutationOptions = {},
-  ): Promise<boolean> {
-    const result = await this.#workMutation(
-      "REMOVE_DUPLICATE",
-      session,
-      id,
-      options,
-      (request, call) => this.#managed.removeDuplicate(request, call),
-    );
-    return result.matched;
-  }
-
-  /**
-   * Removes expired delivered inbox messages in the managed session's shard.
-   *
-   * @param session Supplies the managed session handle.
-   * @param options Bounds or cancels the mutation.
-   * @returns Completion after the server applies one shard predicate.
-   */
-  async removeExpiredDelivered(
-    session: RemoteShardSession,
-    options: DeliveryMutationOptions = {},
-  ): Promise<void> {
-    await this.#mutation(
-      "REMOVE_EXPIRED_DELIVERED",
-      [DeliveryShardCodec.snapshot(session.shard)],
-      options,
-      (signal, timeoutMs) =>
-        this.#managed.removeExpiredDelivered(
-          this.#encodeSession(session),
-          DeliveryRequestCodec.callOptions(signal, timeoutMs),
-        ),
-    );
-  }
-
-  /**
-   * Sends one complete inbox ID with the live managed session.
-   *
-   * @param operation Names the mutation for uncertain-outcome reporting.
-   * @param session Supplies the managed session handle.
-   * @param id Identifies the current inbox message.
-   * @param options Bounds or cancels the request.
-   * @param invoke Calls the selected managed method.
-   * @returns The server's mutation result.
-   */
-  async #workMutation(
-    operation: DeliveryOutcomeUnknownError["operation"],
-    session: RemoteShardSession,
-    id: InboxMessageId,
-    options: DeliveryMutationOptions,
-    invoke: (
-      request: ReturnType<typeof create<typeof InboxWorkRequestSchema>>,
-      call: ReturnType<typeof DeliveryRequestCodec.callOptions>,
-    ) => Promise<InboxWorkResult>,
-  ): Promise<InboxWorkResult> {
-    const request = create(InboxWorkRequestSchema, {
-      session: this.#encodeSession(session),
-      id: create(InboxMessageIdSchema, {
-        uuid: DeliveryMessageCodec.encodeId(id),
-        index: DeliveryShardCodec.encode(id.shard),
-      }),
-    });
-    const result = await this.#mutation(
-      operation,
-      [`${String(id.shard.index)}/${String(id.shard.ofTotal)}:${id.value}`],
-      options,
-      (signal, timeoutMs) => invoke(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
-    );
-    if (result.whenKeepUntil !== undefined && (operation !== "ACKNOWLEDGE" || !result.matched))
-      throw DeliveryRequestCodec.protocol();
-    return result;
-  }
-
-  /**
-   * Encodes and validates a complete session handle for a mutation.
-   */
-  #encodeSession(value: RemoteShardSession) {
-    const candidate = value as Partial<RemoteShardSession>;
-    if (
-      typeof candidate.sessionId !== "string" ||
-      !candidate.sessionId ||
-      typeof candidate.whenPicked?.seconds !== "bigint" ||
-      !Number.isInteger(candidate.whenPicked.nanos) ||
-      typeof candidate.lifetime?.seconds !== "bigint" ||
-      !Number.isInteger(candidate.lifetime.nanos)
-    )
-      throw new TypeError("Delivery shard session is invalid.");
-    const request = create(DeliverySessionHandleSchema, {
-      shard: DeliveryShardCodec.encode(value.shard),
-      worker: DeliveryShardCodec.encodeWorker(value.worker),
-      sessionId: value.sessionId,
-      whenPicked: DeliveryShardCodec.timestamp(value.whenPicked),
-      lifetime: value.lifetime,
-    });
-    if (!request.sessionId || request.lifetime === undefined)
-      throw new TypeError("Delivery shard session is invalid.");
-
-    return request;
   }
 
   /**
@@ -1144,8 +703,6 @@ const deliveryClientObservations = new WeakMap<
   (options: DeliveryFindOneOptions) => DeliveryShardObservationStream
 >();
 
-const pickupSendTimes = new WeakMap<RemoteShardSession, number>();
-
 /**
  * Provides package-internal Admin observations without extending the public client API.
  */
@@ -1154,11 +711,6 @@ export const deliveryClientAccess: Readonly<{
     client: DeliveryClient,
     options?: DeliveryFindOneOptions,
   ) => DeliveryShardObservationStream;
-
-  /**
-   * Returns the successful attempt's local send time for a managed grant.
-   */
-  pickupSentAt: (session: RemoteShardSession) => number;
 }> = Object.freeze({
   observeOnce(
     client: DeliveryClient,
@@ -1168,17 +720,5 @@ export const deliveryClientAccess: Readonly<{
     if (observe === undefined)
       throw new TypeError("Delivery client observation access is unavailable.");
     return observe(options);
-  },
-
-  /**
-   * Reads the successful attempt's local send time for a managed grant.
-   *
-   * @param session Supplies the granted session.
-   * @returns Its local send time.
-   */
-  pickupSentAt(session) {
-    const sentAt = pickupSendTimes.get(session);
-    if (sentAt === undefined) throw new TypeError("Delivery client pickup time is unavailable.");
-    return sentAt;
   },
 });

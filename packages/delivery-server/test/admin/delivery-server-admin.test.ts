@@ -21,8 +21,9 @@ import { describe, expect, it } from "vitest";
 import {
   AdminService,
   InboxService,
-  DeliveryShardPickupSchema,
-  ManagedShardService,
+  PickUpShardSchema,
+  ReleaseShardSchema,
+  ShardService,
   ShardStatus,
   WriteMessageSchema,
   type SubscriptionResponse,
@@ -56,17 +57,15 @@ describe("DeliveryServer Admin", () => {
     const transport = createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: sessions });
     const admin = createClient(AdminService, transport);
     const inbox = createClient(InboxService, transport);
-    const shards = createClient(ManagedShardService, transport);
+    const shards = createClient(ShardService, transport);
     const first = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
     const second = create(ShardIndexSchema, { index: 0, ofTotal: 3 });
     const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
     try {
       await inbox.writeOne(create(WriteMessageSchema, { message: message("first", second) }));
       await inbox.writeOne(create(WriteMessageSchema, { message: message("second", first) }));
-      const pickup = await shards.pickShardRaw(
-        create(DeliveryShardPickupSchema, { shard: second, worker }),
-      );
-      if (pickup.result.case !== "pickedUp") throw new Error("Expected a session.");
+      const pickup = await shards.pickShard(create(PickUpShardSchema, { shard: second, worker }));
+      if (pickup.value.case !== "pickedUp") throw new Error("Expected a session.");
       await expect(admin.getShardInfo(create(EmptySchema))).resolves.toMatchObject({
         shards: [
           { index: first, status: ShardStatus.NOT_PICKED, messages: 1 },
@@ -106,7 +105,7 @@ describe("DeliveryServer Admin", () => {
           : undefined,
       ).toBeDefined();
       const released = iterator.next();
-      await shards.releaseShardSession(pickup.result.value);
+      await shards.releaseSession(create(ReleaseShardSchema, { shard: second, worker }));
       const releasedResult = await released;
       expect(releasedResult).toMatchObject({
         value: {

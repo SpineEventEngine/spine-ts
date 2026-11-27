@@ -13,6 +13,7 @@
  */
 
 import { InboxRetention } from "./inbox-retention.js";
+import { deliveryPortAccess } from "./delivery-port-access.js";
 import { Time } from "@spine-event-engine/core/time";
 import { clone, create } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
@@ -1110,18 +1111,13 @@ export class Delivery {
     try {
       const worker = this.shards.workerForRun?.(this.worker) ?? this.worker;
       const operation = this.#registryOperation(options.operation);
-      if (options.managed && this.shards.pickUpForWork !== undefined) {
-        const pickup = await this.shards.pickUpForWork(shard, worker, operation);
-        if (pickup.kind === "NO_WORK") return result("NO_WORK");
-        session = pickup.kind === "PICKED" ? pickup.session : undefined;
-      } else {
-        if (
-          options.managed &&
-          (await this.inbox.newestPending(shard, options.operation)) === undefined
-        )
-          return result("NO_WORK");
-        session = await this.shards.pickUp(shard, worker, operation);
-      }
+      if (
+        options.managed &&
+        this.shards.sessionKind !== "EXCLUSIVE" &&
+        (await this.inbox.newestPending(shard, options.operation)) === undefined
+      )
+        return result("NO_WORK");
+      session = await this.shards.pickUp(shard, worker, operation);
     } catch (error) {
       if (this.#shouldStop(options)) return result("STOPPED");
       return this.#pickupFailed(shard, error, options.managed === true);
@@ -1301,6 +1297,14 @@ class DeliveryDrain {
 
   readonly #removedInPage = new Set<InboxMessage>();
 
+  readonly #settledInPage: InboxMessage[] = [];
+
+  readonly #deliveredInPage: { original: InboxMessage; completed: InboxMessage }[] = [];
+
+  readonly #duplicatesInPage: InboxMessage[] = [];
+
+  readonly #reportedInPage: InboxMessage[] = [];
+
   readonly #messageOutcomes = new WeakMap<InboxMessage, DeliveryMessageOutcome>();
 
   #wakeGeneration = 0;
@@ -1310,14 +1314,6 @@ class DeliveryDrain {
   #sessionSerial: Promise<void> = Promise.resolve();
 
   #current: DeliveryWorkSession;
-
-  readonly #renewalIntervalMs: number | undefined;
-
-  #renewalDue = 0;
-
-  #renewalTimer: ReturnType<typeof setTimeout> | undefined;
-
-  #heartbeatActive = false;
 
   #ownershipLost = false;
 
@@ -1347,7 +1343,6 @@ class DeliveryDrain {
    */
   constructor(private readonly input: DeliveryDrainInputState) {
     this.#current = input.session;
-    this.#renewalIntervalMs = input.shards.renewalIntervalMs?.(input.session);
     this.#deduplication = new DeliveryDeduplication(input.inbox);
   }
 
@@ -1369,7 +1364,6 @@ class DeliveryDrain {
    */
   stop(): void {
     this.#stopped = true;
-    this.#stopHeartbeat();
     this.wake();
   }
 
@@ -1403,7 +1397,6 @@ class DeliveryDrain {
    * @returns The terminal delivery outcome and counts.
    */
   async #runScoped(): Promise<DeliveryRun> {
-    this.#startHeartbeat();
     let run: DeliveryRun;
     try {
       run = (await this.#canStart()) ? await this.#readPages() : this.#complete("STOPPED");
@@ -1414,59 +1407,12 @@ class DeliveryDrain {
       throw error;
     }
     this.#reading = false;
-    this.#stopHeartbeat();
     const released = await this.#release();
     return Object.freeze({
       ...(released ? run : this.#complete("FAILED")),
       ...(released && !this.#confirmedLost ? { released: true as const } : {}),
       ...(this.#terminalFailure !== undefined ? { terminalFailure: this.#terminalFailure } : {}),
     });
-  }
-
-  /**
-   * Starts renewal throughout a remote handler using the server lifetime.
-   */
-  #startHeartbeat(): void {
-    const interval = this.#renewalIntervalMs;
-    if (interval === undefined || !Number.isFinite(interval) || interval <= 0) return;
-    this.#heartbeatActive = true;
-    this.#renewalDue = Time.monotonicTime() + interval;
-    this.#armHeartbeat();
-  }
-
-  /**
-   * Schedules the next renewal, chaining timers for long server lifetimes.
-   */
-  #armHeartbeat(): void {
-    if (!this.#heartbeatActive || this.#stopped) return;
-    const remaining = this.#renewalDue - Time.monotonicTime();
-    const delay = Math.max(1, Math.min(remaining, 2_147_483_647));
-    this.#renewalTimer = setTimeout(() => {
-      this.#renewalTimer = undefined;
-      if (!this.#heartbeatActive || this.#stopped) return;
-      if (Time.monotonicTime() < this.#renewalDue) {
-        this.#armHeartbeat();
-        return;
-      }
-      void this.#validate()
-        .then((current) => {
-          if (!current || !this.#heartbeatActive || this.#stopped) return;
-          this.#renewalDue = Time.monotonicTime() + (this.#renewalIntervalMs ?? 0);
-          this.#armHeartbeat();
-        })
-        .catch(() => {
-          this.stop();
-        });
-    }, delay);
-  }
-
-  /**
-   * Cancels further heartbeat attempts before releasing the session.
-   */
-  #stopHeartbeat(): void {
-    this.#heartbeatActive = false;
-    if (this.#renewalTimer !== undefined) clearTimeout(this.#renewalTimer);
-    this.#renewalTimer = undefined;
   }
 
   /**
@@ -1519,15 +1465,17 @@ class DeliveryDrain {
     await this.#cleanupExpired();
     let after: import("./inbox.js").InboxReadContinuation | undefined;
     let deliveredInScan = false;
+    let sawPending = false;
     let scanGeneration = this.#wakeGeneration;
     for (;;) {
       if (this.#stopped || this.#ownershipLost || this.input.options.operation?.signal?.aborted)
         return this.#complete("STOPPED");
       const messages = await this.#readPage(after);
+      sawPending ||= messages.some((message) => message.status === "TO_DELIVER");
       this.#removedInPage.clear();
       if (messages.length === 0) {
         if (this.#emptyPageDrained(deliveredInScan, scanGeneration))
-          return this.#complete("DRAINED");
+          return this.#complete(this.#drainedStatus(sawPending));
         after = undefined;
         deliveredInScan = false;
         scanGeneration = this.#wakeGeneration;
@@ -1538,7 +1486,7 @@ class DeliveryDrain {
       deliveredInScan ||= this.#statistics.delivered !== deliveredBefore;
       if (messages.length < this.input.pageSize) {
         if (this.#shortPageDrained(deliveredInScan, scanGeneration))
-          return this.#complete("DRAINED");
+          return this.#complete(this.#drainedStatus(sawPending));
         after = undefined;
         deliveredInScan = false;
         scanGeneration = this.#wakeGeneration;
@@ -1547,6 +1495,20 @@ class DeliveryDrain {
       const survivor = messages.findLast((message) => !this.#removedInPage.has(message));
       if (survivor !== undefined) after = this.#continuation([survivor]);
     }
+  }
+
+  /**
+   * Returns no work after a remote managed scan found no pending row.
+   *
+   * @param sawPending Whether a page contained pending work.
+   * @returns The completed scan status.
+   */
+  #drainedStatus(sawPending: boolean): "DRAINED" | "NO_WORK" {
+    return this.input.options.managed &&
+      this.input.shards.sessionKind === "EXCLUSIVE" &&
+      !sawPending
+      ? "NO_WORK"
+      : "DRAINED";
   }
 
   /**
@@ -1604,11 +1566,153 @@ class DeliveryDrain {
    * @returns Whether page processing may continue.
    */
   async #processPage(messages: readonly InboxMessage[]): Promise<boolean> {
-    const page = this.#deduplication.page(messages, this.#retentionTime());
-    for (const message of messages) {
-      if (!(await this.#processMessage(message, page))) return false;
+    this.#settledInPage.length = 0;
+    this.#deliveredInPage.length = 0;
+    this.#duplicatesInPage.length = 0;
+    this.#reportedInPage.length = 0;
+    const now = this.#retentionTime();
+    const process = async (
+      isRecent: (message: InboxMessage) => boolean = (message) =>
+        message.keepUntil !== undefined && message.keepUntil.getTime() > now.getTime(),
+    ) => {
+      const page = this.#deduplication.page(messages, isRecent);
+      for (const message of messages) {
+        if (!(await this.#processMessage(message, page))) return false;
+      }
+      return true;
+    };
+    try {
+      const remote = this.input.inbox as DeliveryInbox & {
+        [deliveryPortAccess]?: (
+          messages: readonly InboxMessage[],
+          session: DeliveryWorkSession,
+          options: DeliveryOperationOptions | undefined,
+          process: (isRecent?: (message: InboxMessage) => boolean) => Promise<boolean>,
+          onWritesStored: () => void,
+        ) => Promise<boolean>;
+      };
+      const continued =
+        remote[deliveryPortAccess] === undefined
+          ? await process()
+          : await remote[deliveryPortAccess](
+              messages,
+              this.#current,
+              this.input.options.operation,
+              process,
+              () => {
+                this.#commitPageWrites();
+              },
+            );
+      if (!continued) {
+        this.#failUnflushed(new Error("Delivery page stopped before storage completed."));
+        return false;
+      }
+      this.#commitPageWrites();
+      for (const message of this.#duplicatesInPage) {
+        try {
+          this.input.options.onDuplicateRemoved?.(message);
+        } catch {
+          /* Storage already succeeded. */
+        }
+      }
+      for (const message of this.#reportedInPage) {
+        const outcome = this.#messageOutcomes.get(message);
+        if (outcome !== undefined) {
+          try {
+            this.input.options.onMessageOutcome?.(message, outcome);
+          } catch {
+            /* Storage already succeeded. */
+          }
+        }
+      }
+      for (const message of this.#settledInPage)
+        try {
+          controlledMessageSettlers.get(this.input.options)?.(message);
+        } catch {
+          /* Storage already succeeded. */
+        }
+      this.#settledInPage.length = 0;
+      return true;
+    } catch (error) {
+      this.#failUnflushed(error);
+      throw error;
     }
-    return true;
+  }
+
+  /**
+   * Commits durable completion writes to delivery observers before removals.
+   */
+  #commitPageWrites(): void {
+    const written = new Set(this.#deliveredInPage.map(({ original }) => original));
+    for (const { completed } of this.#deliveredInPage) {
+      this.#deduplication.recordDelivered(completed);
+      this.#statistics.delivered += 1;
+      try {
+        this.input.options.onDelivered?.(completed);
+      } catch {
+        /* Storage already succeeded. */
+      }
+    }
+    for (const message of this.#reportedInPage.filter((candidate) => written.has(candidate))) {
+      const outcome = this.#messageOutcomes.get(message);
+      if (outcome !== undefined) {
+        try {
+          this.input.options.onMessageOutcome?.(message, outcome);
+        } catch {
+          /* Storage already succeeded. */
+        }
+      }
+    }
+    for (const message of this.#settledInPage.filter((candidate) => written.has(candidate))) {
+      try {
+        controlledMessageSettlers.get(this.input.options)?.(message);
+      } catch {
+        /* Storage already succeeded. */
+      }
+    }
+    this.#reportedInPage.splice(
+      0,
+      this.#reportedInPage.length,
+      ...this.#reportedInPage.filter((message) => !written.has(message)),
+    );
+    this.#settledInPage.splice(
+      0,
+      this.#settledInPage.length,
+      ...this.#settledInPage.filter((message) => !written.has(message)),
+    );
+    this.#deliveredInPage.length = 0;
+  }
+
+  /**
+   * Checks whether this Inbox applies one remote mutation batch per page.
+   *
+   * @returns Whether the internal page operation is present.
+   */
+  #usesRemotePage(): boolean {
+    return deliveryPortAccess in this.input.inbox;
+  }
+
+  /**
+   * Records unflushed page results as failures to controlled callers.
+   *
+   * @param error Supplies the page failure.
+   */
+  #failUnflushed(error: unknown): void {
+    for (const message of this.#settledInPage) {
+      if (this.#messageOutcomes.get(message)?.kind === "acknowledged") {
+        this.#messageOutcomes.delete(message);
+        this.#recordFailure(message, error);
+      }
+      controlledMessageSettlers.get(this.input.options)?.(message);
+    }
+    for (const message of this.#reportedInPage) {
+      const outcome = this.#messageOutcomes.get(message);
+      if (outcome !== undefined) this.input.options.onMessageOutcome?.(message, outcome);
+    }
+    this.#settledInPage.length = 0;
+    this.#deliveredInPage.length = 0;
+    this.#duplicatesInPage.length = 0;
+    this.#reportedInPage.length = 0;
   }
 
   /**
@@ -1633,7 +1737,8 @@ class DeliveryDrain {
       }
       return await this.#deliver(message, target);
     } finally {
-      controlledMessageSettlers.get(this.input.options)?.(message);
+      if (!this.#usesRemotePage()) controlledMessageSettlers.get(this.input.options)?.(message);
+      else this.#settledInPage.push(message);
     }
   }
 
@@ -1696,7 +1801,8 @@ class DeliveryDrain {
         throw new Error("Inbox duplicate was not removed.");
       this.#removedInPage.add(message);
       this.#messageOutcomes.set(message, { kind: "acknowledged", agent: false });
-      this.input.options.onDuplicateRemoved?.(message);
+      if (!this.#usesRemotePage()) this.input.options.onDuplicateRemoved?.(message);
+      else this.#duplicatesInPage.push(message);
     } catch (error) {
       this.#recordStorageFailure(message, error);
       this.#blockedTargets.add(target);
@@ -1724,7 +1830,9 @@ class DeliveryDrain {
    */
   #reportOutcome(message: InboxMessage): void {
     const outcome = this.#messageOutcomes.get(message);
-    if (outcome !== undefined) this.input.options.onMessageOutcome?.(message, outcome);
+    if (outcome === undefined) return;
+    if (this.#usesRemotePage()) this.#reportedInPage.push(message);
+    else this.input.options.onMessageOutcome?.(message, outcome);
   }
 
   /**
@@ -1921,14 +2029,18 @@ class DeliveryDrain {
       this.#current,
     );
     if (completed === undefined) throw new Error("Inbox message was not marked delivered.");
-    this.#deduplication.recordDelivered(completed);
-    this.#statistics.delivered += 1;
-    this.#messageOutcomes.set(message, { kind: "acknowledged", agent: false });
-    try {
-      this.input.options.onDelivered?.(completed);
-    } catch {
-      // A post-ack observer cannot undo durable delivery or repeat processing.
+    if (!this.#usesRemotePage()) {
+      this.#deduplication.recordDelivered(completed);
+      this.#statistics.delivered += 1;
     }
+    this.#messageOutcomes.set(message, { kind: "acknowledged", agent: false });
+    if (this.#usesRemotePage()) this.#deliveredInPage.push({ original: message, completed });
+    else
+      try {
+        this.input.options.onDelivered?.(completed);
+      } catch {
+        // A post-ack observer cannot undo durable delivery or repeat processing.
+      }
   }
 
   /**
@@ -2263,11 +2375,14 @@ class DeliveryDeduplication {
    * Creates duplicate checks for one page and retention time.
    *
    * @param messages Supplies the messages in the page.
-   * @param now Supplies the time used to check message retention.
+   * @param isRecent Checks a retained deadline against the current time.
    * @returns Duplicate checks for the page.
    */
-  page(messages: readonly InboxMessage[], now: Date): DeliveryPageDeduplication {
-    return new DeliveryPageDeduplication(messages, this.#recent, now);
+  page(
+    messages: readonly InboxMessage[],
+    isRecent: (message: InboxMessage) => boolean,
+  ): DeliveryPageDeduplication {
+    return new DeliveryPageDeduplication(messages, this.#recent, isRecent);
   }
 
   /**
@@ -2291,21 +2406,16 @@ class DeliveryPageDeduplication {
    *
    * @param messages Supplies the inbox page.
    * @param recent Provides recently delivered message identities.
-   * @param now Supplies the time used to check message retention.
+   * @param isRecent Checks a retained deadline against the current time.
    */
   constructor(
     messages: readonly InboxMessage[],
     private readonly recent: RecentDeliveries,
-    now: Date,
+    isRecent: (message: InboxMessage) => boolean,
   ) {
     this.#identities = new Set(
       messages
-        .filter(
-          (message) =>
-            message.status === "DELIVERED" &&
-            message.keepUntil !== undefined &&
-            message.keepUntil.getTime() > now.getTime(),
-        )
+        .filter((message) => message.status === "DELIVERED" && isRecent(message))
         .map((message) => RecentDeliveries.key(message)),
     );
   }

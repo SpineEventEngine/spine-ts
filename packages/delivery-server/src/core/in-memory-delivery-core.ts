@@ -16,7 +16,6 @@ import type { ServiceImpl } from "@connectrpc/connect";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   InboxService,
-  ManagedShardService,
   ShardService,
   ShardObservingService,
 } from "@spine-event-engine/proto/delivery-server";
@@ -30,7 +29,7 @@ export interface DeliveryCoreOptions {
   // prettier-ignore
 
   /**
-   * Positive session lifetime in milliseconds; defaults to 60 seconds.
+   * Processing timeout in milliseconds; zero disables stale pickup and is the default.
    */
   readonly processingTimeoutMs?: number;
 
@@ -45,13 +44,6 @@ export interface DeliveryCoreOptions {
    * @returns Provides the current timestamp.
    */
   readonly now?: () => Timestamp;
-
-  /**
-   * Returns monotonic milliseconds for deterministic lease-expiry tests.
-   *
-   * @returns An elapsed-time reading independent of wall-clock changes.
-   */
-  readonly monotonicNow?: () => number;
 }
 
 /**
@@ -69,11 +61,6 @@ export interface DeliveryCore {
    * Serves Shard RPCs.
    */
   readonly shards: ServiceImpl<typeof ShardService>;
-
-  /**
-   * Serves typed raw and managed session calls.
-   */
-  readonly managed: ServiceImpl<typeof ManagedShardService>;
 
   /**
    * Streams free shards with pending work to application nodes.
@@ -97,7 +84,7 @@ export const InMemoryDelivery: Readonly<{
    *
    * @param options Configures stale pickup expiry and work reminders.
    * @returns Provides the handlers without owning a listener or process lifecycle.
-   * @throws {RangeError} When the processing timeout is not a positive safe integer.
+   * @throws {RangeError} When the processing timeout is not a nonnegative safe integer.
    */
   create(options?: DeliveryCoreOptions): DeliveryCore;
 }> = Object.freeze({
@@ -108,22 +95,20 @@ export const InMemoryDelivery: Readonly<{
    *
    * @param options Configures stale pickup expiry and work reminders.
    * @returns Provides the handlers without owning a listener or process lifecycle.
-   * @throws {RangeError} When the processing timeout is not a positive safe integer.
+   * @throws {RangeError} When the processing timeout is not a nonnegative safe integer.
    */
   create(options: DeliveryCoreOptions = {}): DeliveryCore {
-    const timeout = options.processingTimeoutMs ?? 60_000;
-    if (!Number.isSafeInteger(timeout) || timeout <= 0)
+    const timeout = options.processingTimeoutMs ?? 0;
+    if (!Number.isSafeInteger(timeout) || timeout < 0)
       throw new RangeError("Processing timeout is invalid.");
     const assembly = DeliveryAssembly.create(options);
     return Object.freeze({
       inbox: assembly.inbox,
       shards: assembly.shards,
-      managed: assembly.managed,
       observing: assembly.observing,
       close() {
         assembly.closeAdmission();
         assembly.closeObserving();
-        assembly.closeSessions();
         assembly.closeAdmin();
       },
     });

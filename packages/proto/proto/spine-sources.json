@@ -4,11 +4,11 @@
   "sources": [
     {
       "localPath": "packages/proto/proto/grpc/health/v1/health.proto",
-      "repository": "SpineEventEngine/delivery-server",
-      "commit": "21f2901f393e552208b97166f4eaeb942f9f5172",
+      "repository": "SpineEventEngine/delivery",
+      "commit": "44213ec6437b10586e652d50b0a40f4e7535b30a",
       "upstreamPath": "grpc-api/src/main/proto/grpc/health/v1/health.proto",
-      "sourceUrl": "https://github.com/SpineEventEngine/delivery-server/blob/21f2901f393e552208b97166f4eaeb942f9f5172/grpc-api/src/main/proto/grpc/health/v1/health.proto",
-      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/delivery-server/21f2901f393e552208b97166f4eaeb942f9f5172/grpc-api/src/main/proto/grpc/health/v1/health.proto",
+      "sourceUrl": "https://github.com/SpineEventEngine/delivery/blob/44213ec6437b10586e652d50b0a40f4e7535b30a/grpc-api/src/main/proto/grpc/health/v1/health.proto",
+      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/delivery/44213ec6437b10586e652d50b0a40f4e7535b30a/grpc-api/src/main/proto/grpc/health/v1/health.proto",
       "sha256": "000f41fd9765e7d7bc4083d8777e548d0aeed0fcb6e312282e7334e6c4ba7a59"
     },
     {
@@ -201,61 +201,61 @@
     },
     {
       "localPath": "packages/proto/proto/spine/delivery/admin/admin_service.proto",
-      "repository": "SpineEventEngine/delivery-server",
-      "commit": "21f2901f393e552208b97166f4eaeb942f9f5172",
+      "repository": "SpineEventEngine/delivery",
+      "commit": "44213ec6437b10586e652d50b0a40f4e7535b30a",
       "upstreamPath": "grpc-api/src/main/proto/spine/delivery/admin/admin_service.proto",
-      "sourceUrl": "https://github.com/SpineEventEngine/delivery-server/blob/21f2901f393e552208b97166f4eaeb942f9f5172/grpc-api/src/main/proto/spine/delivery/admin/admin_service.proto",
-      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/delivery-server/21f2901f393e552208b97166f4eaeb942f9f5172/grpc-api/src/main/proto/spine/delivery/admin/admin_service.proto",
-      "sha256": "421dca6ce445a1913a81a49c1f26fffa4837f1fcb30a14e905b27dd7b37df2ad"
+      "sourceUrl": "https://github.com/SpineEventEngine/delivery/blob/44213ec6437b10586e652d50b0a40f4e7535b30a/grpc-api/src/main/proto/spine/delivery/admin/admin_service.proto",
+      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/delivery/44213ec6437b10586e652d50b0a40f4e7535b30a/grpc-api/src/main/proto/spine/delivery/admin/admin_service.proto",
+      "sha256": "b644477a933216991db705db1a9bf1435570015e673c6c6c19a3ee889f8f0850"
     },
     {
       "localPath": "packages/proto/proto/spine/delivery/commands.proto",
-      "repository": "SpineEventEngine/delivery-server",
-      "commit": "21f2901f393e552208b97166f4eaeb942f9f5172",
+      "repository": "SpineEventEngine/delivery",
+      "commit": "44213ec6437b10586e652d50b0a40f4e7535b30a",
       "upstreamPath": "model/src/main/proto/spine/delivery/commands.proto",
-      "sourceUrl": "https://github.com/SpineEventEngine/delivery-server/blob/21f2901f393e552208b97166f4eaeb942f9f5172/model/src/main/proto/spine/delivery/commands.proto",
-      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/delivery-server/21f2901f393e552208b97166f4eaeb942f9f5172/model/src/main/proto/spine/delivery/commands.proto",
-      "sha256": "c12205a14b880c4c4647fdf52ae53aaa0213be01375c49721cbaf3518c05c842"
+      "sourceUrl": "https://github.com/SpineEventEngine/delivery/blob/44213ec6437b10586e652d50b0a40f4e7535b30a/model/src/main/proto/spine/delivery/commands.proto",
+      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/delivery/44213ec6437b10586e652d50b0a40f4e7535b30a/model/src/main/proto/spine/delivery/commands.proto",
+      "sha256": "c12881f68b42453f7a92ac0151c1db9f7b07525743131e5f84e37efc9a7b23fa"
     },
     {
       "localPath": "packages/proto/proto/spine/delivery/events.proto",
-      "repository": "SpineEventEngine/delivery-server",
-      "commit": "21f2901f393e552208b97166f4eaeb942f9f5172",
+      "repository": "SpineEventEngine/delivery",
+      "commit": "44213ec6437b10586e652d50b0a40f4e7535b30a",
       "upstreamPath": "model/src/main/proto/spine/delivery/events.proto",
-      "sourceUrl": "https://github.com/SpineEventEngine/delivery-server/blob/21f2901f393e552208b97166f4eaeb942f9f5172/model/src/main/proto/spine/delivery/events.proto",
-      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/delivery-server/21f2901f393e552208b97166f4eaeb942f9f5172/model/src/main/proto/spine/delivery/events.proto",
-      "sha256": "d4d5f9202ed71ef41f3f92ed420053744dee00ffcee70bb89bc218790fb03c86"
+      "sourceUrl": "https://github.com/SpineEventEngine/delivery/blob/44213ec6437b10586e652d50b0a40f4e7535b30a/model/src/main/proto/spine/delivery/events.proto",
+      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/delivery/44213ec6437b10586e652d50b0a40f4e7535b30a/model/src/main/proto/spine/delivery/events.proto",
+      "sha256": "cd0b04ce56c652622da1d451e115fd092872bd777188c2eaf77bce851ae70062"
     },
     {
       "localPath": "packages/proto/proto/spine/delivery/message_delivery.proto",
-      "repository": "SpineEventEngine/delivery-server",
-      "commit": "21f2901f393e552208b97166f4eaeb942f9f5172",
+      "repository": "SpineEventEngine/delivery",
+      "commit": "44213ec6437b10586e652d50b0a40f4e7535b30a",
       "upstreamPath": "grpc-api/src/main/proto/spine/delivery/message_delivery.proto",
-      "sourceUrl": "https://github.com/SpineEventEngine/delivery-server/blob/21f2901f393e552208b97166f4eaeb942f9f5172/grpc-api/src/main/proto/spine/delivery/message_delivery.proto",
-      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/delivery-server/21f2901f393e552208b97166f4eaeb942f9f5172/grpc-api/src/main/proto/spine/delivery/message_delivery.proto",
-      "sha256": "d0cb65740a46f967fee9e2bfd384c867c0e79ba9a7da41b46c45cd720ca2125f",
+      "sourceUrl": "https://github.com/SpineEventEngine/delivery/blob/44213ec6437b10586e652d50b0a40f4e7535b30a/grpc-api/src/main/proto/spine/delivery/message_delivery.proto",
+      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/delivery/44213ec6437b10586e652d50b0a40f4e7535b30a/grpc-api/src/main/proto/spine/delivery/message_delivery.proto",
+      "sha256": "7fe3fcd26b97f824cc0913a1d71cf29f47ae0a582ff0f392ee8f30d0a3a38395",
       "localAdaptation": {
         "kind": "delivery-observation",
-        "sha256": "92f0b3d9055898b9a3137329b0296e3fed29b31a5d60a2c8148b2483c9c13b97"
+        "sha256": "153adfc511838366f51aa4812b7a558c34f752bc72de5be226a719b24f0e74aa"
       }
     },
     {
       "localPath": "packages/proto/proto/spine/delivery/pick_up_outcome.proto",
-      "repository": "SpineEventEngine/delivery-server",
-      "commit": "21f2901f393e552208b97166f4eaeb942f9f5172",
+      "repository": "SpineEventEngine/delivery",
+      "commit": "44213ec6437b10586e652d50b0a40f4e7535b30a",
       "upstreamPath": "model/src/main/proto/spine/delivery/pick_up_outcome.proto",
-      "sourceUrl": "https://github.com/SpineEventEngine/delivery-server/blob/21f2901f393e552208b97166f4eaeb942f9f5172/model/src/main/proto/spine/delivery/pick_up_outcome.proto",
-      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/delivery-server/21f2901f393e552208b97166f4eaeb942f9f5172/model/src/main/proto/spine/delivery/pick_up_outcome.proto",
-      "sha256": "3c458e3f85053089fddf2b9618d4729d37084f9f1d8c31270c979e85fb22dc2c"
+      "sourceUrl": "https://github.com/SpineEventEngine/delivery/blob/44213ec6437b10586e652d50b0a40f4e7535b30a/model/src/main/proto/spine/delivery/pick_up_outcome.proto",
+      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/delivery/44213ec6437b10586e652d50b0a40f4e7535b30a/model/src/main/proto/spine/delivery/pick_up_outcome.proto",
+      "sha256": "d0b4257606891fea1315c7c432550907c76ba66970a5538a775bd2223a128f8c"
     },
     {
       "localPath": "packages/proto/proto/spine/delivery/rejections.proto",
-      "repository": "SpineEventEngine/delivery-server",
-      "commit": "21f2901f393e552208b97166f4eaeb942f9f5172",
+      "repository": "SpineEventEngine/delivery",
+      "commit": "44213ec6437b10586e652d50b0a40f4e7535b30a",
       "upstreamPath": "model/src/main/proto/spine/delivery/rejections.proto",
-      "sourceUrl": "https://github.com/SpineEventEngine/delivery-server/blob/21f2901f393e552208b97166f4eaeb942f9f5172/model/src/main/proto/spine/delivery/rejections.proto",
-      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/delivery-server/21f2901f393e552208b97166f4eaeb942f9f5172/model/src/main/proto/spine/delivery/rejections.proto",
-      "sha256": "4c141ec0d55c1171e364f0a80ebf82db783f6897c4ebe8741d087ff609016c29"
+      "sourceUrl": "https://github.com/SpineEventEngine/delivery/blob/44213ec6437b10586e652d50b0a40f4e7535b30a/model/src/main/proto/spine/delivery/rejections.proto",
+      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/delivery/44213ec6437b10586e652d50b0a40f4e7535b30a/model/src/main/proto/spine/delivery/rejections.proto",
+      "sha256": "fe35226aa6f18732016286106cd3dae3d3474404fd5218ab820c481b0709f62a"
     },
     {
       "localPath": "packages/proto/proto/spine/net/email_address.proto",
@@ -497,10 +497,6 @@
     {
       "localPath": "packages/proto/proto/spine/client/subscription_record.proto",
       "sha256": "614caf2608bf3fc36a419f887305ae6b7b1cfad657800b5bc3a5d886d396bd86"
-    },
-    {
-      "localPath": "packages/proto/proto/spine/delivery/session/managed_sessions.proto",
-      "sha256": "2284b6f4d47e9e24fbfb2f40cf2a559034d5fb15b5d04b6ce8b5d55338ccf83e"
     },
     {
       "localPath": "packages/proto/proto/spine/deployment/node_discovery.proto",

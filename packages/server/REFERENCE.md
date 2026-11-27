@@ -22,16 +22,12 @@ After the framework has built an Application, `environment.delivery` returns
 an `ApplicationDelivery`. Its `deliverMessagesFrom(shard)` uses the handlers
 already registered for that Application.
 
-A work registry can implement `pickUpForWork(shard, worker, options)` to check
-for pending work and take the shard in one operation. It returns a session
-on success and distinguishes a busy shard from an empty one. With a registry
-that only supplies `pickUp`, the framework checks the inbox before pickup.
-
-With application storage, `InboxRetention.deadline(nowMs)` from
-`@spine-event-engine/server/spi/delivery` calculates the five-second retention
-deadline from application time. With remote storage, the Delivery server uses
-its clock when it first acknowledges the row. Retrying the acknowledgement
-returns the original deadline.
+When the Delivery server stores the inbox, the application worker takes the
+shard using `ShardService.PickShard`. It reads its messages in pages. For
+each successfully delivered message the worker sets a five-second retention
+deadline using its application clock. At the end of the page it writes the
+changed messages together. A later run can use a retained completion to
+recognize another copy of the same Command or Event for the same recipient.
 
 ## Generated handler-registry SPI
 
