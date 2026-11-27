@@ -80,6 +80,26 @@ Required persistent records during implementation:
 - unresolved questions log;
 - package and API documentation.
 
+## New mechanisms and public API changes
+
+During implementation and when acting on reviewer or critic feedback, identify
+the behavior the human requested before introducing a mechanism. Check whether
+the human asked for that mechanism or whether the requested behavior requires
+it. Prefer an existing operation when it can do the job. A reviewer can identify
+a real defect without establishing that their proposed fix is necessary.
+
+Change a public API only when the requested behavior requires it. This applies
+to exported TypeScript APIs and to gRPC services, methods, and messages. If
+the specific contract change lacks prior approval, prefer to ask the human
+before implementing it. Show one caller's code or request before and after,
+explain why the existing API falls short, and recommend the smallest change.
+Prior approval of that specific change is sufficient.
+
+For example, a worker may need to tell other application nodes that a shard
+has work. Approval of a new notification stream covers that stream. Adding
+another public service for picking up shards is a separate decision. First
+check whether the existing shard service can perform the pickup.
+
 ## Agent Roles
 
 The autonomous cycle has these existing roles available. The orchestrator and
@@ -538,6 +558,10 @@ Run this docs/status lint before reviewer sub-agents receive the review
 package. Use targeted `rg`, `git diff`, and task-log checks. Reserve heavier
 commands for verification gates or when the lightweight pass finds a concrete
 reason to run them.
+
+Apply [New mechanisms and public API changes](#new-mechanisms-and-public-api-changes)
+when deciding how to address a finding. Accepting the defect does not approve
+a new public contract proposed as its remedy.
 
 Classify findings before correction:
 

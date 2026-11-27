@@ -68,6 +68,20 @@ input set. Their ordinary persistence, optional Process Manager Event history an
 the immediate cause on output envelopes remain independent of this feature.
 See [core-jvm issue #1744](https://github.com/SpineEventEngine/core-jvm/issues/1744).
 
+## Public API proposals awaiting a human decision
+
+The server work stream through `ShardObservingService.ObserveAll` was
+explicitly requested. Apply the build protocol's rule on new mechanisms to
+the following separate proposals before changing the Delivery API:
+
+- The branch uses `ManagedShardService` for worker operations and includes
+  `PickShardRaw` for taking even an empty shard. The proposal is to use the
+  existing shard and inbox services and remove the extra empty-shard RPC.
+- The worker currently sends one removal per pending duplicate. The proposal
+  is to submit the duplicates identified on one page together, with one shard
+  session. The existing general batch removal does not check the session or
+  require the stored messages to be pending.
+
 ## Acceptance
 
 Exercise normal application entry points, live SQL and Datastore query behavior,
