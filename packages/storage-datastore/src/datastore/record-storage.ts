@@ -12,7 +12,14 @@
  * the License.
  */
 
-import { clearField, fromBinary, toBinary, isMessage, type Message } from "@bufbuild/protobuf";
+import {
+  clearField,
+  equals,
+  fromBinary,
+  toBinary,
+  isMessage,
+  type Message,
+} from "@bufbuild/protobuf";
 import { timestampFromDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { InboxMessageSchema, InboxMessageStatus } from "@spine-event-engine/proto/delivery";
 import type { google } from "@google-cloud/datastore/build/protos/protos.js";
@@ -640,6 +647,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
    * @internal
    */
   matchesTransactionEntity(entity: Record<string | symbol, unknown>, expected: R): boolean {
+    if (this.#codec.inbox)
+      return equals(this.recordSpec.recordType, this.#codec.decode(entity), expected);
     const expectedData = this.transactionEntity(expected).data[payloadProperty];
     return RecordValues.payloadEqual(entity[payloadProperty], expectedData);
   }
@@ -787,6 +796,18 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     const inbox = this.requireInbox();
     const key = this.transactionKey(id);
     return this.provider(() => inbox.markDelivered(key, deadline, token));
+  }
+
+  /**
+   * Removes a duplicate if its current stored status is still pending.
+   *
+   * @param id Complete inbox ID.
+   * @param token Pending revision from the ordinary page, when available.
+   * @returns True when the message was removed or was already absent.
+   */
+  removePendingInbox(id: I, token?: unknown): Promise<boolean> {
+    const inbox = this.requireInbox();
+    return this.provider(() => inbox.removePending(this.transactionKey(id), token));
   }
 
   /**
@@ -1098,14 +1119,10 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     try {
       await transaction.run();
       const entity = DatastoreResults.first(await transaction.get(key, wrappedReadOptions));
-      const expectedPayload =
-        expected === undefined
-          ? undefined
-          : this.#codec.encode(expected.record, expected.columns)[payloadProperty];
       if (
         entity === undefined
           ? expected !== undefined
-          : !RecordValues.payloadEqual(entity[payloadProperty], expectedPayload)
+          : expected === undefined || !this.matchesTransactionEntity(entity, expected.record)
       ) {
         await transaction.rollback();
         return false;

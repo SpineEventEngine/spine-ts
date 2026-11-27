@@ -258,17 +258,17 @@ export class InboxStorage {
    *
    * @param message Supplies the pending duplicate ID.
    * @param options Propagates cancellation and a delivery deadline.
-   * @returns Whether direct ID deletion removed a row.
+   * @returns Whether the pending ID was removed or is already absent.
    */
   async removeDuplicate(
     message: InboxMessage,
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
     if (message.status !== "TO_DELIVER") return false;
-    return this.#remove(message, options);
+    return this.#removePending(message, options);
   }
 
-  async #remove(
+  async #removePending(
     message: InboxMessage,
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
@@ -277,7 +277,12 @@ export class InboxStorage {
     const storage = this.#storage();
     try {
       if (!isActive()) return false;
-      return await storage.delete(Values.id(message.id));
+      if (!InboxRecordStorageCapabilities.hasMutations(storage))
+        throw new InboxMessageError("Inbox storage does not support pending-only deletion.");
+      return await storage.removePendingInbox(
+        Values.id(message.id),
+        this.#mutationTokens.get(message),
+      );
     } finally {
       this.#finish();
     }

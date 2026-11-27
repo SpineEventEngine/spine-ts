@@ -2623,6 +2623,7 @@ interface LoadedAggregate {
   readonly oldState: Message | undefined;
   readonly states: EntityStateHistoryPort<unknown, Message>;
   readonly events: EntityEventHistoryPort<unknown>;
+  readonly eventCache: { readonly read: (depth: number) => Promise<readonly Event[]> };
   readonly version: bigint;
   readonly storageInput: EntityStorageInput<unknown, Message>;
 }
@@ -3041,7 +3042,7 @@ class AggregateExecutionSupport {
         : { tenantId: this.#storageContext.tenantId },
     );
     const entity = this.#instantiateAggregate(entityId, current);
-    RepositoryHistoryInternals.bindEntityHistory(
+    const eventCache = RepositoryHistoryInternals.bindEntityHistory(
       this.#repository,
       entity,
       storage,
@@ -3050,7 +3051,7 @@ class AggregateExecutionSupport {
       this.#storageContext.tenantId,
     );
 
-    return this.#loadedAggregate(entityId, current, entity, storage, storageInput);
+    return this.#loadedAggregate(entityId, current, entity, storage, storageInput, eventCache);
   }
 
   /**
@@ -3061,6 +3062,7 @@ class AggregateExecutionSupport {
    * @param entity Restored Aggregate instance.
    * @param storage Retained Entity storage.
    * @param storageInput Captured storage configuration.
+   * @param eventCache Shared bound Event-history cache.
    * @returns Loaded Aggregate for command execution.
    */
   #loadedAggregate(
@@ -3069,6 +3071,7 @@ class AggregateExecutionSupport {
     entity: object,
     storage: RepositoryEntityStorage<unknown, Message>,
     storageInput: EntityStorageInput<unknown, Message>,
+    eventCache: { readonly read: (depth: number) => Promise<readonly Event[]> },
   ): LoadedAggregate {
     return Object.freeze({
       commits: storage.commits,
@@ -3089,6 +3092,7 @@ class AggregateExecutionSupport {
           : clone(this.#repository.stateSchema, current.state as never),
       states: storage.states,
       events: storage.events,
+      eventCache,
       version: current?.version ?? 0n,
       storageInput,
     });
@@ -3203,22 +3207,6 @@ class AggregateExecutionSupport {
       diagnostics: diagnostics.map((event) => clone(EventSchema, event)),
       events,
     });
-  }
-
-  /**
-   * Writes a copied Event to the Aggregate diagnostic history.
-   *
-   * @param loaded Aggregate with its history port.
-   * @param entityId Aggregate identifier retained for the caller contract.
-   * @param event Event to append.
-   * @returns Completion after the history append.
-   */
-  async appendDiagnosticEvent(
-    loaded: LoadedAggregate,
-    entityId: unknown,
-    event: Event,
-  ): Promise<void> {
-    await loaded.events.append(clone(EventSchema, event));
   }
 
   /**
@@ -3718,12 +3706,12 @@ class AggregateEventExecution {
   }
 
   /**
-   * Invokes reactors, persists their result, and journals the source Event.
+   * Invokes reactors and persists changed state and produced Events.
    *
    * @param entityId Target Aggregate identifier.
    * @param intake Decoded Event and matching reactors.
    * @param check Checks the loaded Aggregate's recent emitted Event causes.
-   * @returns Completion after persistence and journaling.
+   * @returns Completion after persistence.
    */
   async #executeEntity(
     entityId: unknown,
@@ -11734,6 +11722,7 @@ const RepositoryHistoryInternals = {
    * @param entityId Identifier used to select history records.
    * @param schema Schema used to unpack state records.
    * @param tenantId Captured tenant for later live membership checks.
+   * @returns The Event cache shared with the bound Entity.
    */
   bindEntityHistory(
     repository: RepositoryView,
@@ -11742,7 +11731,7 @@ const RepositoryHistoryInternals = {
     entityId: unknown,
     schema: DescriptorMessageSchema,
     tenantId?: TenantId,
-  ): void {
+  ): { readonly read: (depth: number) => Promise<readonly Event[]> } {
     const lifetime = RepositoryStorage.lifetime(repository);
     const runtime = repositoryRuntimes.get(repository);
     if (runtime === undefined) throw new Error("Repository history requires its active runtime.");
@@ -11766,6 +11755,7 @@ const RepositoryHistoryInternals = {
       stateMaintenance: this.boundStateMaintenance(repository, lifetime, storage.states, onAdmit),
       eventMaintenance: this.boundEventMaintenance(repository, lifetime, storage.events, onAdmit),
     });
+    return eventCache;
   },
 
   /**
@@ -12264,6 +12254,10 @@ class RepositoryHistoryCache<T> {
     const combined = [...this.#entries, ...loaded];
     const cacheable = this.#completeGroups(loaded, requested);
     this.#append(cacheable);
+    if (cacheable.length > 0 && loaded.length >= requested + 1) {
+      const terminal = loaded.at(-1);
+      if (terminal !== undefined) this.#nextVersion = this.#versionOf(terminal);
+    }
     this.#exhausted = loaded.length < requested + 1;
     return Object.freeze(combined.slice(0, depth));
   }
@@ -12653,11 +12647,34 @@ const DispatchGuards = {
       return valid.recent.some((candidate) => this.sameCause(candidate, signal));
     if (guard.recent !== undefined && guard.version === loaded.version)
       return guard.recent.some((candidate) => this.sameCause(candidate, signal));
-    const emitted = await loaded.events.backward(entityId, depth);
+    const emitted = await this.durableHistory(loaded, entityId, depth);
     guard.recent = Object.freeze([...emitted]);
     guard.version = loaded.version;
     this.drainEvidence(repository)?.set(key, { recent: guard.recent, version: loaded.version });
     return emitted.some((candidate) => this.sameCause(candidate, signal));
+  },
+
+  /**
+   * Reads recent Events through the bound cache, excluding versions with no durable state.
+   *
+   * @param loaded Aggregate restored from the durable state.
+   * @param entityId Aggregate identifier used by the provider history query.
+   * @param depth Number of durable Events to inspect.
+   * @returns At most the requested number of committed Events.
+   */
+  async durableHistory(
+    loaded: LoadedAggregate,
+    entityId: unknown,
+    depth: number,
+  ): Promise<readonly Event[]> {
+    if (loaded.version === 0n) return [];
+    const history = await loaded.eventCache.read(depth);
+    const durable = history.filter(
+      (event) => RepositorySignals.readEventVersion(event) <= loaded.version,
+    );
+    if (durable.length >= depth || history.length < depth) return durable.slice(0, depth);
+    const bounded = await loaded.events.backward(entityId, depth, loaded.version);
+    return bounded.filter((event) => RepositorySignals.readEventVersion(event) <= loaded.version);
   },
 
   /**

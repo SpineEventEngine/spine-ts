@@ -1136,7 +1136,8 @@ omitted groups identify the same ungrouped family. Bounded Context names are
 diagnostic and never enter physical storage identity. Each call still returns
 an independently closeable storage handle.
 `InboxRecordMutations` describes the storage operations that Delivery uses to
-mark an inbox ID delivered and delete expired delivered messages for a shard.
+mark an inbox ID delivered, remove a pending duplicate, and delete expired
+delivered messages for a shard.
 `InboxRecordStorageCapabilities.hasMutations(storage)` checks a record handle
 for those operations. A provider can return an `InboxRecordEntry` from the
 ordinary page query when it needs native database metadata for the update.

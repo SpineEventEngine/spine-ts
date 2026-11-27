@@ -560,6 +560,28 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   }
 
   /**
+   * Removes an inbox ID only while its current status is pending.
+   *
+   * @param id Complete inbox message ID.
+   * @returns True when removed or absent; false when already delivered.
+   */
+  removePendingInbox(id: I): Promise<boolean> {
+    this.requireInbox();
+    return this.using(async (connection) => {
+      const [removed] = await connection.execute<ResultSetHeader>(
+        `DELETE FROM \`${this.table.tableName}\` WHERE ID=? AND status=?`,
+        [this.idKey(id), this.queryValue("status", InboxMessageStatus.TO_DELIVER)] as never,
+      );
+      if (removed.affectedRows === 1) return true;
+      const [current] = await connection.execute<PayloadRow[]>(
+        `SELECT ID FROM \`${this.table.tableName}\` WHERE ID=?`,
+        [this.idKey(id)] as never,
+      );
+      return current.length === 0;
+    });
+  }
+
+  /**
    * Deletes expired delivered inbox messages in one database statement.
    *
    * @param shard Selected shard.
@@ -770,33 +792,49 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean | undefined> {
-    const raw = await this.rawOn(connection, id);
-    const current = raw === undefined ? undefined : this.decode(raw);
+    const row = await this.rawOn(connection, id);
+    const raw = row?.bytes;
+    const current = row === undefined ? undefined : this.projectInbox(this.decode(row.bytes), row);
     if (!same(this.recordSpec.recordType, current, expected?.record)) return false;
     if (next === undefined) {
-      if (raw === undefined) return true;
+      if (row === undefined) return true;
       const [deleted] = await connection.execute<ResultSetHeader>(
-        `DELETE FROM \`${this.table.tableName}\` WHERE ID=? AND bytes=?`,
-        [this.idKey(id), raw] as never,
+        `DELETE FROM \`${this.table.tableName}\` WHERE ID=? AND bytes=?${this.casInboxGuard()}`,
+        [this.idKey(id), raw, ...this.casInboxValues(row)] as never,
       );
       return deleted.affectedRows === 1 ? true : undefined;
     }
     if (same(this.recordSpec.recordType, current, next.record)) return true;
-    if (raw === undefined) {
-      try {
-        await connection.execute(this.insertSql(), this.recordValues(next.record, id) as never);
-        return true;
-      } catch (error) {
-        if (this.primaryCollision(error)) return undefined;
-        throw error;
-      }
-    }
+    if (row === undefined) return this.casInsert(connection, id, next.record);
     const [result] = await connection.execute<ResultSetHeader>(this.casUpdateSql(), [
       ...this.recordValues(next.record, id).slice(1),
       this.idKey(id),
       raw,
+      ...this.casInboxValues(row),
     ] as never);
     return result.affectedRows === 1 ? true : undefined;
+  }
+
+  /**
+   * Writes a record after an absent compare-and-set slot.
+   *
+   * @param connection Current operation connection.
+   * @param id Record slot identifier.
+   * @param record Replacement record.
+   * @returns True when inserted, or undefined after a concurrent insert.
+   */
+  private async casInsert(
+    connection: import("mysql2/promise").PoolConnection,
+    id: I,
+    record: R,
+  ): Promise<boolean | undefined> {
+    try {
+      await connection.execute(this.insertSql(), this.recordValues(record, id) as never);
+      return true;
+    } catch (error) {
+      if (this.primaryCollision(error)) return undefined;
+      throw error;
+    }
   }
 
   /**
@@ -899,17 +937,36 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * Reads exact stored bytes for a conditional mutation.
    * @param connection Provides the operation connection.
    * @param id Identifies the row.
-   * @returns Stored bytes, if present.
+   * @returns Stored bytes and authoritative inbox columns, if present.
    */
   private async rawOn(
     connection: import("mysql2/promise").PoolConnection,
     id: I,
-  ): Promise<Uint8Array | undefined> {
+  ): Promise<PayloadRow | undefined> {
     const [rows] = await connection.execute<PayloadRow[]>(
-      `SELECT bytes FROM \`${this.table.tableName}\` WHERE ID=?`,
+      `SELECT bytes${this.inboxReadColumns()} FROM \`${this.table.tableName}\` WHERE ID=?`,
       [this.idKey(id)] as never,
     );
-    return rows[0]?.bytes;
+    return rows[0];
+  }
+
+  /**
+   * Adds mutable inbox columns to a conditional SQL guard.
+   *
+   * @returns The additional SQL condition.
+   */
+  private casInboxGuard(): string {
+    return this.isInboxLayout() ? " AND status<=>? AND when_keep_until<=>?" : "";
+  }
+
+  /**
+   * Reads mutable inbox values for a conditional SQL guard.
+   *
+   * @param row Current database row.
+   * @returns Status and first retention deadline, if this is inbox storage.
+   */
+  private casInboxValues(row: PayloadRow): readonly unknown[] {
+    return this.isInboxLayout() ? [row.status, row.when_keep_until] : [];
   }
 
   /**
@@ -966,7 +1023,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     const names = ["bytes", ...this.recordSpec.columns.map((column) => column.name)];
     return (
       `UPDATE \`${this.table.tableName}\` SET ${names.map((name) => `\`${name}\`=?`).join(", ")} ` +
-      "WHERE ID=? AND bytes=?"
+      `WHERE ID=? AND bytes=?${this.casInboxGuard()}`
     );
   }
 

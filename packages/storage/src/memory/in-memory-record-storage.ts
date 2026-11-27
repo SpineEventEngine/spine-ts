@@ -85,6 +85,22 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
+   * Removes an inbox ID only while its current status is pending.
+   *
+   * @param id Complete inbox message ID.
+   * @returns True when removed or absent; false when already delivered.
+   */
+  removePendingInbox(id: I): Promise<boolean> {
+    if (!this.isOpen()) throw new Error("In-memory record storage is closed.");
+    if (!this.isInboxLayout()) throw new TypeError("Inbox mutation requires inbox record storage.");
+    const records = this.records();
+    const current = records.read(id) as InboxMessage | undefined;
+    if (current === undefined) return Promise.resolve(true);
+    if (current.status !== InboxMessageStatus.TO_DELIVER) return Promise.resolve(false);
+    return Promise.resolve(records.delete(id));
+  }
+
+  /**
    * Removes expired delivered inbox messages in one shard storage call.
    *
    * @param shard Selected shard.

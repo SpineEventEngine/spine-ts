@@ -434,8 +434,23 @@ async function removeExpired(
   const seed = `${context.name}-${randomUUID()}`;
   const message = createMessage(`${seed}-delivered`, "direct", 1n);
   await inbox.storage.write(message);
+  const recordStorage = factory.createRecordStorage(context, inboxRecordSpec);
+  const id = InboxRecords.write(message).id;
+  if (id === undefined) throw new Error("Expected an inbox storage ID.");
+  const stalePending = await recordStorage.read(id);
+  if (stalePending === undefined) throw new Error("Expected a pending inbox record.");
   const delivered = await inbox.markDelivered(message);
   if (delivered === undefined) throw new Error("Expected delivered provider row.");
+  await expect(inbox.removeDuplicate(message)).resolves.toBe(false);
+  await expect(inbox.readMessage(message.id)).resolves.toMatchObject({
+    status: "DELIVERED",
+    keepUntil: delivered.keepUntil,
+  });
+  await expect(recordStorage.compareAndSet(id, stalePending, undefined)).resolves.toBe(false);
+  const current = await recordStorage.read(id);
+  if (current === undefined) throw new Error("Expected a delivered inbox record.");
+  await expect(recordStorage.compareAndSet(id, current, current)).resolves.toBe(true);
+  recordStorage.close();
   now = new Date(now.getTime() + 1);
   const protectedMessage = createMessage(`${seed}-protected`, "protected", 2n);
   await inbox.storage.write(protectedMessage);

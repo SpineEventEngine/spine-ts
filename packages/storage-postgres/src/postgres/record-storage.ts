@@ -588,6 +588,27 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
+   * Removes an inbox ID only while its current status is pending.
+   *
+   * @param id Complete inbox message ID.
+   * @returns True when removed or absent; false when already delivered.
+   */
+  removePendingInbox(id: I): Promise<boolean> {
+    this.requireInbox();
+    return this.using(async (client) => {
+      const removed = await client.query(
+        `DELETE FROM ${this.qualified()} WHERE "ID" = $1 AND "status" = $2`,
+        [this.id(id), this.historyColumn("status", InboxMessageStatus.TO_DELIVER)],
+      );
+      if (removed.rowCount === 1) return true;
+      const current = await client.query(`SELECT 1 FROM ${this.qualified()} WHERE "ID" = $1`, [
+        this.id(id),
+      ]);
+      return current.rowCount === 0;
+    });
+  }
+
+  /**
    * Deletes expired delivered inbox messages in one database statement.
    *
    * @param shard Selected shard.
@@ -750,7 +771,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
-   * Compares and conditionally mutates one row with a raw-byte SQL guard.
+   * Compares and conditionally mutates one complete logical record.
    *
    * @param id Identifies the record slot.
    * @param expected Specifies the current materialized record required to write.
@@ -808,19 +829,21 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     expected: Materialized<I, R> | undefined,
     next: Materialized<I, R> | undefined,
   ): Promise<boolean | undefined> {
-    const raw = await this.rawOn(client, id);
-    const current = raw === undefined ? undefined : this.decode(raw);
+    const row = await this.rawOn(client, id);
+    const raw = row === undefined ? undefined : bytes(row.bytes);
+    const current =
+      row === undefined ? undefined : this.projectInbox(this.decode(bytes(row.bytes)), row);
     if (!this.same(current, expected?.record)) return false;
     if (next === undefined) {
-      if (raw === undefined) return true;
+      if (row === undefined) return true;
       const deleted = await client.query(
-        `DELETE FROM ${this.qualified()} WHERE "ID" = $1 AND "bytes" = $2`,
-        [this.id(id), raw],
+        `DELETE FROM ${this.qualified()} WHERE "ID" = $1 AND "bytes" = $2${this.casInboxGuard(3)}`,
+        [this.id(id), raw, ...this.casInboxValues(row)],
       );
       return deleted.rowCount === 1 ? true : undefined;
     }
     if (this.same(current, next.record)) return true;
-    if (raw === undefined) {
+    if (row === undefined) {
       const inserted = await client.query(
         `${this.insertSql()} ON CONFLICT ("ID") DO NOTHING`,
         this.values(next.record, id),
@@ -831,6 +854,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       this.id(id),
       raw,
       ...this.values(next.record, id).slice(1),
+      ...this.casInboxValues(row),
     ]);
     return changed.rowCount === 1 ? true : undefined;
   }
@@ -839,14 +863,37 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * Reads the exact bytes used as a conditional-mutation guard.
    * @param client Provides the operation client.
    * @param id Identifies the row.
-   * @returns Stored bytes, if present.
+   * @returns Stored bytes and authoritative inbox columns, if present.
    */
-  private async rawOn(client: PoolClient, id: I): Promise<Uint8Array | undefined> {
+  private async rawOn(client: PoolClient, id: I): Promise<Row | undefined> {
     const result = await client.query<Row>(
-      `SELECT "bytes" FROM ${this.qualified()} WHERE "ID" = $1`,
+      `SELECT "bytes"${this.inboxReadColumns()} FROM ${this.qualified()} WHERE "ID" = $1`,
       [this.id(id)],
     );
-    return result.rows[0] === undefined ? undefined : bytes(result.rows[0].bytes);
+    return result.rows[0];
+  }
+
+  /**
+   * Adds mutable inbox columns to a conditional SQL guard.
+   *
+   * @param first First parameter number for the mutable columns.
+   * @returns The additional SQL condition.
+   */
+  private casInboxGuard(first: number): string {
+    return this.isInboxLayout()
+      ? ` AND "status" IS NOT DISTINCT FROM $${String(first)}` +
+          ` AND "when_keep_until" IS NOT DISTINCT FROM $${String(first + 1)}`
+      : "";
+  }
+
+  /**
+   * Reads the mutable inbox column values used by a conditional SQL guard.
+   *
+   * @param row Current database row.
+   * @returns Status and first retention deadline, if this is inbox storage.
+   */
+  private casInboxValues(row: Row): readonly unknown[] {
+    return this.isInboxLayout() ? [row.status, row.when_keep_until] : [];
   }
 
   /**
@@ -871,7 +918,10 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   private casUpdateSql(): string {
     const names = ["bytes", ...this.recordSpec.columns.map(({ name }) => name)];
     const assignments = names.map((name, index) => `${quote(name)} = $${String(index + 3)}`);
-    return `UPDATE ${this.qualified()} SET ${assignments.join(", ")} WHERE "ID" = $1 AND "bytes" = $2`;
+    return (
+      `UPDATE ${this.qualified()} SET ${assignments.join(", ")} WHERE "ID" = $1 AND "bytes" = $2` +
+      this.casInboxGuard(names.length + 3)
+    );
   }
 
   /**

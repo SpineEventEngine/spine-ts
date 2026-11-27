@@ -124,44 +124,67 @@ export class DatastoreInboxMutations {
     deadline: Timestamp,
     token?: unknown,
   ): Promise<Timestamp | undefined> {
-    return this.admit(() => this.update(entity.keyToKeyProto(key), deadline, token));
+    return this.admit(async () => {
+      const nativeKey = entity.keyToKeyProto(key);
+      const result = await this.changePending(nativeKey, token, (version) =>
+        this.deliveryUpdate(nativeKey, version, deadline),
+      );
+      if (result === true) return deadline;
+      const properties = result?.entity?.properties;
+      const status: InboxMessageStatus = Number(properties?.status?.integerValue);
+      const until = properties?.when_keep_until?.timestampValue;
+      return status === InboxMessageStatus.DELIVERED && until
+        ? create(TimestampSchema, {
+            seconds: BigInt((until.seconds ?? 0).toString()),
+            nanos: until.nanos ?? 0,
+          })
+        : undefined;
+    });
   }
 
   /**
-   * Applies acknowledgement to the current inbox ID and recovers the first deadline on a retry.
+   * Removes the current inbox ID only while its stored status is pending.
+   *
+   * @param key Physical key from the delivery page.
+   * @param token Optional pending revision from that page.
+   * @returns True if the message was removed or is already absent.
+   */
+  removePending(key: ReturnType<Datastore["key"]>, token?: unknown): Promise<boolean> {
+    return this.admit(async () => {
+      const nativeKey = entity.keyToKeyProto(key);
+      const result = await this.changePending(nativeKey, token, (version) => ({
+        delete: nativeKey,
+        baseVersion: version,
+        conflictResolutionStrategy: "FAIL",
+      }));
+      return result === undefined || result === true;
+    });
+  }
+
+  /**
+   * Applies a mutation to a pending version and resolves conflicts using the current status.
    *
    * @param key Physical inbox key.
-   * @param deadline Proposed retention deadline.
-   * @param token Revision returned by the ordinary delivery page.
-   * @returns The first deadline when the message is delivered.
+   * @param token Pending revision from a page, when available.
+   * @param mutation Builds the update or delete for the current pending revision.
+   * @returns True on success, the completed message metadata, or undefined for a missing ID.
    */
-  private async update(
+  private async changePending(
     key: google.datastore.v1.IKey,
-    deadline: Timestamp,
-    token?: unknown,
-  ): Promise<Timestamp | undefined> {
+    token: unknown,
+    mutation: (version: string) => google.datastore.v1.IMutation,
+  ): Promise<true | NativeMessage | undefined> {
     const destination = await this.destination();
     let version = typeof token === "string" ? token : undefined;
     for (;;) {
       const conflict =
-        version === undefined
-          ? undefined
-          : await this.complete(destination, key, version, deadline);
-      if (version !== undefined && conflict === undefined) return deadline;
+        version === undefined ? undefined : await this.commit(destination, mutation(version));
+      if (version !== undefined && conflict === undefined) return true;
       const item = await this.metadata(destination, key);
       const properties = item?.entity?.properties;
       if (!properties) return undefined;
       const status: InboxMessageStatus = Number(properties.status?.integerValue);
-      if (status === InboxMessageStatus.DELIVERED) {
-        const until = properties.when_keep_until?.timestampValue;
-        return until
-          ? create(TimestampSchema, {
-              seconds: BigInt((until.seconds ?? 0).toString()),
-              nanos: until.nanos ?? 0,
-            })
-          : undefined;
-      }
-      if (status !== InboxMessageStatus.TO_DELIVER) return undefined;
+      if (status !== InboxMessageStatus.TO_DELIVER) return item;
       if (item.version == null) throw new Error("Datastore omitted the inbox message version.");
       const next = item.version.toString();
       if (conflict && next === version) throw conflict;
@@ -200,29 +223,25 @@ export class DatastoreInboxMutations {
   }
 
   /**
-   * Marks one pending storage revision delivered in a single database call.
+   * Executes one revision-checked update or deletion in a single database call.
    *
    * @param destination Configured project and database.
-   * @param key Physical inbox key.
-   * @param version Pending revision supplied by the query or metadata read.
-   * @param deadline First retention deadline for this inbox message.
-   * @returns The conflict to resolve, or undefined when the update succeeded.
+   * @param mutation Mutation against the last pending revision.
+   * @returns The conflict to resolve, or undefined when the change succeeded.
    */
-  private async complete(
+  private async commit(
     destination: Destination,
-    key: google.datastore.v1.IKey,
-    version: string,
-    deadline: Timestamp,
+    mutation: google.datastore.v1.IMutation,
   ): Promise<Error | undefined> {
     try {
       const [response] = await this.client().commit({
         ...destination,
         mode: "NON_TRANSACTIONAL",
-        mutations: [this.deliveryUpdate(key, version, deadline)],
+        mutations: [mutation],
       });
-      const mutation = response.mutationResults?.[0];
-      if (!mutation) throw new Error("Datastore did not return the inbox update result.");
-      return mutation.conflictDetected
+      const result = response.mutationResults?.[0];
+      if (!result) throw new Error("Datastore did not return the inbox update result.");
+      return result.conflictDetected
         ? new Error("Datastore inbox update conflicted with the stored version.")
         : undefined;
     } catch (error) {

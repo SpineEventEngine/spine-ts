@@ -1021,6 +1021,29 @@ class ProducingGuardedAggregate extends Aggregate<string, typeof ProjectStateSch
   }
 }
 
+class HistoryReadingGuardedAggregate extends Aggregate<string, typeof ProjectStateSchema> {
+  static historyLengths: number[] = [];
+  static historyIds: string[][] = [];
+
+  async reactProjection(event: ProjectCreated): Promise<ProjectRegistered> {
+    if (event.name === "inspect") {
+      const recent = await this.eventHistoryBackward(1);
+      const deeper = await this.eventHistoryBackward(3);
+      HistoryReadingGuardedAggregate.historyLengths.push(recent.length, deeper.length);
+      HistoryReadingGuardedAggregate.historyIds.push(
+        recent.map((item) => item.id?.value ?? ""),
+        deeper.map((item) => item.id?.value ?? ""),
+      );
+    }
+    this.update((draft) => Object.assign(draft, { id: this.id, name: event.name }));
+    return create(ProjectRegisteredSchema, {
+      id: this.id,
+      name: event.name,
+      priority: 1,
+    });
+  }
+}
+
 class GeneratedCommandingProcessManager extends ProcessManager<
   string,
   typeof ProjectQueueStateSchema
@@ -10533,10 +10556,107 @@ describe("repository signal routing", () => {
       ).resolves.toEqual({
         status: "COMPLETED",
       });
-      expect(factory.guardHistoryReads).toBe(1);
+      expect(factory.guardHistoryReads).toBe(0);
       await expect(
         delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
       ).resolves.toHaveLength(2);
+    } finally {
+      await delivery.close();
+      await context.close();
+    }
+  });
+
+  it("shares guarded Event history with depth-one and deeper handler reads", async () => {
+    const setup = createTestSetup(true);
+    const factory = new CountingGuardHistoryFactory();
+    await configureStorage(setup, factory);
+    HistoryReadingGuardedAggregate.historyLengths = [];
+    HistoryReadingGuardedAggregate.historyIds = [];
+    const repository = createHistoryReadingGuardedRepository();
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
+    const target = requireEntityInboxTarget(repository);
+    try {
+      for (const [index, name] of ["seed-one", "seed-two"].entries()) {
+        const stored = await storeEntityInboxEvent(
+          delivery,
+          createProjectCreated(`history-${name}`, "history-target", { name }),
+          new Date(1_783_500_000_000 + index),
+          BigInt(index + 1),
+          { targetTypeUrl: TypeUrls.derive(ProjectStateSchema) },
+        );
+        await target.deliver(stored);
+      }
+      factory.guardHistoryReads = 0;
+      await factory.appendOrphan(
+        createProjectCreated("history-orphan", "history-target", {
+          name: "orphan",
+          version: create(VersionSchema, { number: 3 }),
+        }),
+      );
+      const inspection = await storeEntityInboxEvent(
+        delivery,
+        createProjectCreated("history-inspect", "history-target", { name: "inspect" }),
+        new Date(1_783_500_000_003),
+        3n,
+        { targetTypeUrl: TypeUrls.derive(ProjectStateSchema) },
+      );
+      await target.deliver(inspection);
+      expect(HistoryReadingGuardedAggregate.historyLengths).toEqual([1, 3]);
+      const [shallowIds, deeperIds] = HistoryReadingGuardedAggregate.historyIds;
+      expect(shallowIds).toEqual(deeperIds?.slice(0, 1));
+      expect(new Set(deeperIds).size).toBe(3);
+      expect(factory.guardHistoryReads).toBe(2);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("retries an Aggregate after an Event was stored without its state", async () => {
+    const setup = createTestSetup(true);
+    const factory = new OrphanAggregateEventFactory();
+    await configureStorage(setup, factory);
+    ProducingGuardedAggregate.reset();
+    const repository = createProducingGuardedAggregateRepository();
+    routeAggregateTargets(repository, ["orphan-state-target"]);
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
+    const delivery = new Delivery({
+      context: { name: "OrphanRetry", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const target = requireEntityInboxTarget(repository);
+    try {
+      const stored = await storeEntityInboxEvent(
+        delivery,
+        createProjectCreated("orphan-source", "orphan-state-target"),
+        new Date("2026-07-08T09:05:30.000Z"),
+        1n,
+        { targetId: "orphan-state-target", targetTypeUrl: TypeUrls.derive(ProjectStateSchema) },
+      );
+      await expect(target.deliver(stored)).rejects.toThrow("forced state commit failure");
+      expect(factory.orphanedEvents).toBe(1);
+      const states = new CurrentRecordTestStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: factory,
+        stateSchema: ProjectStateSchema,
+      });
+      await expect(states.readCurrent("orphan-state-target")).resolves.toBeUndefined();
+      await expect(
+        delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+      ).resolves.toHaveLength(1);
+      await expect(
+        delivery.run({
+          onMessage: async (message) => {
+            await target.deliver(message);
+          },
+        }),
+      ).resolves.toEqual({
+        status: "COMPLETED",
+      });
+      expect(ProducingGuardedAggregate.calls).toBe(2);
+      await expect(
+        delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
+      ).resolves.toHaveLength(1);
     } finally {
       await delivery.close();
       await context.close();
@@ -16439,6 +16559,32 @@ function createProducingGuardedAggregateRepository(): Repository<typeof Producin
   });
 }
 
+function createHistoryReadingGuardedRepository(): Repository<
+  typeof HistoryReadingGuardedAggregate
+> {
+  const handlers = HandlerMetadataValues.defineArity(
+    HistoryReadingGuardedAggregate,
+    ProjectStateSchema,
+    (builder) => [builder.react(ProjectCreatedSchema, "reactProjection")],
+    [
+      {
+        kind: "event-reaction",
+        methodName: "reactProjection",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([ProjectRegisteredSchema]),
+      },
+    ],
+  );
+  return new Repository({
+    entityType: HistoryReadingGuardedAggregate,
+    schema: ProjectStateSchema,
+    handlers,
+    events: [ProjectRegisteredSchema],
+    doubleDispatchGuard: { depth: 1 },
+  });
+}
+
 function routeAggregateTargets(
   repository: Repository<typeof ProducingGuardedAggregate>,
   entityIds: readonly string[],
@@ -17984,7 +18130,21 @@ type ReadEntityStorage = EntityStorageConformance<unknown, Message> & { close():
 class CountingGuardHistoryFactory extends InMemoryStorageFactory {
   guardHistoryReads = 0;
 
+  #input: EntityStorageInput<unknown, Message> | undefined;
+
+  async appendOrphan(event: SpineEvent): Promise<void> {
+    if (this.#input === undefined) throw new Error("Expected Aggregate Entity storage input.");
+    const storage = super.createEntityStorage(this.#input) as ReadEntityStorage;
+    try {
+      await storage.events.append(event);
+    } finally {
+      storage.close();
+    }
+  }
+
   override createEntityStorage(input: unknown): unknown {
+    const descriptor = input as EntityStorageInput<unknown, Message>;
+    if (descriptor.eventHistory) this.#input = descriptor;
     const storage = super.createEntityStorage(input) as ReadEntityStorage;
     const events = {
       ...storage.events,
@@ -18002,6 +18162,42 @@ class CountingGuardHistoryFactory extends InMemoryStorageFactory {
         return bound;
       },
     });
+  }
+}
+
+/**
+ * Persists one output Event before failing the corresponding Aggregate state commit.
+ */
+class OrphanAggregateEventFactory extends InMemoryStorageFactory {
+  #failOnce = true;
+  orphanedEvents = 0;
+
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    const storage = super.createEntityCommitStorage(input);
+    return {
+      readAgentCurrent: (id) => storage.readAgentCurrent(id),
+      commitAgent: (work) => storage.commitAgent(work),
+      commit: async <T, U extends Message>(unit: EntityCommitInput<T, U>): Promise<void> => {
+        if (this.#failOnce && (unit.events?.length ?? 0) > 0) {
+          this.#failOnce = false;
+          const history = super.createEntityStorage(input) as ReadEntityStorage;
+          try {
+            for (const event of unit.events ?? []) await history.events.append(event);
+          } finally {
+            history.close();
+          }
+          this.orphanedEvents += 1;
+          throw new Error("forced state commit failure after Event append");
+        }
+        await storage.commit(unit);
+      },
+      close: () => storage.close(),
+      closeIdle: () => {
+        storage.closeIdle();
+      },
+    } satisfies EntityCommitStorage;
   }
 }
 

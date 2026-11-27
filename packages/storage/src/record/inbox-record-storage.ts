@@ -48,6 +48,15 @@ export interface InboxRecordMutations<I, R extends Message> {
   markInboxDelivered(id: I, deadline: Timestamp, token?: unknown): Promise<Timestamp | undefined>;
 
   /**
+   * Deletes an inbox ID only while its current status is pending.
+   *
+   * @param id Complete storage ID.
+   * @param token Private concurrency metadata from an ordinary page, when available.
+   * @returns True when the ID was removed or is absent; false when it is delivered.
+   */
+  removePendingInbox(id: I, token?: unknown): Promise<boolean>;
+
+  /**
    * Reads an inbox page with private metadata needed for a conditional mutation.
    *
    * @param query Provider-executable inbox query.

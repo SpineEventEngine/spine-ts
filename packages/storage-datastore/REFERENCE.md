@@ -206,6 +206,11 @@ The signal payload stays in place. If the update already succeeded and its
 reply was lost, the adapter reads the stored status and deadline. The retry
 then returns the deadline from the first successful update.
 
+Removing a pending duplicate uses its current status too. If another worker
+has already marked that ID delivered, Datastore keeps the completed message
+and its original retention deadline. A conditional record write or delete
+compares the message as a reader sees it, including its stored delivery status.
+
 Datastore deletes by key. It cannot delete all expired delivered messages in a
 shard by their stored attributes in one operation. Automatic inbox cleanup
 therefore leaves those completions in Datastore. Pending messages can still
