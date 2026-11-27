@@ -707,11 +707,13 @@ inbox messages in a shared database and use a cloud queue to wake each other.
 The application supplies the queue publisher and consumer in this example.
 After the framework saves an inbox message, the writing node publishes its
 shard number and total shard count. A consumer on any node can ask the
-framework to deliver that shard. All nodes install the same configuration.
+framework to deliver that shard. All nodes install the same configuration. This example runs with
+`NODE_ENV=production` and supplies a type registry containing the generated Orders message schemas.
 
 <!-- docs-snippet-path: packages/delivery-client/src/remote/delivery-builder.ts -->
 
 ```ts
+import type { TypeRegistryLookup } from "@spine-event-engine/core";
 import { DeliveryBuilder } from "@spine-event-engine/delivery-client";
 import {
   Application,
@@ -725,6 +727,7 @@ import type { StorageFactory } from "@spine-event-engine/storage";
 type QueueItem = { index: number; ofTotal: number };
 
 declare const storageFactory: StorageFactory;
+declare const typeRegistry: TypeRegistryLookup;
 declare const orders: BoundedContextBuilder;
 declare const queue: {
   publish(item: QueueItem): Promise<void>;
@@ -743,7 +746,7 @@ const delivery = DeliveryBuilder.local({
 
 const environment = ServerEnvironment.newBuilder()
   .under(EnvironmentType.Production, (settings) => {
-    settings.use({ delivery, storageFactory });
+    settings.use({ delivery, storageFactory, typeRegistry });
   })
   .build();
 const application = await Application.newBuilder()
@@ -784,6 +787,8 @@ a retained completion in the current page or from a completion it remembers
 locally for five seconds. It then removes the second message. If both pieces
 of evidence have expired, a later worker can invoke the handler again. A
 different Project is a different recipient, even if the Command ID is the same.
+An Event whose ID text is also C42 is a separate signal and is delivered to
+that Project too.
 
 Continue with the [server reference](../packages/server/REFERENCE.md) for
 framework and server contracts.

@@ -684,25 +684,25 @@ label, and retention time remain in `bytes`.
 The six separate query fields have these uses:
 
 - `shard_index` and `shard_total` select one Delivery shard.
-- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+- `status` filters messages when `DeliveryInbox.read()` is given a `statuses`
   option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
 - `when_received`, `version`, and `message_id` put the selected messages in a
   stable order. The message ID resolves ties when time and version are equal,
   so paging can continue without skipping or repeating equal-position rows.
 
-For example, these reads use the same shard and ordering, but only the second
-adds a status condition:
+For example, the framework can ask a storage adapter for all messages in a
+shard or for pending messages in that same order.
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+import type { DeliveryInbox, ShardIndex } from "@spine-event-engine/server";
 
-declare const inboxStorage: InboxStorage;
+declare const inbox: DeliveryInbox;
 declare const shard: ShardIndex;
 
-await inboxStorage.read(shard);
-await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+await inbox.read(shard);
+await inbox.read(shard, { statuses: ["TO_DELIVER"] });
 ```
 
 The ordinary Delivery scan reads all states unless its operation options supply
@@ -1212,25 +1212,25 @@ label, and retention time remain in `bytes`.
 The six separate query fields have these uses:
 
 - `shard_index` and `shard_total` select one Delivery shard.
-- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+- `status` filters messages when `DeliveryInbox.read()` is given a `statuses`
   option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
 - `when_received`, `version`, and `message_id` put the selected messages in a
   stable order. The message ID resolves ties when time and version are equal,
   so paging can continue without skipping or repeating equal-position rows.
 
-For example, these reads use the same shard and ordering, but only the second
-adds a status condition:
+For example, the framework can ask a storage adapter for all messages in a
+shard or for pending messages in that same order.
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+import type { DeliveryInbox, ShardIndex } from "@spine-event-engine/server";
 
-declare const inboxStorage: InboxStorage;
+declare const inbox: DeliveryInbox;
 declare const shard: ShardIndex;
 
-await inboxStorage.read(shard);
-await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+await inbox.read(shard);
+await inbox.read(shard, { statuses: ["TO_DELIVER"] });
 ```
 
 The ordinary Delivery scan reads all states unless its operation options supply
@@ -1630,25 +1630,25 @@ label, and retention time remain in `bytes`.
 The six separate query fields have these uses:
 
 - `shard_index` and `shard_total` select one Delivery shard.
-- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+- `status` filters messages when `DeliveryInbox.read()` is given a `statuses`
   option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
 - `when_received`, `version`, and `message_id` put the selected messages in a
   stable order. The message ID resolves ties when time and version are equal,
   so paging can continue without skipping or repeating equal-position rows.
 
-For example, these reads use the same shard and ordering, but only the second
-adds a status condition:
+For example, the framework can ask a storage adapter for all messages in a
+shard or for pending messages in that same order.
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+import type { DeliveryInbox, ShardIndex } from "@spine-event-engine/server";
 
-declare const inboxStorage: InboxStorage;
+declare const inbox: DeliveryInbox;
 declare const shard: ShardIndex;
 
-await inboxStorage.read(shard);
-await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+await inbox.read(shard);
+await inbox.read(shard, { statuses: ["TO_DELIVER"] });
 ```
 
 The ordinary Delivery scan reads all states unless its operation options supply
@@ -2468,25 +2468,25 @@ label, and retention time remain in `bytes`.
 The six separate query fields have these uses:
 
 - `shard_index` and `shard_total` select one Delivery shard.
-- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+- `status` filters messages when `DeliveryInbox.read()` is given a `statuses`
   option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
 - `when_received`, `version`, and `message_id` put the selected messages in a
   stable order. The message ID resolves ties when time and version are equal,
   so paging can continue without skipping or repeating equal-position rows.
 
-For example, these reads use the same shard and ordering, but only the second
-adds a status condition:
+For example, the framework can ask a storage adapter for all messages in a
+shard or for pending messages in that same order.
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+import type { DeliveryInbox, ShardIndex } from "@spine-event-engine/server";
 
-declare const inboxStorage: InboxStorage;
+declare const inbox: DeliveryInbox;
 declare const shard: ShardIndex;
 
-await inboxStorage.read(shard);
-await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+await inbox.read(shard);
+await inbox.read(shard, { statuses: ["TO_DELIVER"] });
 ```
 
 The ordinary Delivery scan reads all states unless its operation options supply
@@ -3014,25 +3014,25 @@ label, and retention time remain in `bytes`.
 The six separate query fields have these uses:
 
 - `shard_index` and `shard_total` select one Delivery shard.
-- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+- `status` filters messages when `DeliveryInbox.read()` is given a `statuses`
   option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
 - `when_received`, `version`, and `message_id` put the selected messages in a
   stable order. The message ID resolves ties when time and version are equal,
   so paging can continue without skipping or repeating equal-position rows.
 
-For example, these reads use the same shard and ordering, but only the second
-adds a status condition:
+For example, the framework can ask a storage adapter for all messages in a
+shard or for pending messages in that same order.
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+import type { DeliveryInbox, ShardIndex } from "@spine-event-engine/server";
 
-declare const inboxStorage: InboxStorage;
+declare const inbox: DeliveryInbox;
 declare const shard: ShardIndex;
 
-await inboxStorage.read(shard);
-await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+await inbox.read(shard);
+await inbox.read(shard, { statuses: ["TO_DELIVER"] });
 ```
 
 The ordinary Delivery scan reads all states unless its operation options supply
@@ -3508,25 +3508,25 @@ label, and retention time remain in `bytes`.
 The six separate query fields have these uses:
 
 - `shard_index` and `shard_total` select one Delivery shard.
-- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+- `status` filters messages when `DeliveryInbox.read()` is given a `statuses`
   option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
 - `when_received`, `version`, and `message_id` put the selected messages in a
   stable order. The message ID resolves ties when time and version are equal,
   so paging can continue without skipping or repeating equal-position rows.
 
-For example, these reads use the same shard and ordering, but only the second
-adds a status condition:
+For example, the framework can ask a storage adapter for all messages in a
+shard or for pending messages in that same order.
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+import type { DeliveryInbox, ShardIndex } from "@spine-event-engine/server";
 
-declare const inboxStorage: InboxStorage;
+declare const inbox: DeliveryInbox;
 declare const shard: ShardIndex;
 
-await inboxStorage.read(shard);
-await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+await inbox.read(shard);
+await inbox.read(shard, { statuses: ["TO_DELIVER"] });
 ```
 
 The ordinary Delivery scan reads all states unless its operation options supply

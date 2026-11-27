@@ -955,7 +955,7 @@ See [adapter configuration](../ai-vercel-ax/README.md).
 ### Acceptance and completion
 
 An Agent input follows ordinary Inbox delivery. The Agent handler runs and its
-state, attributes, and history commit before the Inbox row is acknowledged.
+state, attributes, and history commit before the Inbox message is acknowledged.
 While the handler or save is pending, the row remains `TO_DELIVER`. A handler can
 still call and await `this.ai.invoke()` directly. Connection and use authorization
 run when that invocation begins. Direct calls finish before the Agent commits;
@@ -969,7 +969,7 @@ triggering envelope enter indexed history. The framework then saves a complete
 submission-attempt envelope before posting the Command. Its registered
 `AsyncCommandHandler` invokes the pinned `ModelRef` and publishes `ModelReplied`
 or the `ModelCallFailed` rejection through ordinary buses. The provider may still
-be running after the original Agent Inbox row becomes `DELIVERED`.
+be running after the original Agent Inbox message becomes `DELIVERED`.
 
 `modelCommands.create()` needs a definition registered in `.add(AgentClass,
 { ai: { models: [definition] } })`. The Agent and registration import that same
@@ -1689,10 +1689,9 @@ delivery, global update ordering, nor cluster-complete notification delivery.
 
 ## Delivery and environment
 
-`Inbox`, `InboxStorage`, `ShardIndex`, and `ShardedWorkRegistry` provide the
-local durable-row abstraction. Inbox and shard storage require a single-tenant
-Delivery storage context shared by all tenants; the packed signal supplies
-the dispatch tenant. The caller chooses a positive page size and supplies
+For application-managed storage, the framework stores each inbox message and
+shard session in a single-tenant Delivery storage context shared by all tenants.
+The packed signal identifies the tenant whose Entity should handle it. The caller chooses a positive page size and supplies
 work leases in positive whole milliseconds. Framework delivery supports command handling, projection
 updates, process-manager reactions, and Aggregate Event reactions. Callbacks must tolerate redelivery:
 lost renewal can prevent stale finalization but cannot undo a callback already
@@ -1700,7 +1699,7 @@ run. The package exposes no general raw worker callback API.
 
 Repository-backed Command and Event routing awaits recipient Inbox writes and
 notifies Delivery immediately. A successful post through this routing means
-recipient Inbox writes completed; it does not wait for handler execution or row
+recipient Inbox writes completed; it does not wait for handler execution or message
 acknowledgement. Restart durability depends on the configured storage provider.
 Custom dispatchers define their own completion contract. After an Entity commit, the
 source delivery awaits one outgoing bus handoff attempt through recipient Inbox
@@ -1713,9 +1712,9 @@ Inbox reads return an `InboxMessage` with a Protobuf `Timestamp` in
 their order even when a JavaScript `Date` would display the same millisecond.
 Writes, acknowledgements, and exact removals preserve this precision.
 
-Shard ownership is the only delivery exclusion mechanism and excludes
-concurrent delivery within that shard. Pending and delivered `InboxMessage`
-rows are direct records; a delivered row is the deduplication fact. A handler
+One worker at a time can hold a shard session. Storage keeps pending and
+delivered inbox messages. The worker uses a retained completion to recognize
+a second copy of the same signal addressed to the same Entity. A handler
 effect and the exact pending-to-delivered compare-and-set are not one
 transaction, so a lost acknowledgement can redeliver after restart. Downstream
 signal handling must be idempotent. A customized `DeliveryWorkRegistry`
@@ -1724,28 +1723,28 @@ the Entity transaction commit, and before acknowledgement. These checks stop a w
 after it detects that another worker has taken the shard. They do not make
 delivery and handler storage part of one distributed transaction.
 
-New Inbox receipts have no `keepUntil`. The first successful local acknowledgement
+New inbox messages have no `keepUntil`. The first successful local acknowledgement
 stores `DELIVERED` and a deadline five seconds after that transition in one
 compare-and-set. A repeated acknowledgement returns the first stored
 deadline. The worker passes that stored completion to delivery observers. This
 timing applies to Aggregate, Process Manager, and Projection delivery through
 the local Inbox.
 
-`keepUntil` is the deduplication-protection deadline on a delivered row, not a second
-retention setting. A delivered row is cleanup-eligible when that deadline is
+`keepUntil` is the deduplication-protection deadline on a delivered message, not a second
+retention setting. A delivered message is cleanup-eligible when that deadline is
 absent or elapsed (`keepUntil <= now`). Delivery skips per-record mutation checks
-and deletion attempts for rows whose deadline is still in the future. Cleanup
-and retained-row duplicate recognition use the same applicable clock. Eligible
-rows still receive final time and shard checks before deletion.
+and deletion attempts for messages whose deadline is still in the future. Cleanup
+and retained message duplicate recognition use the same applicable clock. Eligible
+messages still receive final time and shard checks before deletion.
 Direct local storage checks the supplied delivered status and deadline again,
 then deletes by ID while the operation is active. It does not re-read the stored
-row or compare its snapshot, and the shard session is not checked again after
-deletion. A row changed between the checks and deletion can therefore be
+message or compare its snapshot, and the shard session is not checked again after
+deletion. A message changed between the checks and deletion can therefore be
 removed. Cancellation stops subsequent cleanup attempts; deletions already
-completed remain. The remote adapter sends a separate bounded removal request,
-without an atomic compare-and-delete guarantee from this client. Pending,
-retryable, non-delivered, and still-protected rows are skipped by cleanup. There
-is no additional retention configuration, timer, or scheduler.
+completed remain. With remote storage, the worker sends its session handle
+and the exact inbox message it observed. The Delivery server checks both in the
+same operation that deletes it. For example, if a new message replaced that
+inbox ID after the worker read it, cleanup leaves the replacement in storage.
 
 Configure one Delivery strategy for the environment before setup. It maps
 targets to shards across all Bounded Contexts; the default is one shard. For example:
@@ -1776,7 +1775,7 @@ from this same strategy. Projection Events and Entity-state subscriptions use
 the routed Projection ID and Projection state type, just as other receivers use
 their receiving Entity identity. The framework stores the envelope before
 invoking the handler. Startup notifications cover every configured shard, and
-stored rows are checked against the current strategy before dispatch.
+stored messages are checked against the current strategy before dispatch.
 
 ### Receiver-specific shard policies
 
@@ -1862,7 +1861,7 @@ Keep the mapping deterministic and identical across application processes
 sharing delivery storage. Configure it in processes hosting the receivers,
 before Bounded Context assembly. Shard count is not process count and does not
 assign a receiver to a particular process. Do not change the policy underneath
-pending rows, whose stored shard must agree with the configured strategy.
+pending messages, whose stored shard must agree with the configured strategy.
 
 The built-in uniform strategy hashes the typed ID together with the receiver
 state type. Equal IDs in different receiver types therefore do not guarantee
@@ -1879,7 +1878,9 @@ writes the message with a single create-or-update operation. For example, if
 two independent calls reach the inbox writer for Command `C42` and the same
 Project, they create two inbox messages, even when the first write is still in
 progress. A worker can recognize the repeated Command when it reads the shard.
-Writing under an existing inbox message ID replaces the stored message.
+An Event with the same ID text still reaches the Project. Command and Event
+identifiers have distinct types. Writing under an existing inbox message ID
+replaces the stored message.
 
 With remote Delivery, posting can return once the Delivery server stores the
 message. Every application node subscribes to free shards with pending work.
@@ -1900,17 +1901,17 @@ trying another update. Omitting the option sets no deadline.
 The delivery-client `DeliveryBuilder.remote({ endpoint, notifications? })` produces an environment-installable remote facility. `DeliveryBuilder.local({ storageFactory, shardObserver })` configures shared application storage and a custom observer. An application-managed multi-process deployment must share its inbox, session registry, and Entity storage across replicas. The framework starts no remote work stream in custom mode.
 
 Each Inbox read is bounded to one page. That bound does not limit the total
-pending work: an active drain continues from the last row read until that scan
+pending work: an active drain continues from the last message read until that scan
 ends. It restarts from the beginning only if the completed scan delivered
 messages, allowing it to find work added during delivery. It finishes after a
 scan delivers nothing; it does not restart after each productive page.
-Delivery compares a pending row with retained completions in the current page
+Delivery compares a pending message with retained completions in the current page
 and with identities acknowledged locally during the five-second retention
 window. The local cache drops identities as they age out. A busy shard still
 recognizes duplicates when thousands of other messages finish in that window.
-A retained row becomes eligible for cleanup when its deadline passes.
+A retained message becomes eligible for cleanup when its deadline passes.
 
-Direct delivery uses the configured Inbox storage clock for both retained-row
+Direct delivery uses the configured Inbox storage clock for both retained message
 duplicate checks and early cleanup filtering. Remote delivery uses local client
 wall-clock time for these checks and does not assume it is synchronized with
 the remote server.
@@ -1924,16 +1925,16 @@ reception delivered; independent targets continue. A custom monitor may repeat
 the dispatch and is consulted again if that attempt fails. Monitor and selected
 action errors propagate. A successful handler followed by a failed acknowledgement
 retries acknowledgement up to three times without deliberately rerunning the
-handler. Exhausted acknowledgement leaves the row pending and does not call the
+handler. Exhausted acknowledgement leaves the message pending and does not call the
 reception monitor. A custom reception action that completes normally completes
-delivery and the enclosing stage acknowledges the row. An action that rejects
-propagates its error and leaves the row `TO_DELIVER`. `markDelivered()` does not
+delivery and the enclosing stage acknowledges the message. An action that rejects
+propagates its error and leaves the message `TO_DELIVER`. `markDelivered()` does not
 mean domain processing succeeded.
 Managed repository delivery sends actual handler failures to the monitor while
 storage and delivery infrastructure errors propagate. A direct `onMessage` callback
 is treated as the endpoint. Handler effects and acknowledgement are separate,
 so a crash between them may redeliver.
-The framework adds no persisted attempts, quarantine, dead-letter, receipt, or marker policy. A failed finite run leaves the row pending. The Delivery server observes retained rows and repeats an unclaimed available-shard notice at its configured reminder interval; another application node may attempt the work. When the application stores inbox messages in its database, its custom observer can use the recovery policy of its external queue. Observation is advisory and does not provide exactly-once handler effects.
+The framework adds no persisted attempts, quarantine, dead-letter, receipt, or marker policy. A failed finite run leaves the message pending. The Delivery server checks for pending messages and repeats an unclaimed available-shard notice at its configured reminder interval; another application node may attempt the work. When the application stores inbox messages in its database, its custom observer can use the recovery policy of its external queue. Observation is advisory and does not provide exactly-once handler effects.
 
 `BoundedContext.close()` stops external admission, drains accepted framework
 work, and then closes buses, subscriptions, Stands, and repository bindings.
@@ -1942,7 +1943,7 @@ reactor or Process Manager Event, and System Event receives one first-publicatio
 attempt; a contained failure is logged and does not schedule publication again.
 Persisted System Events use a storage group derived from their System Context
 name and role, separate from domain Event history. Command acceptance
-alone does not promise recipient completion. Processing retries for Inbox rows
+alone does not promise recipient completion. Processing retries for Inbox messages
 and acknowledgement recovery remain separate Delivery behavior.
 
 `Environment` resolves the Node `local` or `production` profile from `NODE_ENV`.
@@ -1994,7 +1995,7 @@ A local facility can supply a custom observer and application storage. Local Del
 factory for its shared Inbox and work registry; the default factory is in-memory.
 Contexts register recipients with the same Delivery and never close that shared
 facility individually. Environment shutdown stops intake, drains local admitted
-work, then closes shared Delivery and configured facilities. Pending remote rows
+work, then closes shared Delivery and configured facilities. Pending remote messages
 do not make a closing context wait indefinitely for other processes to finish.
 
 ## Signal identity and Aggregate semantics

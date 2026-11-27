@@ -2,7 +2,7 @@
 
 This package provides the in-memory Delivery server. Use it to develop and test
 the local delivery path, or as the deliberately ephemeral delivery component in
-the supported examples. Its Inbox rows, leases, and delivered facts disappear
+the supported examples. Its Inbox messages, leases, and delivered facts disappear
 when the process stops.
 
 The [reference](REFERENCE.md) covers gRPC message sizes, shutdown, and the
@@ -57,9 +57,9 @@ Set `processCount: 2` when constructing `DeliveryServer`, or set
 parent process. It routes shard number `s` to child `s % 2`, while each child
 keeps the full shard identity. For example, the parent forwards a write for
 shard 3 to subprocess 1. Subprocess 1 writes to its inbox and returns the
-result. Each subprocess stores its rows in memory.
+result. Each subprocess stores its messages in memory.
 If a subprocess exits, the parent starts a replacement in the same slot.
-The exited process loses its in-memory rows and sessions.
+The exited process loses its in-memory messages and sessions.
 
 ## 🧩 Embed the handlers
 
@@ -117,8 +117,8 @@ directly to the public Internet.
 
 An application instance can open `ShardObservingService.ObserveAll` on the same
 gRPC endpoint as the inbox. Each response identifies a free shard containing at
-least one row with status `TO_DELIVER`. Every subscribed instance can receive
-the same shard index. The application requests pickup before reading the rows
+least one message with status `TO_DELIVER`. Every subscribed instance can receive
+the same shard index. The application requests pickup before reading the messages
 and running a handler.
 
 Suppose shard 4 of 16 already contains a Command when a second application
@@ -146,7 +146,7 @@ processes but does not make this in-memory server durable.
 
 The server has no durable mode, TLS,
 authentication, authorization, configuration reload, health watch stream, or
-administration UI. A pending row is not an attempt-history or quarantine
+administration UI. A pending message is not an attempt-history or quarantine
 record. Its default loopback listener is for development; a wider listener
 belongs only on an application-managed trusted network.
 

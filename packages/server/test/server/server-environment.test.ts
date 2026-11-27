@@ -1190,6 +1190,66 @@ describe("ServerEnvironment delivery lifecycle", () => {
     await environment.close();
   });
 
+  it.each([
+    { notifications: { kind: "delivery-server" }, source: false, error: "require a source" },
+    {
+      notifications: { kind: "delivery-server", maxConcurrentDeliveries: 2 },
+      source: false,
+      error: "require a source",
+    },
+    {
+      notifications: { kind: "custom", shardObserver: { onMessage: () => undefined } },
+      source: true,
+      error: "cannot use a custom observer",
+    },
+    {
+      notifications: undefined,
+      source: true,
+      local: true,
+      error: "Local Delivery cannot provide a remote work source",
+    },
+  ])(
+    "rejects mismatched delivery notifications after facility open: $notifications.kind",
+    async ({ notifications, source, error, ...options }) => {
+      const factory = new InMemoryStorageFactory();
+      const ports = new CoreDelivery({
+        context: { name: "NotificationAgreement", multitenant: false },
+        storageFactory: factory,
+      });
+      let opened = false;
+      const facility = {
+        open: () => {
+          opened = true;
+        },
+        close: () => ports.close(),
+        inbox: ports.inbox,
+        workRegistry: ports.shards,
+        notifications,
+        ...options,
+        get source() {
+          if (!opened) throw new Error("Source was read before facility open.");
+          return source
+            ? {
+                observeAvailableShards: async function* () {
+                  await Promise.resolve();
+                  yield ShardIndex.single();
+                },
+              }
+            : undefined;
+        },
+      };
+      const environment = environmentWith(EnvironmentType.Local, {
+        delivery: facility,
+      });
+      try {
+        await expect(serverEnvironmentAccess.setup(environment)).rejects.toThrow(error);
+        expect(opened).toBe(true);
+      } finally {
+        await environment.close();
+      }
+    },
+  );
+
   it("rejects a local delivery factory that differs from application storage", () => {
     const deliveryFactory = new InMemoryStorageFactory();
     const applicationFactory = new InMemoryStorageFactory();

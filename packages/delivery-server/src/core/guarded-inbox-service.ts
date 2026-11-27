@@ -151,7 +151,7 @@ export class GuardedInboxRuntime {
     if (!GuardedWire.same(current, expected)) return create(GuardedInboxResultSchema);
     const completed = this.#completed(current, this.now());
     const record = InboxMessages.required(completed);
-    this.state.putAll([record]);
+    this.state.put(record.message);
     this.state.rememberAcknowledgement(key, GuardedWire.bytes(expected));
     this.onStoredChange?.(shard);
     this.onWorkChange?.(shard);

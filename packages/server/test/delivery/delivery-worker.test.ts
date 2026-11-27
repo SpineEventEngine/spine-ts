@@ -19,7 +19,13 @@ import { Time } from "@spine-event-engine/core/time";
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, Identifiers, TypeUrls } from "@spine-event-engine/core";
-import { CommandValidationError, EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import {
+  CommandIdSchema,
+  CommandSchema,
+  CommandValidationError,
+  EventIdSchema,
+  EventSchema,
+} from "@spine-event-engine/proto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it, vi } from "vitest";
@@ -39,6 +45,7 @@ import {
   TaskListIdSchema,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import { CreateTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
 import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 describe("Delivery direct worker", () => {
@@ -764,6 +771,55 @@ describe("Delivery direct worker", () => {
     expect(delivered).toHaveLength(1);
     expect(acknowledged).toEqual([firstWrite.id.value]);
   });
+
+  it.each(["command-first", "event-first"])(
+    "dispatches a Command and Event with the same ID text in %s order",
+    async (order) => {
+      const shard = ShardIndex.single();
+      const signalId = "same-uuid-text";
+      const command = {
+        ...message(signalId, "target", shard),
+        id: { value: "command-row", shard },
+        label: "HANDLE_COMMAND" as const,
+        signal: AnyPacker.pack(
+          CommandSchema,
+          create(CommandSchema, {
+            id: create(CommandIdSchema, { uuid: signalId }),
+            message: AnyPacker.pack(
+              CreateTaskSchema,
+              create(CreateTaskSchema, {
+                id: create(TaskIdSchema, { value: "target" }),
+                title: "Created",
+                taskListId: create(TaskListIdSchema, { value: "list-1" }),
+              }),
+            ),
+          }),
+        ),
+      };
+      const event = { ...message(signalId, "target", shard), id: { value: "event-row", shard } };
+      const rows = order === "command-first" ? [command, event] : [event, command];
+      const seen: string[] = [];
+      const delivery = createDelivery({
+        rows,
+        mark: async (row) => {
+          remove(rows, row);
+          return row;
+        },
+      });
+
+      await delivery.drain(shard, {
+        onMessage: (row) => {
+          seen.push(row.label);
+        },
+      });
+
+      expect(seen).toEqual(
+        order === "command-first"
+          ? ["HANDLE_COMMAND", "UPDATE_SUBSCRIBER"]
+          : ["UPDATE_SUBSCRIBER", "HANDLE_COMMAND"],
+      );
+    },
+  );
 
   it("reports the authoritative completed row from acknowledgement", async () => {
     const shard = ShardIndex.single();

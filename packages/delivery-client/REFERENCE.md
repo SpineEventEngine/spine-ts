@@ -12,9 +12,9 @@ advanced form for a Connect transport supplied by the caller; closing that clien
 close the supplied transport. `close()` is synchronous and idempotent. It
 aborts active reads and observation streams and closes its session once.
 
-The client requests 100 rows per page by default. For example, `pageSize: 2000`
-requests up to 2,000 rows per call. The wire field is a positive Protobuf
-`int32`. Batches may contain any number of distinct rows for the same shard
+The client requests 100 inbox messages per page by default. For example, `pageSize: 2000`
+requests up to 2,000 messages per call. The wire field is a positive Protobuf
+`int32`. Batches may contain any number of distinct messages for the same shard
 that fit in one gRPC message.
 
 `connectTo()` accepts `maxInboundMessageBytes` for replies and
@@ -52,7 +52,7 @@ or close the client. If the connection fails, the caller receives the gRPC
 error. Opening another call discovers current work again.
 
 On the TS server, an Admin snapshot and Admin updates report how many inbox
-rows the server stores in each shard. This includes completed rows retained
+messages the server stores in each shard. This includes completed messages retained
 for duplicate detection. To see whether a worker can try to pick up work, use
 `observeAvailableShards()`.
 
@@ -96,20 +96,20 @@ and `whenReleased`. Admin observations expose the same precision in
 
 ## Worker acknowledgement and cleanup
 
-A remote worker sends its current session and the exact inbox row it read when
+A remote worker sends its current session and the exact inbox message it read when
 acknowledging a Command, removing a pending duplicate, or removing an expired
 completion. The server checks both in the same operation as the change.
 
 When calling the remote inbox adapter directly, pass the object returned by a
-read. The client keeps the original Protobuf row with that object, including
-fields unknown to the application. Reconstructing a row from its TypeScript
+read. The client keeps the original Protobuf message with that object, including
+fields unknown to the application. Reconstructing a message from its TypeScript
 properties loses that evidence, so the client rejects such a mutation.
 
-Suppose a worker reads row 7 and enters its Command handler. Another caller
-replaces row 7 before the handler returns. Even a one-nanosecond difference in
-the stored timestamp identifies a different row for this check. The server
+Suppose a worker reads message 7 and enters its Command handler. Another caller
+replaces message 7 before the handler returns. Even a one-nanosecond difference in
+the stored timestamp identifies a different message for this check. The server
 leaves the replacement intact. If the first acknowledgement succeeded and
-only its reply was lost, repeating it for the same row preserves the original
+only its reply was lost, repeating it for the same message preserves the original
 retention deadline.
 
 Workers renew while handlers run. With the default 60-second session, a
@@ -124,13 +124,13 @@ total read deadline, including pages containing only excluded statuses. The
 caller's `AbortSignal` also covers that complete multi-page collection, including
 later pages. The read is live: inserts behind the timestamp position require a later fresh
 scan. The server
-delivery policy compares pending rows with
-delivered rows in the logical page and its bounded recent-delivery cache, then
+delivery policy compares pending messages with
+delivered messages in the current page and those acknowledged locally within the five-second retention window, then
 removes exact duplicates without treating them as delivered acknowledgements.
 The server compares the worker's exact read snapshot within the removal
-operation. If a later write replaced the duplicate, the later row survives.
+operation. If a later write replaced the duplicate, the later message survives.
 
-Remote reception writes a pending row without `keep_until`. A successful
+The remote adapter writes a pending message without `keep_until`. A successful
 guarded acknowledgement sets the status to `DELIVERED` and records the
 server's acknowledgement time plus five seconds in `keep_until`. Before
 deleting a completion, the server checks its deadline and that it still
@@ -141,9 +141,9 @@ deadline until another drain visits it.
 
 `DeliveryBuilder.remote({ endpoint, clientOptions?, notifications? })` creates an unopened `ServerEnvironmentDelivery`. `RemoteDelivery.connectTo()` provides the same remote facility. `open()` constructs the client, Inbox adapter, and work registry before publishing them. It does not ask Admin for a readiness snapshot; an idle work stream cannot delay application startup. Concurrent opens share an attempt. A closed facility cannot reopen.
 
-Built-in notifications open `ShardObservingService.ObserveAll` after endpoints are ready. Every connected application node receives current free shards with pending rows when it connects or reconnects. A disconnected reader reopens with the established increasing reconnect delay, starting at 100 milliseconds and rising to 30 seconds; an unsupported method ends that reader with the original gRPC status. The server repeats an available shard after its configured reminder interval, 10 seconds by default, while it remains free and unclaimed. A write to a busy shard is observed after release or expiry. Admin snapshots and updates report state for administration; they do not trigger application work.
+Built-in notifications open `ShardObservingService.ObserveAll` after endpoints are ready. Every connected application node receives current free shards with pending messages when it connects or reconnects. A disconnected reader reopens with the established increasing reconnect delay, starting at 100 milliseconds and rising to 30 seconds; an unsupported method ends that reader with the original gRPC status. The server repeats an available shard after its configured reminder interval, 10 seconds by default, while it remains free and unclaimed. A write to a busy shard is observed after release or expiry. Admin snapshots and updates report state for administration; they do not trigger application work.
 
-By default, distinct shards can run simultaneously on one node. Remote nodes accept an optional positive `maxConcurrentDeliveries`; the node reserves a place before pickup and drops excess notices. The server's later reminder can offer a still-free shard again. Two local calls for the same shard join one in-flight attempt and share its result. Another node may compete for the shard, while the Delivery server grants one live session. The result of `deliverMessagesFrom(shard)` is `completed`, `busy`, `noWork`, or `stopped`; an unrecovered read, processing, release, or post-release lookup error rejects the call. A stream notice is advisory, and only the retained row and current session permit processing.
+By default, distinct shards can run simultaneously on one node. Remote nodes accept an optional positive `maxConcurrentDeliveries`; the node reserves a place before pickup and drops excess notices. The server's later reminder can offer a still-free shard again. Two local calls for the same shard join one in-flight attempt and share its result. Another node may compete for the shard, while the Delivery server grants one live session. The result of `deliverMessagesFrom(shard)` is `completed`, `busy`, `noWork`, or `stopped`; an unrecovered read, processing, release, or post-release lookup error rejects the call. A stream notice is advisory, and only the retained message and current session permit processing.
 
 Remote storage always uses the server work stream. For an inbox in a shared
 application database, use `DeliveryBuilder.local({ storageFactory, shardObserver })`.
@@ -154,8 +154,8 @@ consumer calls `environment.delivery.deliverMessagesFrom(shard)`. A callback
 failure is logged after the successful write, and the application decides how
 to recover its notification.
 
-Environment shutdown cancels the work reader, waits for admitted runs, and closes the client HTTP/2 session. A failure in a close phase remains retryable. A handler effect and Inbox acknowledgement remain separate operations; a lost acknowledgement may cause redelivery after session expiry. Guarded acknowledgements and cleanup require the same live session and exact row snapshot, while a current Entity write can still finish after another worker takes over.
+Environment shutdown cancels the work reader, waits for admitted runs, and closes the client HTTP/2 session. A failure in a close phase remains retryable. A handler effect and Inbox acknowledgement remain separate operations; a lost acknowledgement may cause redelivery after session expiry. Guarded acknowledgements and cleanup require the same live session and exact message snapshot, while a current Entity write can still finish after another worker takes over.
 
-Retained rows in the current page or recent-delivery cache suppress the same
-signal ID at the same typed Inbox target until `keep_until`. Remote pagination
+Retained messages in the current page or recent-delivery cache suppress the same
+Command or Event ID at the same typed Inbox target until `keep_until`. Remote pagination
 uses the JVM timestamp query and remains a bounded live scan.

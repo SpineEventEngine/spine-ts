@@ -61,14 +61,14 @@ routes to subprocess `s % processCount`. The public endpoint forwards each
 shard-specific gRPC call there. That subprocess handles the read, write,
 pickup, renewal, or release and returns its result.
 The parent combines Admin snapshots and streams work notices from all healthy
-children. When a subprocess exits, it loses its in-memory rows and sessions. Its shards are
+children. When a subprocess exits, it loses its in-memory inbox messages and sessions. Its shards are
 temporarily unavailable while its replacement starts. The other subprocess
 continues serving its shards.
 
 ## Work reminder interval
 
 `workReminderSeconds` configures the interval before the server repeats a
-notice for a free shard that still contains pending rows. The executable reads
+notice for a free shard that still contains pending messages. The executable reads
 `WORK_REMINDER_SECONDS`. The default is ten seconds.
 The accepted value is a whole number of seconds from 1 through
 `Math.floor(Number.MAX_SAFE_INTEGER / 1_000)`.
@@ -110,7 +110,7 @@ request specifying 500 microseconds leaves a 499-microsecond session active.
 A raw pickup can open a session on an empty shard. The process serving that
 shard keeps a session record and an expiry timer until release or expiry.
 Each additional live session consumes memory even when the inbox contains
-zero rows. Queued writes also use memory while they wait for execution.
+zero messages. Queued writes also use memory while they wait for execution.
 
 Ordinary renewal and release use the shard, worker, and session ID from the
 grant. A release from a previous pickup leaves the newer session active, even
@@ -119,16 +119,16 @@ and samples the clock again for a successful pickup reply, following JVM
 Delivery. The reported times can therefore differ slightly. The session ID
 identifies the pickup across those clock readings and subsequent renewals.
 
-The Admin `messages` count includes every stored inbox row for the shard.
+The Admin `messages` count includes every stored inbox message for the shard.
 For example, after the worker acknowledges the only Command, Admin still shows
-one row. The work stream stays silent because that row is already delivered.
-When the framework removes the retained row during a later drain, the stored
+one message. The work stream stays silent because that message is already delivered.
+When the framework removes the retained message during a later drain, the stored
 count falls to zero.
 
 An Admin subscription sends its acknowledgement, the current state of known
 shards, and subsequent changes. Changes within 25 milliseconds can be combined
 for the same shard. Changes to a different shard have their own interval.
-Removing the final row from a free shard sends its empty state to the dashboard.
+Removing the final message from a free shard sends its empty state to the dashboard.
 
 Health `Check` reports registered names while the listener serves;
 unknown names are `NOT_SERVING`. Health `Watch` is not implemented.

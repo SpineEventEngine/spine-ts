@@ -102,23 +102,29 @@ export class InMemoryDeliveryState {
   readonly #buckets = new Map<string, ShardBucket>();
 
   /**
-   * Stores a validated batch atomically.
+   * Stores one validated inbox message and updates its shard's trees.
    *
-   * @param messages Supplies validated messages.
-   * @returns Lists newly inserted messages.
+   * @param message Supplies the new contents of this inbox ID.
+   * @returns Whether the previous or new message is pending.
    */
-  putAll(messages: readonly { readonly message: InboxMessage }[]): InboxMessage[] {
-    const inserted: InboxMessage[] = [];
-    const seen = new Set<string>();
-    const final = new Map<string, { readonly message: InboxMessage }>();
-    for (const candidate of messages) {
-      const key = DeliveryMessages.key(candidate.message);
-      if (!this.messages.has(key) && !seen.has(key)) inserted.push(candidate.message);
-      seen.add(key);
-      final.set(key, candidate);
+  put(message: InboxMessage): boolean {
+    return this.#replace(DeliveryMessages.key(message), message);
+  }
+
+  /**
+   * Stores the last message for each inbox ID in a validated batch.
+   *
+   * @param messages Supplies the messages in request order.
+   * @returns Whether the worker notification state needs to be checked.
+   */
+  putAll(messages: readonly { readonly message: InboxMessage }[]): boolean {
+    const final = new Map<string, InboxMessage>();
+    for (const { message } of messages) final.set(DeliveryMessages.key(message), message);
+    let affectsWork = false;
+    for (const [key, message] of final) {
+      if (this.#replace(key, message)) affectsWork = true;
     }
-    for (const [key, candidate] of final) this.#replace(key, candidate.message);
-    return inserted;
+    return affectsWork;
   }
 
   /**
@@ -331,7 +337,7 @@ export class InMemoryDeliveryState {
     return record;
   }
 
-  #replace(key: string, message: InboxMessage): void {
+  #replace(key: string, message: InboxMessage): boolean {
     this.#acknowledgements.delete(key);
     const prior = this.messages.get(key);
     if (prior !== undefined) {
@@ -354,6 +360,10 @@ export class InMemoryDeliveryState {
     bucket.ordered.setElement(order, detached);
     if (detached.status === InboxMessageStatus.TO_DELIVER)
       bucket.pending.setElement(order, detached);
+    return (
+      prior?.status === InboxMessageStatus.TO_DELIVER ||
+      detached.status === InboxMessageStatus.TO_DELIVER
+    );
   }
 
   #removeFromBucket(message: InboxMessage): void {

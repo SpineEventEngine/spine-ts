@@ -107,9 +107,14 @@ export class DeliveryParentProxy {
   #inboxWrites(): Pick<ServiceImpl<typeof InboxService>, "writeOne" | "writeMany"> {
     return {
       writeOne: (request, context) => {
-        const row = InboxMessages.required(request.message).message;
-        return this.#call(this.#slot(row.id?.index), context.signal, (transport, headers) =>
-          createClient(InboxService, transport).writeOne(request, this.#forward(context, headers)),
+        return this.#call(
+          this.#slot(request.message?.id?.index),
+          context.signal,
+          (transport, headers) =>
+            createClient(InboxService, transport).writeOne(
+              request,
+              this.#forward(context, headers),
+            ),
         );
       },
       writeMany: (request, context) => {
@@ -127,9 +132,14 @@ export class DeliveryParentProxy {
   #inboxRemovals(): Pick<ServiceImpl<typeof InboxService>, "removeOne" | "removeMany"> {
     return {
       removeOne: (request, context) => {
-        const row = InboxMessages.required(request.message).message;
-        return this.#call(this.#slot(row.id?.index), context.signal, (transport, headers) =>
-          createClient(InboxService, transport).removeOne(request, this.#forward(context, headers)),
+        return this.#call(
+          this.#slot(request.message?.id?.index),
+          context.signal,
+          (transport, headers) =>
+            createClient(InboxService, transport).removeOne(
+              request,
+              this.#forward(context, headers),
+            ),
         );
       },
       removeMany: (request, context) => {
@@ -391,14 +401,11 @@ export class DeliveryParentProxy {
    */
   #batchShard(request: {
     shard?: ShardIndex | undefined;
-    message: readonly (InboxMessage | undefined)[];
+    message: readonly InboxMessage[];
   }): ShardIndex {
     const shard = InboxShards.required(request.shard);
     InboxMessages.requiredBatchLength(request.message.length);
-    InboxShards.ensure(
-      request.message.map((row) => InboxMessages.required(row).message),
-      shard,
-    );
+    InboxShards.ensure(request.message, shard);
     return shard;
   }
 
@@ -562,14 +569,14 @@ export class DeliveryParentProxy {
   #guardedMutation<T>(
     request: {
       session?: { shard?: ShardIndex | undefined } | undefined;
-      expected?: Parameters<typeof InboxMessages.required>[0];
+      expected?: InboxMessage | undefined;
     },
     signal: AbortSignal,
     call: (transport: ChildTransport, headers: Headers) => Promise<T>,
   ): Promise<T> {
-    const row = InboxMessages.required(request.expected).message;
+    const messageShard = InboxShards.required(request.expected?.id?.index);
     const shard = DeliverySessionInputs.requireShard(request.session?.shard);
-    if (row.id?.index?.index !== shard.index || row.id.index.ofTotal !== shard.ofTotal)
+    if (messageShard.index !== shard.index || messageShard.ofTotal !== shard.ofTotal)
       throw new ConnectError("Inbox row shard differs from session.", Code.InvalidArgument);
     return this.#call(this.#slot(shard), signal, call);
   }

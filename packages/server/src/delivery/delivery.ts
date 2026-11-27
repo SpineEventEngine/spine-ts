@@ -2356,6 +2356,7 @@ class RecentDeliveries {
   static key(message: InboxMessage): string {
     return JSON.stringify([
       deliveryTenantKey(message),
+      message.label === "HANDLE_COMMAND" ? "command" : "event",
       message.signalId,
       message.inboxId.targetTypeUrl,
       InboxTargets.key(message.inboxId.targetId),

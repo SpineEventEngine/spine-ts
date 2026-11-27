@@ -40,7 +40,7 @@ void shards;
 
 Read operations can use the configured retry policy. If a managed pickup reply
 is lost, `pickUpForDelivery()` retries with the same worker and run ID within
-the original deadline. For a lost inbox write reply, read the affected row to
+the original deadline. For a lost inbox write reply, read the affected message to
 learn whether the write succeeded before deciding what to do next.
 Inbox receipts and `sinceWhen` page anchors use Protobuf `Timestamp` values,
 preserving seconds and nanoseconds. `readPage` calls the JVM
@@ -81,7 +81,7 @@ for await (const shard of client.observeAvailableShards({ signal: shutdown })) {
 
 This low-level call opens one stream. Starting a fresh call after a disconnect
 discovers the free shards again. Several clients can receive the same index, so
-a worker must still request pickup before processing a row.
+a worker must still request pickup before processing a message.
 
 ## 👀 Shard state for Admin
 
@@ -159,7 +159,7 @@ through its own queue. For a complete publisher and consumer example, see
 ## ⚠️ Design for redelivery
 
 A session renewal permits the worker to continue processing its shard.
-If a connection fails after a handler saves its result but before the inbox row
+If a connection fails after a handler saves its result but before the inbox message
 is acknowledged, another worker may invoke that handler again. Keep this case
 in mind when a handler calls an external service.
 

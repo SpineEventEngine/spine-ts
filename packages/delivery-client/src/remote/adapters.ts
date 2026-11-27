@@ -40,7 +40,6 @@ import {
   DeliveryOutcomeUnknownError,
   DeliveryProtocolError,
   type DeliveryWorkerId,
-  type RemoteShardObservation,
   type RemoteShardSession,
 } from "../client/types.js";
 import { DeliveryMessageCodec, DeliveryRequestCodec, DeliveryShardCodec } from "../wire/codec.js";
@@ -370,8 +369,6 @@ class RemoteSessionOwner {
    */
   readonly #sessions = new WeakMap<ExclusiveDeliveryWorkSession, RemoteShardSession>();
 
-  readonly #sessionsByShard = new Map<string, Set<ExclusiveDeliveryWorkSession>>();
-
   readonly #pendingRenewals = new WeakMap<
     ExclusiveDeliveryWorkSession,
     Promise<{ handle: RemoteShardSession; sentAt: number }>
@@ -442,10 +439,6 @@ class RemoteSessionOwner {
     this.#sessions.set(session, remote);
     this.#knownLiveUntil.set(session, sentAt + RemoteValues.lifetimeMs(remote));
     RemoteSessionBindings.get(this.client).set(session, remote);
-    const key = RemoteValues.shardKey(shardIndex);
-    const sessions = this.#sessionsByShard.get(key) ?? new Set<ExclusiveDeliveryWorkSession>();
-    sessions.add(session);
-    this.#sessionsByShard.set(key, sessions);
     return { kind: "PICKED", session };
   }
 
@@ -464,12 +457,10 @@ class RemoteSessionOwner {
     const remote = this.#sessions.get(session) ?? this.#releaseOnly.get(session);
     if (remote === undefined) return false;
     this.#terminal.add(session);
-    const key = RemoteValues.shardKey(session.shard);
     this.#sessions.delete(session);
     this.#knownLiveUntil.delete(session);
     this.#releaseOnly.delete(session);
     RemoteSessionBindings.get(this.client).delete(session);
-    this.#removeSession(key, session);
     const latest = await this.#pendingRenewals.get(session)?.catch(() => undefined);
     await this.client.release(latest?.handle ?? remote, options);
     return true;
@@ -523,10 +514,6 @@ class RemoteSessionOwner {
     this.#invalidate(session);
     if (releaseOnly === undefined) return;
     this.#releaseOnly.set(session, releaseOnly);
-    const key = RemoteValues.shardKey(session.shard);
-    const sessions = this.#sessionsByShard.get(key) ?? new Set<ExclusiveDeliveryWorkSession>();
-    sessions.add(session);
-    this.#sessionsByShard.set(key, sessions);
   }
 
   /**
@@ -581,45 +568,6 @@ class RemoteSessionOwner {
     this.#knownLiveUntil.delete(session);
     this.#releaseOnly.delete(session);
     RemoteSessionBindings.get(this.client).delete(session);
-    this.#removeSession(RemoteValues.shardKey(session.shard), session);
-  }
-
-  /**
-   * Applies a validated Admin observation to local remote-session state.
-   *
-   * A `PICKED` observation cannot prove ownership because the frozen wire
-   * omits a session identity. Only `NOT_PICKED` invalidates stale sessions.
-   *
-   * @param observation Supplies the detached remote shard observation.
-   */
-  reconcile(observation: RemoteShardObservation): void {
-    if (
-      !(observation.shard instanceof ShardIndex) ||
-      !Number.isSafeInteger(observation.messages) ||
-      observation.messages < 0 ||
-      (observation.lastPicked !== undefined &&
-        (!Number.isInteger(observation.lastPicked.nanos) ||
-          observation.lastPicked.nanos < 0 ||
-          observation.lastPicked.nanos >= 1_000_000_000))
-    )
-      throw new DeliveryProtocolError();
-    if (observation.status !== "NOT_PICKED") return;
-    const key = RemoteValues.shardKey(observation.shard);
-    const sessions = this.#sessionsByShard.get(key);
-    if (sessions !== undefined) for (const session of [...sessions]) this.#invalidate(session);
-  }
-
-  /**
-   * Removes one session from the shard's local session set.
-   *
-   * @param key Identifies the shard session set.
-   * @param session Supplies the session to remove.
-   */
-  #removeSession(key: string, session: ExclusiveDeliveryWorkSession): void {
-    const sessions = this.#sessionsByShard.get(key);
-    if (sessions === undefined) return;
-    sessions.delete(session);
-    if (sessions.size === 0) this.#sessionsByShard.delete(key);
   }
 }
 
@@ -724,15 +672,6 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
   ): Promise<ExclusiveDeliveryWorkSession | undefined> {
     return this.#owner.validateOwnership(session, options);
   }
-
-  /**
-   * Applies an Admin shard observation to local ownership.
-   *
-   * @param observation Describes the current remote shard state.
-   */
-  reconcile(observation: RemoteShardObservation): void {
-    this.#owner.reconcile(observation);
-  }
 }
 
 /**
@@ -783,16 +722,6 @@ const RemoteValues = Object.freeze({
    */
   freeze<T extends object>(value: T): T {
     return Object.freeze(value);
-  },
-
-  /**
-   * Creates the local key for a shard.
-   *
-   * @param value Supplies the shard index.
-   * @returns The shard index and count as a key.
-   */
-  shardKey(value: ShardIndex): string {
-    return `${String(value.index)}/${String(value.ofTotal)}`;
   },
 
   /**

@@ -1464,7 +1464,7 @@ const ServerEnvironmentValues = Object.freeze({
   ): void {
     if ("shardObserver" in settings)
       throw new TypeError(
-        "Configure a custom observer through DeliveryBuilder.local or remote notifications.",
+        "Configure a custom observer through DeliveryBuilder.local or application-managed delivery storage.",
       );
     ServerEnvironmentValues.validateNotifications(delivery?.notifications);
     if (
@@ -1489,11 +1489,19 @@ const ServerEnvironmentValues = Object.freeze({
     const workRegistry = internal?.workRegistry ?? remote.workRegistry;
     if (inbox === undefined || workRegistry === undefined)
       throw new TypeError("ServerEnvironmentDelivery requires inbox and workRegistry ports.");
+    const source = remote.source;
+    const notifications = remote.notifications;
+    if (remote.local === true && source !== undefined)
+      throw new TypeError("Local Delivery cannot provide a remote work source.");
+    if (notifications?.kind === "delivery-server" && source === undefined)
+      throw new TypeError("Delivery-server notifications require a source.");
+    if (notifications?.kind === "custom" && source !== undefined)
+      throw new TypeError("A remote work source cannot use a custom observer.");
     return {
       inbox,
       workRegistry,
-      ...(remote.source === undefined ? {} : { source: remote.source }),
-      ...(remote.notifications === undefined ? {} : { notifications: remote.notifications }),
+      ...(source === undefined ? {} : { source }),
+      ...(notifications === undefined ? {} : { notifications }),
       ...(remote.endpoint === undefined ? {} : { endpoint: remote.endpoint }),
       ...(remote.local === undefined ? {} : { local: remote.local }),
     };

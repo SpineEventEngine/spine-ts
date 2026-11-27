@@ -428,29 +428,4 @@ describe("RemoteInbox direct behavior", () => {
     expect(client.removeDeliveredGuarded).toHaveBeenCalledTimes(2);
     expect(client.removeOne).not.toHaveBeenCalled();
   });
-
-  it("rejects malformed shard observations before they can change remote ownership", () => {
-    const registry = new RemoteWorkRegistry(new Client() as never);
-    const valid = { shard: ShardIndex.single(), status: "NOT_PICKED" as const, messages: 0 };
-
-    for (const observation of [
-      { ...valid, shard: {} },
-      { ...valid, messages: -1 },
-      { ...valid, messages: 1.5 },
-      { ...valid, lastPicked: {} },
-      { ...valid, lastPicked: new Date(Number.NaN) },
-      { ...valid, lastPicked: create(TimestampSchema, { seconds: 1n, nanos: -1 }) },
-      { ...valid, lastPicked: create(TimestampSchema, { seconds: 1n, nanos: 1_000_000_000 }) },
-    ]) {
-      expect(() => {
-        registry.reconcile(observation as never);
-      }).toThrow(DeliveryProtocolError);
-    }
-    expect(() => {
-      registry.reconcile({ ...valid, status: "PICKED" });
-    }).not.toThrow();
-    expect(() => {
-      registry.reconcile(valid);
-    }).not.toThrow();
-  });
 });

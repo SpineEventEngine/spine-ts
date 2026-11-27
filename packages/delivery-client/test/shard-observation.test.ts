@@ -643,16 +643,7 @@ describe("DeliveryClient shard observation", () => {
     fake.fail(new Error("release response lost"));
     await expect(registry.release(session)).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
     await expect(registry.release(session)).resolves.toBe(false);
-    registry.reconcile(
-      Object.freeze({
-        shard,
-        status: "PICKED" as const,
-        messages: 0,
-        lastPicked: { $typeName: "google.protobuf.Timestamp" as const, seconds: 1n, nanos: 0 },
-      }),
-    );
-    await expect(registry.release(session)).resolves.toBe(false);
-    registry.reconcile(Object.freeze({ shard, status: "NOT_PICKED" as const, messages: 0 }));
+    expect("reconcile" in registry).toBe(false);
     await expect(registry.release(session)).resolves.toBe(false);
     expect(fake.unary).toHaveBeenCalledTimes(2);
   });

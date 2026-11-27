@@ -80,11 +80,10 @@ const InboxOperations = {
     async (request, context) => {
       const message = InboxMessages.required(request.message);
       await admission.run(context.signal, () => {
-        const prior = state.messages.get(DeliveryMessages.key(message.message));
-        state.putAll([message]);
+        const affectsWork = state.put(message.message);
         const shard = InboxShards.required(message.message.id?.index);
         onStoredChange?.(shard);
-        if (InboxTransitions.affectsWork(prior, message.message)) onWorkChange?.(shard);
+        if (affectsWork) onWorkChange?.(shard);
       });
       return {};
     },
@@ -104,17 +103,9 @@ const InboxOperations = {
         shard,
       );
       await admission.run(context.signal, () => {
-        const final = new Map<string, (typeof messages)[number]>();
-        for (const message of messages) final.set(DeliveryMessages.key(message.message), message);
-        const prior = new Map([...final.entries()].map(([key]) => [key, state.messages.get(key)]));
-        state.putAll(messages);
+        const affectsWork = state.putAll(messages);
         onStoredChange?.(shard);
-        if (
-          [...final].some(([key, message]) =>
-            InboxTransitions.affectsWork(prior.get(key), message.message),
-          )
-        )
-          onWorkChange?.(shard);
+        if (affectsWork) onWorkChange?.(shard);
       });
       return {};
     },
@@ -373,24 +364,6 @@ const InboxTime: Readonly<{
     Number.isInteger(value.nanos) &&
     value.nanos >= 0 &&
     value.nanos < 1_000_000_000,
-});
-
-/**
- * Identifies Inbox writes that can change pending-work availability.
- */
-const InboxTransitions = Object.freeze({
-  /**
-   * Checks whether a row write affects pending work.
-   * @param prior The previous row, if present.
-   * @param next The next row.
-   * @returns Whether work availability may have changed.
-   */
-  affectsWork(prior: InboxMessage | undefined, next: InboxMessage): boolean {
-    return (
-      prior?.status === InboxMessageStatus.TO_DELIVER ||
-      next.status === InboxMessageStatus.TO_DELIVER
-    );
-  },
 });
 
 /**
