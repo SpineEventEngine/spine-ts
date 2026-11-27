@@ -154,7 +154,7 @@ of another Command to that shard always stores its inbox message.
 When an application uses its own shared database for the inbox, it can use
 `DeliveryBuilder.local({ storageFactory, shardObserver })` to notify nodes
 through its own queue. For a complete publisher and consumer example, see
-[running and observation](../../docs/USER_GUIDE.md#8-running-and-observation).
+[running and observation](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/USER_GUIDE.md#8-running-and-observation).
 
 ## ⚠️ Design for redelivery
 
