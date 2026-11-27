@@ -65,6 +65,16 @@ describe("inbox changes during a managed shard session", () => {
     try {
       const original = domainMessage("work", shard);
       const session = await acquire(core, original);
+      const otherShardId = create(InboxMessageIdSchema, {
+        uuid: "0fc706d5-785d-4fb5-9a08-1577fdb2fa22",
+        index: create(ShardIndexSchema, { index: 1, ofTotal: 2 }),
+      });
+      await expect(
+        core.managed.markDelivered(
+          create(InboxWorkRequestSchema, { session, id: otherShardId }),
+          context,
+        ),
+      ).rejects.toMatchObject({ code: Code.InvalidArgument });
       const replacement = domainMessage("work", shard);
       replacement.whenReceived = create(TimestampSchema, { seconds: 11n });
       await core.inbox.writeOne(create(WriteMessageSchema, { message: replacement }), context);
