@@ -95,17 +95,13 @@ const InboxOperations = {
       onWorkChange?: (shard: ShardIndex) => void,
     ): ServiceImpl<typeof InboxService>["writeMany"] =>
     async (request, context) => {
-      const shard = InboxShards.required(request.shard);
-      InboxMessages.requiredBatchLength(request.message.length);
       const messages = request.message.map(InboxMessages.required);
-      InboxShards.ensure(
-        messages.map((value) => value.message),
-        shard,
-      );
       await admission.run(context.signal, () => {
-        const affectsWork = state.putAll(messages);
-        onStoredChange?.(shard);
-        if (affectsWork) onWorkChange?.(shard);
+        for (const [shard, group] of groupByShard(messages, (item) => item.message)) {
+          const affectsWork = state.putAll(group);
+          onStoredChange?.(shard);
+          if (affectsWork) onWorkChange?.(shard);
+        }
       });
       return {};
     },
@@ -117,11 +113,11 @@ const InboxOperations = {
       onWorkChange?: (shard: ShardIndex) => void,
     ): ServiceImpl<typeof InboxService>["removeOne"] =>
     async (request, context) => {
-      const message = InboxMessages.required(request.message);
+      const message = requiredRemoval(request.message);
       await admission.run(context.signal, () => {
-        const prior = state.messages.get(DeliveryMessages.key(message.message));
-        if (state.delete(message.message)) {
-          const shard = InboxShards.required(message.message.id?.index);
+        const prior = state.messages.get(DeliveryMessages.key(message));
+        if (state.delete(message)) {
+          const shard = InboxShards.required(message.id?.index);
           onStoredChange?.(shard);
           if (prior?.status === InboxMessageStatus.TO_DELIVER) onWorkChange?.(shard);
         }
@@ -136,20 +132,13 @@ const InboxOperations = {
       onWorkChange?: (shard: ShardIndex) => void,
     ): ServiceImpl<typeof InboxService>["removeMany"] =>
     async (request, context) => {
-      const shard = InboxShards.required(request.shard);
-      InboxMessages.requiredBatchLength(request.message.length);
-      const messages = request.message.map(InboxMessages.required);
-      InboxShards.ensure(
-        messages.map((value) => value.message),
-        shard,
-      );
+      const messages = request.message.map(requiredRemoval);
       await admission.run(context.signal, () => {
-        const { changed, pendingChanged } = state.deleteMany(
-          shard,
-          messages.map((value) => value.message),
-        );
-        if (changed) onStoredChange?.(shard);
-        if (pendingChanged) onWorkChange?.(shard);
+        for (const [shard, group] of groupByShard(messages, (item) => item)) {
+          const { changed, pendingChanged } = state.deleteMany(shard, group);
+          if (changed) onStoredChange?.(shard);
+          if (pendingChanged) onWorkChange?.(shard);
+        }
       });
       return {};
     },
@@ -169,15 +158,16 @@ const InboxOperations = {
     (state: InMemoryDeliveryState): ServiceImpl<typeof InboxService>["findManyInShard"] =>
     (request) => {
       const shard = InboxShards.required(request.shard);
-      if (
-        !Number.isInteger(request.pageSize) ||
-        request.pageSize < 1 ||
-        request.pageSize > 2_147_483_647
-      )
-        throw InboxResponses.invalid("Delivery page size must be a positive int32.");
+      if (request.pageSize <= 0)
+        throw new ConnectError("Delivery page size is invalid.", Code.Unknown);
       if (request.sinceWhen !== undefined && !InboxTime.valid(request.sinceWhen))
         throw InboxResponses.invalid("Delivery page timestamp is invalid.");
-      const message = state.page(shard, request.sinceWhen, request.pageSize);
+      const sinceWhen = request.sinceWhen;
+      const message = state.page(
+        shard,
+        sinceWhen?.seconds === 0n && sinceWhen.nanos === 0 ? undefined : sinceWhen,
+        request.pageSize,
+      );
       return create(PageOfMessagesSchema, { message });
     },
   newestMessageToDeliver:
@@ -201,6 +191,45 @@ interface InboxRecord {
 }
 
 /**
+ * Validates the inbox identity used by a removal.
+ *
+ * @param message Supplies the row carrying the identity.
+ * @returns The row after its identity is checked.
+ */
+function requiredRemoval(message: InboxMessage | undefined): InboxMessage {
+  if (message?.id?.index === undefined || message.id.uuid.trim().length === 0)
+    throw InboxResponses.invalid("Delivery message identity is missing.");
+  InboxShards.required(message.id.index);
+  return message;
+}
+
+/**
+ * Groups a batch by the actual inbox identity shard in first-seen order.
+ *
+ * @typeParam Item The type of a validated batch item.
+ * @param items Supplies the validated batch.
+ * @param message Selects each item’s inbox message.
+ * @returns Per-shard groups retaining input order.
+ */
+function groupByShard<Item>(
+  items: readonly Item[],
+  message: (item: Item) => InboxMessage,
+): readonly (readonly [ShardIndex, Item[]])[] {
+  const groups = new Map<string, { shard: ShardIndex; items: Item[] }>();
+  for (const item of items) {
+    const shard = InboxShards.required(message(item).id?.index);
+    const key = DeliveryShards.key(shard);
+    let group = groups.get(key);
+    if (group === undefined) {
+      group = { shard, items: [] };
+      groups.set(key, group);
+    }
+    group.items.push(item);
+  }
+  return [...groups.values()].map(({ shard, items }) => [shard, items] as const);
+}
+
+/**
  * Validates Inbox messages and preserves their delivery ordering.
  */
 export const InboxMessages: Readonly<{
@@ -213,14 +242,6 @@ export const InboxMessages: Readonly<{
    * @returns The validated detached message.
    */
   required: (message: InboxMessage | undefined) => InboxRecord;
-
-  /**
-   * Validates an Inbox batch length.
-   *
-   * @param length Holds the requested batch length.
-   * @returns Nothing when the length is valid.
-   */
-  requiredBatchLength: (length: number) => void;
 
   /**
    * Validates an Inbox payload.
@@ -270,9 +291,6 @@ export const InboxMessages: Readonly<{
       throw InboxResponses.invalid("Delivery message enum is invalid.");
     return { message: DeliveryMessages.copy(message) };
   },
-  requiredBatchLength: (length: number): void => {
-    if (length < 1) throw InboxResponses.invalid("Delivery message batch is invalid.");
-  },
   validPayload: (message: InboxMessage): boolean => {
     const payload = message.payload;
     if (payload.case !== "command" && payload.case !== "event") return false;
@@ -312,15 +330,6 @@ export const InboxShards: Readonly<{
    * @returns Whether the shard identity is valid.
    */
   valid: (shard: ShardIndex) => boolean;
-
-  /**
-   * Validates that all messages belong to a shard.
-   *
-   * @param messages Holds the messages to check.
-   * @param shard Holds the expected shard identity.
-   * @returns Nothing when all messages belong to the shard.
-   */
-  ensure: (messages: readonly InboxMessage[], shard: ShardIndex) => void;
 }> = Object.freeze({
   required: (shard: ShardIndex | undefined): ShardIndex => {
     if (shard === undefined || !InboxShards.valid(shard))
@@ -333,15 +342,6 @@ export const InboxShards: Readonly<{
     Number.isInteger(shard.ofTotal) &&
     shard.ofTotal >= 1 &&
     shard.index < shard.ofTotal,
-  ensure: (messages: readonly InboxMessage[], shard: ShardIndex): void => {
-    for (const message of messages) {
-      if (
-        message.id?.index === undefined ||
-        DeliveryShards.key(message.id.index) !== DeliveryShards.key(shard)
-      )
-        throw InboxResponses.invalid("Delivery batch spans shards.");
-    }
-  },
 });
 
 /**

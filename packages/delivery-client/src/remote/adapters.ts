@@ -80,7 +80,7 @@ export class RemoteInbox implements DeliveryInbox {
         session: DeliveryWorkSession,
         options: DeliveryOperationOptions | undefined,
         process: (isRecent?: (message: InboxMessage) => boolean) => Promise<boolean>,
-        onWritesStored: () => void,
+        onWritesStored: (deadlineNs: (message: InboxMessage) => bigint | undefined) => void,
       ) => this.#applyPage(messages, session, options, process, onWritesStored),
     });
     Object.freeze(this);
@@ -93,7 +93,7 @@ export class RemoteInbox implements DeliveryInbox {
    * @param session Identifies the current worker session.
    * @param options Carries cancellation for the batch RPCs.
    * @param process Dispatches the page with full-precision retention checks.
-   * @param onWritesStored Reports durable completion writes before removals.
+   * @param onWritesStored Reports durable completion writes and their exact deadlines before removals.
    * @returns Whether processing continued through the complete page.
    * @internal
    */
@@ -102,7 +102,7 @@ export class RemoteInbox implements DeliveryInbox {
     session: DeliveryWorkSession,
     options: DeliveryOperationOptions | undefined,
     process: (isRecent?: (message: InboxMessage) => boolean) => Promise<boolean>,
-    onWritesStored: () => void,
+    onWritesStored: (deadlineNs: (message: InboxMessage) => bigint | undefined) => void,
   ): Promise<boolean> {
     const now = Time.currentTime();
     const nowNs = now.seconds * 1_000_000_000n + BigInt(now.nanos);
@@ -128,7 +128,12 @@ export class RemoteInbox implements DeliveryInbox {
         return false;
       if (page.writes.length > 0) {
         await this.client.writeMany(page.writes, options);
-        onWritesStored();
+        onWritesStored((message) => {
+          const deadline = DeliveryMessageCodec.retentionDeadline(message);
+          return deadline === undefined
+            ? undefined
+            : deadline.seconds * 1_000_000_000n + BigInt(deadline.nanos);
+        });
       }
       if (page.removals.length > 0) await this.client.removeMany(page.removals, options);
       return true;

@@ -60,7 +60,7 @@ export function domainMessage(
   });
   return create(InboxMessageSchema, {
     id: { uuid: id, index: shard },
-    signalId: { value: `signal-${id}` },
+    signalId: { value: `command-${id}` },
     inboxId: {
       entityId: { id: AnyPacker.pack(TaskIdSchema, taskId) },
       typeUrl: TypeUrls.derive(TaskSchema),

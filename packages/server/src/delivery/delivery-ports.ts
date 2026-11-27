@@ -182,11 +182,11 @@ export interface DeliveryWorkRegistry {
   ): Promise<LeasedDeliveryWorkSession | undefined>;
 
   /**
-   * Validates ownership immediately before a guarded side effect.
+   * Checks the session immediately before a guarded side effect.
    *
    * Leased registries return the renewed session. Exclusive registries return
-   * the current session only while its authoritative remote fence still
-   * matches.
+   * the locally recorded session until release. The remote check does not read
+   * the server's shard record.
    *
    * @param session Supplies the session to validate.
    * @param options Propagates cancellation and a delivery deadline.
@@ -198,11 +198,12 @@ export interface DeliveryWorkRegistry {
   ): Promise<DeliveryWorkSession | undefined>;
 
   /**
-   * Removes a held work fence.
+   * Removes a work session through its registry.
    *
    * @param session Supplies the session to release.
    * @param options Propagates cancellation and a delivery deadline.
-   * @returns Whether the held fence was released.
+   * @returns Whether release completed for the locally recorded session. A
+   * remote release does not report whether the server still held that worker.
    */
   release(session: DeliveryWorkSession, options?: DeliveryOperationOptions): Promise<boolean>;
 }

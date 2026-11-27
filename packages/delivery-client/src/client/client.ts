@@ -36,7 +36,7 @@ import {
   WriteMessageSchema,
   WriteMessagesSchema,
 } from "@spine-event-engine/proto/delivery-server";
-import { InboxMessageIdSchema } from "@spine-event-engine/proto/delivery";
+import { InboxMessageIdSchema, InboxMessageSchema } from "@spine-event-engine/proto/delivery";
 import {
   DeliveryOutcomeUnknownError,
   type DeliveryClientOptions,
@@ -385,7 +385,7 @@ export class DeliveryClient {
    * @returns A promise that completes after the delivery server removes the message.
    */
   async removeOne(message: InboxMessage, options: DeliveryMutationOptions = {}): Promise<void> {
-    const wire = DeliveryMessageCodec.encode(message);
+    const wire = this.#removalMessage(message);
     const request = create(RemoveMessageSchema, { message: wire });
 
     await this.#mutation("REMOVE_ONE", [message.id.value], options, (signal, timeoutMs) =>
@@ -394,7 +394,7 @@ export class DeliveryClient {
   }
 
   /**
-   * Writes one bounded same-shard batch with exactly one delivery-server RPC attempt.
+   * Writes a batch in caller order with exactly one delivery-server RPC attempt.
    * @param messages Supplies the messages to write.
    * @param options Bounds or cancels the mutation.
    * @returns A promise that completes after the delivery server accepts the batch.
@@ -412,7 +412,7 @@ export class DeliveryClient {
   }
 
   /**
-   * Removes one bounded same-shard batch with exactly one delivery-server RPC attempt.
+   * Removes a batch by inbox identities with exactly one delivery-server RPC attempt.
    * @param messages Supplies the messages to remove.
    * @param options Bounds or cancels the mutation.
    * @returns A promise that completes after the delivery server removes the batch.
@@ -421,12 +421,25 @@ export class DeliveryClient {
     messages: readonly InboxMessage[],
     options: DeliveryMutationOptions = {},
   ): Promise<void> {
-    const batch = DeliveryMessageCodec.encodeBatch(messages);
-    const request = create(RemoveMessagesSchema, { shard: batch.shard, message: batch.messages });
+    const ids = messages.map((message) => DeliveryMessageCodec.encodeId(message.id));
+    const wire = messages.map((message) => this.#removalMessage(message));
+    const request = create(RemoveMessagesSchema, { shard: wire[0]?.id?.index, message: wire });
 
-    await this.#mutation("REMOVE_MANY", batch.ids, options, (signal, timeoutMs) =>
+    await this.#mutation("REMOVE_MANY", ids, options, (signal, timeoutMs) =>
       this.#inbox.removeMany(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
+  }
+
+  /**
+   * Encodes only the inbox identity required by RemoveOne and RemoveMany.
+   *
+   * @param message Supplies the inbox identity.
+   * @returns A wire row carrying that identity.
+   */
+  #removalMessage(message: InboxMessage) {
+    const uuid = DeliveryMessageCodec.encodeId(message.id);
+    const index = DeliveryShardCodec.encode(message.id.shard);
+    return create(InboxMessageSchema, { id: create(InboxMessageIdSchema, { uuid, index }) });
   }
 
   /**
@@ -493,7 +506,7 @@ export class DeliveryClient {
   }
 
   /**
-   * Performs releases for sessions inactive for a positive duration.
+   * Performs releases for sessions inactive for the requested duration.
    * @param inactivityMs Supplies the minimum inactivity in milliseconds.
    * @param options Bounds or cancels the mutation.
    * @returns Detached sessions released by the remote service.

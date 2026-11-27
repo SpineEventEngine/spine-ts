@@ -40,6 +40,8 @@ import {
 } from "../../src/server/server-environment.js";
 import { DeliveryBuilder, type PublicDelivery } from "../../src/delivery/delivery-builder.js";
 import { Delivery as CoreDelivery } from "../../src/delivery/delivery.js";
+import { Inbox } from "../../src/delivery/inbox.js";
+import { deliveryPortAccess } from "../../src/delivery/delivery-port-access.js";
 import { IntegrationBroker } from "../../src/integration/integration-broker.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { createMessage } from "../delivery/inbox-message-fixture.js";
@@ -1188,6 +1190,36 @@ describe("ServerEnvironment delivery lifecycle", () => {
       .receive(createMessage("local-observer", "signal", 1n));
     expect(shardObserver.onMessage).toHaveBeenCalledExactlyOnceWith(row);
     await environment.close();
+  });
+
+  it("uses the private facility page size for the environment's first inbox read", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const ports = new CoreDelivery({
+      context: { name: "RemotePageSizeFixture", multitenant: false },
+      storageFactory,
+    });
+    const facility: ServerEnvironmentDelivery = {
+      open: () => undefined,
+      close: () => ports.close(),
+      [deliveryPortAccess]: () => ({
+        inbox: ports.inbox,
+        workRegistry: ports.shards,
+        pageSize: 1,
+      }),
+    };
+    const environment = environmentWith(EnvironmentType.Local, { delivery: facility });
+    await serverEnvironmentAccess.setup(environment);
+    const read = vi.spyOn(Inbox.prototype, "read");
+    try {
+      await ports.inbox.receive(createMessage("page-size-one", "signal", 1n));
+      await serverEnvironmentAccess.coreDelivery(environment).drain(ShardIndex.single(), {
+        onMessage: () => undefined,
+      });
+      expect(read.mock.calls[0]?.[1]?.limit).toBe(1);
+    } finally {
+      read.mockRestore();
+      await environment.close();
+    }
   });
 
   it.each([

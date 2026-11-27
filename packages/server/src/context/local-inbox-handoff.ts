@@ -88,6 +88,11 @@ export interface EnvironmentDeliveryPorts {
   readonly workRegistry: DeliveryWorkRegistry;
 
   /**
+   * Sets the page size used by the environment's shared Delivery.
+   */
+  readonly pageSize?: number;
+
+  /**
    * Supplies built-in available-work observations when delivery is remote.
    */
   readonly source?: ApplicationWorkSource;

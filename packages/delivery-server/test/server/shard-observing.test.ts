@@ -339,7 +339,7 @@ function message(uuid: string, index = shard) {
   });
   return create(InboxMessageSchema, {
     id: { uuid, index },
-    signalId: { value: "signal" },
+    signalId: { value: `command-${uuid}` },
     inboxId: {
       entityId: { id: AnyPacker.pack(TaskIdSchema, taskId) },
       typeUrl: TypeUrls.derive(TaskSchema),

@@ -705,6 +705,7 @@ each node, set `notifications: { kind: "delivery-server", maxConcurrentDeliverie
 **Application-managed storage and an external queue.** Suppose your nodes store
 inbox messages in a shared database and use a cloud queue to wake each other.
 The application supplies the queue publisher and consumer in this example.
+This queue acknowledges a successful callback and redelivers its item if the callback throws.
 After the framework saves an inbox message, the writing node publishes its
 shard number and total shard count. A consumer on any node can ask the
 framework to deliver that shard. All nodes install the same configuration. This example runs with
@@ -757,7 +758,9 @@ const application = await Application.newBuilder()
 try {
   await queue.consume(async ({ index, ofTotal }) => {
     const result = await environment.delivery.deliverMessagesFrom(new ShardIndex(index, ofTotal));
-    console.log("Delivery attempt", index, ofTotal, result.status);
+    if (result.status === "busy" || result.status === "stopped") {
+      throw new Error(`Retry shard ${index} of ${ofTotal}: ${result.status}`);
+    }
   });
 } finally {
   await application.close();
@@ -772,12 +775,18 @@ worker checks for messages that arrived late and passes the newest pending
 message to the observer.
 
 The consumer can receive an old queue item. A `busy` result means another worker
-holds the shard. A `noWork` result means it found no pending messages. If
-delivery throws a storage error, the queue applies the application's failure policy.
+holds the shard. A `stopped` result means this caller stopped waiting or the
+worker stopped its run. In these cases the example leaves the queue item
+available for another attempt. A `noWork` result means no pending messages
+were found. The callback can then finish and the queue can acknowledge its
+item. A storage error also follows the queue's redelivery policy.
 
 An Agent's handler and save finish before the worker acknowledges its inbox
-message. If the worker exits between those steps, another node can pick up the
-same pending message and invoke the Agent again. An original input that is still
+message. Suppose the worker exits between those steps. With the Delivery
+server's default settings the shard stays assigned to that worker. An
+operator can release inactive assignments with `ShardService.ReleaseSessions`.
+The server then reports the free shard, and another node can pick it up and
+invoke the Agent again. An original input that is still
 `TO_DELIVER` can cause a new model call with a fresh ID. A previously saved
 pending model call is not automatically sent again.
 

@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { InboxRetention } from "./inbox-retention.js";
 import { deliveryPortAccess } from "./delivery-port-access.js";
 import { Time } from "@spine-event-engine/core/time";
 import { clone, create } from "@bufbuild/protobuf";
@@ -1588,7 +1587,7 @@ class DeliveryDrain {
           session: DeliveryWorkSession,
           options: DeliveryOperationOptions | undefined,
           process: (isRecent?: (message: InboxMessage) => boolean) => Promise<boolean>,
-          onWritesStored: () => void,
+          onWritesStored: (deadlineNs: (message: InboxMessage) => bigint | undefined) => void,
         ) => Promise<boolean>;
       };
       const continued =
@@ -1599,8 +1598,8 @@ class DeliveryDrain {
               this.#current,
               this.input.options.operation,
               process,
-              () => {
-                this.#commitPageWrites();
+              (deadlineNs) => {
+                this.#commitPageWrites(deadlineNs);
               },
             );
       if (!continued) {
@@ -1641,11 +1640,13 @@ class DeliveryDrain {
 
   /**
    * Commits durable completion writes to delivery observers before removals.
+   *
+   * @param deadlineNs Reads exact stored deadlines for remote completions.
    */
-  #commitPageWrites(): void {
+  #commitPageWrites(deadlineNs?: (message: InboxMessage) => bigint | undefined): void {
     const written = new Set(this.#deliveredInPage.map(({ original }) => original));
     for (const { completed } of this.#deliveredInPage) {
-      this.#deduplication.recordDelivered(completed);
+      this.#deduplication.recordDelivered(completed, deadlineNs?.(completed));
       this.#statistics.delivered += 1;
       try {
         this.input.options.onDelivered?.(completed);
@@ -2367,7 +2368,16 @@ class DeliveryDeduplication {
    */
   constructor(inbox: DeliveryInbox) {
     const current = recentDeliveries.get(inbox);
-    this.#recent = current ?? new RecentDeliveries();
+    this.#recent =
+      current ??
+      new RecentDeliveries(
+        inbox instanceof Inbox
+          ? () => BigInt(InboxStorageClock.read(inbox.storage).getTime()) * 1_000_000n
+          : () => {
+              const now = Time.currentTime();
+              return now.seconds * 1_000_000_000n + BigInt(now.nanos);
+            },
+      );
     if (current === undefined) recentDeliveries.set(inbox, this.#recent);
   }
 
@@ -2389,9 +2399,10 @@ class DeliveryDeduplication {
    * Records a message as recently delivered.
    *
    * @param message Supplies the delivered message.
+   * @param deadlineNs Supplies an exact remote wire deadline when available.
    */
-  recordDelivered(message: InboxMessage): void {
-    this.#recent.add(message);
+  recordDelivered(message: InboxMessage, deadlineNs?: bigint): void {
+    this.#recent.add(message, deadlineNs);
   }
 }
 
@@ -2438,7 +2449,14 @@ class DeliveryPageDeduplication {
  * Keeps recently acknowledged identities for the inbox retention interval.
  */
 class RecentDeliveries {
-  readonly #identities = new Map<string, number>();
+  readonly #identities = new Map<string, bigint>();
+
+  /**
+   * Creates a cache using the Inbox storage clock for its expiry checks.
+   *
+   * @param now Reads the relevant storage clock in nanoseconds.
+   */
+  constructor(private readonly now: () => bigint) {}
 
   /**
    * Checks whether an identity is in the recent-delivery set.
@@ -2447,29 +2465,35 @@ class RecentDeliveries {
    * @returns Whether that identity is present.
    */
   has(identity: string): boolean {
-    this.#prune(Time.monotonicTime());
-    return this.#identities.has(identity);
+    const deadline = this.#identities.get(identity);
+    if (deadline === undefined) return false;
+    if (deadline > this.now()) return true;
+    this.#identities.delete(identity);
+    return false;
   }
 
   /**
    * Adds a delivered identity with its local expiration time.
    *
    * @param message Supplies the delivered message.
+   * @param deadlineNs Supplies an exact remote wire deadline when available.
    */
-  add(message: InboxMessage): void {
+  add(message: InboxMessage, deadlineNs?: bigint): void {
+    if (message.keepUntil === undefined) return;
     const identity = RecentDeliveries.key(message);
-    const now = Time.monotonicTime();
+    const now = this.now();
     this.#prune(now);
     this.#identities.delete(identity);
-    this.#identities.set(identity, now + InboxRetention.durationMs);
+    const deadline = deadlineNs ?? BigInt(message.keepUntil.getTime()) * 1_000_000n;
+    if (deadline > now) this.#identities.set(identity, deadline);
   }
 
   /**
-   * Removes expired identities in the order they were acknowledged.
+   * Removes expired leading identities in amortized insertion order.
    *
-   * @param now Current monotonic time in milliseconds.
+   * @param now Current wall-clock time in nanoseconds.
    */
-  #prune(now: number): void {
+  #prune(now: bigint): void {
     for (const [identity, deadline] of this.#identities) {
       if (deadline > now) break;
       this.#identities.delete(identity);

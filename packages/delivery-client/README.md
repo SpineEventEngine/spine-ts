@@ -44,7 +44,8 @@ inbox write, read the message to see whether the server stored it.
 
 Inbox receive times and the `sinceWhen` query field use Protobuf `Timestamp` values,
 preserving seconds and nanoseconds. `readPage` calls the JVM
-`InboxService.FindManyInShard` RPC with an exclusive timestamp bound.
+`InboxService.FindManyInShard` RPC. An omitted or zero timestamp starts at
+the beginning. Other timestamps select messages received strictly later.
 
 <!-- docs-snippet-path: packages/delivery-client/src/client/client.ts -->
 

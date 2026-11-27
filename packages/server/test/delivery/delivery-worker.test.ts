@@ -36,6 +36,7 @@ import { DuplicateDispatch } from "../../src/delivery/duplicate-dispatch.js";
 import type { DeliveryInbox, DeliveryOperationOptions } from "../../src/delivery/delivery-ports.js";
 import { Inbox, type InboxMessage, type InboxReadOptions } from "../../src/delivery/inbox.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
+import { InboxRetention } from "../../src/delivery/inbox-retention.js";
 import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
 import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
@@ -639,6 +640,9 @@ describe("Delivery direct worker", () => {
     const shard = ShardIndex.single();
     const first = message("first-signal", "first-target", shard);
     const rows = [first];
+    const instant = Time.currentTime();
+    const start = Number(instant.seconds) * 1_000 + Math.floor(instant.nanos / 1_000_000);
+    let elapsed = 0;
     const inbox = {
       sessionKind: "LEASED" as const,
       receive: async () => {
@@ -649,7 +653,11 @@ describe("Delivery direct worker", () => {
       newestPending: async () => undefined,
       markDelivered: async (row: DeliveryEndpointMessage) => {
         remove(rows, row);
-        return { ...row, status: "DELIVERED" as const };
+        return {
+          ...row,
+          status: "DELIVERED" as const,
+          keepUntil: new Date(start + elapsed + InboxRetention.durationMs),
+        };
       },
       removeDuplicate: async (row: DeliveryEndpointMessage) => {
         remove(rows, row);
@@ -663,9 +671,10 @@ describe("Delivery direct worker", () => {
       workRegistry: localRegistry(shard),
       pageSize: 1_000,
     };
-    const instant = Time.currentTime();
-    let elapsed = 0;
-    const original = Time.setProvider({ currentTime: () => instant, monotonicTime: () => elapsed });
+    const original = Time.setProvider({
+      currentTime: () => timestampFromDate(new Date(start + elapsed)),
+      monotonicTime: () => elapsed,
+    });
     try {
       const dispatched: string[] = [];
       await new Delivery(options).drain(shard, {
@@ -701,6 +710,58 @@ describe("Delivery direct worker", () => {
     }
   });
 
+  it("expires a recent identity at its stored deadline after a slow page", async () => {
+    const shard = ShardIndex.single();
+    const first = message("slow-first", "target", shard);
+    const duplicate = { ...message("slow-later", "target", shard), signalId: first.signalId };
+    const rows = [first];
+    let nowMs = 100_000;
+    const prior = Time.setProvider({ currentTime: () => timestampFromDate(new Date(nowMs)) });
+    const inbox = {
+      sessionKind: "LEASED" as const,
+      receive: async () => {
+        throw new Error("not used");
+      },
+      read: async () => [...rows],
+      readMessage: async () => undefined,
+      newestPending: async () => undefined,
+      markDelivered: async (row: DeliveryEndpointMessage) => {
+        remove(rows, row);
+        return { ...row, status: "DELIVERED" as const, keepUntil: new Date(105_000) };
+      },
+      removeDuplicate: async (row: DeliveryEndpointMessage) => {
+        remove(rows, row);
+        return true;
+      },
+    };
+    const delivery = new Delivery({
+      context: { name: "SlowPageDeadline", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      inbox,
+      workRegistry: localRegistry(shard),
+    });
+    const dispatched: string[] = [];
+    try {
+      await delivery.drain(shard, {
+        onMessage: (row) => {
+          dispatched.push(row.id.value);
+        },
+        onDelivered: () => {
+          nowMs = 106_000;
+        },
+      });
+      rows.push(duplicate);
+      await delivery.drain(shard, {
+        onMessage: (row) => {
+          dispatched.push(row.id.value);
+        },
+      });
+      expect(dispatched).toEqual([first.id.value, duplicate.id.value]);
+    } finally {
+      Time.setProvider(prior);
+    }
+  });
+
   it("retains an acknowledged identity across short-lived delivery wrappers", async () => {
     const shard = ShardIndex.single();
     const first = message("same-signal", "target", shard);
@@ -717,6 +778,7 @@ describe("Delivery direct worker", () => {
       markDelivered: async (row: DeliveryEndpointMessage) => ({
         ...row,
         status: "DELIVERED" as const,
+        keepUntil: new Date(Time.currentTimeMillis() + InboxRetention.durationMs),
       }),
       removeDuplicate: async () => true,
     };
@@ -1844,6 +1906,7 @@ describe("Delivery direct worker", () => {
         ...message(`${signal}-delivered`, target, shard),
         signalId: signal,
         status: "DELIVERED" as const,
+        keepUntil: new Date(Time.currentTimeMillis() + InboxRetention.durationMs),
       };
       const pending = { ...message(`${signal}-pending`, target, shard), signalId: signal };
       return [delivered, pending];
@@ -1897,7 +1960,13 @@ function createDelivery(config: {
     newestPending: config.newestPending ?? (async () => undefined),
     markDelivered: async (row) => {
       const snapshot = row;
-      return config.mark?.(snapshot) ?? snapshot;
+      if (config.mark !== undefined) return config.mark(snapshot);
+      remove(rows, snapshot);
+      return {
+        ...snapshot,
+        status: "DELIVERED",
+        keepUntil: new Date((config.now?.() ?? new Date()).getTime() + InboxRetention.durationMs),
+      };
     },
     removeDuplicate: async (row) => {
       const snapshot = row;

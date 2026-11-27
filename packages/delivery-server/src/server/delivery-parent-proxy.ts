@@ -36,7 +36,7 @@ import {
 import { DeliveryShards } from "../core/wire-values.js";
 import type { InboxMessage, ShardIndex } from "@spine-event-engine/proto/delivery";
 
-import { InboxMessages, InboxShards } from "../core/inbox-service.js";
+import { InboxShards } from "../core/inbox-service.js";
 import { DeliverySessionInputs } from "../core/shard-service.js";
 import { DeliveryChildPool, type DeliveryChildEndpoint } from "./delivery-child-pool.js";
 import { DeliveryStreamFanIn } from "./delivery-stream-fan-in.js";
@@ -115,11 +115,18 @@ export class DeliveryParentProxy {
             ),
         );
       },
-      writeMany: (request, context) => {
-        const shard = this.#batchShard(request);
-        return this.#call(this.#slot(shard), context.signal, (transport, headers) =>
-          createClient(InboxService, transport).writeMany(request, this.#forward(context, headers)),
+      writeMany: async (request, context) => {
+        await Promise.all(
+          this.#batchSlots(request.message).map((group) =>
+            this.#call(group.slot, context.signal, (transport, headers) =>
+              createClient(InboxService, transport).writeMany(
+                { ...request, shard: group.shard, message: group.messages },
+                this.#forward(context, headers),
+              ),
+            ),
+          ),
         );
+        return {};
       },
     };
   }
@@ -140,14 +147,18 @@ export class DeliveryParentProxy {
             ),
         );
       },
-      removeMany: (request, context) => {
-        const shard = this.#batchShard(request);
-        return this.#call(this.#slot(shard), context.signal, (transport, headers) =>
-          createClient(InboxService, transport).removeMany(
-            request,
-            this.#forward(context, headers),
+      removeMany: async (request, context) => {
+        await Promise.all(
+          this.#batchSlots(request.message).map((group) =>
+            this.#call(group.slot, context.signal, (transport, headers) =>
+              createClient(InboxService, transport).removeMany(
+                { ...request, shard: group.shard, message: group.messages },
+                this.#forward(context, headers),
+              ),
+            ),
           ),
         );
+        return {};
       },
     };
   }
@@ -333,16 +344,25 @@ export class DeliveryParentProxy {
   }
 
   /**
-   * Rejects a mixed-shard batch before forwarding it to a child.
+   * Groups batch messages by child slot while preserving order within each slot.
    */
-  #batchShard(request: {
-    shard?: ShardIndex | undefined;
-    message: readonly InboxMessage[];
-  }): ShardIndex {
-    const shard = InboxShards.required(request.shard);
-    InboxMessages.requiredBatchLength(request.message.length);
-    InboxShards.ensure(request.message, shard);
-    return shard;
+  #batchSlots(messages: readonly InboxMessage[]): readonly {
+    slot: number;
+    shard: ShardIndex;
+    messages: InboxMessage[];
+  }[] {
+    const groups = new Map<number, { slot: number; shard: ShardIndex; messages: InboxMessage[] }>();
+    for (const message of messages) {
+      const shard = InboxShards.required(message.id?.index);
+      const slot = this.#slot(shard);
+      let group = groups.get(slot);
+      if (group === undefined) {
+        group = { slot, shard, messages: [] };
+        groups.set(slot, group);
+      }
+      group.messages.push(message);
+    }
+    return [...groups.values()];
   }
 
   /**

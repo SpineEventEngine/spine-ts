@@ -366,8 +366,8 @@ describe("multi-process public Delivery endpoint", () => {
     try {
       await inbox.writeOne({ message: second });
       await inbox.writeOne({ message: first });
-      expect((await shards.pickShard({ shard: smaller, worker })).value?.case).toBe("pickedUp");
-      expect((await shards.pickShard({ shard: larger, worker })).value?.case).toBe("pickedUp");
+      expect((await shards.pickShard({ shard: smaller, worker })).value.case).toBe("pickedUp");
+      expect((await shards.pickShard({ shard: larger, worker })).value.case).toBe("pickedUp");
       await inbox.writeOne({ message: { ...first, status: InboxMessageStatus.DELIVERED } });
       expect((await inbox.newestMessageToDeliver(larger)).message).toEqual(second);
       expect((await inbox.newestMessageToDeliver(smaller)).message).toBeUndefined();
@@ -393,8 +393,8 @@ describe("multi-process public Delivery endpoint", () => {
     try {
       await inbox.writeMany({ shard: second, message: [b, c] });
       await inbox.writeOne({ message: a });
-      expect((await shards.pickShard({ shard: first, worker })).value?.case).toBe("pickedUp");
-      expect((await shards.pickShard({ shard: second, worker })).value?.case).toBe("pickedUp");
+      expect((await shards.pickShard({ shard: first, worker })).value.case).toBe("pickedUp");
+      expect((await shards.pickShard({ shard: second, worker })).value.case).toBe("pickedUp");
       await inbox.writeMany({
         shard: second,
         message: [{ ...c, status: InboxMessageStatus.DELIVERED }],
@@ -515,7 +515,7 @@ describe("multi-process public Delivery endpoint", () => {
       const joined = await Promise.all([nextFrame(right), nextFrame(right)]);
       expect(joined.map((item) => item.shard?.index).sort()).toEqual([0, 1]);
       const updates = admin.subscribeToShardUpdates(create(EmptySchema))[Symbol.asyncIterator]();
-      expect((await nextFrame(updates)).value?.case).toBe("created");
+      expect((await nextFrame(updates)).value.case).toBe("created");
       expect((await createClient(Health, transport).check({ service: "" })).status).toBeDefined();
       await Promise.all([left.return?.(), right.return?.(), updates.return?.()]);
     } finally {
@@ -577,7 +577,7 @@ describe("multi-process public Delivery endpoint", () => {
     }
   });
 
-  it("rejects a mixed batch in one modulo slot before writing either row", async () => {
+  it("routes mixed batches by actual inbox ID across child slots", async () => {
     const server = new DeliveryServer({ port: 0, processCount: 2 });
     await server.start();
     const sessions = new Http2SessionManager(server.baseUrl);
@@ -587,17 +587,26 @@ describe("multi-process public Delivery endpoint", () => {
     );
     const first = create(ShardIndexSchema, { index: 0, ofTotal: 4 });
     const other = create(ShardIndexSchema, { index: 2, ofTotal: 4 });
+    const separateSlot = create(ShardIndexSchema, { index: 1, ofTotal: 4 });
     const a = domainMessage("batch-a", first);
     const b = domainMessage("batch-b", other);
+    const c = domainMessage("batch-c", separateSlot);
     try {
-      await expect(inbox.writeMany({ shard: first, message: [a, b] })).rejects.toMatchObject({
-        code: Code.InvalidArgument,
-      });
+      await inbox.writeMany({ shard: first, message: [a, b, c] });
+      expect((await inbox.findOne({ uuid: a.id?.uuid ?? "", index: first })).message).toBeDefined();
+      expect((await inbox.findOne({ uuid: b.id?.uuid ?? "", index: other })).message).toBeDefined();
+      expect(
+        (await inbox.findOne({ uuid: c.id?.uuid ?? "", index: separateSlot })).message,
+      ).toBeDefined();
       const snapshot = await createClient(
         AdminService,
         createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: sessions }),
       ).getShardInfo(create(EmptySchema));
-      expect(snapshot.shards).toEqual([]);
+      expect(snapshot.shards.map((item) => item.index?.index)).toEqual([0, 1, 2]);
+      await inbox.removeMany({ message: [a, b, c].map((row) => ({ id: row.id })) });
+      expect(
+        (await inbox.findOne({ uuid: a.id?.uuid ?? "", index: first })).message,
+      ).toBeUndefined();
     } finally {
       sessions.abort();
       await server.close();

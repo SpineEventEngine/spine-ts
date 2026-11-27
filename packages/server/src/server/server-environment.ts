@@ -74,6 +74,7 @@ export interface ServerEnvironmentDelivery extends ServerEnvironmentCloseable {
   [deliveryPortAccess]?(): {
     readonly inbox: DeliveryInbox;
     readonly workRegistry: DeliveryWorkRegistry;
+    readonly pageSize?: number;
   };
 
   /**
@@ -1500,6 +1501,7 @@ const ServerEnvironmentValues = Object.freeze({
     return {
       inbox,
       workRegistry,
+      ...(internal?.pageSize === undefined ? {} : { pageSize: internal.pageSize }),
       ...(source === undefined ? {} : { source }),
       ...(notifications === undefined ? {} : { notifications }),
       ...(remote.endpoint === undefined ? {} : { endpoint: remote.endpoint }),

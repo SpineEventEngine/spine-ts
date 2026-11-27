@@ -121,6 +121,22 @@ describe("in-memory Inbox", () => {
       context,
     );
     expect(again.message?.[0]?.id?.index?.index).toBe(0);
+    const zeroCursor = await core.inbox.findManyInShard(
+      create(ReadMessagesSinceTimeSchema, { shard, pageSize: 10, sinceWhen: { seconds: 0n } }),
+      context,
+    );
+    expect(zeroCursor.message).toEqual(again.message);
+  });
+
+  it("returns UNKNOWN for a nonpositive wire page size", () => {
+    const core = InMemoryDelivery.create();
+    for (const pageSize of [0, -1])
+      expect(() =>
+        core.inbox.findManyInShard(
+          create(ReadMessagesSinceTimeSchema, { shard, pageSize }),
+          context,
+        ),
+      ).toThrow(expect.objectContaining({ code: Code.Unknown }));
   });
 
   it("rejects malformed direct messages before mutation", async () => {
@@ -201,16 +217,13 @@ describe("in-memory Inbox", () => {
     }
   });
 
-  it("rejects empty batches and validates records in nonempty batches", async () => {
+  it("accepts empty batches without a shard header and validates nonempty writes", async () => {
     const core = InMemoryDelivery.create();
     for (const request of [
-      core.inbox.writeMany(create(WriteMessagesSchema, { shard, message: [] }), context),
-      core.inbox.removeMany(create(RemoveMessagesSchema, { shard, message: [] }), context),
+      core.inbox.writeMany(create(WriteMessagesSchema), context),
+      core.inbox.removeMany(create(RemoveMessagesSchema), context),
     ]) {
-      await expect(request).rejects.toMatchObject({
-        code: Code.InvalidArgument,
-        rawMessage: "Delivery message batch is invalid.",
-      });
+      await expect(request).resolves.toEqual({});
     }
     await expect(
       core.inbox.writeMany(
@@ -221,6 +234,33 @@ describe("in-memory Inbox", () => {
       code: Code.InvalidArgument,
       rawMessage: "Delivery message identity is incomplete.",
     });
+  });
+
+  it("groups mixed batches by inbox ID shard and removes by identity alone", async () => {
+    const core = InMemoryDelivery.create();
+    const other = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    const first = message("mixed-a", 1, 1);
+    const second = message("mixed-b", 1, 2, other);
+    const completed = { ...first, status: InboxMessageStatus.DELIVERED };
+    await core.inbox.writeMany(
+      create(WriteMessagesSchema, { message: [first, second, completed] }),
+      context,
+    );
+    expect((await core.inbox.findOne(id("mixed-a", shard), context)).message?.status).toBe(
+      InboxMessageStatus.DELIVERED,
+    );
+    expect((await core.inbox.findOne(id("mixed-b", other), context)).message).toBeDefined();
+    await core.inbox.removeMany(
+      create(RemoveMessagesSchema, {
+        message: [
+          create(InboxMessageSchema, { id: first.id }),
+          create(InboxMessageSchema, { id: second.id }),
+        ],
+      }),
+      context,
+    );
+    expect((await core.inbox.findOne(id("mixed-a", shard), context)).message).toBeUndefined();
+    expect((await core.inbox.findOne(id("mixed-b", other), context)).message).toBeUndefined();
   });
 
   it("rejects impossible shard identities before Inbox reads or admission", async () => {

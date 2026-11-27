@@ -156,14 +156,14 @@ const DeliveryTargetIds = Object.freeze({
 
 type DeliveryMessageCodecApi = Readonly<{
   /**
-   * Encodes one bounded, single-shard inbox batch.
+   * Encodes a batch in caller order, including mixed shards and repeated IDs.
    *
    * @param messages Supplies the messages to encode.
-   * @returns The encoded messages, their IDs, and their common shard.
+   * @returns The encoded messages, their IDs, and the first shard when present.
    */
   encodeBatch(messages: readonly InboxMessage[]): {
     readonly ids: readonly string[];
-    readonly shard: WireShardIndex;
+    readonly shard: WireShardIndex | undefined;
     readonly messages: WireInboxMessage[];
   };
 
@@ -315,29 +315,19 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
   // prettier-ignore
 
   /**
-   * Encodes one bounded, single-shard inbox batch.
+   * Encodes a batch in caller order, including mixed shards and repeated IDs.
    *
    * @param messages Supplies the messages to encode.
-   * @returns The encoded messages, their IDs, and their common shard.
+   * @returns The encoded messages, their IDs, and the first shard when present.
    */
   encodeBatch(messages: readonly InboxMessage[]): {
     readonly ids: readonly string[];
-    readonly shard: WireShardIndex;
+    readonly shard: WireShardIndex | undefined;
     readonly messages: WireInboxMessage[];
   } {
-    if (messages.length === 0)
-      throw new TypeError("Delivery message batch is invalid.");
     const ids = messages.map((message) => DeliveryMessageCodec.encodeId(message.id));
-    if (new Set(ids).size !== ids.length)
-      throw new TypeError("Delivery message batch contains duplicate IDs.");
     const first = messages.at(0);
-    if (first === undefined) throw new TypeError("Delivery message batch is invalid.");
-    const shard = DeliveryShardCodec.encode(first.id.shard);
-    for (const message of messages) {
-      const messageShard = DeliveryShardCodec.encode(message.id.shard);
-      if (messageShard.index !== shard.index || messageShard.ofTotal !== shard.ofTotal)
-        throw new TypeError("Delivery message batch spans multiple shards.");
-    }
+    const shard = first === undefined ? undefined : DeliveryShardCodec.encode(first.id.shard);
     return {
       ids: Object.freeze(ids),
       shard,
@@ -1118,7 +1108,7 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
    */
   duration(value: number): { seconds: bigint; nanos: number } {
     const maximumMilliseconds = 315_576_000_000_000;
-    if (!Number.isSafeInteger(value) || value <= 0 || value > maximumMilliseconds)
+    if (!Number.isSafeInteger(value) || value < 0 || value > maximumMilliseconds)
       throw new TypeError("Delivery inactivity duration is invalid.");
     return { seconds: BigInt(Math.floor(value / 1000)), nanos: (value % 1000) * 1_000_000 };
   },

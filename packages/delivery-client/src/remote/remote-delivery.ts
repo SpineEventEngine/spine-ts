@@ -99,7 +99,11 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
     Object.defineProperty(this, deliveryPortAccess, {
       value: () => {
         if (this.#bundle === undefined) throw new Error("Remote delivery is not open.");
-        return { inbox: this.#bundle.inbox, workRegistry: this.#bundle.workRegistry };
+        return {
+          inbox: this.#bundle.inbox,
+          workRegistry: this.#bundle.workRegistry,
+          pageSize: this.#bundle.client.pageSize,
+        };
       },
     });
     this.notifications = {

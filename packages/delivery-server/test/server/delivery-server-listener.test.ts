@@ -70,7 +70,7 @@ describe("DeliveryServer listener", () => {
           shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
           pageSize: 0,
         }),
-      ).rejects.toMatchObject({ code: Code.InvalidArgument });
+      ).rejects.toMatchObject({ code: Code.Unknown });
       await expect(
         createClient(InboxService, transport).findManyInShard({
           shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),

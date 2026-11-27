@@ -60,6 +60,10 @@ process and starts that many homogeneous child processes. Shard number `s`
 routes to subprocess `s % processCount`. The public endpoint forwards each
 shard-specific gRPC call there. That subprocess handles the read, write,
 pickup, renewal, or release and returns its result.
+For a batch containing messages for shard 2 and shard 3, the parent uses the
+shard in each inbox ID. With two subprocesses it sends those messages to
+subprocesses 0 and 1 respectively. A deletion uses only the inbox ID.
+An empty batch succeeds without changing storage.
 The parent combines Admin snapshots and streams work notices from all healthy
 children. When a subprocess exits, it loses its in-memory inbox messages and sessions. Its shards are
 temporarily unavailable while its replacement starts. The other subprocess
@@ -102,6 +106,8 @@ disconnects before receiving the reply.
 
 Each call to `InboxService.FindManyInShard` reads the current inbox. Its
 `sinceWhen` field selects messages received strictly after the supplied time.
+An omitted timestamp or an explicit zero starts at the beginning of the shard.
+A nonpositive page size produces the JVM service's `UNKNOWN` gRPC status.
 Suppose a worker reads two messages per page and three messages have the same
 receive time. Using that time as the next lower bound would skip the third
 message. The TS worker includes that instant again, asks for a larger page

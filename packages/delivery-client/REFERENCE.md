@@ -14,8 +14,8 @@ aborts active reads and observation streams and closes its session once.
 
 The client requests 100 inbox messages per page by default. For example, `pageSize: 2000`
 requests up to 2,000 messages per call. The wire field is a positive Protobuf
-`int32`. Batches may contain any number of distinct messages for the same shard
-that fit in one gRPC message.
+`int32`. A batch can contain messages for several shards. The server uses the shard in each inbox ID.
+The encoded request must fit in one gRPC message.
 
 `connectTo()` accepts `maxInboundMessageBytes` for replies and
 `maxOutboundMessageBytes` for requests. Omit them to use the transport's
@@ -36,7 +36,8 @@ mutation response raises `DeliveryOutcomeUnknownError`; inspect its
 the mutation.
 
 `readPage` calls the existing JVM `InboxService.FindManyInShard` RPC.
-`sinceWhen` is its exclusive timestamp lower bound. When several messages share a receive time, the worker rereads that time and
+Omit `sinceWhen` or pass the zero timestamp to start at the beginning. Any other
+timestamp selects messages received strictly later. When several messages share a receive time, the worker rereads that time and
 compares each message's inbox counter and UUID with the last one it visited.
 If a full reply contains only positions already visited, it requests more
 messages using the existing RPC. An unsupported offset, or a boundary that
@@ -78,7 +79,7 @@ If shard 3 has since passed to another worker, the server leaves that worker
 in place. The RPC returns an empty reply in either case.
 
 `releaseExpired(inactivityMs)` asks the server to release every session that
-has been idle for that long. If the releases succeed but the reply is lost
+has been idle for at least that long. Zero makes every current session eligible. If the releases succeed but the reply is lost
 or exceeds a transport message-size setting, the client throws
 `DeliveryOutcomeUnknownError`. For example, a second call can return an empty
 list because the first call already released the sessions. A shard snapshot
@@ -110,7 +111,9 @@ deadline has passed. The application worker processes the page as follows.
 If the write succeeds and the deletion fails, the first inbox message
 remains delivered. The worker reports the deletion error. The second copy
 can still be present when another worker reads the shard. The retained
-completion gives that worker evidence that the Command was already handled.
+completion gives that worker evidence if it appears on the same page. A fresh
+node with a page size of one can read the completion on one page and the
+duplicate on the next. It can then invoke the handler again.
 
 If the application stops after the handler succeeds but before the inbox
 write reaches the server, the stored Command can still appear pending. A

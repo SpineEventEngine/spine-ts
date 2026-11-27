@@ -696,8 +696,8 @@ configured strategy, endpoint enumeration, and stored-shard validation. Configur
 it before environment resolution and retain the same mapping while rows remain
 pending. See [receiver-specific policies](../../packages/server/REFERENCE.md#receiver-specific-shard-policies).
 `DeliveryBuilder` snapshots storage, node, shard strategy, monitor, and bounded
-read options. A run takes one shard, checks the complete `WorkerId`, and
-reads pending messages in delivery order. Applications post signals to their
+read options. A remote run requests one shard with its complete `WorkerId`. A successful
+pickup lets it read the inbox in delivery order. Applications post signals to their
 Bounded Context's bus. After the repository selects a recipient, the framework
 stores a new `InboxMessage` in one create-or-update call. During a shard
 delivery the worker can recognize that two stored messages carry the same

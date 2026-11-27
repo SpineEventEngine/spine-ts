@@ -14,13 +14,15 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { deliveryPortAccess } from "@spine-event-engine/server/spi/delivery";
+import type { ServerEnvironmentDelivery } from "@spine-event-engine/server";
 
 const state = vi.hoisted(() => ({ clients: [] as FakeClient[], closeFailures: 0 }));
 
 vi.mock("../src/client/client.js", () => ({
   DeliveryClient: {
-    connectTo: vi.fn(() => {
-      const client = new FakeClient();
+    connectTo: vi.fn((_endpoint: string, options?: { pageSize?: number }) => {
+      const client = new FakeClient(options?.pageSize ?? 100);
       state.clients.push(client);
       return client;
     }),
@@ -39,6 +41,8 @@ import { RemoteDelivery } from "../src/remote/remote-delivery.js";
 import { DeliveryBuilder } from "../src/index.js";
 
 class FakeClient {
+  constructor(readonly pageSize: number) {}
+
   closed = 0;
   observed = 0;
   async *observeAvailableShards(): AsyncIterable<string> {
@@ -76,6 +80,16 @@ describe("RemoteDelivery work source", () => {
     expect(state.clients[0]?.observed).toBe(1);
     await delivery.close();
     expect(state.clients[0]?.closed).toBe(1);
+  });
+
+  it("passes the configured client page size through its private facility ports", async () => {
+    const delivery = RemoteDelivery.connectTo({
+      endpoint: "http://delivery.test",
+      clientOptions: { pageSize: 1 },
+    });
+    await delivery.open();
+    expect((delivery as ServerEnvironmentDelivery)[deliveryPortAccess]?.().pageSize).toBe(1);
+    await delivery.close();
   });
 
   it("validates notification modes before opening a connection", () => {

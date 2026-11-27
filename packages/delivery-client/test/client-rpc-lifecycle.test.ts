@@ -20,6 +20,7 @@ import {
   OptionalInboxMessageSchema,
   PageOfMessagesSchema,
   ReadMessagesSinceTimeSchema,
+  ExpiredSessionsReleasedSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
   InboxMessageIdSchema,
@@ -35,6 +36,16 @@ import {
 import { domainMessage, message, transport } from "./shared-fixtures.js";
 
 describe("DeliveryClient RPC and lifecycle", () => {
+  it("sends a zero inactivity period for explicit release of active sessions", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    fake.reply(create(ExpiredSessionsReleasedSchema));
+    await expect(client.releaseExpired(0)).resolves.toEqual([]);
+    expect(fake.unary.mock.lastCall?.[4]).toMatchObject({
+      inactivityPeriod: { seconds: 0n, nanos: 0 },
+    });
+  });
+
   it("validates and retains a caller-owned bounded page size", () => {
     const fake = transport();
 
@@ -559,7 +570,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(fake.unary).toHaveBeenCalledTimes(2);
   });
 
-  it("rejects invalid batches before RPC", async () => {
+  it("accepts empty, repeated, and mixed-shard batches and rejects invalid identities", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
     const one = domainMessage("one");
@@ -571,22 +582,21 @@ describe("DeliveryClient RPC and lifecycle", () => {
     const aborted = new AbortController();
     aborted.abort(new Error("caller stopped"));
 
-    for (const invalid of [
-      [],
-      [one, domainMessage("one")],
-      [one, anotherShard],
-      [{ ...one, signalId: "" }],
-    ]) {
-      await expect(client.writeMany(invalid)).rejects.toThrow();
-      await expect(client.removeMany(invalid)).rejects.toThrow();
+    for (const valid of [[], [one, domainMessage("one")], [one, anotherShard]]) {
+      fake.reply(create(EmptySchema));
+      await expect(client.writeMany(valid)).resolves.toBeUndefined();
+      fake.reply(create(EmptySchema));
+      await expect(client.removeMany(valid)).resolves.toBeUndefined();
     }
+    await expect(client.writeMany([{ ...one, signalId: "" }])).rejects.toThrow();
+    await expect(client.removeMany([{ ...one, id: { ...one.id, value: "" } }])).rejects.toThrow();
     await expect(client.writeMany([one], { timeoutMs: 0 })).rejects.toThrow();
     await expect(client.removeMany([one], { signal: aborted.signal })).rejects.toThrow(
       "caller stopped",
     );
     client.close();
     await expect(client.writeMany([one])).rejects.toThrow("Delivery client is closed.");
-    expect(fake.unary).not.toHaveBeenCalled();
+    expect(fake.unary).toHaveBeenCalledTimes(6);
   });
 
   it("reports each ambiguous batch outcome without payload leakage or retry", async () => {

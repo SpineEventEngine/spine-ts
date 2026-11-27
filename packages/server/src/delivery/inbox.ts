@@ -111,12 +111,11 @@ export class Inbox {
   }
 
   /**
-   * Updates one pending message to delivered when its snapshot still matches.
+   * Updates one pending message to delivered by its inbox identity.
    *
    * @param message Supplies the pending message snapshot.
    * @returns The first stored completion and deadline, or `undefined` when the
-   * durable row is missing or its immutable content differs. Matching delivered
-   * rows return idempotently so concurrent workers converge without re-dispatching.
+   * durable row is missing. Matching delivered rows return idempotently.
    */
   markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
     return this.storage.markDelivered(message);

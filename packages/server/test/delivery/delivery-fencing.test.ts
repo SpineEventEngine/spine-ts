@@ -21,6 +21,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Delivery } from "../../src/delivery/delivery.js";
 import { Inbox } from "../../src/delivery/inbox.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
+import { InboxRetention } from "../../src/delivery/inbox-retention.js";
 import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
 import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
@@ -853,9 +854,17 @@ function agentDelivery(
       newestPending: () => Promise.resolve(undefined),
       markDelivered: (message) => {
         onMark(message);
-        return Promise.resolve(message);
+        acknowledged.add(message.id.value);
+        return Promise.resolve({
+          ...message,
+          status: "DELIVERED" as const,
+          keepUntil: new Date(Date.now() + InboxRetention.durationMs),
+        });
       },
-      removeDuplicate: () => Promise.resolve(true),
+      removeDuplicate: (message) => {
+        acknowledged.add(message.id.value);
+        return Promise.resolve(true);
+      },
     },
     workRegistry: {
       sessionKind: "LEASED",
