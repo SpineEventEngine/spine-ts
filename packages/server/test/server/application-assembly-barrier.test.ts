@@ -216,7 +216,7 @@ it("lets the first recovered handler query a later Bounded Context", async () =>
     whenReceived: create(TimestampSchema, { seconds: 1n }),
     version: 1n,
   });
-  expect(written.outcome).toBe("WRITTEN");
+  expect(written.signalId).toBe("retained-project-1");
   await inboxStorage.close();
 
   RecoveryReader.names = [];

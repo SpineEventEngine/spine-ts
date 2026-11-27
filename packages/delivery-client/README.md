@@ -125,48 +125,14 @@ Here `timeoutMs` bounds setup through the first acknowledgement only; it never
 ends an acknowledged observation stream. Keep the snapshot and live view
 separate so a slower snapshot response cannot overwrite a newer live update.
 
-`RemoteInbox` and `RemoteWorkRegistry` adapt a client to a server
-`DeliveryBuilder`. The authoritative delivery state is the remote Inbox row and
-the current shard lease; the client keeps no local removal record. A delivered
-row is the deduplication fact, but a handler effect and its acknowledgement are
-not one transaction. If an acknowledgement is lost, delivery can happen again
-after restart, so make downstream effects idempotent.
-Remote delivery reads bounded raw pages. The shared server delivery policy
-removes a pending duplicate when its signal ID and typed Inbox target match a
-delivered row in that page or a recent delivery during the five-second local deduplication
-window. A different target or a newly generated signal ID remains independently
-deliverable, even when its payload is equal.
+Use `DeliveryBuilder.remote({ endpoint })` to connect an application to the
+Delivery server. During startup each node opens `ShardObservingService.ObserveAll`.
+If shard 3 already contains a pending Command, a new node can take that shard
+and run the handler. If the inbox is empty, startup finishes with the stream
+open and silent. The server repeats a notice for free, unclaimed work after
+ten seconds by default. Further writes do not postpone the reminder.
 
-Remote reception writes a pending row without a completion deadline. When the
-worker acknowledges it, the Delivery server checks the session and row together
-and records a deadline five seconds after that acknowledgement. A matching
-repeat preserves the first deadline.
-
-<!-- docs-snippet-path: packages/delivery-client/src/remote/adapters.ts -->
-
-```ts
-import {
-  DeliveryClient,
-  RemoteInbox,
-  RemoteWorkRegistry,
-} from "@spine-event-engine/delivery-client";
-import { DeliveryBuilder } from "@spine-event-engine/server";
-import type { StorageFactory } from "@spine-event-engine/storage";
-
-declare const storageFactory: StorageFactory;
-const client = DeliveryClient.connectTo("http://127.0.0.1:8484");
-const delivery = new DeliveryBuilder()
-  .withStorageFactory(storageFactory)
-  .withNode("orders-worker")
-  .withInbox(new RemoteInbox(client))
-  .withWorkRegistry(new RemoteWorkRegistry(client))
-  .build();
-// When the worker has finished using delivery, close its connection.
-client.close();
-void delivery;
-```
-
-For server assembly, install a remote facility in `ServerEnvironment`. The built-in mode opens `ShardObservingService.ObserveAll` after the application is ready. The stream can stay silent when no shard is available; startup does not wait for its first notice. A new or reconnected node receives a scan of currently free shards with pending rows. The server repeats an unclaimed notice after its configured interval, 10 seconds by default. A further write does not postpone that reminder. Admin snapshots remain available for diagnostics, but Admin updates do not initiate application delivery.
+For a node that should process at most two shards concurrently:
 
 <!-- docs-snippet-path: packages/delivery-client/src/remote/delivery-builder.ts -->
 
@@ -180,9 +146,15 @@ const delivery = DeliveryBuilder.remote({
 void delivery;
 ```
 
-With no `maxConcurrentDeliveries`, this node can run distinct shards in parallel. Two calls to `environment.delivery.deliverMessagesFrom(shard)` for the same shard join one local attempt and receive its result. Other nodes can try the same shard, but only one current server session can handle it. Notices are advisory: a node can miss one during a disconnect, and reconnect discovery or the server reminder can offer the work again. The Inbox row and session determine whether processing may proceed.
+With no `maxConcurrentDeliveries`, the node can process distinct shards in
+parallel. Two calls to `environment.delivery.deliverMessagesFrom(shard)` on
+that node for the same shard share one delivery attempt. An independent write
+of another Command to that shard always stores its inbox message.
 
-If your application uses an external message queue to notify its nodes, select `notifications: { kind: "custom", shardObserver }`. The observer's `onMessage(message)` receives the complete persisted Inbox row after a write or normal release and may publish its shard to the queue. In this mode the framework opens no `ObserveAll` stream and schedules no fallback attempt if the callback fails. The consumer you register with that queue calls `environment.delivery.deliverMessagesFrom(shard)`. For shared application storage, `DeliveryBuilder.local({ storageFactory, shardObserver })` supplies the same hook; use one shared factory for application and delivery records. A failed observer callback is logged without reversing the write. The application decides how to recover missed queue notifications.
+When an application uses its own shared database for the inbox, it can use
+`DeliveryBuilder.local({ storageFactory, shardObserver })` to notify nodes
+through its own queue. For a complete publisher and consumer example, see
+[running and observation](../../docs/USER_GUIDE.md#8-running-and-observation).
 
 ## ⚠️ Design for redelivery
 

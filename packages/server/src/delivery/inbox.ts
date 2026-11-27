@@ -52,9 +52,9 @@ export class Inbox {
    * Stores one pending message without a completion deadline.
    *
    * @param input Describes the message to make durable.
-   * @returns The write or deduplication outcome.
+   * @returns The stored message.
    */
-  async receive(input: InboxMessageInput): Promise<InboxWriteResult> {
+  async receive(input: InboxMessageInput): Promise<InboxMessage> {
     const messageInput = this.#inputObject(input, "Inbox message input");
     const shard = this.#readInput(messageInput, "shard", "Inbox message shard") as ShardIndex;
     const signal = this.#readInput(messageInput, "signal", "Inbox signal") as Any | undefined;
@@ -413,21 +413,4 @@ export interface InboxReadContinuation {
    * Version from the last row of the previous page.
    */
   readonly version: bigint;
-}
-
-/**
- * Durable inbox write outcome.
- */
-export interface InboxWriteResult {
-  // prettier-ignore
-
-  /**
-   * Whether the message was written or matched an existing dedup key.
-   */
-  readonly outcome: "WRITTEN" | "DUPLICATE";
-
-  /**
-   * Stored message selected for the outcome.
-   */
-  readonly message: InboxMessage;
 }

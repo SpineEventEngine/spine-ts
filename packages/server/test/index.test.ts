@@ -15,7 +15,6 @@
 import type { Message } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { TimeProvider } from "@spine-event-engine/core/time";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
 import { CommandSchema } from "@spine-event-engine/proto";
 
@@ -69,11 +68,8 @@ import {
   AbstractCommander,
   AbstractEventReactor,
   AbstractEventSubscriber,
-  Inbox,
   type InboxMessage,
-  type InboxMessageInput,
   type InboxReadContinuation,
-  InboxStorage,
   type PrimitiveId,
   Repository,
   ShardIndex,
@@ -216,9 +212,7 @@ describe("@spine-event-engine/server", () => {
         "HandlerRegistryIngestor",
         "Entity",
         "InMemorySubscriptionRegistry",
-        "Inbox",
         "InboxMessageError",
-        "InboxStorage",
         "LocalDeliveryFacility",
         "ManagedServerApplication",
         "PersistentTenantIndex",
@@ -277,10 +271,7 @@ describe("@spine-event-engine/server", () => {
     expectTypeOf<StandObserver<typeof ProjectOverviewStateSchema>["next"]>().toBeFunction();
     expect(StandSubscriptionCapacityError).toBeTypeOf("function");
     expectTypeOf<InboxMessage>().not.toHaveProperty("claim");
-    expectTypeOf<InboxMessageInput["whenReceived"]>().toEqualTypeOf<Timestamp>();
     expectTypeOf<InboxReadContinuation["whenReceived"]>().toEqualTypeOf<Timestamp>();
-    expectTypeOf<Inbox>().not.toHaveProperty("claim");
-    expectTypeOf<Inbox>().not.toHaveProperty("unclaim");
     expectTypeOf<DeliveryInbox["removeDelivered"]>().toEqualTypeOf<
       | ((
           message: InboxMessage,
@@ -359,20 +350,6 @@ describe("@spine-event-engine/server", () => {
     expect(acceptSignalIntake("command").acceptedFor).toBe("async-work");
     expect(failSignalIntake("event", "MALFORMED_ENVELOPE").failure.code).toBe("MALFORMED_ENVELOPE");
     expect(new CommandBus()).toBeInstanceOf(CommandBus);
-    expect(
-      new InboxStorage({
-        context: { name: "Exports", multitenant: false },
-        storageFactory: new InMemoryStorageFactory(),
-      }),
-    ).toBeInstanceOf(InboxStorage);
-    expect(
-      new Inbox(
-        new InboxStorage({
-          context: { name: "Exports", multitenant: false },
-          storageFactory: new InMemoryStorageFactory(),
-        }),
-      ),
-    ).toBeInstanceOf(Inbox);
     expect(
       new ShardSession(ShardIndex.single(), undefined, new Date(0), new Date(1)),
     ).toBeInstanceOf(ShardSession);

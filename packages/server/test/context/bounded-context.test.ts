@@ -1507,7 +1507,9 @@ describe("BoundedContext assembly", () => {
 
     try {
       await context.commandBus().post(createAggregateCommand("strategy-clone", "original-id"));
-      const rows = await environmentFor(setup).delivery.inbox.read(ShardIndex.single());
+      const rows = await serverEnvironmentAccess
+        .coreDelivery(environmentFor(setup))
+        .inbox.read(ShardIndex.single());
 
       expect(rows.map((row) => Identifiers.unpack("string", row.inboxId.targetId))).toContain(
         "original-id",
@@ -4709,7 +4711,7 @@ describe("BoundedContext assembly", () => {
       whenReceived: timestampFromDate(new Date("2026-08-04T12:00:00.000Z")),
       version: 1n,
     });
-    expect(written.outcome).toBe("WRITTEN");
+    expect(written.signalId).toBe(command.id?.uuid);
 
     await seedDelivery.close();
     const context = await buildContext(
@@ -4726,7 +4728,7 @@ describe("BoundedContext assembly", () => {
         statuses: ["TO_DELIVER"],
         limit: 100,
       });
-      expect(pending.some((row) => row.id.value === written.message.id.value)).toBe(false);
+      expect(pending.some((row) => row.id.value === written.id.value)).toBe(false);
     } finally {
       await context.close();
     }
@@ -5508,10 +5510,7 @@ async function persistDescriptorRow(input: {
     whenReceived: timestampFromDate(new Date("2026-08-04T12:00:00.000Z")),
     version: 1n,
   });
-  if (written.outcome !== "WRITTEN") {
-    throw new Error("Expected descriptor fixture row to be written.");
-  }
-  return written.message;
+  return written;
 }
 
 function requireRecoveryContext(context: BoundedContext | undefined): BoundedContext {

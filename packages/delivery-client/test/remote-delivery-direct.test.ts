@@ -63,12 +63,12 @@ describe("RemoteDelivery work source", () => {
 
   it("publishes adapters without waiting for the first work notice", async () => {
     const delivery = DeliveryBuilder.remote({ endpoint: "http://delivery.test" });
-    expect(() => delivery.inbox).toThrow("not open");
+    expect("inbox" in delivery).toBe(false);
     expect(() => delivery.source).toThrow("not open");
 
     await Promise.all([delivery.open(), delivery.open()]);
     expect(state.clients).toHaveLength(1);
-    expect(delivery.inbox).toBeTruthy();
+    expect("inbox" in delivery).toBe(false);
     expect(delivery.workRegistry).toBeTruthy();
     await expect(
       delivery.source.observeAvailableShards()[Symbol.asyncIterator]().next(),
@@ -93,20 +93,11 @@ describe("RemoteDelivery work source", () => {
         endpoint: "http://delivery.test",
         notifications: {
           kind: "custom",
-          shardObserver: undefined,
-        } as never,
-      }),
-    ).toThrow("shard observer");
-    expect(() =>
-      RemoteDelivery.connectTo({
-        endpoint: "http://delivery.test",
-        notifications: {
-          kind: "custom",
           shardObserver: { onMessage: () => undefined },
           maxConcurrentDeliveries: 2,
         } as never,
       }),
-    ).toThrow("built-in");
+    ).toThrow("delivery-server");
     expect(() =>
       RemoteDelivery.connectTo({
         endpoint: "http://delivery.test",
@@ -115,7 +106,7 @@ describe("RemoteDelivery work source", () => {
           shardObserver: { onMessage: () => undefined },
         } as never,
       }),
-    ).toThrow("custom");
+    ).toThrow("shard observer");
     expect(state.clients).toHaveLength(0);
     for (const notifications of [
       null,
@@ -129,7 +120,7 @@ describe("RemoteDelivery work source", () => {
     ]) {
       expect(() =>
         RemoteDelivery.connectTo({ endpoint: "http://delivery.test", notifications } as never),
-      ).toThrow("notification kind");
+      ).toThrow("delivery-server");
     }
   });
 

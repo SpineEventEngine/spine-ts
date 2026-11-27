@@ -8,6 +8,7 @@ import {
   ShardIndex,
   UniformAcrossAllShards,
 } from "@spine-event-engine/server";
+import { deliveryPortAccess } from "@spine-event-engine/server/spi/delivery";
 import { commitFenced } from "../../server/test-fixtures/internal.mjs";
 import process from "node:process";
 
@@ -44,12 +45,7 @@ const environment = ServerEnvironment.newBuilder()
       delivery: {
         open: () => delivery.open(),
         close: () => delivery.close(),
-        get inbox() {
-          return delivery.inbox;
-        },
-        get workRegistry() {
-          return delivery.workRegistry;
-        },
+        [deliveryPortAccess]: () => delivery[deliveryPortAccess](),
         source,
         endpoint,
         notifications: delivery.notifications,
@@ -104,7 +100,7 @@ process.on("message", async (frame) => {
   }
   if (!isWrite(frame)) return;
   try {
-    await environment.delivery.inbox.receive(
+    await delivery[deliveryPortAccess]().inbox.receive(
       projectInboxInput(frame.signalId, new ShardIndex(frame.shardIndex ?? 0, shardCount)),
     );
     process.send({ type: "result", id: frame.id });

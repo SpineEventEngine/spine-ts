@@ -14,9 +14,9 @@
 
 import {
   type ServerEnvironmentDelivery,
-  type DeliveryNotifications,
   type ApplicationWorkSource,
 } from "@spine-event-engine/server";
+import { deliveryPortAccess } from "@spine-event-engine/server/spi/delivery";
 
 import { DeliveryClient } from "../client/client.js";
 import type { DeliveryClientOptions } from "../client/types.js";
@@ -39,9 +39,12 @@ export interface RemoteDeliveryConfig {
   readonly clientOptions?: DeliveryClientOptions;
 
   /**
-   * Selects built-in server notices or a custom row observer.
+   * Optionally bounds simultaneous shard runs from server notices.
    */
-  readonly notifications?: DeliveryNotifications;
+  readonly notifications?: {
+    readonly kind: "delivery-server";
+    readonly maxConcurrentDeliveries?: number;
+  };
 }
 
 /**
@@ -56,9 +59,12 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
   readonly #options: DeliveryClientOptions;
 
   /**
-   * Selects server notices or an application observer.
+   * Selects server notices.
    */
-  readonly notifications: DeliveryNotifications;
+  readonly notifications: {
+    readonly kind: "delivery-server";
+    readonly maxConcurrentDeliveries?: number;
+  };
 
   #bundle: RemoteDeliveryBundle | undefined;
 
@@ -83,27 +89,28 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
       supplied !== undefined &&
       (typeof supplied !== "object" ||
         supplied === null ||
-        !["delivery-server", "custom"].includes((supplied as { kind?: unknown }).kind as string))
+        (supplied as { kind?: unknown }).kind !== "delivery-server")
     )
-      throw new TypeError("Delivery notification kind must be delivery-server or custom.");
+      throw new TypeError("Remote delivery notifications must use delivery-server.");
+    if (supplied !== undefined && "shardObserver" in supplied)
+      throw new TypeError("Remote delivery does not accept a shard observer.");
     this.#endpoint = config.endpoint;
     this.#options = config.clientOptions ?? {};
-    this.notifications = config.notifications ?? { kind: "delivery-server" };
-    if (this.notifications.kind === "delivery-server") {
-      if ("shardObserver" in this.notifications)
-        throw new TypeError("shardObserver requires custom delivery notifications.");
-      const count = this.notifications.maxConcurrentDeliveries;
-      if (count !== undefined && (!Number.isSafeInteger(count) || count <= 0))
-        throw new TypeError("maxConcurrentDeliveries must be a positive safe integer.");
-    } else {
-      if ("maxConcurrentDeliveries" in this.notifications)
-        throw new TypeError("maxConcurrentDeliveries applies only to built-in delivery notices.");
-      const custom = this.notifications as Partial<
-        Extract<DeliveryNotifications, { kind: "custom" }>
-      >;
-      if (typeof custom.shardObserver?.onMessage !== "function")
-        throw new TypeError("Custom delivery notifications require a shard observer.");
-    }
+    Object.defineProperty(this, deliveryPortAccess, {
+      value: () => {
+        if (this.#bundle === undefined) throw new Error("Remote delivery is not open.");
+        return { inbox: this.#bundle.inbox, workRegistry: this.#bundle.workRegistry };
+      },
+    });
+    this.notifications = {
+      kind: "delivery-server",
+      ...(config.notifications?.maxConcurrentDeliveries === undefined
+        ? {}
+        : { maxConcurrentDeliveries: config.notifications.maxConcurrentDeliveries }),
+    };
+    const count = this.notifications.maxConcurrentDeliveries;
+    if (count !== undefined && (!Number.isSafeInteger(count) || count <= 0))
+      throw new TypeError("maxConcurrentDeliveries must be a positive safe integer.");
   }
 
   /**
@@ -130,16 +137,6 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
       if (this.#opening === opening) this.#opening = undefined;
     });
     return opening;
-  }
-
-  /**
-   * Returns the ready remote inbox adapter.
-   *
-   * @returns The published inbox adapter after readiness succeeds.
-   */
-  get inbox(): RemoteInbox {
-    if (this.#bundle === undefined) throw new Error("Remote delivery is not open.");
-    return this.#bundle.inbox;
   }
 
   /**

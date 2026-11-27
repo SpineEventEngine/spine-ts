@@ -113,14 +113,13 @@ describe("live SQL custom post-release observation", () => {
             },
           );
           const write = JSON.parse(writer.stdout.trim()) as {
-            outcome: string;
             id: string;
             signalId: string;
             eventHex: string;
             pid: number;
             pickup: "BLOCKED" | "ACQUIRED" | "NOT_ATTEMPTED";
           };
-          expect(write).toMatchObject({ outcome: "WRITTEN", signalId });
+          expect(write.signalId).toBe(signalId);
           expect(write.pid).not.toBe(process.pid);
           expect(write.pickup).toBe(phase === "before" ? "BLOCKED" : "NOT_ATTEMPTED");
           const pending = await inbox.readMessage({ value: write.id, shard });

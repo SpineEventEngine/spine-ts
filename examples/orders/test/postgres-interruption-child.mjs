@@ -24,12 +24,15 @@ import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
 import {
   Application,
-  Inbox,
   ShardedWorkRegistry,
   ShardIndex,
   SignalMetadata,
 } from "@spine-event-engine/server";
 
+import {
+  Inbox,
+  serverEnvironmentAccess,
+} from "../../../packages/server/test-fixtures/internal.mjs";
 import { CreateOrderSchema } from "../dist/generated/spine/examples/orders/commands_pb.js";
 import { OrderSchema } from "../dist/generated/spine/examples/orders/entities_pb.js";
 import { OrderSummarySchema } from "../dist/generated/spine/examples/orders/read_models_pb.js";
@@ -106,9 +109,11 @@ async function stage(id, setup) {
         throw new Error(`Staged Orders command was not accepted: ${JSON.stringify(ack.status)}`);
     }),
   ]);
-  const rows = await setup.environment.delivery.inbox.read(ShardIndex.single(), {
-    statuses: ["TO_DELIVER"],
-  });
+  const rows = await serverEnvironmentAccess
+    .coreDelivery(setup.environment)
+    .inbox.read(ShardIndex.single(), {
+      statuses: ["TO_DELIVER"],
+    });
   const stored = rows.find((row) => row.signalId === envelope.id.uuid);
   if (stored?.status !== "TO_DELIVER")
     throw new Error("Interrupted Orders Command did not remain durably pending.");
@@ -142,7 +147,7 @@ async function recover(id, setup) {
   const handlerReleased = new Promise((resolve) => {
     release = resolve;
   });
-  const newReceipt = new Promise((resolve) => {
+  const newMessageStored = new Promise((resolve) => {
     received = resolve;
   });
   const originalHandler = OrderAggregate.prototype.createOrder;
@@ -156,8 +161,7 @@ async function recover(id, setup) {
   };
   Inbox.prototype.receive = async function (input) {
     const written = await originalReceive.call(this, input);
-    if (input.signalId === newEnvelope.id.uuid && written.outcome === "WRITTEN")
-      received(written.message);
+    if (input.signalId === newEnvelope.id.uuid) received(written);
     return written;
   };
   try {
@@ -167,7 +171,7 @@ async function recover(id, setup) {
       newEnvelope,
       setup,
       handlerEntered,
-      newReceipt,
+      newMessageStored,
       release,
     );
   } finally {
@@ -177,7 +181,15 @@ async function recover(id, setup) {
   }
 }
 
-async function recoverWithGate(id, newId, newEnvelope, setup, handlerEntered, newReceipt, release) {
+async function recoverWithGate(
+  id,
+  newId,
+  newEnvelope,
+  setup,
+  handlerEntered,
+  newMessageStored,
+  release,
+) {
   return await withOrdersServer(
     setup,
     () => startOrdersServer(setup),
@@ -188,8 +200,8 @@ async function recoverWithGate(id, newId, newEnvelope, setup, handlerEntered, ne
         await handlerEntered;
         process.send?.({ kind: "recovered-entered" });
         const posted = createClient(CommandService, transport).post(newEnvelope);
-        const [newRow, ack] = await Promise.all([newReceipt, posted]);
-        if (newRow.status !== "TO_DELIVER")
+        const [newMessage, ack] = await Promise.all([newMessageStored, posted]);
+        if (newMessage.status !== "TO_DELIVER")
           throw new Error("New Orders Command was not pending while recovery was gated.");
         if (ack.status?.status.case !== "ok")
           throw new Error(`New Orders command was not accepted: ${JSON.stringify(ack.status)}`);

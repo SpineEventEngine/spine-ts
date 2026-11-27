@@ -1708,10 +1708,10 @@ acceptance. A failed publication is reported and contained without re-executing
 a successful source Command. Entity storage, recipient Inbox writes, and source
 acknowledgement remain separate operations.
 
-Inbox reads return `InboxMessage` with a full-precision Protobuf `Timestamp` in
-`whenReceived`. `InboxMessageInput` requires a precise `Timestamp` for new
-receipts. Writes, acknowledgements, and exact removals use an `InboxMessage`
-with the same Timestamp contract.
+Inbox reads return an `InboxMessage` with a Protobuf `Timestamp` in
+`whenReceived`. For example, two messages recorded a nanosecond apart retain
+their order even when a JavaScript `Date` would display the same millisecond.
+Writes, acknowledgements, and exact removals preserve this precision.
 
 Shard ownership is the only delivery exclusion mechanism and excludes
 concurrent delivery within that shard. Pending and delivered `InboxMessage`
@@ -1871,14 +1871,25 @@ hash input when their domain identifier has the same meaning. This does not make
 their separate signal deliveries transactional. The callback has no tenant ID
 or Bounded Context name parameter.
 
-### Reception and processing
+### Inbox writes and delivery
 
-Local repository-backed posting waits for recipient Inbox writes and scheduling,
-while handler execution and row acknowledgement continue through Delivery. For an
-Agent, the handler and save finish before its Inbox row is acknowledged. A detached
-model Command may keep running after that acknowledgement.
+Applications post Commands and Events through their Bounded Context's bus.
+For each selected recipient, the framework generates an inbox message ID and
+writes the message with a single create-or-update operation. For example, if
+two independent calls reach the inbox writer for Command `C42` and the same
+Project, they create two inbox messages, even when the first write is still in
+progress. A worker can recognize the repeated Command when it reads the shard.
+Writing under an existing inbox message ID replaces the stored message.
 
-With remote Delivery, posting completes when the remote Inbox accepts the row. The Delivery server publishes available-shard notices to each built-in application observer, and every new or reconnected node discovers current pending work. Processing may still be pending on another process. A custom observer receives the complete persisted `InboxMessage` after a write or normal release and initiates work through its application mechanism. Callback failures are logged without reversing the write or starting fallback work. `Delivery.deliverMessagesFrom(shard)` starts or joins one managed attempt and returns `completed`, `busy`, `noWork`, or `stopped`. Distinct shards run concurrently by default; only built-in server notification mode accepts a positive `maxConcurrentDeliveries` limit. The server repeats an unclaimed available-shard notice after its configured reminder interval, 10 seconds by default.
+With remote Delivery, posting can return once the Delivery server stores the
+message. Every application node subscribes to free shards with pending work.
+The server rechecks a busy shard when its worker releases it or its session
+expires. A node that connects later discovers work that is already waiting.
+Unclaimed work is reported again after the reminder interval (ten seconds by
+default). The remote configuration accepts an optional per-node
+`maxConcurrentDeliveries`. With application-managed storage, a custom observer
+can tell a node to call `environment.delivery.deliverMessagesFrom(shard)`.
+Simultaneous calls to process that shard on the same node join one attempt.
 
 A consumer using application storage can pass an explicit deadline to
 `deliverMessagesFrom(shard, { timeoutMs })`. For example, a call with zero
@@ -1922,7 +1933,7 @@ Managed repository delivery sends actual handler failures to the monitor while
 storage and delivery infrastructure errors propagate. A direct `onMessage` callback
 is treated as the endpoint. Handler effects and acknowledgement are separate,
 so a crash between them may redeliver.
-The framework adds no persisted attempts, quarantine, dead-letter, receipt, or marker policy. A failed finite run leaves the row pending. The Delivery server observes retained rows and repeats an unclaimed available-shard notice at its configured reminder interval; another application node may attempt the work. A custom observer can use its own queue recovery policy. Observation is advisory and does not provide exactly-once handler effects.
+The framework adds no persisted attempts, quarantine, dead-letter, receipt, or marker policy. A failed finite run leaves the row pending. The Delivery server observes retained rows and repeats an unclaimed available-shard notice at its configured reminder interval; another application node may attempt the work. When the application stores inbox messages in its database, its custom observer can use the recovery policy of its external queue. Observation is advisory and does not provide exactly-once handler effects.
 
 `BoundedContext.close()` stops external admission, drains accepted framework
 work, and then closes buses, subscriptions, Stands, and repository bindings.
@@ -1944,15 +1955,14 @@ environment close retries unfinished cleanup and still reports the original
 startup failure. Successfully closed services are not closed again. Environment
 configuration does not authenticate requests or select a remote topology.
 
-`ServerEnvironmentDelivery` supplies an optional remote facility with `open()`,
-`inbox`, and `workRegistry` ports. Setup opens it once before creating the
+Environment setup opens the configured facility once before creating the
 shared Delivery. If setup fails, the environment closes the facilities it opened.
-The built-in remote facility supplies a work stream that starts after application readiness.
+With `DeliveryBuilder.remote({ endpoint })`, the framework starts listening for
+available shards when the application is ready.
 
 Application code can also supply just the storage operations. For example,
 this configuration uses the application's inbox and shard registry. A successful
-write wakes delivery on the writing node. The application needs a work stream
-or a custom observer if it wants to notify another node.
+write wakes delivery on the writing node. To notify other nodes about its application-managed storage, install a custom observer.
 
 <!-- docs-snippet-path: packages/server/src/server/server-environment.ts -->
 
@@ -1977,8 +1987,8 @@ const delivery: ServerEnvironmentDelivery = {
 ```
 
 If application code installs a custom observer, that observer decides how to
-notify another node. A failed callback is logged after the write. The framework
-keeps the stored row and leaves recovery to the application.
+notify another node. A failed callback is logged after the write. The inbox
+message stays in storage, and the application decides how to recover.
 
 A local facility can supply a custom observer and application storage. Local Delivery uses the environment's configured storage
 factory for its shared Inbox and work registry; the default factory is in-memory.
@@ -1995,6 +2005,27 @@ Command or Event envelopes retain their IDs through transport and storage, inclu
 when returned or passed as envelopes. Aggregate domain Events use the loaded pre-dispatch
 version, while persisted Aggregate state advances to the next version. History caching accepts descending retained
 versions with gaps, while continuing to reject equal or newer continuations.
+
+### Duplicate dispatch at an Entity
+
+Suppose Command `C42` makes a Project Aggregate emit `ProjectCreated`. The
+emitted Event records that Command as its immediate cause. When the repository
+enables `doubleDispatchGuard`, it checks the configured number of recent
+emitted Events before invoking the handler. A match for Command `C42` produces
+`DUPLICATE_COMMAND`. If an incoming Event caused a recent emitted Event, the
+corresponding outcome is `DUPLICATE_EVENT`. The guard distinguishes a Command
+and an Event even when their IDs contain the same text. The worker acknowledges
+the inbox message after recognizing the duplicate. An application using remote
+delivery can already have received acknowledgement of its original post by
+then. That acknowledgement confirms that the Command was accepted for delivery.
+
+Aggregate repositories retain emitted Events. A Process Manager needs
+`processManagerEventHistory: true` to enable this guard. Both guard settings
+are optional. With `doubleDispatchGuard: true`, the guard considers the latest
+100 emitted Events. Earlier committed outputs in the same delivery pass are
+visible to later dispatches. A handler that emitted no qualifying Event leaves
+no evidence for this check. The Agent's optional Event guard remembers its
+completed inputs in process memory, so restarting the process clears that memory.
 
 # Dynamic unary discovery
 

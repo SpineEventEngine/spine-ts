@@ -33,9 +33,9 @@ import {
   DeliveryClient,
   DeliveryOutcomeUnknownError,
   DeliveryProtocolError,
-  RemoteInbox,
   RemoteWorkRegistry,
 } from "../src/index.js";
+import { RemoteInbox } from "../src/remote/adapters.js";
 import { deliveryClientAccess } from "../src/client/client.js";
 import { echoPickup, message, transport } from "./shared-fixtures.js";
 import { createMessage } from "../../server/test/delivery/inbox-message-fixture.js";

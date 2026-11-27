@@ -38,6 +38,8 @@ import { Delivery as CoreDelivery } from "../../src/delivery/delivery.js";
 import { InboxRecords } from "../../src/delivery/inbox-records.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { createMessage } from "./inbox-message-fixture.js";
+import { deliveryPortAccess } from "../../src/delivery/delivery-port-access.js";
+import type { ServerEnvironmentDelivery } from "../../src/server/server-environment.js";
 import { EnvironmentTests, EnvironmentType } from "../../src/server/environment.js";
 
 describe("DeliveryMonitor delivery", () => {
@@ -48,7 +50,10 @@ describe("DeliveryMonitor delivery", () => {
     expect(local.storageFactory).toBe(storageFactory);
     expect(local.local).toBe(true);
     expect(local.notifications).toEqual({ kind: "custom", shardObserver });
-    expect(local.inbox.sessionKind).toBe(local.workRegistry.sessionKind);
+    const ports = (local as ServerEnvironmentDelivery)[deliveryPortAccess]?.();
+    if (ports === undefined) throw new Error("Local delivery ports were not registered.");
+    expect(ports.inbox.sessionKind).toBe(ports.workRegistry.sessionKind);
+    expect("inbox" in local).toBe(false);
     await local.open();
     await local.close();
     expect(() => DeliveryBuilder.local({ storageFactory, shardObserver: {} } as never)).toThrow(
@@ -67,6 +72,7 @@ describe("DeliveryMonitor delivery", () => {
     EnvironmentTests.use(EnvironmentType.Production);
     try {
       const delivery = build().build();
+      expect("inbox" in delivery).toBe(false);
       expect(delivery).not.toHaveProperty("deliverMessagesFrom");
       expect(delivery.node).toBeTruthy();
       expect(() => new DeliveryBuilder().build()).toThrow(/storage factory/i);
@@ -207,7 +213,7 @@ describe("DeliveryMonitor delivery", () => {
     );
     const originalInbox = new InboxStorage({ context: original, storageFactory });
 
-    await expect(originalInbox.readMessage(written.message.id)).resolves.toMatchObject({
+    await expect(originalInbox.readMessage(written.id)).resolves.toMatchObject({
       signalId: "tenant-signal",
     });
     const current = await delivery.shards.pickUp(

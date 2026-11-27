@@ -29,7 +29,6 @@ import {
   type InboxMessage,
   type InboxMessageId,
   type InboxReadOptions,
-  type InboxWriteResult,
 } from "./inbox.js";
 import { InboxRecords, inboxRecordSpec } from "./inbox-records.js";
 import { InboxRetention } from "./inbox-retention.js";
@@ -170,25 +169,18 @@ export class InboxStorage {
   }
 
   /**
-   * Writes one direct inbox row without overwriting a collision.
+   * Writes one direct inbox row, replacing a row with the same message ID.
    *
    * @param message Supplies the message to persist.
-   * @returns Whether the row was written or matched an existing duplicate.
+   * @returns The stored message.
    */
-  async write(message: InboxMessage): Promise<InboxWriteResult> {
+  async write(message: InboxMessage): Promise<InboxMessage> {
     const record = InboxRecords.write(message);
     const id = Values.wireId(record);
     const storage = this.#storage();
     try {
-      Values.atomic(storage);
-      if (await storage.compareAndSet(id, undefined, record)) {
-        return Object.freeze({ outcome: "WRITTEN", message: InboxRecords.read(record, id) });
-      }
-      const existing = await storage.read(id);
-      if (existing !== undefined && Values.same(existing, record)) {
-        return Object.freeze({ outcome: "DUPLICATE", message: InboxRecords.read(existing, id) });
-      }
-      throw new InboxMessageError("Inbox message ID already exists.");
+      await storage.write(record);
+      return InboxRecords.read(record, id);
     } finally {
       this.#finish();
     }

@@ -127,21 +127,21 @@ describe("in-memory delivery core response loss", () => {
     });
     try {
       const received = await inbox.receive(pending);
-      expect((await client.findOne(received.message.id))?.keepUntil).toBeUndefined();
+      expect((await client.findOne(received.id))?.keepUntil).toBeUndefined();
       const registry = new RemoteWorkRegistry(client);
       const session = await registry.pickUp(
         ShardIndex.single(),
         create(WorkerIdSchema, { nodeId: { value: "node" }, value: "run" }),
       );
-      const read = await client.findOne(received.message.id);
+      const read = await client.findOne(received.id);
       if (session === undefined || read === undefined) throw new Error("Expected a live read.");
       const completed = await inbox.markDelivered(read, undefined, session);
       expect(completed?.keepUntil).toEqual(new Date(125_000));
-      expect((await client.findOne(received.message.id))?.keepUntil).toEqual(new Date(125_000));
+      expect((await client.findOne(received.id))?.keepUntil).toEqual(new Date(125_000));
 
       now = 130_000;
       expect(await inbox.markDelivered(read, undefined, session)).toEqual(completed);
-      expect((await client.findOne(received.message.id))?.keepUntil).toEqual(new Date(125_000));
+      expect((await client.findOne(received.id))?.keepUntil).toEqual(new Date(125_000));
     } finally {
       Time.setProvider(previous);
     }

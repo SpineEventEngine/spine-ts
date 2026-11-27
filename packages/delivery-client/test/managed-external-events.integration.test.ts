@@ -46,7 +46,7 @@ import { ProjectOverviewStateSchema } from "@spine-event-engine/server-test-fixt
 import { DeliveryAssembly } from "@spine-event-engine/delivery-server/testing";
 import { SignalMetadata, UniformAcrossAllShards } from "@spine-event-engine/server";
 import { afterEach, expect, it } from "vitest";
-import { DeliveryClient, RemoteDelivery } from "../src/index.js";
+import { DeliveryClient } from "../src/index.js";
 
 const childPath = fileURLToPath(
   new URL("../test-fixtures/managed-external-events-application.mjs", import.meta.url),
@@ -144,8 +144,6 @@ it(
       [Symbol.asyncIterator]();
     await expectActivationAck(updates);
 
-    const holder = RemoteDelivery.connectTo({ endpoint: delivery.baseUrl });
-    await holder.open();
     const shard = UniformAcrossAllShards.forNumber(2).shardFor(
       Identifiers.pack("string", "t0210-third-party"),
       TypeUrls.derive(ProjectOverviewStateSchema),
@@ -160,14 +158,15 @@ it(
       const completed = fileAppears(directory, "third-party-complete");
       await writeFile(join(directory, "third-party-request"), "");
       await bounded(completed, "remote ThirdParty reception completion");
-      const pending = await holder.inbox.read(shard, { statuses: ["TO_DELIVER"] });
+      const pending = (await rawClient.readPage(shard)).filter(
+        (message) => message.status === "TO_DELIVER",
+      );
       expect(pending).toHaveLength(1);
       expect(pending[0]?.shard).toEqual(shard);
       expect(typeof pending[0]?.signalId).toBe("string");
     } finally {
       await rawClient.release(held);
       rawClient.close();
-      await holder.close();
     }
     const thirdParty = await bounded(updates.next(), "third-party external state update");
     if (thirdParty.done) throw new Error("ThirdParty Project update was missing.");

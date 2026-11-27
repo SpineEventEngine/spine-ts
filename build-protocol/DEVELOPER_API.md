@@ -343,133 +343,57 @@ storage. The storage delegate remains a storage-only seam.
 
 ## Delivery and Inbox API
 
-The root-public delivery surface includes `DeliveryBuilder`, immutable
-`Delivery`, `DeliveryMonitor`, `DeliverySupervisor`, durable Inbox/work ports,
-and the callback-visible `DeliveryEndpointMessage` snapshot. The builder
-creates one finite shard drain; the supervisor observes bounded remote shard
-work. The public slice deliberately excludes scheduled/timed retries and
-persistent retry state:
+Applications submit Commands and Events through a Bounded Context's buses.
+After a repository selects a recipient, the framework generates an inbox
+message ID and writes the message. Two independent submissions can therefore
+store the same Command for the same Project under different inbox IDs. The
+worker checks for duplicates while delivering that shard. Storage adapters
+write an explicit inbox ID in one create-or-update operation. Writing the same
+inbox ID twice leaves the second message in storage.
 
-- `Inbox` is the low-level durable delivery storage primitive in this slice. It
-  accepts `InboxMessageInput` with `receive()` and lets framework delivery code
-  read durable inbox rows by `ShardIndex`. `markDelivered()` is the narrow
-  framework exact-message status update used by internal replay: missing
-  rows, non-pending rows, and mismatched caller snapshots return `undefined`;
-  already-delivered matching rows are returned idempotently. Its `storage`
-  property is an
-  intentional low-level escape hatch for storage-focused tests and
-  integrations, not an application-facing query facade;
-- `InboxStorage` is the lower-level durable storage seam behind `Inbox`,
-  including the same narrow `markDelivered()` status update. It remains useful
-  for framework tests or storage-focused integrations rather than as an
-  application-facing read-side/query facade;
-- `ShardIndex` identifies one delivery shard, `ShardSession` is the durable
-  lease snapshot for that shard, and `ShardedWorkRegistry` persists shard
-  pickup/renew/release across processes with a complete generated `WorkerId`.
-  `renew(session)` is lease fencing for active drains, not retry policy;
-- `DeliveryBuilder` snapshots the context, storage, worker, shard strategy,
-  page size, ports, and monitor. `DeliveryMonitor` selects the failed-reception
-  action; `DeliverySupervisor` connects a built delivery to a bounded
-  `DeliverySource`; and
-- `DeliveryLabel`, `DeliveryStatus`, `InboxId`, `InboxMessage`,
-  `DeliveryEndpointMessage`, `DeliveryStorageCorruptionError`,
-  `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
-  `InboxReadOptions`, `InboxWriteResult`, `InboxStorageOptions`, and
-  `ShardedWorkRegistryOptions` describe the stable root-public inputs/outputs
-  of this slice.
+With a Delivery server, all application nodes use the remote builder. The
+server sends each connected node the identity of a free shard with pending
+work. A notice lets a node attempt pickup. The server suppresses work notices
+while a worker holds the shard. A newly connected node also learns about
+available work that predates its connection.
 
-Built bounded contexts use the same storage boundary internally for three
-narrow handoffs: process-manager command assignees with `HANDLE_COMMAND`,
-process-manager event reactions with `REACT_UPON_EVENT`, and live projection
-event subscribers with `UPDATE_SUBSCRIBER`. Pending and delivered
-`InboxMessage` rows are stored directly. Shard ownership is the only exclusion
-of concurrent workers; it creates neither a per-message claim nor a separate
-dedup record. A delivered row is the deduplication fact. Handler effects and
-the delivered-row compare-and-set are not one transaction, so a lost
-acknowledgement can redeliver after restart and downstream effects must be
-idempotent. `DeliveryMonitor` contains reception failures. Its default action
-marks a failed reception delivered and continues independent targets; a custom
-monitor may select one immediate repeat action. A failed durable action leaves
-the row pending, stops later same-target messages, continues independent
-targets, releases ownership, and allows a later run. The runtime adds no
-attempt history, exhaustion policy, quarantine, receipts, markers, timers,
-backoff, dead-letter storage, scheduler persistence, or delivery policy.
+<!-- docs-snippet-path: packages/delivery-client/src/index.ts -->
 
-Public error contract for this slice is intentionally small: callers should
-expect `InboxMessageError` for invalid inbox message input and
-`DeliveryStorageCorruptionError` when durable delivery storage is corrupt or
-out of contract. `ShardedWorkRegistry.pickUp()` caller validation for an
-incomplete/blank `WorkerId`, or invalid clock values supplied through `now`,
-currently throws plain `Error` before any storage read/write begins.
-`ShardedWorkRegistryOptions.leaseMs` must be a safe integer from `1000` through
-`2147483647` milliseconds. `InboxReadOptions.limit` must be positive and at
-most `1000`. Recognized valid `DeliveryLabel` values for durable rows are
-`HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`.
-Framework replay callbacks support only `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`,
-and `REACT_UPON_EVENT`; valid `CATCH_UP` rows remain pending and skipped. New
-`IMPORT_EVENT` inbox writes are invalid and rejected before durable storage
-opens; legacy stored/wire `IMPORT_EVENT` rows remain recognizable only as
-deprecated compatibility data and fail closed as storage corruption if read or
-drained.
+```ts
+import { DeliveryBuilder } from "@spine-event-engine/delivery-client";
 
-One finite public delivery run looks like this:
-
-```typescript
-import { create } from "@bufbuild/protobuf";
-import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
-import { DeliveryBuilder, ShardIndex } from "@spine-event-engine/server";
-
-const delivery = new DeliveryBuilder()
-  .withContext(context)
-  .withStorageFactory(storageFactory)
-  .withWorker(
-    create(WorkerIdSchema, {
-      nodeId: { value: "node-a" },
-      value: "process-start-42",
-    }),
-  )
-  .build();
-
-await delivery.run({
-  shard: ShardIndex.single(),
-  onMessage: (message) => {
-    console.log(message.label, message.inboxId);
-    return Promise.resolve();
-  },
-});
+const delivery = DeliveryBuilder.remote({ endpoint: "http://localhost:50051" });
 ```
 
-Keep the write/read split intact at the application/service/domain level. These
-storage primitives are framework internals; they are not user-facing read-side
-facades. Built bounded contexts use this boundary for three narrow local
-handoffs: process-manager command assignees with
-`HANDLE_COMMAND`, process-manager event reactions with `REACT_UPON_EVENT`, and
-live projection event subscribers with `UPDATE_SUBSCRIBER`. Process-manager
-event and projection subscriber rows store the original `Event` envelope as the
-signal payload, the original event ID as `signalId`, the target state type URL
-plus routed entity ID as `inboxId`, `TO_DELIVER` status, and `ShardIndex.single()`.
-The pending row has no completion deadline. The context drains the local
-shard immediately and replays only the exact row target before running the
-process-manager or projection transaction and `Stand` update. Before handler
-code runs, replay validates the row label, pending `TO_DELIVER` status, tenant,
-payload/schema, target type URL, and routed target ID.
-At the lower-level Inbox boundary, the first acknowledgement stores a
-`keepUntil` deadline five seconds after delivery. Local storage persists the
-status and deadline in one conditional update. Remote delivery sends the same
-fields through the existing Inbox write operation using the application clock.
-A matching repeated acknowledgement returns the first stored deadline. Cleanup
-can remove a delivered row at or after that deadline.
+Application-managed storage can use a custom observer. For example, if the
+application publishes shard IDs to a cloud queue, a consumer on any
+identically configured node can start processing the shard it received.
 
-Built contexts replay through validated framework endpoints. A public delivery
-callback is an integration boundary; it does not bypass row validation or
-ownership fencing. `DeliverySupervisor` and remote delivery ports can supervise
-bounded shard work, as demonstrated by the distributed Message Board example.
-The current API does not provide a timed retry scheduler, attempt/exhaustion
-history, quarantine, dead-letter storage, or exactly-once downstream effects.
-Event import and aggregate importers are removed from the active plan by
-upstream ADR 0001 D1; ordinary aggregate `@React` handlers are generated
-reactor handlers with current transaction semantics, not event-sourcing
-import/applier work.
+<!-- docs-snippet-path: packages/server/src/index.ts -->
+
+```ts
+import { ShardIndex, type ServerEnvironment } from "@spine-event-engine/server";
+
+declare const environment: ServerEnvironment;
+declare const notification: { index: number; ofTotal: number };
+
+const shard = new ShardIndex(notification.index, notification.ofTotal);
+const result = await environment.delivery.deliverMessagesFrom(shard);
+```
+
+The framework records successful processing by marking the inbox message
+delivered. It retains that message for five seconds from acknowledgement so
+a worker can recognize a second copy of the signal for the same recipient.
+On remote storage, the Delivery server sets the deadline. A repeated
+acknowledgement preserves it. A later pass over the shard can remove the
+message when that time has passed. The handler's business effect and the
+inbox acknowledgement are separate writes. If the handler finishes but its
+acknowledgement fails, a later worker can process the pending message again.
+
+The package guides describe configuration, the results of a delivery attempt
+and what the framework does when a handler fails.
+[Server delivery reference](../packages/server/REFERENCE.md#inbox-writes-and-delivery)
+and [Delivery client reference](../packages/delivery-client/REFERENCE.md).
 
 ## Runtime lifecycle
 

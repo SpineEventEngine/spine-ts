@@ -49,9 +49,9 @@ import {
   DeliveryClient,
   DeliveryPagingError,
   DeliveryProtocolError,
-  RemoteInbox,
   RemoteWorkRegistry,
 } from "../src/index.js";
+import { RemoteInbox } from "../src/remote/adapters.js";
 import {
   DeliveryMessageCodec,
   DeliveryRequestCodec,
@@ -90,7 +90,7 @@ describe("delivery codec and immutable snapshots", () => {
     const source = domainMessage();
 
     fake.reply(create(EmptySchema));
-    await expect(inbox.receive(source)).resolves.toMatchObject({ outcome: "WRITTEN" });
+    await expect(inbox.receive(source)).resolves.toMatchObject({ signalId: source.signalId });
     fake.reply(create(PageOfMessagesSchema, { message: [DeliveryMessageCodec.encode(source)] }));
     await expect(inbox.read(ShardIndex.single())).resolves.toHaveLength(1);
     await expect(inbox.read(ShardIndex.single(), { offset: 1 })).rejects.toBeInstanceOf(

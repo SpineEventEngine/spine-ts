@@ -50,7 +50,6 @@ import { SubscriptionService } from "@spine-event-engine/proto/client";
 import {
   BoundedContext,
   Application,
-  DeliveryBuilder,
   EventRouting,
   InMemorySubscriptionRegistry,
   SignalMetadata,
@@ -77,6 +76,8 @@ import {
   InMemoryStorageBackend,
   InMemoryStorageFactory,
 } from "../../../packages/storage/dist/index.js";
+import { Inbox } from "../../../packages/server/dist/delivery/inbox.js";
+import { InboxStorage } from "../../../packages/server/dist/delivery/inbox-storage.js";
 import {
   AssignTaskSchema,
   CompleteTaskSchema,
@@ -929,11 +930,12 @@ describe("@spine-event-engine/example-todo", () => {
 
     const targetId = AnyPacker.pack(TaskListIdSchema, listId);
     const targetTypeUrl = TypeUrls.derive(TaskListSchema);
-    const delivery = new DeliveryBuilder()
-      .withContext({ name: "Tasks", multitenant: false })
-      .withStorageFactory(new InMemoryStorageFactory(storageBackend))
-      .withNode("todo-retained-seed")
-      .build();
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(storageBackend),
+      }),
+    );
     const retainedEvent = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-inbox-restart" }),
       context: create(EventContextSchema, {
@@ -952,13 +954,13 @@ describe("@spine-event-engine/example-todo", () => {
         }),
       ),
     });
-    await delivery.inbox.receive({
+    await inbox.receive({
       inboxId: { targetId, targetTypeUrl },
       signalId: "event-inbox-restart",
       signal: AnyPacker.pack(EventSchema, retainedEvent),
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
-      shard: delivery.strategy.shardFor(targetId, targetTypeUrl),
+      shard: UniformAcrossAllShards.singleShard().shardFor(targetId, targetTypeUrl),
       whenReceived: Time.currentTime(),
       version: 1n,
     });

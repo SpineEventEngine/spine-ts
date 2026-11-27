@@ -161,7 +161,7 @@ describe("RemoteInbox direct behavior", () => {
 
     const received = await inbox.receive(pending);
 
-    expect(received.message.keepUntil).toBeUndefined();
+    expect(received.keepUntil).toBeUndefined();
     expect(client.writeOne.mock.calls[0]?.[0].keepUntil).toBeUndefined();
   });
 
@@ -252,7 +252,7 @@ describe("RemoteInbox direct behavior", () => {
       whenReceived: timestampFromDate(new Date(2_000)),
     };
 
-    await expect(inbox.receive(first)).resolves.toMatchObject({ outcome: "WRITTEN" });
+    await expect(inbox.receive(first)).resolves.toMatchObject({ signalId: first.signalId });
     expect(client.writeOne).toHaveBeenCalledTimes(1);
     client.readPage.mockResolvedValueOnce([first, second]).mockResolvedValueOnce([second]);
     await expect(inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] })).resolves.toEqual([

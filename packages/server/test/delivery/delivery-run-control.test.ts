@@ -17,12 +17,13 @@ import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
 import {
   DeliveryBuilder,
+  type Delivery,
   type DeliveryRunOptions,
   ShardIndex,
   UniformAcrossAllShards,
 } from "../../src/index.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../../src/delivery/delivery-ports.js";
-import { deliveryControls, type Delivery } from "../../src/delivery/delivery-builder.js";
+import { deliveryControls } from "../../src/delivery/delivery-builder.js";
 import type { DeliveryControlledRun } from "../../src/delivery/delivery-run-control.js";
 import type { InboxMessage } from "../../src/delivery/inbox.js";
 

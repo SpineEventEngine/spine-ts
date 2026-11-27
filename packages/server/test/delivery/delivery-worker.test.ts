@@ -19,13 +19,14 @@ import { Time } from "@spine-event-engine/core/time";
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, Identifiers, TypeUrls } from "@spine-event-engine/core";
-import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import { CommandValidationError, EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it, vi } from "vitest";
 
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
+import { DuplicateDispatch } from "../../src/delivery/duplicate-dispatch.js";
 import type { DeliveryInbox, DeliveryOperationOptions } from "../../src/delivery/delivery-ports.js";
 import { Inbox, type InboxMessage, type InboxReadOptions } from "../../src/delivery/inbox.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
@@ -761,7 +762,7 @@ describe("Delivery direct worker", () => {
     });
 
     expect(delivered).toHaveLength(1);
-    expect(acknowledged).toEqual([firstWrite.message.id.value]);
+    expect(acknowledged).toEqual([firstWrite.id.value]);
   });
 
   it("reports the authoritative completed row from acknowledgement", async () => {
@@ -831,6 +832,32 @@ describe("Delivery direct worker", () => {
       acknowledged: true,
       outcome: { kind: "acknowledged" },
     });
+  });
+
+  it("acknowledges a guarded duplicate with its typed dispatch outcome", async () => {
+    const shard = ShardIndex.single();
+    const target = message("guarded", "target", shard);
+    const rows = [target];
+    const delivery = createDelivery({
+      rows,
+      mark: async (row) => {
+        remove(rows, row);
+        return row;
+      },
+    });
+
+    await expect(
+      delivery.drainMessage(target, () => {
+        throw new DuplicateDispatch("command");
+      }),
+    ).resolves.toMatchObject({
+      acknowledged: true,
+      outcome: {
+        kind: "acknowledged",
+        duplicate: { kind: "command", code: CommandValidationError.DUPLICATE_COMMAND },
+      },
+    });
+    expect(rows).toEqual([]);
   });
 
   it("runs one owned delivered cleanup page after each delivery page and on an empty drain", async () => {

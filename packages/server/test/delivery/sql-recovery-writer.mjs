@@ -101,8 +101,7 @@ try {
       )
     : undefined;
   const facts = {
-    outcome: result.outcome,
-    id: result.message.id.value,
+    id: result.id.value,
     signalId: input.signalId,
     eventHex: Buffer.from(toBinary(EventSchema, event)).toString("hex"),
     pid: process.pid,

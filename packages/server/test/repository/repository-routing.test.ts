@@ -43,11 +43,13 @@ import {
   CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
+  CommandValidationError as CommandValidationCode,
   EmailAddressSchema,
   type EventContext,
   type Event as SpineEvent,
   EventContextSchema,
   EventIdSchema,
+  EventValidationError,
   EventSchema,
   InternetDomainSchema,
   MessageIdSchema,
@@ -5155,7 +5157,7 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("retries a failed state-only Aggregate reaction without exposing or duplicating state", async () => {
+  it("commits a state-only Aggregate reaction without a synthetic journal Event", async () => {
     const setup = createTestSetup(true);
     const factory = new FailingSourceDiagnosticStorageFactory();
     await configureStorage(setup, factory);
@@ -5183,12 +5185,6 @@ describe("repository signal routing", () => {
       eventHistory: true,
     });
     try {
-      await expect(target.deliver(row)).rejects.toThrow(/forced.*failure/);
-      await expect(
-        context.stand().read(ProjectStateSchema, "task-count-retry"),
-      ).resolves.toBeUndefined();
-      await expect(storage.readCurrent("task-count-retry")).resolves.toBeUndefined();
-
       await expect(target.deliver(row)).resolves.toBeUndefined();
       await expect(
         context.stand().read(ProjectStateSchema, "task-count-retry"),
@@ -5197,9 +5193,12 @@ describe("repository signal routing", () => {
         version: 1n,
         state: { id: "task-count-retry", name: "1" },
       });
-      const history = await storage.readEvents("task-count-retry");
-      expect(history).toHaveLength(1);
-      expect(history[0]?.message?.typeUrl).toBe(TypeUrls.derive(ProjectCreatedSchema));
+      expect(await storage.readEvents("task-count-retry")).toEqual([]);
+      await expect(target.deliver(row)).resolves.toBeUndefined();
+      await expect(storage.readCurrent("task-count-retry")).resolves.toMatchObject({
+        version: 2n,
+        state: { id: "task-count-retry", name: "2" },
+      });
     } finally {
       await context.close();
       await delivery.close();
@@ -10572,6 +10571,109 @@ describe("repository signal routing", () => {
     await secondContext.close();
   });
 
+  it("reports a duplicate Event from emitted evidence across repository reload", async () => {
+    const setup = createTestSetup(true);
+    ProducingGuardedAggregate.reset();
+    await configureStorage(setup, new InMemoryStorageFactory());
+    const repository = createProducingGuardedAggregateRepository();
+    routeAggregateTargets(repository, ["aggregate-direct"]);
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
+    const target = requireEntityInboxTarget(repository);
+    const stored = await storeEntityInboxEvent(
+      delivery,
+      createProjectCreated("event-direct-duplicate", "aggregate-source"),
+      new Date("2026-07-08T09:05:30.000Z"),
+      1n,
+      { targetId: "aggregate-direct", targetTypeUrl: TypeUrls.derive(ProjectStateSchema) },
+    );
+
+    await target.deliver(stored);
+    await expect(target.deliver(stored)).rejects.toMatchObject({
+      code: EventValidationError.DUPLICATE_EVENT,
+      kind: "event",
+    });
+    await context.close();
+    const restored = createProducingGuardedAggregateRepository();
+    routeAggregateTargets(restored, ["aggregate-direct"]);
+    const restoredContext = await buildContext(
+      BoundedContext.singleTenant("Tasks").add(restored),
+      setup,
+    );
+    await expect(requireEntityInboxTarget(restored).deliver(stored)).rejects.toMatchObject({
+      code: EventValidationError.DUPLICATE_EVENT,
+      kind: "event",
+    });
+    expect(ProducingGuardedAggregate.calls).toBe(1);
+    await restoredContext.close();
+  });
+
+  it("reports a duplicate Command after its emitted Event records the typed cause", async () => {
+    const setup = createTestSetup(true);
+    await configureStorage(setup, new InMemoryStorageFactory());
+    const handlers = HandlerMetadataValues.defineArity(
+      ProjectAggregate,
+      ProjectStateSchema,
+      (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+      [
+        {
+          kind: "command-assignment",
+          methodName: "createProject",
+          parameterCount: 1,
+          outcomes: handlerOutcomes([ProjectCreatedSchema]),
+        },
+      ],
+    );
+    const repository = new Repository({
+      entityType: ProjectAggregate,
+      schema: ProjectStateSchema,
+      handlers,
+      events: [ProjectCreatedSchema],
+      doubleDispatchGuard: { depth: 1 },
+    });
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
+    const target = requireEntityInboxTarget(repository);
+    const stored = await storeEntityInboxCommand(
+      delivery,
+      createContextlessGeneratedCreateProject("command-direct-duplicate", "command-target"),
+      new Date("2026-07-08T09:05:30.000Z"),
+      1n,
+      { targetTypeUrl: TypeUrls.derive(ProjectStateSchema) },
+    );
+
+    await target.deliver(stored);
+    await expect(target.deliver(stored)).rejects.toMatchObject({
+      code: CommandValidationCode.DUPLICATE_COMMAND,
+      kind: "command",
+    });
+    await context.close();
+  });
+
+  it("uses emitted Event causes to guard Process Manager Commands", async () => {
+    const setup = createTestSetup(true);
+    DiagnosticOnlyProcessManager.calls = 0;
+    await configureStorage(setup, new InMemoryStorageFactory());
+    const repository = createDiagnosticOnlyProcessManagerRepository(true);
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
+    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
+    const target = requireEntityInboxTarget(repository);
+    const stored = await storeEntityInboxCommand(
+      delivery,
+      createAggregateCommand("pm-command-duplicate", "pm-command-target"),
+      new Date("2026-07-08T09:05:30.000Z"),
+      1n,
+    );
+
+    await target.deliver(stored);
+    await expect(target.deliver(stored)).rejects.toMatchObject({
+      code: CommandValidationCode.DUPLICATE_COMMAND,
+      kind: "command",
+    });
+    expect(DiagnosticOnlyProcessManager.calls).toBe(1);
+    await context.close();
+  });
+
   it("closes guard probe handles for both entity kinds on success, duplicates, and failures", async () => {
     const setup = createTestSetup(true);
     const aggregateFactory = new CountingProbeStorageFactory();
@@ -11135,7 +11237,7 @@ describe("repository signal routing", () => {
     await context.close();
   });
 
-  it("trims completed lanes behind an active lane without breaking its serialization", async () => {
+  it("serializes an active lane while no-output Process Manager Events run independently", async () => {
     const setup = createTestSetup(true);
     BlockingProcessManager.reset();
     BlockingProcessManager.blockingId = "pm-guard-trim-active";
@@ -11187,7 +11289,7 @@ describe("repository signal routing", () => {
     );
     BlockingProcessManager.release();
     await expect(Promise.all([first, duplicateActive])).resolves.toEqual([undefined, undefined]);
-    expect(BlockingProcessManager.completedCalls).toBe(5);
+    expect(BlockingProcessManager.completedCalls).toBe(7);
     await context.close();
   });
 
@@ -11360,7 +11462,7 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("guards repeated Process Manager inbox delivery per target with the retained source event", async () => {
+  it("runs a Process Manager reactor again when no emitted Event records its cause", async () => {
     const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
@@ -11379,7 +11481,7 @@ describe("repository signal routing", () => {
     await target.deliver(stored);
     await target.deliver(stored);
 
-    expect(RoutingProcessManager.eventCalls).toBe(1);
+    expect(RoutingProcessManager.eventCalls).toBe(3);
   });
 
   it("executes process-manager event reactors and stores mutated state in Stand", async () => {
@@ -14538,7 +14640,7 @@ describe("repository signal routing", () => {
       whenReceived: timestampFromDate(new Date("2026-08-11T04:56:00.000Z")),
       version: 1n,
     });
-    expect(written.outcome).toBe("WRITTEN");
+    expect(written.signalId).toBe("pending-projection-event");
     const context = await buildContext(
       BoundedContext.singleTenant("Tasks").add(createExecutingProjectionRepository()),
       setup,
@@ -14886,7 +14988,7 @@ describe("repository signal routing", () => {
     await expect(storage.readCurrent("pm-void")).resolves.toBeUndefined();
     await expect(storage.readStates("pm-void")).resolves.toEqual([]);
     await expect(context.stand().read(ProjectQueueStateSchema, "pm-void")).resolves.toBeUndefined();
-    await expect(storage.readEvents("pm-void")).resolves.toHaveLength(1);
+    await expect(storage.readEvents("pm-void")).resolves.toEqual([]);
   });
 
   it("dispatches a command-only Process Manager reaction without advancing state", async () => {
@@ -14923,7 +15025,7 @@ describe("repository signal routing", () => {
     await expect(
       context.stand().readVersioned(ProjectQueueStateSchema, "pm-command-only"),
     ).resolves.toBeUndefined();
-    await expect(storage.readEvents("pm-command-only")).resolves.toHaveLength(1);
+    await expect(storage.readEvents("pm-command-only")).resolves.toEqual([]);
   });
 
   it("dispatches each native @Command union branch from generated handler metadata", async () => {
@@ -17086,9 +17188,9 @@ function createProcessManagerCommandAndReactRepository(): Repository<typeof Rout
   });
 }
 
-function createDiagnosticOnlyProcessManagerRepository(): Repository<
-  typeof DiagnosticOnlyProcessManager
-> {
+function createDiagnosticOnlyProcessManagerRepository(
+  guarded = false,
+): Repository<typeof DiagnosticOnlyProcessManager> {
   const handlers = HandlerMetadataValues.defineArity(
     DiagnosticOnlyProcessManager,
     ProjectQueueStateSchema,
@@ -17110,6 +17212,7 @@ function createDiagnosticOnlyProcessManagerRepository(): Repository<
     handlers,
     events: [ProjectCreatedSchema],
     processManagerEventHistory: true,
+    ...(guarded ? { doubleDispatchGuard: { depth: 1 } } : {}),
   });
 }
 
@@ -17753,7 +17856,7 @@ async function storeEntityInboxCommand(
     version,
   });
 
-  return message.message;
+  return message;
 }
 
 async function storeEntityInboxEvent(
@@ -17786,7 +17889,7 @@ async function storeEntityInboxEvent(
     version,
   });
 
-  return message.message;
+  return message;
 }
 
 function readAggregateId(command: SpineCommand): string {

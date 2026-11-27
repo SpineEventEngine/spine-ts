@@ -29,6 +29,7 @@ import type { DeliveryInbox, DeliveryWorkRegistry } from "./delivery-ports.js";
 import type { DeliveryControlledRun } from "./delivery-run-control.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry, shardedWorkRegistryAccess } from "./sharded-work-registry.js";
+import { deliveryPortAccess } from "./delivery-port-access.js";
 
 const defaultContext: StorageContext = Object.freeze({
   name: "__System_Delivery__",
@@ -36,12 +37,12 @@ const defaultContext: StorageContext = Object.freeze({
 });
 const defaultPageSize = 100;
 const controlledDeliveryRunners = new WeakMap<
-  Delivery,
+  PublicDelivery,
   (options: DeliveryControlledRun) => Promise<DeliveryResult>
 >();
-const controlledDeliveryWakers = new WeakMap<Delivery, (shard: ShardIndex) => void>();
-const activeCounts = new WeakMap<Delivery, () => number>();
-const activeShards = new WeakMap<Delivery, (shard: ShardIndex) => boolean>();
+const controlledDeliveryWakers = new WeakMap<PublicDelivery, (shard: ShardIndex) => void>();
+const activeCounts = new WeakMap<PublicDelivery, () => number>();
+const activeShards = new WeakMap<PublicDelivery, (shard: ShardIndex) => boolean>();
 
 /**
  * Provides package-local controls for builder-created deliveries.
@@ -56,7 +57,7 @@ export interface DeliveryControls {
    * @returns Its controlled runner, if present.
    */
   runner(
-    delivery: Delivery,
+    delivery: PublicDelivery,
   ): ((options: DeliveryControlledRun) => Promise<DeliveryResult>) | undefined;
 
   /**
@@ -65,7 +66,7 @@ export interface DeliveryControls {
    * @param delivery Retained Delivery instance.
    * @returns The active Delivery wake callback, if one is registered.
    */
-  waker(delivery: Delivery): ((shard: ShardIndex) => void) | undefined;
+  waker(delivery: PublicDelivery): ((shard: ShardIndex) => void) | undefined;
 
   /**
    * Registers the environment's single retained core for managed runs.
@@ -80,7 +81,7 @@ export interface DeliveryControls {
    * @param delivery Selects the node-local delivery.
    * @returns The count of active distinct shard runs.
    */
-  activeRunCount(delivery: Delivery): number;
+  activeRunCount(delivery: PublicDelivery): number;
 
   /**
    * Checks whether a shard already has a joinable local run.
@@ -89,7 +90,7 @@ export interface DeliveryControls {
    * @param shard Selects the candidate shard.
    * @returns Whether that shard has an active run.
    */
-  isShardActive(delivery: Delivery, shard: ShardIndex): boolean;
+  isShardActive(delivery: PublicDelivery, shard: ShardIndex): boolean;
 }
 
 /**
@@ -102,20 +103,20 @@ export const deliveryControls: DeliveryControls = Object.freeze({
    * Finds controlled execution for a builder-created delivery.
    */
   runner(
-    delivery: Delivery,
+    delivery: PublicDelivery,
   ): ((options: DeliveryControlledRun) => Promise<DeliveryResult>) | undefined {
     return controlledDeliveryRunners.get(delivery);
   },
-  waker(delivery: Delivery): ((shard: ShardIndex) => void) | undefined {
+  waker(delivery: PublicDelivery): ((shard: ShardIndex) => void) | undefined {
     return controlledDeliveryWakers.get(delivery);
   },
   managed(core: CoreDelivery): ApplicationDelivery {
     return new BoundApplicationDelivery(core);
   },
-  activeRunCount(delivery: Delivery): number {
+  activeRunCount(delivery: PublicDelivery): number {
     return activeCounts.get(delivery)?.() ?? 0;
   },
-  isShardActive(delivery: Delivery, shard: ShardIndex): boolean {
+  isShardActive(delivery: PublicDelivery, shard: ShardIndex): boolean {
     return activeShards.get(delivery)?.(shard) ?? false;
   },
 });
@@ -294,7 +295,7 @@ export interface Delivery {
 /**
  * Runs deliveries using the handlers registered in an Application.
  */
-export interface ApplicationDelivery extends Delivery {
+export interface ApplicationDelivery extends PublicDelivery {
   /**
    * Starts or joins delivery from one shard using registered application handlers.
    *
@@ -307,6 +308,11 @@ export interface ApplicationDelivery extends Delivery {
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<DeliveryAttempt>;
 }
+
+/**
+ * Application-facing delivery controls without direct Inbox reception.
+ */
+export type PublicDelivery = Omit<Delivery, "inbox">;
 
 /**
  * Configures and snapshots one public {@link Delivery}.
@@ -462,7 +468,7 @@ export class DeliveryBuilder {
    *
    * @returns The configured delivery.
    */
-  build(): Delivery {
+  build(): PublicDelivery {
     const context = this.#context ?? defaultContext;
     const strategy = DeliveryValues.snapshotStrategy(
       this.#strategy ?? UniformAcrossAllShards.singleShard(),
@@ -533,12 +539,12 @@ export class LocalDeliveryFacility {
   /**
    * Stores and reads local Inbox rows.
    */
-  readonly inbox: Inbox;
+  readonly #inbox: Inbox;
 
   /**
    * Coordinates local shard sessions.
    */
-  readonly workRegistry: ShardedWorkRegistry;
+  readonly #workRegistry: ShardedWorkRegistry;
 
   /**
    * Prepares local ports for one application environment.
@@ -556,8 +562,14 @@ export class LocalDeliveryFacility {
     const context = defaultContext;
     this.storageFactory = config.storageFactory;
     this.notifications = { kind: "custom", shardObserver: config.shardObserver };
-    this.inbox = new Inbox(new InboxStorage({ context, storageFactory: config.storageFactory }));
-    this.workRegistry = new ShardedWorkRegistry({ context, storageFactory: config.storageFactory });
+    this.#inbox = new Inbox(new InboxStorage({ context, storageFactory: config.storageFactory }));
+    this.#workRegistry = new ShardedWorkRegistry({
+      context,
+      storageFactory: config.storageFactory,
+    });
+    Object.defineProperty(this, deliveryPortAccess, {
+      value: () => ({ inbox: this.#inbox, workRegistry: this.#workRegistry }),
+    });
   }
 
   /**
@@ -575,14 +587,14 @@ export class LocalDeliveryFacility {
    * @returns Completion after local records close.
    */
   async close(): Promise<void> {
-    await Promise.all([this.inbox.storage.close(), this.workRegistry.close()]);
+    await Promise.all([this.#inbox.storage.close(), this.#workRegistry.close()]);
   }
 }
 
 /**
  * Exposes one configured Delivery through the public facade.
  */
-class BuiltDelivery implements Delivery {
+class BuiltDelivery implements PublicDelivery {
   readonly context: StorageContext;
 
   readonly storageFactory: StorageFactory;
@@ -594,8 +606,6 @@ class BuiltDelivery implements Delivery {
   readonly worker: WorkerId;
 
   readonly pageSize: number;
-
-  readonly inbox: DeliveryInbox;
 
   readonly #core: CoreDelivery;
 
@@ -612,7 +622,6 @@ class BuiltDelivery implements Delivery {
     this.node = core.node;
     this.worker = core.worker;
     this.pageSize = core.pageSize;
-    this.inbox = core.publicInbox();
     controlledDeliveryRunners.set(this, (options) => core.runControlled(options));
     controlledDeliveryWakers.set(this, (shard) => {
       core.wake(shard);

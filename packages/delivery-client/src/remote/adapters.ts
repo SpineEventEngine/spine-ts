@@ -26,10 +26,9 @@ import type {
   ExclusiveDeliveryWorkSession,
   InboxMessage,
   InboxMessageId,
-  InboxMessageInput,
   InboxReadOptions,
-  InboxWriteResult,
 } from "@spine-event-engine/server";
+import type { InboxMessageInput } from "@spine-event-engine/server/spi/delivery";
 import { ShardIndex } from "@spine-event-engine/server";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
@@ -108,10 +107,10 @@ export class RemoteInbox implements DeliveryInbox {
   async receive(
     input: InboxMessageInput,
     options?: DeliveryOperationOptions,
-  ): Promise<InboxWriteResult> {
+  ): Promise<InboxMessage> {
     const message = RemoteValues.receiveMessage(input);
     await this.client.writeOne(message, options);
-    return RemoteValues.freeze({ outcome: "WRITTEN" as const, message });
+    return RemoteValues.freeze(message);
   }
 
   /**

@@ -37,6 +37,7 @@ import { boundedContextAccess, type BoundedContext } from "../context/bounded-co
 import type { EnvironmentDeliveryPorts } from "../context/local-inbox-handoff.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
 import { Environment, EnvironmentType } from "./environment.js";
+import { deliveryPortAccess } from "../delivery/delivery-port-access.js";
 
 /**
  * Common closeable facility owned by a server environment.
@@ -66,14 +67,24 @@ export interface ServerEnvironmentDelivery extends ServerEnvironmentCloseable {
   open(): unknown;
 
   /**
-   * Supplies the Inbox port used by shared environment Delivery.
+   * Returns framework ports through the internal delivery SPI.
+   *
+   * @returns Inbox and shard registry ports after the facility opens.
    */
-  readonly inbox: DeliveryInbox;
+  [deliveryPortAccess]?(): {
+    readonly inbox: DeliveryInbox;
+    readonly workRegistry: DeliveryWorkRegistry;
+  };
 
   /**
-   * Supplies the shard work-registry port used by shared environment Delivery.
+   * Application-managed Inbox provider port, when supplied directly.
    */
-  readonly workRegistry: DeliveryWorkRegistry;
+  readonly inbox?: DeliveryInbox;
+
+  /**
+   * Application-managed shard registry port, when supplied directly.
+   */
+  readonly workRegistry?: DeliveryWorkRegistry;
 
   /**
    * Supplies the built-in remote stream for available shard work.
@@ -1403,8 +1414,8 @@ const ServerEnvironmentValues = Object.freeze({
     if (typeof candidate.open !== "function") return undefined;
     if (
       typeof candidate.close !== "function" ||
-      !("inbox" in candidate) ||
-      !("workRegistry" in candidate)
+      (typeof candidate[deliveryPortAccess] !== "function" &&
+        (!("inbox" in candidate) || !("workRegistry" in candidate)))
     ) {
       throw new TypeError("ServerEnvironmentDelivery requires inbox and workRegistry ports.");
     }
@@ -1473,9 +1484,14 @@ const ServerEnvironmentValues = Object.freeze({
   ports(delivery: ServerEnvironmentCloseable | undefined): EnvironmentDeliveryPorts | undefined {
     const remote = ServerEnvironmentValues.openableDelivery(delivery);
     if (remote === undefined) return undefined;
+    const internal = remote[deliveryPortAccess]?.();
+    const inbox = internal?.inbox ?? remote.inbox;
+    const workRegistry = internal?.workRegistry ?? remote.workRegistry;
+    if (inbox === undefined || workRegistry === undefined)
+      throw new TypeError("ServerEnvironmentDelivery requires inbox and workRegistry ports.");
     return {
-      inbox: remote.inbox,
-      workRegistry: remote.workRegistry,
+      inbox,
+      workRegistry,
       ...(remote.source === undefined ? {} : { source: remote.source }),
       ...(remote.notifications === undefined ? {} : { notifications: remote.notifications }),
       ...(remote.endpoint === undefined ? {} : { endpoint: remote.endpoint }),

@@ -635,19 +635,20 @@ The following runtime pieces are not available in the verified local/example con
   entity IDs, or a starting time and has no durable operation identity,
   progress, Inbox catch-up lifecycle, restart, resumption, or cross-process
   historical/live coordination. It is not Projection catch-up;
-- production transport-backed/background worker topology and supervision,
-  production catch-up orchestration, durable production storage adapters, entity
-  storage/cache catch-up, and production tenant-index policy. Durable inbox
-  records and shard ownership are present; delivered rows are the deduplication
-  fact, with no per-message claim or separate dedup record;
+- production catch-up orchestration, Entity storage/cache catch-up, and
+  production tenant-index policy;
 - richer query filtering, retained subscription update replay, and
   cross-process subscription stream coordination;
 - full system-context runtime, command-log repositories, system event taxonomy,
   tracing/monitors/debug UI, deployment/authentication/tracing/health
   hardening, and broader production server verification; and
-- remote/multi-host transport topology, broker topology/process supervision,
-  retry monitors/workers, production delivery policy, and transport-backed
-  worker topology beyond the framework's local delivery loop.
+- deployment-specific broker topology and process supervision for external brokers.
+
+For remote shard delivery, each application node connects to the Delivery
+server's work stream. For example, a subscriber can start after a Command
+was stored, learn that shard 3 is free, and pick it up. The Delivery server
+can distribute shard storage across a fixed number of subprocesses.
+[Delivery server reference](../../packages/delivery-server/REFERENCE.md)
 
 ## Server Runtime
 
@@ -787,9 +788,11 @@ If the session expires with work remaining, the server immediately offers the
 shard again. [Recovery settings](../../packages/delivery-server/REFERENCE.md#session-lifetime-and-work-reminders)
 
 With direct local delivery, posting can wait for the exact Command or
-Projection input to reach its handler. With server observation or an
-application-supplied observer, posting can return after the inbox write. A
-worker then processes the row on this node or another application node. For Agents,
+Projection input to reach its handler. When the Delivery server stores the
+message, the server's observation stream wakes workers. When the application
+stores the message, it can supply a custom observer. In both cases, posting
+can return after the inbox write. A worker on any application node can then
+pick up the shard and process its messages. For Agents,
 an original Agent input still `TO_DELIVER` may be redelivered after interruption
 and create a new model call. Saved model calls do not replay from pending
 attributes or history.

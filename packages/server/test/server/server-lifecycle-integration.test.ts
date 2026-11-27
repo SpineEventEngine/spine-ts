@@ -268,7 +268,9 @@ describe("Server lifecycle integration", () => {
         secondContext,
       ]);
       expect(environment.delivery).toBe(delivery);
-      await expect(delivery.inbox.read(ShardIndex.single())).resolves.toEqual([]);
+      await expect(
+        serverEnvironmentAccess.coreDelivery(environment).publicInbox().read(ShardIndex.single()),
+      ).resolves.toEqual([]);
       await second.close();
       expect(serverEnvironmentAccess.openContexts(environment)).toEqual([
         firstContext,

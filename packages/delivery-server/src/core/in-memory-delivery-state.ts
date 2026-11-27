@@ -77,8 +77,8 @@ interface ShardBucket {
 interface DeliveryOrderKey {
   readonly seconds: bigint;
   readonly nanos: number;
-  /** Breaks timestamp ties. A timestamp alone seeks past every message at that time. */
-  readonly message?: { readonly version: number; readonly uuid: Buffer };
+  readonly version: number;
+  readonly uuid: Buffer;
 }
 
 /**
@@ -139,7 +139,7 @@ export class InMemoryDeliveryState {
   }
 
   /**
-   * Deletes the stored members of one validated shard batch in one ordered-array pass.
+   * Deletes the stored members of a validated shard batch from both trees.
    *
    * @param shard Identifies the validated batch shard.
    * @param messages Supplies requested row identities, including possible duplicates.
@@ -235,8 +235,13 @@ export class InMemoryDeliveryState {
     const rows = this.#buckets.get(DeliveryShards.key(shard))?.ordered;
     if (rows === undefined) return [];
     const page: InboxMessage[] = [];
-    const start = sinceWhen === undefined ? rows.begin() : rows.lowerBound(sinceWhen);
-    for (const cursor = start; !cursor.equals(rows.end()); cursor.next()) {
+    // Any stored Protobuf version is finite. This key skips every message at sinceWhen.
+    const start =
+      sinceWhen === undefined
+        ? rows.begin()
+        : rows.upperBound({ ...sinceWhen, version: Infinity, uuid: Buffer.alloc(0) });
+    const end = rows.end();
+    for (const cursor = start; !cursor.equals(end); cursor.next()) {
       page.push(DeliveryMessages.copy(cursor.pointer[1]));
       if (page.length === size) break;
     }
@@ -404,7 +409,8 @@ const DeliveryRowOrder = Object.freeze({
     return {
       seconds: row.whenReceived.seconds,
       nanos: row.whenReceived.nanos,
-      message: { version: row.version, uuid: Buffer.from(row.id.uuid) },
+      version: row.version,
+      uuid: Buffer.from(row.id.uuid),
     };
   },
 
@@ -418,11 +424,7 @@ const DeliveryRowOrder = Object.freeze({
   compare(left: DeliveryOrderKey, right: DeliveryOrderKey): number {
     if (left.seconds !== right.seconds) return left.seconds < right.seconds ? -1 : 1;
     if (left.nanos !== right.nanos) return left.nanos < right.nanos ? -1 : 1;
-    if (left.message === undefined) return right.message === undefined ? 0 : 1;
-    if (right.message === undefined) return -1;
-    return (
-      left.message.version - right.message.version ||
-      Buffer.compare(left.message.uuid, right.message.uuid)
-    );
+    if (left.version !== right.version) return left.version < right.version ? -1 : 1;
+    return Buffer.compare(left.uuid, right.uuid);
   },
 });

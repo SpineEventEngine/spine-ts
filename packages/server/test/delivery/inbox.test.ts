@@ -29,6 +29,19 @@ import { InboxMessageError, ShardIndex } from "../../src/index.js";
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Inbox", () => {
+  it("replaces the same message ID with one ordinary provider write", async () => {
+    const inbox = open("ReplaceInboxMessage");
+    const original = createMessage("same-id", "first", 1n);
+    const replacement = { ...createMessage("same-id", "second", 2n), id: original.id };
+
+    await inbox.storage.write(original);
+    const written = await inbox.storage.write(replacement);
+
+    expect(written.signalId).toBe("second");
+    expect((await inbox.readMessage(original.id))?.signalId).toBe("second");
+    expect((await inbox.read(ShardIndex.single())).map((row) => row.id.value)).toEqual(["same-id"]);
+  });
+
   it("orders adjacent-second receipts and continues pages by full timestamp", async () => {
     const inbox = open("AdjacentSecondOrder");
     const before = create(TimestampSchema, { seconds: 100n, nanos: 999_000_000 });
@@ -74,8 +87,8 @@ describe("Inbox", () => {
     const inbox = open("PendingWithoutDeadline");
     const received = await inbox.receive(input(createMessage("pending-deadline", "signal", 1n)));
 
-    expect(received.message.keepUntil).toBeUndefined();
-    expect((await inbox.readMessage(received.message.id))?.keepUntil).toBeUndefined();
+    expect(received.keepUntil).toBeUndefined();
+    expect((await inbox.readMessage(received.id))?.keepUntil).toBeUndefined();
   });
 
   it("deletes an eligible delivered ID without a session or exact row snapshot", async () => {
@@ -107,13 +120,13 @@ describe("Inbox", () => {
       ...createMessage("precise", "signal", 1n),
       whenReceived: create(TimestampSchema, { seconds: 1n, nanos: 234_001_000 }),
     });
-    expect(receipt.message.whenReceived.seconds).toBe(1n);
-    expect(receipt.message.whenReceived.nanos).toBe(234_001_000);
+    expect(receipt.whenReceived.seconds).toBe(1n);
+    expect(receipt.whenReceived.nanos).toBe(234_001_000);
 
     const page = await inbox.read(ShardIndex.single());
     expect(page[0]?.whenReceived.seconds).toBe(1n);
     expect(page[0]?.whenReceived.nanos).toBe(234_001_000);
-    const direct = await inbox.readMessage(receipt.message.id);
+    const direct = await inbox.readMessage(receipt.id);
     expect(direct?.whenReceived.seconds).toBe(1n);
     expect(direct?.whenReceived.nanos).toBe(234_001_000);
   });
@@ -258,8 +271,8 @@ describe("Inbox", () => {
       "first",
       "later",
     ]);
-    expect(await inbox.readMessage(written.message.id)).toEqual(written.message);
-    expect(await inbox.markDelivered(written.message)).toMatchObject({
+    expect(await inbox.readMessage(written.id)).toEqual(written);
+    expect(await inbox.markDelivered(written)).toMatchObject({
       status: "DELIVERED",
       signalId: "first",
     });

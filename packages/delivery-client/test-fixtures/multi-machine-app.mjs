@@ -1,11 +1,6 @@
-import { Time } from "@spine-event-engine/core/time";
-
-import { create } from "@bufbuild/protobuf";
-import { AnyPacker, Identifiers, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
-import { DeliveryBuilder, DeliveryClient, RemoteInbox } from "@spine-event-engine/delivery-client";
-import { CommandContextSchema, CommandSchema } from "@spine-event-engine/proto";
-import { CreateProjectSchema } from "@spine-event-engine/server-test-fixtures/entity/project_commands_pb.js";
-import { ProjectStateSchema } from "@spine-event-engine/server-test-fixtures/entity/project_states_pb.js";
+import { randomUUID } from "node:crypto";
+import { DeliveryBuilder, DeliveryClient } from "@spine-event-engine/delivery-client";
+import { projectInboxInput } from "./project-inbox-input.ts";
 import process from "node:process";
 import {
   Application,
@@ -21,7 +16,6 @@ export function createMultiMachineApplication({ baseUrl, node }) {
     observationReconnects: 2,
     observationReconnectBackoffMs: 50,
   });
-  const inbox = new RemoteInbox(client);
   let application;
   let environment;
   let directSession;
@@ -75,25 +69,10 @@ export function createMultiMachineApplication({ baseUrl, node }) {
       await start();
     },
     async write(signalId) {
-      await inbox.receive({
-        inboxId: {
-          targetId: Identifiers.pack("string", signalId),
-          targetTypeUrl: TypeUrls.derive(ProjectStateSchema),
-        },
-        signalId,
-        signal: AnyPacker.pack(
-          CommandSchema,
-          SignalEnvelopes.command({
-            schema: CreateProjectSchema,
-            message: create(CreateProjectSchema, { id: signalId, name: signalId }),
-            context: create(CommandContextSchema),
-          }),
-        ),
-        label: "HANDLE_COMMAND",
-        status: "TO_DELIVER",
-        shard: ShardIndex.single(),
-        whenReceived: Time.currentTime(),
-        version: 1n,
+      const shard = ShardIndex.single();
+      await client.writeOne({
+        ...projectInboxInput(signalId, shard),
+        id: { value: randomUUID(), shard },
       });
     },
     armStall() {

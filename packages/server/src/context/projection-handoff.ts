@@ -18,7 +18,7 @@ import { deliveryTenantKey } from "../delivery/delivery-tenant.js";
 
 import { Delivery } from "../delivery/delivery.js";
 import { receptionObservation } from "../delivery/reception-observation.js";
-import type { InboxMessage, InboxWriteResult } from "../delivery/inbox.js";
+import type { InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import { UniformAcrossAllShards, type DeliveryStrategy } from "../delivery/delivery-builder.js";
 import type { ProjectionInbox, ProjectionInboxTarget } from "../repository/repository.js";
@@ -50,8 +50,6 @@ export class LocalProjectionInbox implements ProjectionInbox {
    * Selects a shard for each routed Projection target.
    */
   readonly #strategy: DeliveryStrategy;
-
-  readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
 
   readonly #inFlightMessageIds = new Set<string>();
 
@@ -131,11 +129,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
   ): Promise<InboxMessage> {
     const routedInput = this.#route(input);
     const routed = this.#readiness.route(delivery);
-    return await InboxHandoff.coordinate({
-      handoffs: this.#inFlightHandoffs,
-      key: InboxHandoff.key(routedInput, deliveryTenantId),
-      onHandoff: () => this.#receiveAndSchedule(routed, routedInput, deliveryTenantId),
-    });
+    return await this.#receiveAndSchedule(routed, routedInput, deliveryTenantId);
   }
 
   /**
@@ -144,7 +138,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
    * @param delivery Delivery used for the stored row.
    * @param input Projection Inbox input.
    * @param deliveryTenantId Tenant selected for the row.
-   * @returns The accepted Inbox receipt.
+   * @returns The stored Inbox message.
    */
   async #receiveAndSchedule(
     delivery: Delivery,
@@ -153,19 +147,14 @@ export class LocalProjectionInbox implements ProjectionInbox {
   ): Promise<InboxMessage> {
     await this.#onAdmit(deliveryTenantId);
     const written = await this.#writeInboxRow(delivery, input);
-    this.#trackMessage(written.message);
-    const processing = this.#drainWritten(
-      delivery,
-      written.message,
-      written.outcome === "WRITTEN",
-      deliveryTenantId,
-    );
+    this.#trackMessage(written);
+    const processing = this.#drainWritten(delivery, written, deliveryTenantId);
     void processing
       .finally(() => {
-        this.#untrackMessage(written.message);
+        this.#untrackMessage(written);
       })
       .catch(() => undefined);
-    return written.message;
+    return written;
   }
 
   /**
@@ -173,9 +162,9 @@ export class LocalProjectionInbox implements ProjectionInbox {
    *
    * @param delivery Delivery containing the Inbox storage.
    * @param input Projection input with its selected shard.
-   * @returns The stored Inbox receipt.
+   * @returns The stored Inbox message.
    */
-  #writeInboxRow(delivery: Delivery, input: RoutedProjectionInput): Promise<InboxWriteResult> {
+  #writeInboxRow(delivery: Delivery, input: RoutedProjectionInput): Promise<InboxMessage> {
     return delivery.inbox.receive({
       inboxId: input.inboxId,
       signalId: input.signalId,
@@ -189,17 +178,15 @@ export class LocalProjectionInbox implements ProjectionInbox {
   }
 
   /**
-   * Notifies a custom observer for a new row or starts its local route.
+   * Notifies a custom observer or starts its local route.
    *
    * @param delivery Reads the stored row during direct draining.
    * @param message Supplies the stored Inbox row.
-   * @param newlyWritten Distinguishes a new write from a duplicate receipt.
    * @param deliveryTenantId Identifies its tenant when present.
    */
   async #drainWritten(
     delivery: Delivery,
     message: InboxMessage,
-    newlyWritten: boolean,
     deliveryTenantId?: TenantId,
   ): Promise<void> {
     const endpoint = InboxHandoff.configuredEndpoint(
@@ -209,7 +196,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
     await this.#readiness
       .claim(
         endpoint === undefined ? undefined : InboxHandoff.ready(endpoint, deliveryTenantId),
-        newlyWritten ? message : undefined,
+        message,
       )
       .complete(() =>
         this.#isAcknowledged(message)

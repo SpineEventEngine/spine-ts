@@ -687,18 +687,27 @@ Application; use the same mapping in processes sharing delivery
 storage. See [receiver-specific shard policies](../packages/server/REFERENCE.md#receiver-specific-shard-policies)
 for a complete example using the Orders Projections.
 
-All Bounded Contexts use the Delivery configured in `ServerEnvironment`. With local Delivery, posting waits for Inbox reception and scheduling. Delivery acknowledges an Agent input after its handler and save finish; a returned model Command can continue running afterward. With remote Delivery, posting returns after the remote Inbox accepts the signal. Processing may happen afterward on another application process. The built-in work stream notifies every connected node about free shards with pending rows and scans current work when a node connects or reconnects. It can remain idle without delaying startup.
+All Bounded Contexts use the Delivery configured in `ServerEnvironment`.
+Application code posts a Command or Event to its bus. The repository selects
+each recipient, then the framework stores an `InboxMessage` for that recipient.
 
-With `DeliveryBuilder.remote({ endpoint })` from `@spine-event-engine/delivery-client`,
-each node can process different shards concurrently. To limit automatic pickups on
+With `DeliveryBuilder.remote({ endpoint })`, every application node opens
+the Delivery server's work stream. Suppose one node posts a Command for a
+recipient in shard 3 of 8. Each connected node can hear that shard 3 has work.
+The first node to take the shard reads the Command and runs its handler. If a
+second Command arrives while the worker holds shard 3, the server checks for
+pending work when the worker releases the shard. A newly connected node also
+discovers free shards with work that was saved before it started.
+
+A node can process different shards concurrently. To limit automatic pickups on
 each node, set `notifications: { kind: "delivery-server", maxConcurrentDeliveries: 2 }`.
 
-An application that already uses an external message service can use it to
-tell another node where work is waiting. The application supplies the
-`queue` publisher and consumer in this example. The item for shard 3 of 8
-carries both numbers. On the writing node, the framework calls `onMessage` after storing the inbox row.
-On the receiving node, the queue consumer rebuilds the shard index and asks
-the framework to deliver it. Every node installs the same configuration.
+**Application-managed storage and an external queue.** Suppose your nodes store
+inbox messages in a shared database and use a cloud queue to wake each other.
+The application supplies the queue publisher and consumer in this example.
+After the framework saves an inbox message, the writing node publishes its
+shard number and total shard count. A consumer on any node can ask the
+framework to deliver that shard. All nodes install the same configuration.
 
 <!-- docs-snippet-path: packages/delivery-client/src/remote/delivery-builder.ts -->
 
@@ -722,18 +731,16 @@ declare const queue: {
   consume(handler: (item: QueueItem) => Promise<void>): Promise<void>;
 };
 
-const delivery = DeliveryBuilder.remote({
-  endpoint: "https://delivery.example.test",
-  notifications: {
-    kind: "custom",
-    shardObserver: {
-      onMessage(row) {
-        const { index, ofTotal } = row.shard;
-        return queue.publish({ index, ofTotal });
-      },
+const delivery = DeliveryBuilder.local({
+  storageFactory,
+  shardObserver: {
+    onMessage(message) {
+      const { index, ofTotal } = message.shard;
+      return queue.publish({ index, ofTotal });
     },
   },
 });
+
 const environment = ServerEnvironment.newBuilder()
   .under(EnvironmentType.Production, (settings) => {
     settings.use({ delivery, storageFactory });
@@ -754,46 +761,29 @@ try {
 }
 ```
 
-The same callback runs when a handler route writes a new row and when application
-code writes it through `environment.delivery.inbox.receive(input)`. A duplicate
-receipt for an existing row creates no second callback. In this example the
-observer publishes the shard number and shard count to the application's queue. A consumer on any application node
-can receive that item and call `deliverMessagesFrom()`. In this example the
-queue acknowledges the item when the consumer returns. A `busy` result means
-another worker took the shard. A `noWork` result means it was already empty.
-If delivery throws a storage error, the queue applies its failure policy.
+If the inbox write fails, posting reports the storage error. If the write
+succeeds and publishing to the queue fails, the framework logs the callback
+error. The message is already in the inbox. The application decides how to send
+the missed notification. After a normal delivery pass releases a shard, the
+worker checks for messages that arrived late and passes the newest pending
+message to the observer.
 
-If the inbox write fails, the posting call rejects. If the write succeeds
-and publishing to the queue fails, the framework logs the observer error.
-The row is already in the inbox. The application decides how to send the
-missed notification. After a normal delivery run releases its shard, the
-framework checks for rows that arrived late. If any are waiting, it passes
-the newest pending row to the observer.
+The consumer can receive an old queue item. A `busy` result means another worker
+holds the shard. A `noWork` result means it found no pending messages. If
+delivery throws a storage error, the queue applies the application's failure policy.
 
-A custom observer can also use
-`DeliveryBuilder.local({ storageFactory, shardObserver })` when all nodes
-share application-managed inbox, shard, and Entity storage.
+An Agent's handler and save finish before the worker acknowledges its inbox
+message. If the worker exits between those steps, another node can pick up the
+same pending message and invoke the Agent again. An original input that is still
+`TO_DELIVER` can cause a new model call with a fresh ID. A previously saved
+pending model call is not automatically sent again.
 
-Durable delivery stores pending and delivered Inbox rows. A shard lease prevents
-concurrent delivery, but a handler effect and the delivered transition are not
-one transaction. A lost acknowledgement can redeliver Aggregate, Process Manager, Agent, or
-Projection work after restart, so make downstream effects idempotent. If an
-original Agent input is still `TO_DELIVER`, redelivery can prepare a new model
-call with a new ID. A previously saved pending call is not replayed from history
-or attributes. The framework does not add a durable outgoing queue, scheduled
-retry policy, or exactly-once side effects.
-Local and remote delivery removes a pending duplicate when its signal ID and
-typed Inbox target match a delivered row in the current page or a recent local
-acknowledgement during the five-second local retention window. This cache
-disappears on restart. After the
-relevant delivered rows and cache entries are gone, a later Inbox delivery may
-execute the same recipient again. Cleaning SQL Inbox rows alone may still leave
-a cache entry that suppresses Inbox delivery; cleanup does not guarantee
-repetition. Neither mechanism
-provides exactly-once execution or durable storage for the simple in-memory
-Delivery server. The same signal may still reach a different target, and a newly
-created signal with a different ID is not suppressed merely because its payload
-is equal.
+Suppose two inbox messages carry Command C42 to the same Project. A worker
+acknowledges the first. When it reaches the second, it can recognize C42 from
+a retained completion in the current page or from a completion it remembers
+locally for five seconds. It then removes the second message. If both pieces
+of evidence have expired, a later worker can invoke the handler again. A
+different Project is a different recipient, even if the Command ID is the same.
 
 Continue with the [server reference](../packages/server/REFERENCE.md) for
 framework and server contracts.

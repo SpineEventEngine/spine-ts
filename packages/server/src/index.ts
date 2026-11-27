@@ -130,7 +130,7 @@ export { type DeliveryAttempt, type DeliveryEndpointMessage } from "./delivery/d
 export {
   DeliveryBuilder,
   DeliveryMonitor,
-  type Delivery,
+  type PublicDelivery as Delivery,
   type ApplicationDelivery,
   type DeliveryResult,
   type DeliveryRunOptions,
@@ -149,19 +149,15 @@ export {
   type ReceptionAction,
 } from "./delivery/delivery-monitor.js";
 export {
-  Inbox,
   type DeliveryLabel,
   type DeliveryStatus,
   type InboxId,
   InboxMessageError,
   type InboxMessage,
   type InboxMessageId,
-  type InboxMessageInput,
   type InboxReadContinuation,
   type InboxReadOptions,
-  type InboxWriteResult,
 } from "./delivery/inbox.js";
-export { InboxStorage, type InboxStorageOptions } from "./delivery/inbox-storage.js";
 export { ShardIndex } from "./delivery/shard-index.js";
 export {
   ShardedWorkRegistry,

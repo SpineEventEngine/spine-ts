@@ -12,7 +12,6 @@
  * the License.
  */
 
-import type { Any } from "@bufbuild/protobuf/wkt";
 import type { TenantId } from "@spine-event-engine/proto";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
 
@@ -405,52 +404,16 @@ export interface LocalInboxDrainOptions {
 }
 
 /**
- * Identifies the fields that deduplicate an in-flight inbox handoff.
- */
-export interface LocalInboxKeyInput {
-  // prettier-ignore
-
-  /**
-   * Identifies the inbox target receiving the message.
-   */
-  readonly inboxId: {
-    readonly targetId: Any;
-    readonly targetTypeUrl: string;
-  };
-
-  /**
-   * Identifies the source signal persisted in the inbox.
-   */
-  readonly signalId: string;
-
-  /**
-   * Names the delivery action for the message.
-   */
-  readonly label: InboxMessage["label"];
-
-  /**
-   * Locates the message in its delivery shard set.
-   */
-  readonly shard: InboxMessage["shard"];
-}
-
-/**
  * Coordinates durable local inbox ownership and delivery handoffs.
  */
 export const InboxHandoff: Readonly<{
   ready(endpoint: DeliveryEndpoint, tenantId?: TenantId): DeliveryReady;
   isPromiseLike(value: unknown): value is PromiseLike<unknown>;
-  coordinate(options: {
-    readonly handoffs: Map<string, Promise<InboxMessage>>;
-    readonly key: string;
-    readonly onHandoff: () => Promise<InboxMessage>;
-  }): Promise<InboxMessage>;
   drain(options: LocalInboxDrainOptions): Promise<void>;
   runDrain(options: LocalInboxDrainOptions): Promise<void>;
   drainAttempt(options: LocalInboxDrainOptions): Promise<"ACKNOWLEDGED" | "IDLE" | "RETRY">;
   drainInput(options: LocalInboxDrainOptions): Parameters<Delivery["drainMessage"]>[1];
   deliveryFailure(error: unknown, message: string): Error;
-  key(input: LocalInboxKeyInput, tenantId?: TenantId): string;
   sameMessageId(
     left: {
       readonly value: string;
@@ -487,28 +450,6 @@ export const InboxHandoff: Readonly<{
       return false;
     }
     return "then" in value && typeof value.then === "function";
-  },
-
-  async coordinate(options: {
-    readonly handoffs: Map<string, Promise<InboxMessage>>;
-    readonly key: string;
-    readonly onHandoff: () => Promise<InboxMessage>;
-  }): Promise<InboxMessage> {
-    const inFlightHandoff = options.handoffs.get(options.key);
-
-    if (inFlightHandoff !== undefined) {
-      return await inFlightHandoff;
-    }
-
-    const handoff = options.onHandoff();
-    options.handoffs.set(options.key, handoff);
-    try {
-      return await handoff;
-    } finally {
-      if (options.handoffs.get(options.key) === handoff) {
-        options.handoffs.delete(options.key);
-      }
-    }
   },
 
   async drain(options: LocalInboxDrainOptions): Promise<void> {
@@ -561,18 +502,6 @@ export const InboxHandoff: Readonly<{
 
   deliveryFailure(error: unknown, message: string): Error {
     return error instanceof Error ? error : new Error(message, { cause: error });
-  },
-
-  key(input: LocalInboxKeyInput, deliveryTenantId?: TenantId): string {
-    return JSON.stringify([
-      tenantKey(deliveryTenantId),
-      input.label,
-      input.signalId,
-      input.inboxId.targetTypeUrl,
-      InboxTargets.key(input.inboxId.targetId),
-      input.shard.index,
-      input.shard.ofTotal,
-    ]);
   },
 
   sameMessageId(
@@ -635,7 +564,3 @@ export const InboxHandoff: Readonly<{
     );
   },
 });
-
-function tenantKey(tenantId: TenantId | undefined): string {
-  return tenantId === undefined ? "" : String(TenantBoundary.from(tenantId).key);
-}

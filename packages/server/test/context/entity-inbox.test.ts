@@ -194,7 +194,7 @@ describe("LocalEntityInbox", () => {
     await receiving;
   });
 
-  it("schedules a distinct written batch row before an existing receipt settles", async () => {
+  it("schedules each submitted batch row while an earlier receipt remains pending", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const backing = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -259,8 +259,9 @@ describe("LocalEntityInbox", () => {
 
     try {
       expect(onWake).toHaveBeenCalledWith(ShardIndex.single());
-      expect(batchSettled).toBe(false);
+      expect(batchSettled).toBe(true);
       expect(await delivery.inbox.read(ShardIndex.single())).toMatchObject([
+        { signalId: "signal-first" },
         { signalId: "signal-second" },
       ]);
     } finally {
@@ -282,7 +283,7 @@ describe("LocalEntityInbox", () => {
       admitted ? Promise.resolve() : Promise.reject(failure),
     );
     inbox.register({ targetTypeUrl, labels: ["HANDLE_COMMAND"], deliver: deliverTarget });
-    const saved = writtenResult(processInput(targetTypeUrl, "saved"), 1n).message;
+    const saved = writtenResult(processInput(targetTypeUrl, "saved"), 1n);
 
     await inbox.deliver(saved, tenant("tenant-a"));
     admitted = false;
@@ -299,7 +300,7 @@ describe("LocalEntityInbox", () => {
     if (first === undefined) {
       throw new Error("Expected one persisted batch input.");
     }
-    const persisted = writtenResult(first, 1n).message;
+    const persisted = writtenResult(first, 1n);
     const writeFailure = new Error("second write failed");
     const drainMessage = vi.fn().mockResolvedValue({
       acknowledged: true,
@@ -317,10 +318,7 @@ describe("LocalEntityInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
       inbox: {
-        receive: vi
-          .fn()
-          .mockResolvedValueOnce({ outcome: "WRITTEN", message: persisted })
-          .mockRejectedValueOnce(writeFailure),
+        receive: vi.fn().mockResolvedValueOnce(persisted).mockRejectedValueOnce(writeFailure),
         readMessage,
       },
       drainMessage,
@@ -344,7 +342,7 @@ describe("LocalEntityInbox", () => {
   it("accepts a persisted row before aggregate delivery counts settle", async () => {
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const input = processInput(targetTypeUrl, "missing-target");
-    const persisted = writtenResult(input, 1n).message;
+    const persisted = writtenResult(input, 1n);
     const drainMessage = vi.fn().mockResolvedValue({
       acknowledged: false,
       run: {
@@ -360,7 +358,7 @@ describe("LocalEntityInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
       inbox: {
-        receive: () => Promise.resolve({ outcome: "WRITTEN", message: persisted }),
+        receive: () => Promise.resolve(persisted),
         readMessage: () => Promise.resolve(undefined),
       },
       drainMessage,
@@ -384,13 +382,13 @@ describe("LocalEntityInbox", () => {
   it("accepts a persisted row despite an unrelated delivery result", async () => {
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const input = processInput(targetTypeUrl, "failed-target");
-    const persisted = writtenResult(input, 1n).message;
+    const persisted = writtenResult(input, 1n);
     const failure = new Error("exact acknowledgement failed");
     const delivery = {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
       inbox: {
-        receive: () => Promise.resolve({ outcome: "WRITTEN", message: persisted }),
+        receive: () => Promise.resolve(persisted),
         readMessage: () => Promise.resolve(undefined),
       },
       close: () => Promise.resolve(),
@@ -823,12 +821,12 @@ describe("LocalEntityInbox", () => {
     await expect(inbox.receive(rejectedDelivery, input)).rejects.toThrow("write rejected");
     expect(ready).toEqual([]);
 
-    const duplicate = writtenResult(input, 1n).message;
+    const duplicate = writtenResult(input, 1n);
     const duplicateDelivery = {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
       inbox: {
-        receive: () => Promise.resolve({ outcome: "DUPLICATE", message: duplicate }),
+        receive: () => Promise.resolve(duplicate),
         readMessage: () => Promise.resolve({ ...duplicate, status: "DELIVERED" }),
       },
       drainMessage: () =>
@@ -1037,7 +1035,7 @@ describe("LocalEntityInbox", () => {
       expect(seen).toEqual(["signal-recovered", "event-from-recovered-command"]);
       expect(pickUp).toHaveBeenCalledOnce();
       expect(recipientCommits).toBe(1);
-      await expect(delivery.inbox.readMessage(source.message.id)).resolves.toMatchObject({
+      await expect(delivery.inbox.readMessage(source.id)).resolves.toMatchObject({
         signalId: "signal-recovered",
         status: "DELIVERED",
       });
@@ -2186,18 +2184,12 @@ function corruptedInput(input: unknown): ReceiveInput {
   return input as ReceiveInput;
 }
 
-function writtenResult(
-  input: ReceiveInput,
-  version: bigint,
-): { readonly outcome: "WRITTEN"; readonly message: InboxMessage } {
+function writtenResult(input: ReceiveInput, version: bigint): InboxMessage {
   return {
-    outcome: "WRITTEN" as const,
-    message: {
-      ...input,
-      shard: ShardIndex.single(),
-      id: { value: `row-${String(version)}`, shard: ShardIndex.single() },
-      whenReceived: timestampFromDate(new Date("2026-07-12T09:00:00.000Z")),
-      version,
-    },
+    ...input,
+    shard: ShardIndex.single(),
+    id: { value: `row-${String(version)}`, shard: ShardIndex.single() },
+    whenReceived: timestampFromDate(new Date("2026-07-12T09:00:00.000Z")),
+    version,
   };
 }

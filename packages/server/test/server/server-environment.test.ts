@@ -38,10 +38,7 @@ import {
   type ServerEnvironmentDelivery,
   serverEnvironmentAccess,
 } from "../../src/server/server-environment.js";
-import {
-  DeliveryBuilder,
-  type Delivery as PublicDelivery,
-} from "../../src/delivery/delivery-builder.js";
+import { DeliveryBuilder, type PublicDelivery } from "../../src/delivery/delivery-builder.js";
 import { Delivery as CoreDelivery } from "../../src/delivery/delivery.js";
 import { IntegrationBroker } from "../../src/integration/integration-broker.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
@@ -224,7 +221,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     });
 
     await serverEnvironmentAccess.setup(environment);
-    expect(environment.delivery.inbox).toBe(ports.inbox);
+    expect(serverEnvironmentAccess.coreDelivery(environment).publicInbox()).toBe(ports.inbox);
     await environment.close();
   });
 
@@ -340,7 +337,9 @@ describe("ServerEnvironment delivery lifecycle", () => {
     );
     const running = await Server.atPort(0).setApplication(application).start();
     await running.close();
-    await expect(environment.delivery.inbox.read(ShardIndex.single())).resolves.toEqual([]);
+    await expect(
+      serverEnvironmentAccess.coreDelivery(environment).publicInbox().read(ShardIndex.single()),
+    ).resolves.toEqual([]);
     await application.close();
   });
 
@@ -355,7 +354,8 @@ describe("ServerEnvironment delivery lifecycle", () => {
       multitenant: false,
     });
     expect(environment.delivery.storageFactory).toBe(environment.storageFactory);
-    await environment.delivery.inbox.read(ShardIndex.single());
+    expect("inbox" in environment.delivery).toBe(false);
+    await serverEnvironmentAccess.coreDelivery(environment).publicInbox().read(ShardIndex.single());
     await environment.close();
   });
 
@@ -365,7 +365,10 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const environment = environmentWith(EnvironmentType.Local, { storageFactory: factory });
 
     await serverEnvironmentAccess.setup(environment);
-    await environment.delivery.inbox.receive(createMessage("public-run", "event-public-run", 1n));
+    await serverEnvironmentAccess
+      .coreDelivery(environment)
+      .publicInbox()
+      .receive(createMessage("public-run", "event-public-run", 1n));
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
     const running = environment.delivery.run({
@@ -395,10 +398,11 @@ describe("ServerEnvironment delivery lifecycle", () => {
 
   it("opens configured remote ports before constructing its single Delivery", async () => {
     let ready = false;
-    const ports = new DeliveryBuilder()
-      .withStorageFactory(new InMemoryStorageFactory())
-      .withNode("remote-fixture")
-      .build();
+    const ports = new CoreDelivery({
+      context: { name: "RemoteFixture", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      node: "remote-fixture",
+    });
     const inbox = ports.inbox;
     const workRegistry = {
       sessionKind: inbox.sessionKind,
@@ -440,7 +444,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
       "Build the Application before using environment Delivery.",
     );
     await serverEnvironmentAccess.setup(environment);
-    expect(environment.delivery.inbox).toBe(inbox);
+    expect(serverEnvironmentAccess.coreDelivery(environment).publicInbox()).toBe(inbox);
     const empty = await buildContext(
       BoundedContext.singleTenant("NoRemoteRecipientYet"),
       environment,
@@ -597,10 +601,11 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const transport = new InMemoryTransportFactory();
     const closeStorage = vi.spyOn(storage, "close");
     const closeTransport = vi.spyOn(transport, "close");
-    const ports = new DeliveryBuilder()
-      .withStorageFactory(storage)
-      .withNode("remote-close")
-      .build();
+    const ports = new CoreDelivery({
+      context: { name: "RemoteClose", multitenant: false },
+      storageFactory: storage,
+      node: "remote-close",
+    });
     const remote = {
       open: vi.fn(async () => {
         entered.resolve(undefined);
@@ -1151,13 +1156,17 @@ describe("ServerEnvironment delivery lifecycle", () => {
     });
 
     await serverEnvironmentAccess.setup(environment);
-    const received = await environment.delivery.inbox.receive(
-      createMessage("notify-failed", "signal", 1n),
-    );
+    const received = await serverEnvironmentAccess
+      .coreDelivery(environment)
+      .publicInbox()
+      .receive(createMessage("notify-failed", "signal", 1n));
     await expect(
-      environment.delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+      serverEnvironmentAccess
+        .coreDelivery(environment)
+        .publicInbox()
+        .read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([{ signalId: "signal" }]);
-    expect(observer.onMessage).toHaveBeenCalledExactlyOnceWith(received.message);
+    expect(observer.onMessage).toHaveBeenCalledExactlyOnceWith(received);
     expect(errors).toEqual(["Delivery observer failed."]);
     await environment.close();
   });
@@ -1172,10 +1181,12 @@ describe("ServerEnvironment delivery lifecycle", () => {
     await serverEnvironmentAccess.setup(environment);
     expect(environment.storageFactory).toBe(storageFactory);
     expect(serverEnvironmentAccess.remoteObserved(environment)).toBe(false);
-    const row = await environment.delivery.inbox.receive(
-      createMessage("local-observer", "signal", 1n),
-    );
-    expect(shardObserver.onMessage).toHaveBeenCalledExactlyOnceWith(row.message);
+    expect("inbox" in environment.delivery).toBe(false);
+    const row = await serverEnvironmentAccess
+      .coreDelivery(environment)
+      .publicInbox()
+      .receive(createMessage("local-observer", "signal", 1n));
+    expect(shardObserver.onMessage).toHaveBeenCalledExactlyOnceWith(row);
     await environment.close();
   });
 
@@ -1270,7 +1281,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
       delivery: { close: closed },
     });
     await serverEnvironmentAccess.setup(environment);
-    expect(environment.delivery.inbox).toBeDefined();
+    expect(serverEnvironmentAccess.coreDelivery(environment).publicInbox()).toBeDefined();
     await environment.close();
     expect(closed).toHaveBeenCalledOnce();
   });

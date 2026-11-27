@@ -12,13 +12,7 @@
  * the License.
  */
 
-import type {
-  InboxMessage,
-  InboxMessageId,
-  InboxMessageInput,
-  InboxReadOptions,
-  InboxWriteResult,
-} from "./inbox.js";
+import type { InboxMessage, InboxMessageId, InboxMessageInput, InboxReadOptions } from "./inbox.js";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 import type { ShardIndex } from "./shard-index.js";
 import type { ShardSession } from "./sharded-work-registry.js";
@@ -56,9 +50,9 @@ export interface DeliveryInbox {
    *
    * @param input Describes the message to make durable.
    * @param options Propagates cancellation and a delivery deadline.
-   * @returns The write or deduplication outcome.
+   * @returns The stored message.
    */
-  receive(input: InboxMessageInput, options?: DeliveryOperationOptions): Promise<InboxWriteResult>;
+  receive(input: InboxMessageInput, options?: DeliveryOperationOptions): Promise<InboxMessage>;
 
   /**
    * Reads one bounded continuation page for a shard.

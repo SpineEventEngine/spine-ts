@@ -7,9 +7,18 @@ High-risk implementation on `shard-delivery-correctness-and-performance`, from o
 1. Ship a TS-specific `ShardObservingService.ObserveAll(Empty)` in `spine/delivery/message_delivery.proto`. The streamed response contains only the required shard index. Document the complete notification contract on the method itself. Register before discovering existing free shards with pending rows; omit held and completed-only shards; remain silent while idle; recheck on release or expiry; repeat unclaimed work after a configurable interval (10 seconds by default). Additional writes cannot postpone the reminder. Reconnect discovers current work. The notice grants no session. Preserve the Admin wire descriptor.
 2. Port per-shard ordered and pending indexes and exact stored counts from JVM Delivery issues 70 and 71, preserving TS page continuation, atomic batch rejection. Admin and expiration replies return the complete list or fail if its encoded size exceeds the configured gRPC transport size. After the Admin acknowledgement, replay known shards. Send the first eligible change immediately, coalesce later changes independently per shard using the approved JVM default of 25 milliseconds, and suppress consecutive identical states. Preserve the existing five-second opportunistic retention policy.
 3. Recover uncertain pickup with a stable run ID; differentiate busy and no work; require live session handles and changing record revisions for managed renewal/release. Server-driven 60-second default expiry and renewal at one third of the lifetime. Retain Protobuf time precision. Guard worker acknowledgement and both deletion paths with session and wire-exact row identity. Do not couple delivery with Entity persistence.
-4. Replace the supervisor with built-in all-shard observation or an application-selected custom observer through normal environment startup. Independent same-config nodes may run distinct shards concurrently without a default cap. Offer per-node concurrency only for built-in server observation. Join simultaneous same-shard local calls. Preserve monitor actions, cancellation, and orderly shutdown. Publish the new higher-level run result and shared newest-pending inbox operation. On normal completion release before checking the pending row, remove the local run before invoking the custom observer, and log callback failures without retry. Test new-node startup and equal-configuration replicas, stale notices, and missed notifications.
+4. Replace the supervisor with built-in all-shard observation for remote storage or an application-selected custom observer for application-managed storage through normal environment startup. Independent same-config nodes may run distinct shards concurrently without a default cap. Offer per-node concurrency only for built-in server observation. Join simultaneous same-shard local calls. Preserve monitor actions, cancellation, and orderly shutdown. Publish the new higher-level run result and shared newest-pending inbox operation. On normal completion release before checking the pending row, remove the local run before invoking the custom observer, and log callback failures without retry. Test new-node startup and equal-configuration replicas, stale notices, and missed notifications.
 5. Keep one server process by default. Offer one public gRPC parent with a fixed number of homogeneous child processes and private gRPC endpoints. Route the full shard identity by index modulo child count. Each subprocess applies shard operations directly. Fan out global calls and provide fresh subscriptions to each public subscriber. Restart a lost child in its original slot, keep healthy slots serving and discard old handles and obsolete stream responses.
 6. Update maintained applications, docs, wire and behavior tests, and operator settings. Use targeted mechanical checks and relevant specialist reviews, followed by release verification, versioning and final security review. No JVM changes and no migration or compatibility shims.
+
+## Approved corrections
+
+- Application code posts a Command or Event through its bus. Only framework code writes the resulting inbox message. Remove raw inbox writing from the application Delivery API.
+- Store each independently received signal with a new inbox ID in one create-or-update operation. An explicit write using an existing inbox ID replaces the previous message. Remove the write outcome classification, pre-read, and same-signal sharing between overlapping writes, including batch writes. Two callers may still join the same active shard delivery.
+- A remote inbox requires the server work stream. The optional per-node concurrency setting applies to that configuration. A custom observer runs only with application-managed storage.
+- Maintain balanced trees for all stored and pending messages in each in-memory server shard. Order by receive seconds, nanoseconds, version and UTF-8 inbox UUID. Replacing one stored ID updates its position and pending status.
+- Follow core-jvm `DoubleDispatchGuard` at `6d349cb86` for Aggregates and Process Managers. If enabled, examine the typed cause of the configured number of recent emitted Events, including earlier committed outputs from the same batch. Match a Command or Event before invoking its handler and report the corresponding duplicate dispatch outcome. Process Managers need their Event journal enabled.
+- Keep the Agent’s optional duplicate memory local to its process. Inbox acknowledgement remains independent of the handler’s business effect.
 
 ## Reference and execution
 
@@ -36,10 +45,11 @@ stream has its own snapshot and update rules.
 
 ## Indexed storage and Admin
 
-Page reads and newest-pending lookups now use the selected shard. The same local
-two-row page measurement with 8 and 4,008 total rows took about 19 and 297
-microseconds before indexing, and 20 and 17 after indexing. A regression test
-also verifies the read without a scan of the global message map.
+Each shard keeps one balanced tree for all its inbox messages and one for its
+pending messages. The full message ID selects the stored message directly.
+A page scan can start after the caller's timestamp, and the pending tree
+provides the newest pending message for a single shard. The Admin count
+includes both pending and retained delivered messages.
 
 Admin replays 150 known shards with a concurrent write in a regression test.
 The application now uses a dedicated work stream. Its gRPC tests cover a
@@ -77,7 +87,7 @@ one delivery each. A third, identically configured node starts and picks up
 work that was already waiting, before the reminder. The default configuration
 allows simultaneous runs of different shards.
 
-An application can install a custom observer with either storage option. A
+An application can install a custom observer with application-managed storage. Remote inbox storage requires the Delivery server’s work stream. A
 normal pass releases the shard, then reads the newest pending row for the
 callback. Tests with PostgreSQL and MySQL cover a separate process writing
 immediately before and immediately after release.

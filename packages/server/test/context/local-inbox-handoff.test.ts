@@ -89,31 +89,6 @@ describe("DeliveryReadiness", () => {
     await readiness.close();
   });
 
-  it("coalesces the same persisted handoff and clears only its completed entry", async () => {
-    const handoffs = new Map<string, Promise<InboxMessage>>();
-    const released = Promise.withResolvers<InboxMessage>();
-    const row = createMessage("coalesced", "event-coalesced", 1n);
-    const onHandoff = vi.fn(() => released.promise);
-    const first = InboxHandoff.coordinate({ handoffs, key: "row", onHandoff });
-    const second = InboxHandoff.coordinate({ handoffs, key: "row", onHandoff });
-    expect(onHandoff).toHaveBeenCalledOnce();
-    released.resolve(row);
-    await expect(Promise.all([first, second])).resolves.toEqual([row, row]);
-    expect(handoffs.size).toBe(0);
-
-    const newer = Promise.resolve(row);
-    const older = Promise.withResolvers<InboxMessage>();
-    const overlapping = InboxHandoff.coordinate({
-      handoffs,
-      key: "row",
-      onHandoff: () => older.promise,
-    });
-    handoffs.set("row", newer);
-    older.resolve(row);
-    await overlapping;
-    expect(handoffs.get("row")).toBe(newer);
-  });
-
   it("retries deferred and unresolved local outcomes before acknowledging the exact row", async () => {
     const row = createMessage("retried", "event-retried", 1n);
     const drainMessage = vi

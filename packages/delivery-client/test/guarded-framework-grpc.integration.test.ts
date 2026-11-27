@@ -25,7 +25,8 @@ import {
   ManagedShardService,
   GuardedInboxService,
 } from "@spine-event-engine/proto/delivery-server";
-import { DeliveryClient, RemoteInbox, RemoteWorkRegistry } from "../src/index.js";
+import { DeliveryClient, RemoteWorkRegistry } from "../src/index.js";
+import { RemoteInbox } from "../src/remote/adapters.js";
 import { domainMessage } from "./shared-fixtures.js";
 
 const servers: DeliveryServer[] = [];

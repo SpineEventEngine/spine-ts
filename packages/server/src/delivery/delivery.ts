@@ -43,6 +43,7 @@ import { ShardedWorkRegistry } from "./sharded-work-registry.js";
 import { deliveryTenantKey } from "./delivery-tenant.js";
 import { withDeliveryCommitFence } from "../repository/commit-fence.js";
 import { receptionObservation, type ReceptionObservation } from "./reception-observation.js";
+import { DuplicateDispatch } from "./duplicate-dispatch.js";
 import type { DeliveryResult, DeliveryRunOptions, DeliveryStrategy } from "./delivery-builder.js";
 import { emitServerError } from "../server/server-log.js";
 
@@ -131,6 +132,21 @@ export type DeliveryMessageOutcome =
        * Whether this row was accepted by a live Agent.
        */
       readonly agent: boolean;
+
+      /**
+       * Terminal duplicate validation outcome when the Entity guard matched.
+       */
+      readonly duplicate?: {
+        /**
+         * Selects the Command or Event validation enum family.
+         */
+        readonly kind: DuplicateDispatch["kind"];
+
+        /**
+         * Gives the generated duplicate validation code in that family.
+         */
+        readonly code: DuplicateDispatch["code"];
+      };
     }
   | {
       /**
@@ -407,7 +423,7 @@ export class Delivery {
         if (property === "receive")
           return async (input: InboxMessageInput, options?: DeliveryOperationOptions) => {
             const result = await inbox.receive(input, options);
-            if (result.outcome === "WRITTEN") this.observePersisted(result.message);
+            this.observePersisted(result);
             return result;
           };
         const value: unknown = Reflect.get(target, property, target);
@@ -1683,6 +1699,9 @@ class DeliveryDrain {
     acknowledgement: DeliveryAcknowledgement,
   ): Promise<void> {
     const observation = receptionObservation.create();
+    let duplicate:
+      | { readonly kind: DuplicateDispatch["kind"]; readonly code: DuplicateDispatch["code"] }
+      | undefined;
     try {
       const admitted = await this.#dispatch(message, observation);
       if (admitted === dispatchNotAdmitted) {
@@ -1691,10 +1710,17 @@ class DeliveryDrain {
       }
       this.#statistics.accepted += 1;
     } catch (error) {
-      await this.#handleReceptionFailure(message, target, acknowledgement, observation, error);
-      if (this.#ownershipLost || this.input.options.operation?.signal?.aborted) return;
+      if (error instanceof DuplicateDispatch) {
+        duplicate = { kind: error.kind, code: error.code };
+        this.#statistics.accepted += 1;
+      } else {
+        await this.#handleReceptionFailure(message, target, acknowledgement, observation, error);
+        if (this.#ownershipLost || this.input.options.operation?.signal?.aborted) return;
+      }
     }
     await this.#completeAttempt(message, target, acknowledgement);
+    if (duplicate !== undefined && acknowledgement.completed)
+      this.#messageOutcomes.set(message, { kind: "acknowledged", agent: false, duplicate });
   }
 
   /**

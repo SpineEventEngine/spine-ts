@@ -44,8 +44,8 @@ describe("shared Delivery tenant identity", () => {
     const inbox = delivery.inbox as Inbox;
     const first = eventForTenant("first", "row-first");
     const second = eventForTenant("second", "row-second");
-    expect(deliveryTenant((await inbox.storage.write(first)).message)).toEqual(tenant("first"));
-    expect(deliveryTenant((await inbox.storage.write(second)).message)).toEqual(tenant("second"));
+    expect(deliveryTenant(await inbox.storage.write(first))).toEqual(tenant("first"));
+    expect(deliveryTenant(await inbox.storage.write(second))).toEqual(tenant("second"));
     const seen: string[] = [];
     await delivery.run({
       onMessage: (message) => {
@@ -74,12 +74,12 @@ describe("shared Delivery tenant identity", () => {
     delivery.wake(ShardIndex.single());
     await delivery.whenIdle();
     expect(seen).toEqual([]);
-    expect((await delivery.inbox.readMessage(written.message.id))?.status).toBe("TO_DELIVER");
+    expect((await delivery.inbox.readMessage(written.id))?.status).toBe("TO_DELIVER");
     registered = true;
     delivery.wake(ShardIndex.single());
     await delivery.whenIdle();
-    expect(seen).toEqual([written.message.id.value]);
-    const completed = await delivery.inbox.readMessage(written.message.id);
+    expect(seen).toEqual([written.id.value]);
+    const completed = await delivery.inbox.readMessage(written.id);
     expect(completed?.status).toBe("DELIVERED");
     expect(completed?.keepUntil).toBeInstanceOf(Date);
     await delivery.close();

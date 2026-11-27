@@ -1090,15 +1090,6 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "kind": "function-declaration",
-    "identity": "tenantKey()#1",
-    "name": "tenantKey",
-    "disposition": "necessity",
-    "reason": "TypeScript delivery tenancy boundary: tenantKey gives local handoff routing one structural complete-tenant comparison key."
-  },
-  {
-    "rule": "standalone-function",
     "file": "packages/server/src/entity/entity-storage-descriptor.ts",
     "kind": "function-declaration",
     "identity": "primitiveIdKind()#1",

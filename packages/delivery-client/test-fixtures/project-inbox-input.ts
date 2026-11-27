@@ -16,7 +16,8 @@ import { create } from "@bufbuild/protobuf";
 import { AnyPacker, Identifiers, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import { Time } from "@spine-event-engine/core/time";
 import { CommandContextSchema, CommandSchema } from "@spine-event-engine/proto";
-import type { InboxMessageInput, ShardIndex } from "@spine-event-engine/server";
+import type { ShardIndex } from "@spine-event-engine/server";
+import type { InboxMessageInput } from "@spine-event-engine/server/spi/delivery";
 import { CreateProjectSchema } from "@spine-event-engine/server-test-fixtures/entity/project_commands_pb.js";
 import { ProjectStateSchema } from "@spine-event-engine/server-test-fixtures/entity/project_states_pb.js";
 
@@ -25,7 +26,7 @@ import { ProjectStateSchema } from "@spine-event-engine/server-test-fixtures/ent
  *
  * @param projectId Identifies the project to create.
  * @param shard Selects the delivery shard.
- * @returns The input for Inbox reception.
+ * @returns The pending Command and its recipient.
  */
 export function projectInboxInput(projectId: string, shard: ShardIndex): InboxMessageInput {
   const signal = SignalEnvelopes.command({
