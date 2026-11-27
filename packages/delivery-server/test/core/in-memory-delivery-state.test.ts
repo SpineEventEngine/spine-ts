@@ -30,7 +30,12 @@ describe("InMemoryDeliveryState", () => {
     const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
     const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
     state.putAll([
-      { message: create(InboxMessageSchema, { id: { uuid: "message", index: shard } }) },
+      {
+        message: create(InboxMessageSchema, {
+          id: { uuid: "message", index: shard },
+          whenReceived: { seconds: 0n, nanos: 0 },
+        }),
+      },
     ]);
     state.setSession(
       shard,

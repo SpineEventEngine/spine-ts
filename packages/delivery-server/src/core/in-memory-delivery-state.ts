@@ -13,6 +13,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { OrderedMap } from "@js-sdsl/ordered-map";
 import {
   InboxMessageStatus,
   type InboxMessage,
@@ -66,8 +67,18 @@ export interface ShardRecord {
  */
 interface ShardBucket {
   readonly shard: ShardIndex;
-  readonly ordered: InboxMessage[];
-  readonly pending: InboxMessage[];
+  readonly ordered: OrderedMap<DeliveryOrderKey, InboxMessage>;
+  readonly pending: OrderedMap<DeliveryOrderKey, InboxMessage>;
+}
+
+/**
+ * Keys the two shard trees by the JVM receive-time, version, and UTF-8 UUID order.
+ */
+interface DeliveryOrderKey {
+  readonly seconds: bigint;
+  readonly nanos: number;
+  /** Breaks timestamp ties. A timestamp alone seeks past every message at that time. */
+  readonly message?: { readonly version: number; readonly uuid: Buffer };
 }
 
 /**
@@ -139,24 +150,21 @@ export class InMemoryDeliveryState {
     messages: readonly InboxMessage[],
   ): { changed: boolean; pendingChanged: boolean } {
     const keys = new Set(messages.map(DeliveryMessages.key));
-    const removed = new Set<string>();
     let pendingChanged = false;
+    let changed = false;
     for (const key of keys) {
       const current = this.messages.get(key);
       if (current === undefined) continue;
+      changed = true;
       this.messages.delete(key);
       this.#acknowledgements.delete(key);
-      removed.add(key);
+      this.#removeFromBucket(current);
       pendingChanged ||= current.status === InboxMessageStatus.TO_DELIVER;
     }
-    if (removed.size === 0) return { changed: false, pendingChanged: false };
+    if (!changed) return { changed: false, pendingChanged: false };
     const shardKey = DeliveryShards.key(shard);
-    const bucket = this.#buckets.get(shardKey);
-    if (bucket === undefined) throw new TypeError("Delivery message shard count is invalid.");
-    DeliveryRowOrder.removeMany(bucket.ordered, removed);
-    DeliveryRowOrder.removeMany(bucket.pending, removed);
     this.#pruneBucket(shardKey);
-    return { changed: true, pendingChanged };
+    return { changed, pendingChanged };
   }
 
   /**
@@ -198,7 +206,7 @@ export class InMemoryDeliveryState {
    * @returns Whether the shard has at least one retained `TO_DELIVER` message.
    */
   hasPending(shard: ShardIndex): boolean {
-    return (this.#buckets.get(DeliveryShards.key(shard))?.pending.length ?? 0) > 0;
+    return (this.#buckets.get(DeliveryShards.key(shard))?.pending.size() ?? 0) > 0;
   }
 
   /**
@@ -208,7 +216,7 @@ export class InMemoryDeliveryState {
    * @returns The exact stored-row count.
    */
   storedCount(shard: ShardIndex): number {
-    return this.#buckets.get(DeliveryShards.key(shard))?.ordered.length ?? 0;
+    return this.#buckets.get(DeliveryShards.key(shard))?.ordered.size() ?? 0;
   }
 
   /**
@@ -224,12 +232,12 @@ export class InMemoryDeliveryState {
     sinceWhen: { readonly seconds: bigint; readonly nanos: number } | undefined,
     size: number,
   ): InboxMessage[] {
-    const rows = this.#buckets.get(DeliveryShards.key(shard))?.ordered ?? [];
+    const rows = this.#buckets.get(DeliveryShards.key(shard))?.ordered;
+    if (rows === undefined) return [];
     const page: InboxMessage[] = [];
-    for (let index = DeliveryRowOrder.firstAfter(rows, sinceWhen); index < rows.length; index++) {
-      const row = rows[index];
-      if (row === undefined) throw new TypeError("Delivery row index is invalid.");
-      page.push(DeliveryMessages.copy(row));
+    const start = sinceWhen === undefined ? rows.begin() : rows.lowerBound(sinceWhen);
+    for (const cursor = start; !cursor.equals(rows.end()); cursor.next()) {
+      page.push(DeliveryMessages.copy(cursor.pointer[1]));
       if (page.length === size) break;
     }
     return page;
@@ -242,7 +250,7 @@ export class InMemoryDeliveryState {
    * @returns A detached row or undefined when none remains.
    */
   newestPending(shard: ShardIndex): InboxMessage | undefined {
-    const row = this.#buckets.get(DeliveryShards.key(shard))?.pending.at(-1);
+    const row = this.#buckets.get(DeliveryShards.key(shard))?.pending.back()?.[1];
     return row === undefined ? undefined : DeliveryMessages.copy(row);
   }
 
@@ -253,7 +261,7 @@ export class InMemoryDeliveryState {
    */
   *pendingShards(): Iterable<ShardIndex> {
     for (const bucket of this.#buckets.values())
-      if (bucket.pending.length > 0) yield DeliveryShards.copy(bucket.shard);
+      if (bucket.pending.size() > 0) yield DeliveryShards.copy(bucket.shard);
   }
 
   /**
@@ -330,25 +338,30 @@ export class InMemoryDeliveryState {
     const shardKey = DeliveryShards.key(shard);
     let bucket = this.#buckets.get(shardKey);
     if (bucket === undefined) {
-      bucket = { shard: DeliveryShards.copy(shard), ordered: [], pending: [] };
+      bucket = {
+        shard: DeliveryShards.copy(shard),
+        ordered: new OrderedMap([], DeliveryRowOrder.compare),
+        pending: new OrderedMap([], DeliveryRowOrder.compare),
+      };
       this.#buckets.set(shardKey, bucket);
     }
-    DeliveryRowOrder.insert(bucket.ordered, detached);
+    const order = DeliveryRowOrder.key(detached);
+    bucket.ordered.setElement(order, detached);
     if (detached.status === InboxMessageStatus.TO_DELIVER)
-      DeliveryRowOrder.insert(bucket.pending, detached);
+      bucket.pending.setElement(order, detached);
   }
 
   #removeFromBucket(message: InboxMessage): void {
     const key = DeliveryShards.key(this.#requiredShard(message));
     const bucket = this.#buckets.get(key);
     if (bucket === undefined) throw new TypeError("Delivery message shard count is invalid.");
-    DeliveryRowOrder.remove(bucket.ordered, message);
-    if (message.status === InboxMessageStatus.TO_DELIVER)
-      DeliveryRowOrder.remove(bucket.pending, message);
+    const order = DeliveryRowOrder.key(message);
+    bucket.ordered.eraseElementByKey(order);
+    if (message.status === InboxMessageStatus.TO_DELIVER) bucket.pending.eraseElementByKey(order);
   }
 
   #pruneBucket(key: string): void {
-    if (this.#buckets.get(key)?.ordered.length !== 0) return;
+    if (this.#buckets.get(key)?.ordered.size() !== 0) return;
     this.#buckets.delete(key);
     if (this.shards.get(key)?.worker === undefined) this.shards.delete(key);
   }
@@ -376,116 +389,40 @@ const DeliveryBytes = Object.freeze({
 });
 
 /**
- * Maintains the per-shard receive-time, version, and UTF-8 ID order.
+ * Maintains the per-shard receive-time, version, and UTF-8 UUID order.
  */
 const DeliveryRowOrder = Object.freeze({
   /**
-   * Compares two rows in delivery order.
+   * Creates an exact tree key for one stored row.
    *
-   * @param left Supplies the first row.
-   * @param right Supplies the second row.
+   * @param row Supplies the stored row.
+   * @returns Its stable ordering key.
+   */
+  key(row: InboxMessage): DeliveryOrderKey {
+    if (row.whenReceived === undefined || row.id === undefined)
+      throw new TypeError("Delivery message ordering fields are missing.");
+    return {
+      seconds: row.whenReceived.seconds,
+      nanos: row.whenReceived.nanos,
+      message: { version: row.version, uuid: Buffer.from(row.id.uuid) },
+    };
+  },
+
+  /**
+   * Compares exact keys and exclusive timestamp probes.
+   *
+   * @param left Supplies the first key.
+   * @param right Supplies the second key.
    * @returns A signed order comparison.
    */
-  compare(left: InboxMessage, right: InboxMessage): number {
-    const time = this.compareTime(left, right.whenReceived);
-    if (time !== 0) return time;
-    const version = left.version - right.version;
-    if (version !== 0) return version;
-    return Buffer.compare(Buffer.from(left.id?.uuid ?? ""), Buffer.from(right.id?.uuid ?? ""));
-  },
-
-  /**
-   * Compares a row's full receive time with a timestamp.
-   *
-   * @param row Supplies the row.
-   * @param time Supplies the comparison timestamp.
-   * @returns A signed time comparison.
-   */
-  compareTime(
-    row: InboxMessage,
-    time: { readonly seconds: bigint; readonly nanos: number } | undefined,
-  ): number {
-    if (row.whenReceived === undefined || time === undefined)
-      throw new TypeError("Delivery message receive time is missing.");
-    if (row.whenReceived.seconds !== time.seconds)
-      return row.whenReceived.seconds < time.seconds ? -1 : 1;
-    return row.whenReceived.nanos - time.nanos;
-  },
-
-  /**
-   * Finds the first row strictly after a full receive timestamp.
-   *
-   * @param rows Supplies the ordered shard index.
-   * @param time Supplies the optional exclusive receive time.
-   * @returns The first eligible row position.
-   */
-  firstAfter(
-    rows: readonly InboxMessage[],
-    time: { readonly seconds: bigint; readonly nanos: number } | undefined,
-  ): number {
-    if (time === undefined) return 0;
-    let low = 0;
-    let high = rows.length;
-    while (low < high) {
-      const middle = (low + high) >>> 1;
-      const candidate = rows[middle];
-      if (candidate === undefined) throw new TypeError("Delivery row index is invalid.");
-      if (this.compareTime(candidate, time) <= 0) low = middle + 1;
-      else high = middle;
-    }
-    return low;
-  },
-
-  /**
-   * Adds a row at its sorted position.
-   *
-   * @param rows Supplies the mutable shard index.
-   * @param row Supplies the row to insert.
-   */
-  insert(rows: InboxMessage[], row: InboxMessage): void {
-    let low = 0;
-    let high = rows.length;
-    while (low < high) {
-      const middle = (low + high) >>> 1;
-      const candidate = rows[middle];
-      if (candidate === undefined) throw new TypeError("Delivery row index is invalid.");
-      if (this.compare(candidate, row) < 0) low = middle + 1;
-      else high = middle;
-    }
-    rows.splice(low, 0, row);
-  },
-
-  /**
-   * Removes one row from its shard index.
-   *
-   * @param rows Supplies the mutable shard index.
-   * @param row Identifies the row to remove.
-   */
-  remove(rows: InboxMessage[], row: InboxMessage): void {
-    let low = 0;
-    let high = rows.length;
-    while (low < high) {
-      const middle = (low + high) >>> 1;
-      const candidate = rows[middle];
-      if (candidate === undefined) throw new TypeError("Delivery row index is invalid.");
-      if (this.compare(candidate, row) < 0) low = middle + 1;
-      else high = middle;
-    }
-    const found = rows[low];
-    if (found === undefined || DeliveryMessages.key(found) !== DeliveryMessages.key(row))
-      throw new TypeError("Delivery message shard count is invalid.");
-    rows.splice(low, 1);
-  },
-
-  /**
-   * Removes selected rows from a sorted shard index after batch validation.
-   *
-   * @param rows Supplies the mutable shard index.
-   * @param keys Identifies stored rows removed from the shard.
-   */
-  removeMany(rows: InboxMessage[], keys: ReadonlySet<string>): void {
-    let retained = 0;
-    for (const row of rows) if (!keys.has(DeliveryMessages.key(row))) rows[retained++] = row;
-    rows.length = retained;
+  compare(left: DeliveryOrderKey, right: DeliveryOrderKey): number {
+    if (left.seconds !== right.seconds) return left.seconds < right.seconds ? -1 : 1;
+    if (left.nanos !== right.nanos) return left.nanos < right.nanos ? -1 : 1;
+    if (left.message === undefined) return right.message === undefined ? 0 : 1;
+    if (right.message === undefined) return -1;
+    return (
+      left.message.version - right.message.version ||
+      Buffer.compare(left.message.uuid, right.message.uuid)
+    );
   },
 });

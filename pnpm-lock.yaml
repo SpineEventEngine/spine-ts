@@ -999,6 +999,9 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      '@js-sdsl/ordered-map':
+        specifier: 4.4.2
+        version: 4.4.2
       '@spine-event-engine/core':
         specifier: 2.0.0-snapshot.33
         version: link:../core

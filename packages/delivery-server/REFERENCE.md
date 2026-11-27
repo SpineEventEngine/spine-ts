@@ -43,12 +43,17 @@ which override defaults. Invalid values throw before a listener is created:
 - `processingTimeoutSeconds` / `SHARD_PROCESSING_TIMEOUT` sets the session
   lifetime. It defaults to 60 seconds.
 
-The in-memory inbox stores rows while process memory is available. A batch
-is applied atomically. For example, a batch of 150 valid rows for the same
-shard makes one write. A request for 2,000 rows uses the page size in the
-call. If a configured transport size prevents a request or reply from being
-sent, gRPC reports the error. The transport settings cover both the public
-connection and connections to storage subprocesses.
+The in-memory inbox keeps two balanced trees per shard. One orders all stored
+messages, the other orders messages waiting for delivery. They use receive
+seconds, nanoseconds, version, and inbox UUID. For example, if a worker
+acknowledges the newest pending Command, that Command leaves the pending tree
+and stays in the full tree until cleanup. Writing a replacement with the same
+inbox ID updates its position and status in both collections.
+
+The inbox uses available process memory. A batch of 150 valid inbox messages for
+the same shard can be stored in one request. A reader can request a page of
+2,000 messages. The configured gRPC size applies to both the public connection
+and the connections to storage subprocesses.
 
 With `processCount` greater than one, the public endpoint runs in a parent
 process and starts that many homogeneous child processes. Shard number `s`
