@@ -73,7 +73,10 @@ describe("inbox changes during a managed shard session", () => {
       const first = await core.managed.markDelivered(request, context);
       expect(first.whenKeepUntil).toMatchObject({ seconds: 15n, nanos: 20 });
       now = create(TimestampSchema, { seconds: 15n, nanos: 19 });
-      expect(await core.managed.markDelivered(request, context)).toEqual(first);
+      const retry = await core.managed.markDelivered(request, context);
+      expect(retry).toEqual(first);
+      if (!retry.whenKeepUntil) throw new Error("Expected the stored retention deadline.");
+      retry.whenKeepUntil.seconds = 999n;
       await core.managed.removeExpiredDelivered(session, context);
       expect((await core.inbox.findOne(id, context)).message).toMatchObject({
         status: InboxMessageStatus.DELIVERED,

@@ -16,6 +16,14 @@ import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { AnyPacker } from "@spine-event-engine/core";
 import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import {
+  InboxLabel,
+  InboxMessageIdSchema,
+  InboxMessageSchema,
+  InboxMessageStatus,
+  ShardIndexSchema,
+  type InboxMessage,
+} from "@spine-event-engine/proto/delivery";
+import {
   EventIdSchema,
   EventSchema,
   VersionSchema,
@@ -1948,6 +1956,117 @@ describe("MysqlRecordStorage", () => {
       false,
     );
   });
+
+  it("acknowledges an inbox ID once and returns its first deadline on a lost-response retry", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const connection = readyConnection(calls);
+    const ordinary = connection.execute;
+    let current: "pending" | "delivered" | "absent" = "pending";
+    connection.execute = (sql, values) => {
+      if (sql.startsWith("UPDATE") && sql.includes("SET status")) {
+        calls.push(values === undefined ? { sql } : { sql, values });
+        if (current === "pending") {
+          current = "delivered";
+          return Promise.resolve([{ affectedRows: 1 }, []] as never);
+        }
+        return Promise.resolve([{ affectedRows: 0 }, []] as never);
+      }
+      if (sql.startsWith("SELECT status")) {
+        calls.push(values === undefined ? { sql } : { sql, values });
+        return Promise.resolve([
+          current === "absent"
+            ? []
+            : [
+                {
+                  status:
+                    current === "delivered"
+                      ? InboxMessageStatus.DELIVERED
+                      : InboxMessageStatus.TO_DELIVER,
+                  when_keep_until: current === "delivered" ? "100000000000" : null,
+                },
+              ],
+          [],
+        ] as never);
+      }
+      return ordinary(sql, values);
+    };
+    const storage = inboxStorage(connection);
+    const first = create(TimestampSchema, { seconds: 100n });
+    const later = create(TimestampSchema, { seconds: 200n });
+
+    await expect(storage.markInboxDelivered("ack", first)).resolves.toEqual(first);
+    expect(calls.filter(({ sql }) => sql.startsWith("SELECT status"))).toHaveLength(0);
+    await expect(storage.markInboxDelivered("ack", later)).resolves.toEqual(first);
+    current = "absent";
+    await expect(storage.markInboxDelivered("ack", later)).resolves.toBeUndefined();
+    current = "pending";
+    const retry = await storage.markInboxDelivered("ack", later);
+    expect(retry).toEqual(later);
+    expect(
+      calls.filter(({ sql }) => sql.startsWith("UPDATE") && sql.includes("SET status")),
+    ).toHaveLength(4);
+  });
+
+  it("deletes only pending inbox IDs and expires delivered messages by one shard predicate", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const connection = readyConnection(calls);
+    const ordinary = connection.execute;
+    let state: "pending" | "delivered" | "absent" = "pending";
+    connection.execute = (sql, values) => {
+      if (sql.startsWith("DELETE") && sql.includes("WHERE ID=? AND status=?")) {
+        calls.push(values === undefined ? { sql } : { sql, values });
+        const removed = state === "pending";
+        if (removed) state = "absent";
+        return Promise.resolve([{ affectedRows: removed ? 1 : 0 }, []] as never);
+      }
+      if (sql.startsWith("SELECT ID")) {
+        calls.push(values === undefined ? { sql } : { sql, values });
+        return Promise.resolve([state === "absent" ? [] : [{ ID: "ack" }], []] as never);
+      }
+      return ordinary(sql, values);
+    };
+    const storage = inboxStorage(connection);
+    await expect(storage.removePendingInbox("ack")).resolves.toBe(true);
+    await expect(storage.removePendingInbox("ack")).resolves.toBe(true);
+    state = "delivered";
+    await expect(storage.removePendingInbox("ack")).resolves.toBe(false);
+    await expect(
+      storage.removeExpiredInbox(
+        create(ShardIndexSchema, { index: 2, ofTotal: 4 }),
+        create(TimestampSchema, { seconds: 100n }),
+      ),
+    ).resolves.toBe(true);
+    const cleanup = calls.filter(
+      ({ sql }) => sql.startsWith("DELETE") && sql.includes("shard_index"),
+    );
+    expect(cleanup).toHaveLength(1);
+    expect(cleanup[0]?.sql).toContain("when_keep_until IS NULL OR when_keep_until<=?");
+    expect(cleanup[0]?.values?.slice(0, 3)).toEqual([2, 4, InboxMessageStatus.DELIVERED]);
+  });
+
+  it("compares authoritative inbox status and deadline before a payload replacement", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const pending = inboxRecord("before", InboxMessageStatus.TO_DELIVER);
+    const completed = inboxRecord("before", InboxMessageStatus.DELIVERED, 100n);
+    const replacement = inboxRecord("after", InboxMessageStatus.DELIVERED, 100n);
+    const raw = toBinary(InboxMessageSchema, pending);
+    const connection = readyConnection(calls, {
+      select: () => [
+        { bytes: raw, status: InboxMessageStatus.DELIVERED, when_keep_until: "100000000000" },
+      ],
+    });
+    const storage = inboxStorage(connection);
+    await expect(storage.compareAndSet("ack", pending, undefined)).resolves.toBe(false);
+    expect(calls.some(({ sql }) => sql.startsWith("DELETE"))).toBe(false);
+    await expect(storage.compareAndSet("ack", completed, replacement)).resolves.toBe(true);
+    const update = calls.find(({ sql }) => sql.startsWith("UPDATE"));
+    expect(update?.sql).toContain("status<=>? AND when_keep_until<=>?");
+    expect(Array.from(update?.values?.[0] as Uint8Array)).toEqual([
+      ...toBinary(InboxMessageSchema, replacement),
+    ]);
+    expect(update?.values?.at(-2)).toBe(InboxMessageStatus.DELIVERED);
+    expect(update?.values?.at(-1)).toBe("100000000000");
+  });
 });
 
 function lifecycle(connection: unknown) {
@@ -1975,6 +2094,72 @@ function stringStorage(
       release: () => undefined,
     },
     () => undefined,
+  );
+}
+
+function inboxSpec(): RecordSpec<string, InboxMessage> {
+  return new RecordSpec({
+    recordType: InboxMessageSchema,
+    idKind: "string",
+    extractId: (record) => record.id?.uuid ?? "",
+    columns: [
+      new RecordColumn(
+        "shard_index",
+        ColumnTypes.scalar(ScalarType.INT32),
+        (record) => record.id?.index?.index ?? 0,
+      ),
+      new RecordColumn(
+        "shard_total",
+        ColumnTypes.scalar(ScalarType.INT32),
+        (record) => record.id?.index?.ofTotal ?? 1,
+      ),
+      new RecordColumn(
+        "status",
+        ColumnTypes.fromField(InboxMessageSchema.field.status),
+        (record) => record.status,
+      ),
+      new RecordColumn(
+        "when_keep_until",
+        ColumnTypes.fromField(InboxMessageSchema.field.keepUntil),
+        (record) => record.keepUntil,
+      ),
+    ],
+  });
+}
+
+function inboxRecord(payload: string, status: InboxMessageStatus, deadline?: bigint): InboxMessage {
+  return create(InboxMessageSchema, {
+    id: create(InboxMessageIdSchema, {
+      uuid: "ack",
+      index: create(ShardIndexSchema, { index: 2, ofTotal: 4 }),
+    }),
+    label: InboxLabel.REACT_UPON_EVENT,
+    payload: {
+      case: "event",
+      value: create(EventSchema, { id: create(EventIdSchema, { value: payload }) }),
+    },
+    status,
+    version: 1,
+    ...(deadline === undefined
+      ? {}
+      : { keepUntil: create(TimestampSchema, { seconds: deadline }) }),
+  });
+}
+
+function inboxStorage(
+  connection: ReturnType<typeof readyConnection>,
+): MysqlRecordStorage<string, InboxMessage> {
+  return new MysqlRecordStorage(
+    { name: "inbox", multitenant: false },
+    inboxSpec(),
+    new MysqlTableResolver().resolve(InboxMessageSchema.typeName, undefined),
+    lifecycle(connection),
+    () => undefined,
+    undefined,
+    undefined,
+    undefined,
+    false,
+    false,
   );
 }
 

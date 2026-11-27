@@ -34,6 +34,39 @@ afterEach(async () => {
 });
 
 describe("framework shard delivery over gRPC", () => {
+  it("delivers a pending Command after scheduled messages with the same receive time", async () => {
+    const server = new DeliveryServer({ host: "127.0.0.1", port: 0 });
+    servers.push(server);
+    await server.start();
+    const client = DeliveryClient.connectTo(server.baseUrl);
+    clients.push(client);
+    const shard = ShardIndex.single();
+    const messages = Array.from({ length: 5 }, (_, index) => ({
+      ...domainMessage(`65ae7a6e-77a9-43d9-885c-8f2ab61c43d${String(index)}`),
+      version: BigInt(index + 1),
+      status: index === 4 ? ("TO_DELIVER" as const) : ("SCHEDULED" as const),
+    }));
+    await client.writeMany(messages);
+    const delivery = new DeliveryBuilder()
+      .withContext({ name: "TiedDelivery", multitenant: false })
+      .withStorageFactory({} as never)
+      .withInbox(new RemoteInbox(client))
+      .withWorkRegistry(new RemoteWorkRegistry(client))
+      .withPageSize(2)
+      .build();
+    const handled: string[] = [];
+    await expect(
+      delivery.run({
+        shard,
+        onMessage(message) {
+          handled.push(message.id.value);
+        },
+      }),
+    ).resolves.toEqual({ status: "COMPLETED" });
+    expect(handled).toEqual(["65ae7a6e-77a9-43d9-885c-8f2ab61c43d4"]);
+    expect(await client.newestPending(shard)).toBeUndefined();
+  });
+
   it("drains a pending Command through one managed session", async () => {
     const server = new DeliveryServer({ port: 0 });
     servers.push(server);

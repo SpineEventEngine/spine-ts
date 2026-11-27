@@ -462,8 +462,10 @@ export class Delivery {
     const key = shard.key();
     const active = this.#managedAttempts.get(key);
     if (active !== undefined) return this.#joinManagedAttempt(active, options);
-    const budget = this.#managedBudget(options);
-    const attempt = this.#executeManaged(shard, options, budget.operation);
+    const joiningPhysicalRun = this.#activeDirect.has(key);
+    const admittedOptions = joiningPhysicalRun ? {} : options;
+    const budget = this.#managedBudget(admittedOptions);
+    const attempt = this.#executeManaged(shard, admittedOptions, budget.operation);
     this.#managedAttempts.set(key, attempt);
     this.#managedInFlight.add(attempt);
     void attempt
@@ -473,7 +475,7 @@ export class Delivery {
         if (this.#managedAttempts.get(key) === attempt) this.#managedAttempts.delete(key);
       })
       .catch(() => undefined);
-    return attempt;
+    return joiningPhysicalRun ? this.#joinManagedAttempt(attempt, options) : attempt;
   }
 
   /**
@@ -1815,10 +1817,10 @@ class DeliveryDrain {
       this.input.options.operation?.signal?.aborted
     )
       return;
-    if (!(await this.#validate())) return;
     try {
       await this.#acknowledgeWithRetry(message, acknowledgement);
     } catch (error) {
+      if (this.#ownershipLost) return;
       acknowledgement.exhausted = true;
       this.#recordStorageFailure(message, error);
       this.#blockedTargets.add(target);

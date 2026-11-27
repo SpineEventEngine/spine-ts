@@ -96,6 +96,7 @@ import { DeliveryClient, type RemoteShardObservation } from "@spine-event-engine
 
 declare const client: DeliveryClient;
 declare const shutdown: AbortSignal;
+declare function reportDashboardError(error: unknown): void;
 declare function showLive(rows: ReadonlyMap<string, RemoteShardObservation>, stale: boolean): void;
 
 async function showAdmin(): Promise<void> {
@@ -116,7 +117,7 @@ async function showAdmin(): Promise<void> {
   }
 }
 
-void showAdmin();
+await showAdmin().catch(reportDashboardError);
 ```
 
 Call `showAdmin()` again after a failure to build a fresh live view. The client

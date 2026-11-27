@@ -93,32 +93,18 @@ describe("RemoteInbox direct behavior", () => {
     expect(client.newestPending).toHaveBeenCalledExactlyOnceWith(shard, undefined);
   });
 
-  it("refuses an excluded full page with an unsafe tied-time continuation", async () => {
+  it("continues from the earliest Protobuf timestamp when the previous message is gone", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
-    const whenReceived = create(TimestampSchema, { seconds: 2n, nanos: 42 });
-    const first = { ...domainMessage("tie-a"), status: "DELIVERED" as const, whenReceived };
-    const second = { ...domainMessage("tie-b"), status: "DELIVERED" as const, whenReceived };
-    client.readPage.mockResolvedValueOnce([first, second]);
-    await expect(
-      inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
-    ).rejects.toBeInstanceOf(DeliveryPagingError);
-    expect(client.readPage).toHaveBeenCalledOnce();
-  });
-
-  it("refuses an exclusive continuation before Protobuf's earliest timestamp", async () => {
-    const client = new Client();
-    const inbox = new RemoteInbox(client as never);
+    const whenReceived = create(TimestampSchema, { seconds: -62_135_596_800n, nanos: 0 });
+    const next = { ...domainMessage("second"), whenReceived, version: 1n };
+    client.readPage.mockResolvedValueOnce([next]);
     await expect(
       inbox.read(ShardIndex.single(), {
-        after: {
-          messageId: "first",
-          whenReceived: create(TimestampSchema, { seconds: -62_135_596_800n, nanos: 0 }),
-          version: 1n,
-        },
+        after: { messageId: "first", whenReceived, version: 1n },
       }),
-    ).rejects.toBeInstanceOf(DeliveryPagingError);
-    expect(client.readPage).not.toHaveBeenCalled();
+    ).resolves.toEqual([next]);
+    expect(client.readPage.mock.calls[0]?.[1]?.sinceWhen).toBeUndefined();
   });
 
   it("stops a filtered multi-page read when the total deadline expires between pages", async () => {
@@ -264,7 +250,7 @@ describe("RemoteInbox direct behavior", () => {
           version: first.version,
         },
       }),
-    ).rejects.toBeInstanceOf(DeliveryPagingError);
+    ).resolves.toEqual([]);
     client.pageSize = 2;
     const tied = { ...domainMessage("tied"), whenReceived: timestampFromDate(new Date(2_000)) };
     client.readPage.mockReset().mockResolvedValueOnce([first, tied]);

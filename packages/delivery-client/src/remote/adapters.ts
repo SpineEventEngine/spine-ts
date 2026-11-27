@@ -48,7 +48,6 @@ interface RemoteInboxPage {
   readonly messages: readonly InboxMessage[];
   readonly complete: boolean;
   readonly last: InboxMessage | undefined;
-  readonly unsafeContinuation: boolean;
 }
 
 /**
@@ -215,29 +214,26 @@ export class RemoteInbox implements DeliveryInbox {
       readonly timeoutMs?: number;
     },
   ): Promise<RemoteInboxPage> {
-    const pageSize = Math.min(0x7fff_ffff, after === undefined ? limit : limit + 1);
-    const page = await RemoteInbox.#awaitPage(
-      this.client.readPage(shardIndex, {
-        pageSize,
-        signal: options.signal,
-        ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
-        ...(after === undefined ? {} : { sinceWhen: RemoteValues.pageAnchor(after.whenReceived) }),
-      }),
-      options.signal,
-    );
-    const start = after === undefined ? 0 : RemoteValues.exactAfter(page, after);
-    const last = page.at(-1);
-    const prior = page.at(-2);
-    return {
-      messages: page.slice(start),
-      complete: page.length < pageSize,
-      last,
-      unsafeContinuation:
-        page.length === pageSize &&
-        prior !== undefined &&
-        last !== undefined &&
-        RemoteValues.sameTime(prior.whenReceived, last.whenReceived),
-    };
+    const maxPageSize = 0x7fff_ffff; // The wire page size is a signed int32.
+    let pageSize = Math.min(maxPageSize, after === undefined ? limit : limit + 1);
+    const sinceWhen = after === undefined ? undefined : RemoteValues.pageAnchor(after.whenReceived);
+    for (;;) {
+      const page = await RemoteInbox.#awaitPage(
+        this.client.readPage(shardIndex, {
+          pageSize,
+          signal: options.signal,
+          ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+          ...(sinceWhen === undefined ? {} : { sinceWhen }),
+        }),
+        options.signal,
+      );
+      const messages =
+        after === undefined ? page : page.filter((message) => RemoteValues.isAfter(message, after));
+      const complete = page.length < pageSize;
+      if (messages.length || complete) return { messages, complete, last: messages.at(-1) };
+      if (pageSize === maxPageSize) throw new DeliveryPagingError();
+      pageSize = Math.min(maxPageSize, pageSize * 2);
+    }
   }
 
   async #readCollected(
@@ -264,7 +260,6 @@ export class RemoteInbox implements DeliveryInbox {
       }
       if (page.complete) return Object.freeze(result);
       if (page.last === undefined) throw new DeliveryPagingError();
-      if (page.unsafeContinuation) throw new DeliveryPagingError();
       after = {
         messageId: page.last.id.value,
         whenReceived: page.last.whenReceived,
@@ -734,38 +729,27 @@ const RemoteValues = Object.freeze({
    * @param value Last received timestamp.
    * @returns Exclusive JVM query bound that includes the cursor row.
    */
-  pageAnchor(value: Timestamp): Timestamp {
-    if (value.seconds === -62_135_596_800n && value.nanos === 0) throw new DeliveryPagingError();
+  pageAnchor(value: Timestamp): Timestamp | undefined {
+    if (value.seconds === -62_135_596_800n && value.nanos === 0) return undefined;
     return value.nanos === 0
       ? create(TimestampSchema, { seconds: value.seconds - 1n, nanos: 999_999_999 })
       : create(TimestampSchema, { seconds: value.seconds, nanos: value.nanos - 1 });
   },
 
   /**
-   * Compares two receive times at nanosecond precision.
-   * @param left The first receive time.
-   * @param right The second receive time.
-   * @returns Whether both instants have equal seconds and nanoseconds.
+   * Checks whether a message follows the previous page in the server's delivery order.
+   *
+   * @param message Candidate from the timestamp query.
+   * @param after Last position consumed by the worker.
+   * @returns True when this candidate has not yet been visited.
    */
-  sameTime(left: Timestamp, right: Timestamp): boolean {
-    return left.seconds === right.seconds && left.nanos === right.nanos;
-  },
-
-  /**
-   * Finds a continuation row returned by the JVM timestamp query.
-   * @param page Returned page.
-   * @param after Previous row identity.
-   * @returns Position after the previous row.
-   */
-  exactAfter(page: readonly InboxMessage[], after: NonNullable<InboxReadOptions["after"]>): number {
-    const exact = page.findIndex(
-      (message) =>
-        message.id.value === after.messageId &&
-        RemoteValues.sameTime(message.whenReceived, after.whenReceived) &&
-        message.version === after.version,
-    );
-    if (exact < 0) throw new DeliveryPagingError();
-    return exact + 1;
+  isAfter(message: InboxMessage, after: NonNullable<InboxReadOptions["after"]>): boolean {
+    const time = message.whenReceived;
+    if (time.seconds !== after.whenReceived.seconds)
+      return time.seconds > after.whenReceived.seconds;
+    if (time.nanos !== after.whenReceived.nanos) return time.nanos > after.whenReceived.nanos;
+    if (message.version !== after.version) return message.version > after.version;
+    return Buffer.compare(Buffer.from(message.id.value), Buffer.from(after.messageId)) > 0;
   },
 
   /**

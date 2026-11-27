@@ -36,9 +36,12 @@ mutation response raises `DeliveryOutcomeUnknownError`; inspect its
 the mutation.
 
 `readPage` calls the existing JVM `InboxService.FindManyInShard` RPC.
-`sinceWhen` is its exclusive timestamp lower bound. Invalid local offsets or
-unsafe page continuation raise `DeliveryPagingError`; malformed responses raise
-`DeliveryProtocolError`. Inbox read results expose `whenReceived` as a Protobuf
+`sinceWhen` is its exclusive timestamp lower bound. When several messages share a receive time, the worker rereads that time and
+compares each message's inbox counter and UUID with the last one it visited.
+If a full reply contains only positions already visited, it requests more
+messages using the existing RPC. An unsupported offset, or a boundary that
+cannot be passed within the RPC's signed int32 page size, raises
+`DeliveryPagingError`. A malformed reply raises `DeliveryProtocolError`. Inbox read results expose `whenReceived` as a Protobuf
 `Timestamp` with seconds and nanoseconds. Single and batch writes and removals
 also preserve that timestamp.
 

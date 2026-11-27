@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
 import { EmptySchema, TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import {
@@ -122,15 +122,18 @@ export class InboxWorkRuntime {
     if (current.status === InboxMessageStatus.DELIVERED)
       return create(InboxWorkResultSchema, {
         matched: true,
-        whenKeepUntil: current.keepUntil,
+        whenKeepUntil: current.keepUntil && clone(TimestampSchema, current.keepUntil),
       });
     if (current.status !== InboxMessageStatus.TO_DELIVER) return create(InboxWorkResultSchema);
     const now = this.now();
     const keepUntil = create(TimestampSchema, { seconds: now.seconds + 5n, nanos: now.nanos });
-    this.state.put({ ...current, status: InboxMessageStatus.DELIVERED, keepUntil });
+    this.state.markDelivered(current, keepUntil);
     this.onStoredChange?.(shard);
     this.onWorkChange?.(shard);
-    return create(InboxWorkResultSchema, { matched: true, whenKeepUntil: keepUntil });
+    return create(InboxWorkResultSchema, {
+      matched: true,
+      whenKeepUntil: clone(TimestampSchema, keepUntil),
+    });
   }
 
   /**

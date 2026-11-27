@@ -126,6 +126,42 @@ describe("Delivery direct worker", () => {
     }
   });
 
+  it("stops a managed joiner independently when a direct run started the shard", async () => {
+    const shard = ShardIndex.single();
+    const pending = message("direct-first", "target", shard);
+    const entered = Promise.withResolvers<undefined>();
+    const held = Promise.withResolvers<DeliveryEndpointMessage[]>();
+    const delivery = createDelivery({
+      newestPending: async () => pending,
+      read: async () => {
+        entered.resolve(undefined);
+        return held.promise;
+      },
+    });
+    delivery.setDispatcher(() => undefined);
+    const observed = vi.fn();
+    delivery.setShardObserver(observed);
+    const direct = delivery.run({ shard, onMessage: () => undefined });
+    try {
+      await entered.promise;
+      const caller = new AbortController();
+      const joined = delivery.deliverMessagesFrom(shard, { signal: caller.signal });
+      caller.abort();
+      await expect(joined).resolves.toEqual({ status: "stopped" });
+      const settled = vi.fn();
+      void direct.then(settled);
+      await Promise.resolve();
+      expect(settled).not.toHaveBeenCalled();
+      held.resolve([]);
+      await expect(direct).resolves.toEqual({ status: "COMPLETED" });
+      await delivery.whenIdle();
+      expect(observed).toHaveBeenCalledWith(pending);
+    } finally {
+      held.resolve([]);
+      await delivery.close();
+    }
+  });
+
   it("closes a direct run during sustained shard pickup conflicts", async () => {
     let attempts = 0;
     const handle = {
@@ -932,7 +968,7 @@ describe("Delivery direct worker", () => {
     expect(run.status).toBe("SKIPPED");
   });
 
-  it("renews before callback and durable acknowledgement", async () => {
+  it("validates before callback and once before the first acknowledgement", async () => {
     const shard = ShardIndex.single();
     const rows = [message("one", "target", shard)];
     let renewals = 0;
@@ -955,7 +991,7 @@ describe("Delivery direct worker", () => {
     });
     const run = await delivery.drain(shard, { onMessage: () => undefined });
     expect(run).toMatchObject({ status: "DRAINED", processed: 1, delivered: 1 });
-    expect(renewals).toBeGreaterThanOrEqual(2);
+    expect(renewals).toBe(2);
     expect(marks).toBe(1);
   });
 

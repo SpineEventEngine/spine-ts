@@ -229,6 +229,21 @@ export class InMemoryDeliveryState {
   }
 
   /**
+   * Marks the retained pending message delivered and removes its pending tree entry.
+   *
+   * @param current Pending message held by the server.
+   * @param deadline First retention deadline computed by the server.
+   */
+  markDelivered(current: InboxMessage, deadline: Timestamp): void {
+    const shard = this.#requiredShard(current);
+    this.#buckets
+      .get(DeliveryShards.key(shard))
+      ?.pending.eraseElementByKey(DeliveryRowOrder.key(current));
+    current.status = InboxMessageStatus.DELIVERED;
+    current.keepUntil = deadline;
+  }
+
+  /**
    * Removes delivered messages whose retention has ended in the requested shard.
    *
    * @param shard Selects the shard being drained.
