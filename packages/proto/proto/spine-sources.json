@@ -500,7 +500,7 @@
     },
     {
       "localPath": "packages/proto/proto/spine/delivery/session/managed_sessions.proto",
-      "sha256": "5b449910bfe0df3529ec50add969b0aec5f56ea191038bec826dd7d0071007a8"
+      "sha256": "2284b6f4d47e9e24fbfb2f40cf2a559034d5fb15b5d04b6ce8b5d55338ccf83e"
     },
     {
       "localPath": "packages/proto/proto/spine/deployment/node_discovery.proto",

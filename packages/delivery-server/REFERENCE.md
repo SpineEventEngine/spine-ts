@@ -12,7 +12,7 @@ This reference describes the public in-memory Delivery server API. Read the
 ## Public entry points
 
 `InMemoryDelivery.create(options)` returns `DeliveryCore` with Connect handler
-implementations `inbox`, `guarded`, `shards`, `managed`, and `observing`.
+implementations `inbox`, `shards`, `managed`, and `observing`.
 Register `observing` for `ShardObservingService` so application nodes can receive work notices.
 The caller supplies the network listener. Call `close()` to finish streams and cancel
 timers. The standalone `DeliveryServer` also provides the Admin and health services.

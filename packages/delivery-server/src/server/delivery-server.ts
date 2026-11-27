@@ -23,7 +23,6 @@ import {
   Health,
   InboxService,
   ManagedShardService,
-  GuardedInboxService,
   ShardObservingService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
@@ -287,10 +286,7 @@ export class DeliveryServer {
    * Builds the public listener after its service handlers are ready.
    */
   #createServer(
-    core: Pick<
-      DeliveryAssembly,
-      "inbox" | "shards" | "managed" | "guarded" | "observing" | "admin"
-    >,
+    core: Pick<DeliveryAssembly, "inbox" | "shards" | "managed" | "observing" | "admin">,
   ): http2.Http2Server {
     const server = http2.createServer(
       connectNodeAdapter({
@@ -299,7 +295,6 @@ export class DeliveryServer {
           router.service(InboxService, core.inbox);
           router.service(ShardService, core.shards);
           router.service(ManagedShardService, core.managed);
-          router.service(GuardedInboxService, core.guarded);
           router.service(ShardObservingService, core.observing);
           router.service(AdminService, core.admin);
           router.service(Health, health);
@@ -319,7 +314,7 @@ export class DeliveryServer {
    * Constructs single-process handlers or starts fixed private child slots.
    */
   async #services(): Promise<
-    Pick<DeliveryAssembly, "inbox" | "shards" | "managed" | "guarded" | "observing" | "admin">
+    Pick<DeliveryAssembly, "inbox" | "shards" | "managed" | "observing" | "admin">
   > {
     if (this.#processCount === 1) {
       const core = DeliveryAssembly.create(this.#configuration);
@@ -335,7 +330,6 @@ export class DeliveryServer {
       inbox: proxy.inbox(),
       shards: proxy.shards(),
       managed: proxy.managed(),
-      guarded: proxy.guarded(),
       observing: proxy.observing(),
       admin: proxy.admin(),
     };

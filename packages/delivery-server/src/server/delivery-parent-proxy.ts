@@ -24,7 +24,6 @@ import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-no
 import {
   AdminService,
   ExpiredSessionsReleasedSchema,
-  GuardedInboxService,
   InboxService,
   ManagedShardService,
   ShardService,
@@ -218,33 +217,37 @@ export class DeliveryParentProxy {
             this.#forward(context, headers),
           ),
         ),
+      ...this.#inboxWork(),
     };
   }
 
   /**
-   * Creates session-guarded acknowledgement and cleanup routes.
+   * Routes each inbox change to the storage subprocess serving the session's shard.
    *
-   * @returns Guarded Inbox handlers for complete row identities.
+   * @returns The three inbox operations that require a managed session.
    */
-  guarded(): ServiceImpl<typeof GuardedInboxService> {
+  #inboxWork(): Pick<
+    ServiceImpl<typeof ManagedShardService>,
+    "markDelivered" | "removeDuplicate" | "removeExpiredDelivered"
+  > {
     return {
-      acknowledge: (request, context) =>
-        this.#guardedMutation(request, context.signal, (transport, headers) =>
-          createClient(GuardedInboxService, transport).acknowledge(
+      markDelivered: (request, context) =>
+        this.#workMutation(request, context.signal, (transport, headers) =>
+          createClient(ManagedShardService, transport).markDelivered(
             request,
             this.#forward(context, headers),
           ),
         ),
-      removePendingDuplicate: (request, context) =>
-        this.#guardedMutation(request, context.signal, (transport, headers) =>
-          createClient(GuardedInboxService, transport).removePendingDuplicate(
+      removeDuplicate: (request, context) =>
+        this.#workMutation(request, context.signal, (transport, headers) =>
+          createClient(ManagedShardService, transport).removeDuplicate(
             request,
             this.#forward(context, headers),
           ),
         ),
       removeExpiredDelivered: (request, context) =>
-        this.#guardedMutation(request, context.signal, (transport, headers) =>
-          createClient(GuardedInboxService, transport).removeExpiredDelivered(
+        this.#sessionMutation(request, context.signal, (transport, headers) =>
+          createClient(ManagedShardService, transport).removeExpiredDelivered(
             request,
             this.#forward(context, headers),
           ),
@@ -562,22 +565,26 @@ export class DeliveryParentProxy {
   }
 
   /**
-   * Rejects a guarded row from another shard before child mutation admission.
+   * Routes an inbox ID mutation to the fixed child for its live session.
    *
-   * @typeParam T The guarded mutation result.
+   * @typeParam T The mutation result.
+   * @param request Session and complete inbox message ID.
+   * @param signal Cancels the forwarded call.
+   * @param call Invokes the child's managed service.
+   * @returns The child's result.
    */
-  #guardedMutation<T>(
+  #workMutation<T>(
     request: {
       session?: { shard?: ShardIndex | undefined } | undefined;
-      expected?: InboxMessage | undefined;
+      id?: { index?: ShardIndex | undefined } | undefined;
     },
     signal: AbortSignal,
     call: (transport: ChildTransport, headers: Headers) => Promise<T>,
   ): Promise<T> {
-    const messageShard = InboxShards.required(request.expected?.id?.index);
+    const messageShard = InboxShards.required(request.id?.index);
     const shard = DeliverySessionInputs.requireShard(request.session?.shard);
     if (messageShard.index !== shard.index || messageShard.ofTotal !== shard.ofTotal)
-      throw new ConnectError("Inbox row shard differs from session.", Code.InvalidArgument);
+      throw new ConnectError("Inbox message shard differs from session.", Code.InvalidArgument);
     return this.#call(this.#slot(shard), signal, call);
   }
 }

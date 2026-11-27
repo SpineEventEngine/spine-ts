@@ -238,8 +238,8 @@ export class DeliveryOutcomeUnknownError extends Error {
     | "RELEASE_SHARD"
     | "RELEASE_EXPIRED"
     | "ACKNOWLEDGE"
-    | "REMOVE_DUPLICATE_GUARDED"
-    | "REMOVE_DELIVERED_GUARDED";
+    | "REMOVE_DUPLICATE"
+    | "REMOVE_EXPIRED_DELIVERED";
 
   /**
    * Identifies the observation required to reconcile the mutation outcome.
@@ -285,8 +285,8 @@ const DeliveryOutcomeValues = Object.freeze({
     if (
       operation === "REMOVE_ONE" ||
       operation === "REMOVE_MANY" ||
-      operation === "REMOVE_DUPLICATE_GUARDED" ||
-      operation === "REMOVE_DELIVERED_GUARDED"
+      operation === "REMOVE_DUPLICATE" ||
+      operation === "REMOVE_EXPIRED_DELIVERED"
     )
       return "Delivery removal outcome is unknown.";
     return "Delivery shard operation outcome is unknown.";
@@ -330,7 +330,8 @@ const DeliveryOutcomeValues = Object.freeze({
       operation === "PICK_UP_SHARD" ||
       operation === "PICK_UP_FOR_DELIVERY" ||
       operation === "RENEW_SHARD" ||
-      operation === "RELEASE_SHARD"
+      operation === "RELEASE_SHARD" ||
+      operation === "REMOVE_EXPIRED_DELIVERED"
     );
   },
 });

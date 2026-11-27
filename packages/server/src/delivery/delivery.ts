@@ -42,6 +42,7 @@ import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
 import { deliveryTenantKey } from "./delivery-tenant.js";
 import { withDeliveryCommitFence } from "../repository/commit-fence.js";
+import { deliveryRunScopes } from "./delivery-run-scope.js";
 import { receptionObservation, type ReceptionObservation } from "./reception-observation.js";
 import { DuplicateDispatch } from "./duplicate-dispatch.js";
 import type { DeliveryResult, DeliveryRunOptions, DeliveryStrategy } from "./delivery-builder.js";
@@ -1391,6 +1392,15 @@ class DeliveryDrain {
    * @returns The terminal delivery outcome and counts.
    */
   async run(): Promise<DeliveryRun> {
+    return deliveryRunScopes.run(() => this.#runScoped());
+  }
+
+  /**
+   * Processes pages under one stable drain identity.
+   *
+   * @returns The terminal delivery outcome and counts.
+   */
+  async #runScoped(): Promise<DeliveryRun> {
     this.#startHeartbeat();
     let run: DeliveryRun;
     try {
@@ -1504,6 +1514,7 @@ class DeliveryDrain {
    * @returns The terminal delivery outcome.
    */
   async #readPages(): Promise<DeliveryRun> {
+    await this.#cleanupExpired();
     let after: import("./inbox.js").InboxReadContinuation | undefined;
     let deliveredInScan = false;
     let scanGeneration = this.#wakeGeneration;
@@ -1522,7 +1533,6 @@ class DeliveryDrain {
       }
       const deliveredBefore = this.#statistics.delivered;
       if (!(await this.#processPage(messages))) return this.#complete("STOPPED");
-      if (!(await this.#cleanupPage(messages))) return this.#complete("STOPPED");
       deliveredInScan ||= this.#statistics.delivered !== deliveredBefore;
       if (messages.length < this.input.pageSize) {
         if (this.#shortPageDrained(deliveredInScan, scanGeneration))
@@ -1920,44 +1930,21 @@ class DeliveryDrain {
   }
 
   /**
-   * Removes expired delivered messages from one page when supported.
+   * Applies one shard-wide expired-delivery predicate before page reads.
    *
-   * @param messages Supplies the inbox page to clean up.
-   * @returns Whether cleanup completed while the session remained valid.
-   */
-  async #cleanupPage(messages: readonly InboxMessage[]): Promise<boolean> {
-    if (this.input.inbox.removeDelivered === undefined) return true;
-    if (!(await this.#validate())) return false;
-    const now = this.#retentionTime().getTime();
-    for (const message of messages) {
-      if (
-        message.status === "DELIVERED" &&
-        (message.keepUntil === undefined || message.keepUntil.getTime() <= now)
-      ) {
-        const removed = await this.#removeDelivered(message);
-        if (removed === undefined) return false;
-        if (removed) this.#removedInPage.add(message);
-      }
-    }
-    return true;
-  }
-
-  /**
-   * Removes one expired delivered message when supported.
+   * Providers without a single-operation predicate leave retained completions
+   * for later maintenance while pending delivery continues.
    *
-   * @param message Supplies the delivered message to remove.
-   * @returns Whether the row was removed, or undefined if the session was lost.
+   * @returns Completion after the cleanup attempt.
    */
-  async #removeDelivered(message: InboxMessage): Promise<boolean | undefined> {
-    if (this.input.inbox.removeDelivered === undefined) return false;
-    if (this.input.options.operation?.signal?.aborted || !(await this.#validate()))
-      return undefined;
-    const removed = await this.input.inbox.removeDelivered(
-      message,
+  async #cleanupExpired(): Promise<void> {
+    if (this.input.inbox.removeExpiredDelivered === undefined) return;
+    if (!(await this.#validate())) return;
+    await this.input.inbox.removeExpiredDelivered(
+      this.input.shard,
       this.input.options.operation,
       this.#current,
     );
-    return removed;
   }
 
   /**

@@ -272,9 +272,9 @@ describe("@spine-event-engine/server", () => {
     expect(StandSubscriptionCapacityError).toBeTypeOf("function");
     expectTypeOf<InboxMessage>().not.toHaveProperty("claim");
     expectTypeOf<InboxReadContinuation["whenReceived"]>().toEqualTypeOf<Timestamp>();
-    expectTypeOf<DeliveryInbox["removeDelivered"]>().toEqualTypeOf<
+    expectTypeOf<DeliveryInbox["removeExpiredDelivered"]>().toEqualTypeOf<
       | ((
-          message: InboxMessage,
+          shard: ShardIndex,
           options?: DeliveryOperationOptions,
           session?: DeliveryWorkSession,
         ) => Promise<boolean>)

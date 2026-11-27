@@ -91,8 +91,6 @@ import {
   type StorageContext,
 } from "@spine-event-engine/storage";
 import type {
-  AgentHistoryStorage,
-  AgentHistoryStorageInput,
   EntityStorageConformance,
   EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
@@ -2199,38 +2197,6 @@ class GuardedSupportAgent extends Agent<SupportReplyAgentId, typeof SupportReply
     const reply = `Answer: ${event.question}`;
     this.update((state) => Object.assign(state, { id: this.id, proposedReply: reply }));
     return create(SupportReplyDraftedSchema, { agent: this.id, reply });
-  }
-}
-
-/**
- * Counts provider history reads during ordinary Agent dispatch.
- */
-class HistoryReadTrackingFactory extends InMemoryStorageFactory {
-  historyReads = 0;
-
-  /**
-   * Wraps one Agent history handle without changing its stored records.
-   *
-   * @param input Bound Agent repository scope.
-   * @returns Handle that counts chronological history reads.
-   */
-  protected override createAgentHistoryStorage<Id>(
-    input: AgentHistoryStorageInput<Id>,
-  ): AgentHistoryStorage<Id> {
-    const storage = super.createAgentHistoryStorage(input);
-    return {
-      capacity: storage.capacity,
-      append: (id, entry) => storage.append(id, entry),
-      appendAll: (id, entries) => storage.appendAll(id, entries),
-      read: (request) => {
-        this.historyReads += 1;
-        return storage.read(request);
-      },
-      readModelRequest: (id, callId) => storage.readModelRequest(id, callId),
-      close: () => {
-        storage.close();
-      },
-    };
   }
 }
 
@@ -7941,69 +7907,6 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("guards multi-target composite Process Manager delivery by complete ID", async () => {
-    const setup = createTestSetup(true);
-    ProjectMilestoneProcessManager.reset();
-    let routeCalls = 0;
-    const idA = create(ProjectMilestoneIdSchema, {
-      reader: create(UserIdSchema, { value: "guarded" }),
-      number: 1,
-    });
-    const idB = create(ProjectMilestoneIdSchema, {
-      reader: create(UserIdSchema, { value: "guarded" }),
-      number: 2,
-    });
-    const repository = createProjectMilestoneProcessManagerRepository(
-      EventRouting.create<ProjectMilestoneId>().route(ProjectMilestoneAddedSchema, () => {
-        routeCalls += 1;
-        return [idA, clone(ProjectMilestoneIdSchema, idA), idB];
-      }),
-      { doubleDispatchGuard: true },
-    );
-    const factory = new InMemoryStorageFactory();
-    await configureStorage(setup, factory);
-    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
-    const dispatcher = repositoryAccess.eventDispatcher(repository);
-    if (dispatcher === undefined)
-      throw new Error("Expected a composite Process Manager dispatcher.");
-    const duplicate = create(EventSchema, {
-      id: create(EventIdSchema, { value: "event-composite-guarded" }),
-      context: create(EventContextSchema, {
-        producerId: Identifiers.pack(ProjectMilestoneIdSchema, idA),
-        version: create(VersionSchema, { number: 1 }),
-        timestamp: create(TimestampSchema, { seconds: 1n }),
-      }),
-      message: AnyPacker.pack(
-        ProjectMilestoneAddedSchema,
-        create(ProjectMilestoneAddedSchema, { id: idA, name: "Guarded" }),
-      ),
-    });
-    const distinct = create(EventSchema, {
-      id: create(EventIdSchema, { value: "event-composite-guarded-distinct" }),
-      context: create(EventContextSchema, {
-        producerId: Identifiers.pack(ProjectMilestoneIdSchema, idA),
-        version: create(VersionSchema, { number: 2 }),
-        timestamp: create(TimestampSchema, { seconds: 2n }),
-      }),
-      message: AnyPacker.pack(
-        ProjectMilestoneAddedSchema,
-        create(ProjectMilestoneAddedSchema, { id: idA, name: "Distinct" }),
-      ),
-    });
-
-    try {
-      await dispatcher.dispatch(duplicate);
-      await dispatcher.dispatch(duplicate);
-      await dispatcher.dispatch(distinct);
-      await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
-
-      expect(routeCalls).toBe(3);
-      expect(ProjectMilestoneProcessManager.ids).toEqual([idA, idB, idA, idB]);
-    } finally {
-      await context.close();
-    }
-  });
-
   it("applies exact Event routes before replacement defaults", async () => {
     const exact = createRoutingRepository(
       undefined,
@@ -10422,89 +10325,6 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("guards each target of a multi-target Process Manager route independently", async () => {
-    const setup = createTestSetup(true);
-    SplitRouteProcessManager.reset();
-    const factory = new InMemoryStorageFactory();
-    await configureStorage(setup, factory);
-    const repository = createGuardedSplitPmRepo(
-      EventRouting.create<string>().route(ProjectCreatedSchema, () => ["pm-one", "pm-two"]),
-    );
-    await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
-    const dispatcher = repositoryAccess.eventDispatcher(repository);
-    if (dispatcher === undefined) throw new Error("Expected a process-manager event dispatcher.");
-
-    const event = createProjectCreated("event-pm-guarded-many", "pm-source");
-    await dispatcher.dispatch(event);
-    await dispatcher.dispatch(event);
-    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
-
-    expect(SplitRouteProcessManager.startedIds).toEqual(["pm-one", "pm-two"]);
-    expect(SplitRouteProcessManager.completedIds).toEqual(["pm-one", "pm-two"]);
-  });
-
-  it.each([true, false])(
-    "uses the process-local Agent guard after Inbox retention with guard enabled=%s",
-    async (guarded) => {
-      const setup = createTestSetup(true);
-      GuardedSupportAgent.reactions = 0;
-      const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-guard" });
-      expect(() => createGuardedSupportAgentRepository(agent, false, guarded)).not.toThrow();
-
-      const factory = new HistoryReadTrackingFactory();
-      await configureStorage(setup, factory);
-      const event = SignalEnvelopes.event({
-        schema: SupportTicketUpdatedSchema,
-        message: create(SupportTicketUpdatedSchema, { agent, question: "Delivery?" }),
-        context: create(EventContextSchema, {
-          producerId: AnyPacker.pack(SupportReplyAgentIdSchema, agent),
-          version: create(VersionSchema, { number: 1 }),
-        }),
-      });
-      const repository = createGuardedSupportAgentRepository(agent, false, guarded);
-      const context = await buildContext(
-        BoundedContext.singleTenant("SupportGuard")
-          .add(repository)
-          .withAi(
-            AiRegistry.create({
-              defaultModels: {},
-              invocationLimits: {
-                operations: 1,
-                modelRequests: 1,
-                toolCalls: 0,
-                recordedReads: 0,
-                deadlineMs: 1_000,
-                totalInputBytes: 4_000,
-                totalOutputBytes: 4_000,
-              },
-            }),
-          )
-          .persistSystemEvents(),
-        setup,
-      );
-      let now = 1_900_000_000_000;
-      const previousTime = Time.setProvider({
-        currentTime: () => timestampFromDate(new Date(now)),
-        monotonicTime: () => now,
-      });
-      try {
-        const dispatcher = repositoryAccess.eventDispatcher(repository);
-        if (dispatcher === undefined) throw new Error("Expected Agent Event dispatcher.");
-        await dispatcher.dispatch(event);
-        await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
-        expect(GuardedSupportAgent.reactions).toBe(1);
-        now += 5_001;
-        await dispatcher.dispatch(event);
-        await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
-      } finally {
-        await context.close();
-        Time.setProvider(previousTime);
-      }
-      expect(GuardedSupportAgent.reactions).toBe(guarded ? 1 : 2);
-      expect(factory.historyReads).toBe(0);
-    },
-  );
-
   it("suppresses a duplicate Aggregate Event using its delivered Inbox receipt", async () => {
     const setup = createTestSetup(true);
     GuardedAggregate.reset();
@@ -10661,96 +10481,66 @@ describe("repository signal routing", () => {
     await context.close();
   });
 
-  it("uses emitted Event causes to guard Process Manager Commands", async () => {
+  it("reuses guarded Aggregate Event evidence across one sequential shard drain", async () => {
     const setup = createTestSetup(true);
-    DiagnosticOnlyProcessManager.calls = 0;
-    await configureStorage(setup, new InMemoryStorageFactory());
-    const repository = createDiagnosticOnlyProcessManagerRepository(true);
-    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
-    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
-    const target = requireEntityInboxTarget(repository);
-    const stored = await storeEntityInboxCommand(
-      delivery,
-      createAggregateCommand("pm-command-duplicate", "pm-command-target"),
-      new Date("2026-07-08T09:05:30.000Z"),
-      1n,
+    const factory = new CountingGuardHistoryFactory();
+    await configureStorage(setup, factory);
+    const handlers = HandlerMetadataValues.defineArity(
+      ProjectAggregate,
+      ProjectStateSchema,
+      (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+      [
+        {
+          kind: "command-assignment",
+          methodName: "createProject",
+          parameterCount: 1,
+          outcomes: handlerOutcomes([ProjectCreatedSchema]),
+        },
+      ],
     );
-
-    await target.deliver(stored);
-    await expect(target.deliver(stored)).rejects.toMatchObject({
-      code: CommandValidationCode.DUPLICATE_COMMAND,
-      kind: "command",
+    const repository = new Repository({
+      entityType: ProjectAggregate,
+      schema: ProjectStateSchema,
+      handlers,
+      events: [ProjectCreatedSchema],
+      doubleDispatchGuard: { depth: 2 },
     });
-    expect(DiagnosticOnlyProcessManager.calls).toBe(1);
-    await context.close();
-  });
-
-  it("closes guard probe handles for both entity kinds on success, duplicates, and failures", async () => {
-    const setup = createTestSetup(true);
-    const aggregateFactory = new CountingProbeStorageFactory();
-    await configureStorage(setup, aggregateFactory);
-    const aggregateRepository = createGuardedAggregateRepository();
-    const aggregateContext = await buildContext(
-      BoundedContext.singleTenant("Tasks").add(aggregateRepository),
-      setup,
-    );
-    const aggregateDispatcher = repositoryAccess.eventDispatcher(aggregateRepository);
-    if (aggregateDispatcher === undefined)
-      throw new Error("Expected an aggregate event dispatcher.");
-    const aggregateEvent = createProjectCreated("event-aggregate-probe", "aggregate-probe");
-
-    await aggregateDispatcher.dispatch(aggregateEvent);
-    expect(aggregateFactory.closedProbes).toBe(0);
-    await aggregateDispatcher.dispatch(
-      createProjectCreated("event-aggregate-probe-other", "aggregate-probe-other"),
-    );
-    expect(aggregateFactory.closedProbes).toBe(0);
-    await aggregateDispatcher.dispatch(aggregateEvent);
-    expect(aggregateFactory.closedProbes).toBe(0);
-    await aggregateContext.close();
-    expect(aggregateFactory.closedProbes).toBe(1);
-
-    const pmFactory = new CountingProbeStorageFactory();
-    await configureStorage(setup, pmFactory);
-    const pmRepository = createGuardedProcessManagerReactRepository(1);
-    const pmContext = await buildContext(
-      BoundedContext.singleTenant("Tasks").add(pmRepository),
-      setup,
-    );
-    const pmDispatcher = repositoryAccess.eventDispatcher(pmRepository);
-    if (pmDispatcher === undefined) throw new Error("Expected a process-manager event dispatcher.");
-    const pmEvent = createProjectCreated("event-pm-probe", "pm-probe");
-
-    await pmDispatcher.dispatch(createProjectCreated("event-pm-probe-retry", "pm-probe"));
-    expect(pmFactory.closedProbes).toBe(0);
-    await pmDispatcher.dispatch(createProjectCreated("event-pm-probe-other", "pm-probe-other"));
-    expect(pmFactory.closedProbes).toBe(0);
-    await pmDispatcher.dispatch(pmEvent);
-    expect(pmFactory.closedProbes).toBe(0);
-    await pmContext.close();
-    expect(pmFactory.closedProbes).toBe(1);
-
-    const failingFactory = new CountingProbeStorageFactory(true);
-    await configureStorage(setup, failingFactory);
-    const failingRepository = createGuardedAggregateRepository();
-    const failingContext = await buildContext(
-      BoundedContext.singleTenant("Tasks").add(failingRepository),
-      setup,
-    );
-    const failingDispatcher = repositoryAccess.eventDispatcher(failingRepository);
-    if (failingDispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
-
-    await expect(
-      failingDispatcher.dispatch(
-        createProjectCreated("event-aggregate-probe-fail", "aggregate-probe-fail"),
-      ),
-    ).resolves.toBeUndefined();
-    await expect(serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup))).rejects.toThrow(
-      "guard probe read failed",
-    );
-    expect(failingFactory).toMatchObject({ opened: 1, closed: 0, closedProbes: 0 });
-    await failingContext.close();
-    expect(failingFactory).toMatchObject({ opened: 1, closed: 1, closedProbes: 1 });
+    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
+    const delivery = new Delivery({
+      context: { name: "GuardBatch", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const target = requireEntityInboxTarget(repository);
+    try {
+      for (const [index, id] of ["guard-batch-first", "guard-batch-second"].entries()) {
+        await storeEntityInboxCommand(
+          delivery,
+          createContextlessGeneratedCreateProject(id, "guard-batch-target"),
+          new Date(1_783_500_000_000 + index),
+          BigInt(index + 1),
+          { targetTypeUrl: TypeUrls.derive(ProjectStateSchema) },
+        );
+      }
+      expect(
+        await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+      ).toHaveLength(2);
+      await expect(
+        delivery.run({
+          onMessage: async (message) => {
+            await target.deliver(message);
+          },
+        }),
+      ).resolves.toEqual({
+        status: "COMPLETED",
+      });
+      expect(factory.guardHistoryReads).toBe(1);
+      await expect(
+        delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
+      ).resolves.toHaveLength(2);
+    } finally {
+      await delivery.close();
+      await context.close();
+    }
   });
 
   it("retains one Entity storage across repeated repository dispatch and closes it with the context", async () => {
@@ -11080,26 +10870,6 @@ describe("repository signal routing", () => {
     await expect(entity.readAudit()).rejects.toThrow("active runtime");
   });
 
-  it("bounds delivery lanes while delivered Inbox rows suppress a duplicate after lane eviction", async () => {
-    const setup = createTestSetup(true);
-    RoutingProcessManager.reset();
-    const factory = new InMemoryStorageFactory();
-    await configureStorage(setup, factory);
-    const repository = createGuardedProcessManagerReactRepository(1);
-    await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
-    const dispatcher = repositoryAccess.eventDispatcher(repository);
-    if (dispatcher === undefined) throw new Error("Expected a process-manager event dispatcher.");
-
-    const first = createProjectCreated("event-guard-depth-first", "pm-guard-depth-first");
-    const second = createProjectCreated("event-guard-depth-second", "pm-guard-depth-second");
-    await dispatcher.dispatch(first);
-    await dispatcher.dispatch(second);
-    await dispatcher.dispatch(first);
-    await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
-
-    expect(RoutingProcessManager.eventCalls).toBe(2);
-  });
-
   it("starts a fresh Inbox deduplication lifetime after environment replacement", async () => {
     const setup = createTestSetup(true);
     RoutingProcessManager.reset();
@@ -11209,99 +10979,6 @@ describe("repository signal routing", () => {
     });
     await expect(postJournal.readEvents("pm-guard-after-journal")).resolves.toEqual([]);
     await postJournalContext.close();
-  });
-
-  it("runs unrelated guarded entity lanes concurrently", async () => {
-    const setup = createTestSetup(true);
-    BlockingProcessManager.reset();
-    BlockingProcessManager.blockingId = "pm-guard-lane-one";
-    const factory = new InMemoryStorageFactory();
-    await configureStorage(setup, factory);
-    const repository = createGuardedBlockingPmRepo();
-    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
-    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
-    const target = requireEntityInboxTarget(repository);
-    const blockedRow = await storeEntityInboxEvent(
-      delivery,
-      createProjectCreated("event-guard-lane-one", "pm-guard-lane-one"),
-      new Date("2026-07-24T19:00:00.000Z"),
-      1n,
-    );
-    const unrelatedRow = await storeEntityInboxEvent(
-      delivery,
-      createProjectCreated("event-guard-lane-two", "pm-guard-lane-two"),
-      new Date("2026-07-24T19:00:01.000Z"),
-      2n,
-    );
-
-    const blocked = target.deliver(blockedRow);
-    await waitForCondition(() => BlockingProcessManager.startedCalls === 1);
-    const unrelated = target.deliver(unrelatedRow);
-
-    await waitForCondition(() => BlockingProcessManager.startedCalls === 2);
-    await expect(Promise.race([unrelated.then(() => "resolved"), delay(150)])).resolves.toBe(
-      "resolved",
-    );
-    BlockingProcessManager.release();
-    await expect(Promise.all([blocked, unrelated])).resolves.toEqual([undefined, undefined]);
-    expect(BlockingProcessManager.completedCalls).toBe(2);
-    await context.close();
-  });
-
-  it("serializes an active lane while no-output Process Manager Events run independently", async () => {
-    const setup = createTestSetup(true);
-    BlockingProcessManager.reset();
-    BlockingProcessManager.blockingId = "pm-guard-trim-active";
-    const factory = new CountingProbeStorageFactory(false, true);
-    await configureStorage(setup, factory);
-    const repository = createGuardedBlockingPmRepo(1);
-    const context = await buildContext(BoundedContext.singleTenant("Tasks").add(repository), setup);
-    const delivery = serverEnvironmentAccess.coreDelivery(environmentFor(setup));
-    const target = requireEntityInboxTarget(repository);
-    const active = createProjectCreated("event-guard-trim-active", "pm-guard-trim-active");
-    const evicted = createProjectCreated("event-guard-trim-evicted", "pm-guard-trim-evicted");
-    const first = target.deliver(
-      await storeEntityInboxEvent(delivery, active, new Date("2026-07-24T20:00:00.000Z"), 1n),
-    );
-    await waitForCondition(() => BlockingProcessManager.startedCalls === 1);
-    await target.deliver(
-      await storeEntityInboxEvent(delivery, evicted, new Date("2026-07-24T20:00:01.000Z"), 2n),
-    );
-    await target.deliver(
-      await storeEntityInboxEvent(
-        delivery,
-        createProjectCreated("event-guard-trim-two", "pm-guard-trim-two"),
-        new Date("2026-07-24T20:00:02.000Z"),
-        3n,
-      ),
-    );
-    await target.deliver(
-      await storeEntityInboxEvent(
-        delivery,
-        createProjectCreated("event-guard-trim-three", "pm-guard-trim-three"),
-        new Date("2026-07-24T20:00:03.000Z"),
-        4n,
-      ),
-    );
-    await target.deliver(
-      await storeEntityInboxEvent(delivery, evicted, new Date("2026-07-24T20:00:04.000Z"), 5n, {
-        signalId: "delivery-row-guard-trim-evicted",
-      }),
-    );
-    await waitForCondition(() => BlockingProcessManager.startedCalls === 5);
-
-    const duplicateActive = target.deliver(
-      await storeEntityInboxEvent(delivery, active, new Date("2026-07-24T20:00:05.000Z"), 6n, {
-        signalId: "delivery-row-guard-trim-active",
-      }),
-    );
-    await expect(Promise.race([duplicateActive.then(() => "resolved"), delay(150)])).resolves.toBe(
-      "pending",
-    );
-    BlockingProcessManager.release();
-    await expect(Promise.all([first, duplicateActive])).resolves.toEqual([undefined, undefined]);
-    expect(BlockingProcessManager.completedCalls).toBe(7);
-    await context.close();
   });
 
   it("uses the stored process-manager target and rejects other invalid delivery rows", async () => {
@@ -11473,7 +11150,7 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("runs a Process Manager reactor again when no emitted Event records its cause", async () => {
+  it("runs a Process Manager reactor again without a dispatch guard", async () => {
     const setup = createTestSetup(true);
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
@@ -16185,9 +15862,7 @@ function createProjectMilestoneProcessManagerRepository(
     handlers,
     ...(eventRouting === undefined ? {} : { eventRouting }),
     ...(commandRouting === undefined ? {} : { commandRouting }),
-    ...(options.doubleDispatchGuard === true
-      ? { processManagerEventHistory: true, doubleDispatchGuard: true }
-      : {}),
+    ...(options.doubleDispatchGuard === true ? { processManagerEventHistory: true } : {}),
   });
 }
 
@@ -16760,7 +16435,7 @@ function createProducingGuardedAggregateRepository(): Repository<typeof Producin
     schema: ProjectStateSchema,
     handlers,
     events: [ProjectRegisteredSchema],
-    doubleDispatchGuard: true,
+    doubleDispatchGuard: { depth: 100 },
   });
 }
 
@@ -17199,9 +16874,9 @@ function createProcessManagerCommandAndReactRepository(): Repository<typeof Rout
   });
 }
 
-function createDiagnosticOnlyProcessManagerRepository(
-  guarded = false,
-): Repository<typeof DiagnosticOnlyProcessManager> {
+function createDiagnosticOnlyProcessManagerRepository(): Repository<
+  typeof DiagnosticOnlyProcessManager
+> {
   const handlers = HandlerMetadataValues.defineArity(
     DiagnosticOnlyProcessManager,
     ProjectQueueStateSchema,
@@ -17223,14 +16898,12 @@ function createDiagnosticOnlyProcessManagerRepository(
     handlers,
     events: [ProjectCreatedSchema],
     processManagerEventHistory: true,
-    ...(guarded ? { doubleDispatchGuard: { depth: 1 } } : {}),
   });
 }
 
 function createGuardedSupportAgentRepository(
   agent: SupportReplyAgentId,
   retainHistory: boolean,
-  guarded = true,
 ): Repository<typeof GuardedSupportAgent> {
   const handlers = HandlerMetadataValues.defineArity(
     GuardedSupportAgent,
@@ -17257,13 +16930,10 @@ function createGuardedSupportAgentRepository(
       () => [agent],
     ),
     ...(retainHistory ? { processManagerEventHistory: true } : {}),
-    ...(guarded ? { doubleDispatchGuard: true } : {}),
   });
 }
 
-function createGuardedProcessManagerReactRepository(
-  depth = 100,
-): Repository<typeof RoutingProcessManager> {
+function createGuardedProcessManagerReactRepository(): Repository<typeof RoutingProcessManager> {
   const handlers = EntityHandlers.define(
     RoutingProcessManager,
     ProjectQueueStateSchema,
@@ -17275,7 +16945,6 @@ function createGuardedProcessManagerReactRepository(
     schema: ProjectQueueStateSchema,
     handlers,
     processManagerEventHistory: true,
-    doubleDispatchGuard: { depth },
   });
 }
 
@@ -17307,22 +16976,6 @@ function createBlockingPmRepo(): Repository<typeof BlockingProcessManager> {
   });
 }
 
-function createGuardedBlockingPmRepo(depth = 100): Repository<typeof BlockingProcessManager> {
-  const handlers = EntityHandlers.define(
-    BlockingProcessManager,
-    ProjectQueueStateSchema,
-    (builder) => [builder.react(ProjectCreatedSchema, "reactTask")],
-  );
-
-  return new Repository({
-    entityType: BlockingProcessManager,
-    schema: ProjectQueueStateSchema,
-    handlers,
-    processManagerEventHistory: true,
-    doubleDispatchGuard: { depth },
-  });
-}
-
 function createSplitPmRepo(
   eventRouting?: EventRouting<string> | EventRouting<string, typeof SplitRouteProcessManager>,
 ): Repository<typeof SplitRouteProcessManager> {
@@ -17336,24 +16989,6 @@ function createSplitPmRepo(
     entityType: SplitRouteProcessManager,
     schema: ProjectQueueStateSchema,
     handlers,
-    ...(eventRouting === undefined ? {} : { eventRouting }),
-  });
-}
-
-function createGuardedSplitPmRepo(
-  eventRouting?: EventRouting<string>,
-): Repository<typeof SplitRouteProcessManager> {
-  const handlers = EntityHandlers.define(
-    SplitRouteProcessManager,
-    ProjectQueueStateSchema,
-    (builder) => [builder.react(ProjectCreatedSchema, "reactTask")],
-  );
-  return new Repository({
-    entityType: SplitRouteProcessManager,
-    schema: ProjectQueueStateSchema,
-    handlers,
-    processManagerEventHistory: true,
-    doubleDispatchGuard: true,
     ...(eventRouting === undefined ? {} : { eventRouting }),
   });
 }
@@ -17498,7 +17133,6 @@ function createGuardedProcessManagerCommandOnlyRepository(): Repository<
     schema: ProjectQueueStateSchema,
     handlers,
     processManagerEventHistory: true,
-    doubleDispatchGuard: true,
   });
 }
 
@@ -18347,6 +17981,30 @@ class CurrentRecordTestStorage<S extends Message = Message> {
 
 type ReadEntityStorage = EntityStorageConformance<unknown, Message> & { close(): void };
 
+class CountingGuardHistoryFactory extends InMemoryStorageFactory {
+  guardHistoryReads = 0;
+
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as ReadEntityStorage;
+    const events = {
+      ...storage.events,
+      backward: (id: unknown, depth: number, startingFromVersion?: bigint) => {
+        this.guardHistoryReads += 1;
+        return storage.events.backward(id, depth, startingFromVersion);
+      },
+    };
+    return new Proxy(storage, {
+      get(target, property) {
+        if (property === "events") return events;
+        const value: unknown = Reflect.get(target, property, target);
+        if (typeof value !== "function") return value;
+        const bound: unknown = value.bind(target);
+        return bound;
+      },
+    });
+  }
+}
+
 class RetainedEntityStorageFactory extends InMemoryStorageFactory {
   entityOpens = 0;
   openedStorageScopes: string[] = [];
@@ -18571,84 +18229,6 @@ class FailingReadStorageFactory extends InMemoryStorageFactory {
       states: storage.states,
       close: () => {
         this.readCloses += 1;
-        storage.close();
-      },
-    };
-  }
-}
-
-class CountingProbeStorageFactory extends InMemoryStorageFactory {
-  opened = 0;
-  closed = 0;
-  closedProbes = 0;
-
-  constructor(
-    private readonly failRead = false,
-    private readonly hideGuardHistory = false,
-  ) {
-    super();
-  }
-
-  override createEntityStorage(input: unknown): unknown {
-    const storage = super.createEntityStorage(input) as {
-      readonly current: {
-        read(id: unknown): Promise<unknown>;
-        write(record: unknown): Promise<void>;
-      };
-      readonly states: unknown;
-      readonly events: {
-        append(record: {
-          readonly entityId: unknown;
-          readonly event: SpineEvent;
-          readonly producerVersion: bigint;
-          readonly createdAt: Message;
-        }): Promise<void>;
-        backward(
-          entityId: unknown,
-          depth: number,
-          startingFromVersion?: bigint,
-        ): Promise<readonly SpineEvent[]>;
-      };
-      close(): void;
-    };
-    this.opened++;
-    let closed = false;
-    let probed = false;
-    let readCurrent = false;
-
-    return {
-      current: {
-        read: async (id: unknown) => {
-          readCurrent = true;
-          return storage.current.read(id);
-        },
-        write: (record: unknown) => storage.current.write(record),
-      },
-      states: storage.states,
-      events: {
-        append: (record: {
-          readonly entityId: unknown;
-          readonly event: SpineEvent;
-          readonly producerVersion: bigint;
-          readonly createdAt: Message;
-        }) => storage.events.append(record),
-        backward: (
-          entityId: unknown,
-          depth: number,
-          startingFromVersion?: bigint,
-        ): Promise<readonly SpineEvent[]> => {
-          probed = true;
-          if (this.failRead) return Promise.reject(new Error("guard probe read failed"));
-          if (this.hideGuardHistory && !readCurrent) return Promise.resolve([]);
-          return storage.events.backward(entityId, depth, startingFromVersion);
-        },
-      },
-      close: () => {
-        if (!closed) {
-          closed = true;
-          this.closed++;
-          if (probed) this.closedProbes++;
-        }
         storage.close();
       },
     };

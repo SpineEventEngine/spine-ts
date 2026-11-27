@@ -105,6 +105,23 @@ export interface DeliveryInbox {
   ): Promise<InboxMessage | undefined>;
 
   /**
+   * Deletes expired delivered messages for one shard in one storage operation.
+   *
+   * A provider that cannot express the predicate returns false without deleting
+   * messages. Pending delivery continues under the current session.
+   *
+   * @param shard Selects the shard to clean.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @param session Supplies the current exclusive fence to remote adapters.
+   * @returns Whether the provider applied the cleanup predicate.
+   */
+  removeExpiredDelivered?(
+    shard: ShardIndex,
+    options?: DeliveryOperationOptions,
+    session?: DeliveryWorkSession,
+  ): Promise<boolean>;
+
+  /**
    * Removes one pending duplicate by storage ID after delivery selects it.
    *
    * @param message Supplies the pending duplicate snapshot.
@@ -117,26 +134,10 @@ export interface DeliveryInbox {
     options?: DeliveryOperationOptions,
     session?: DeliveryWorkSession,
   ): Promise<boolean>;
-
-  /**
-   * Removes one eligible delivered message by storage ID.
-   *
-   * Custom structural ports may omit this optional retention capability.
-   *
-   * @param message Supplies the expected delivered row snapshot.
-   * @param options Propagates cancellation and a delivery deadline.
-   * @param session Supplies the current exclusive fence to remote adapters.
-   * @returns Whether the adapter completed its supported removal operation.
-   */
-  removeDelivered?(
-    message: InboxMessage,
-    options?: DeliveryOperationOptions,
-    session?: DeliveryWorkSession,
-  ): Promise<boolean>;
 }
 
 /**
- * Server-owned exclusive shard-work boundary.
+ * Coordinates exclusive or leased shard sessions for delivery drains.
  */
 export interface DeliveryWorkRegistry {
   // prettier-ignore

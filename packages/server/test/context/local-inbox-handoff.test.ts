@@ -109,7 +109,29 @@ describe("DeliveryReadiness", () => {
     expect(drainMessage).toHaveBeenCalledTimes(3);
   });
 
-  it("accepts a delivered readback after an unresolved local result", async () => {
+  it("waits through more than eight deferred outcomes for the exact acknowledgement", async () => {
+    const row = createMessage("late-ack", "event-late-ack", 1n);
+    let attempts = 0;
+    const drainMessage = vi.fn(() =>
+      Promise.resolve(
+        ++attempts === 10
+          ? { acknowledged: true, outcome: { kind: "acknowledged" } }
+          : { acknowledged: false, outcome: { kind: "deferred" } },
+      ),
+    );
+    await InboxHandoff.runDrain({
+      delivery: { drainMessage } as unknown as Delivery,
+      received: row,
+      node: "Tasks",
+      onDispatch: () => undefined,
+      deliveryFailureMessage: "delivery failed",
+      skippedMessage: "skipped",
+      unfinishedMessage: "unfinished",
+    });
+    expect(drainMessage).toHaveBeenCalledTimes(10);
+  });
+
+  it("reports an unresolved local result without rereading the inbox message", async () => {
     const row = createMessage("delivered-readback", "event-readback", 1n);
     const readMessage = vi.fn().mockResolvedValue({ ...row, status: "DELIVERED" });
     const delivery = {
@@ -119,8 +141,8 @@ describe("DeliveryReadiness", () => {
           kind: "unresolved",
           run: {
             status: "STOPPED",
-            processed: 1,
-            accepted: 1,
+            processed: 0,
+            accepted: 0,
             delivered: 0,
             failed: 0,
             failures: [],
@@ -129,16 +151,18 @@ describe("DeliveryReadiness", () => {
       }),
       inbox: { readMessage },
     } as unknown as Delivery;
-    await InboxHandoff.runDrain({
-      delivery,
-      received: row,
-      node: "Tasks",
-      onDispatch: () => undefined,
-      deliveryFailureMessage: "delivery failed",
-      skippedMessage: "skipped",
-      unfinishedMessage: "unfinished",
-    });
-    expect(readMessage).toHaveBeenCalledWith(row.id);
+    await expect(
+      InboxHandoff.runDrain({
+        delivery,
+        received: row,
+        node: "Tasks",
+        onDispatch: () => undefined,
+        deliveryFailureMessage: "delivery failed",
+        skippedMessage: "skipped",
+        unfinishedMessage: "unfinished",
+      }),
+    ).rejects.toThrow("unfinished");
+    expect(readMessage).not.toHaveBeenCalled();
   });
 
   it("uses the shared Delivery wake when no custom wake callback was installed", async () => {
@@ -203,7 +227,7 @@ describe("DeliveryReadiness", () => {
           unfinishedMessage: "unfinished",
         }),
       ).rejects.toThrow(status === "skipped" ? "skipped" : "unfinished");
-      expect(readMessage).toHaveBeenCalledWith(row.id);
+      expect(readMessage).not.toHaveBeenCalled();
       expect(drainMessage).toHaveBeenCalledOnce();
     },
   );

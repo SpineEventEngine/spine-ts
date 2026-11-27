@@ -17,7 +17,6 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   InboxService,
   ManagedShardService,
-  GuardedInboxService,
   ShardService,
   ShardObservingService,
 } from "@spine-event-engine/proto/delivery-server";
@@ -77,11 +76,6 @@ export interface DeliveryCore {
   readonly managed: ServiceImpl<typeof ManagedShardService>;
 
   /**
-   * Serves session-guarded Inbox mutations.
-   */
-  readonly guarded: ServiceImpl<typeof GuardedInboxService>;
-
-  /**
    * Streams free shards with pending work to application nodes.
    */
   readonly observing: ServiceImpl<typeof ShardObservingService>;
@@ -125,7 +119,6 @@ export const InMemoryDelivery: Readonly<{
       inbox: assembly.inbox,
       shards: assembly.shards,
       managed: assembly.managed,
-      guarded: assembly.guarded,
       observing: assembly.observing,
       close() {
         assembly.closeAdmission();

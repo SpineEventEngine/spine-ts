@@ -660,7 +660,7 @@ DraftSupportReply → SupportDraftAgent → CallModel
                               SupportReview query
 ```
 
-The Agent's `@Command` handler returns `this.modelCommands.create(draftSupportReply, { conversation, input: command })`. The definition comes from the example's `src/model.ts`; both the Agent and its Bounded Context registration import it. `.withAi(registry)` supplies a permitted provider deployment. The framework saves the returned Command with the Agent turn, then its registered asynchronous handler runs the model. A typed reply or rejection returns to the Agent, whose `@React` handler emits `SupportReplySuggested` or `SupportReplyFailed`. The review Projection stores the outcome for a person to inspect. Local Command posting waits for reception and scheduling. Delivery marks the Agent Inbox row `DELIVERED` only after its handler and save finish. To observe completion, wait for the domain outcome or read the resulting state; the provider reply may arrive later.
+The Agent's `@Command` handler returns `this.modelCommands.create(draftSupportReply, { conversation, input: command })`. The definition comes from the example's `src/model.ts`; both the Agent and its Bounded Context registration import it. `.withAi(registry)` supplies a permitted provider deployment. The framework saves the returned Command with the Agent turn, then its registered asynchronous handler runs the model. A typed reply or rejection returns to the Agent, whose `@React` handler emits `SupportReplySuggested` or `SupportReplyFailed`. The review Projection stores the outcome for a person to inspect. Local Command posting waits for reception and scheduling. Delivery marks the Agent inbox message `DELIVERED` only after its handler and save finish. To observe completion, wait for the domain outcome or read the resulting state; the provider reply may arrive later.
 
 A model can still be wrong about facts it cannot verify. Keep the review decision in application code. Configure the permitted provider and its credentials outside the Agent. For local tests, `AiTestBackend` supplies controlled replies without a paid model request. The example's [BlackBox test](../examples/support/test/support-blackbox.test.ts) checks the proposal, failure, review query, and recorded interaction history. See the [AI package guide](../packages/ai/README.md) for the task definition, [adapter guide](../packages/ai-vercel-ax/README.md) for deployment, and [Agent reference](../packages/server/REFERENCE.md#agent-execution) for exact runtime contracts.
 
@@ -781,13 +781,13 @@ same pending message and invoke the Agent again. An original input that is still
 `TO_DELIVER` can cause a new model call with a fresh ID. A previously saved
 pending model call is not automatically sent again.
 
-Suppose two inbox messages carry Command C42 to the same Project. A worker
-acknowledges the first. When it reaches the second, it can recognize C42 from
+Suppose two inbox messages carry the same Command to the same Project. A worker
+acknowledges the first. When it reaches the second, it can recognize the Command ID from
 a retained completion in the current page or from a completion it remembers
 locally for five seconds. It then removes the second message. If both pieces
 of evidence have expired, a later worker can invoke the handler again. A
 different Project is a different recipient, even if the Command ID is the same.
-An Event whose ID text is also C42 is a separate signal and is delivered to
+An Event with the same UUID text is a separate signal and is delivered to
 that Project too.
 
 Continue with the [server reference](../packages/server/REFERENCE.md) for

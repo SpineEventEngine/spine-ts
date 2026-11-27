@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import {
   AnySchema,
   Int32ValueSchema,
@@ -33,7 +33,7 @@ import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import {
   OptionalInboxMessageSchema,
   PageOfMessagesSchema,
-  GuardedInboxResultSchema,
+  InboxWorkResultSchema,
   DeliverySessionHandleSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
@@ -109,7 +109,7 @@ describe("delivery codec and immutable snapshots", () => {
     expect(fake.unary.mock.calls.at(-1)?.[0]).toMatchObject({ name: "RemoveOne" });
   });
 
-  it("uses guarded RPCs for delivered cleanup and pending duplicate removal", async () => {
+  it("cleans the session shard and removes a pending duplicate by ID", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
     const inbox = new RemoteInbox(client);
@@ -128,26 +128,20 @@ describe("delivery codec and immutable snapshots", () => {
       DeliveryMessageCodec.encode(pending),
       ShardIndex.single(),
     );
-    const readDelivered = DeliveryMessageCodec.decode(
-      DeliveryMessageCodec.encode({
-        ...pending,
-        status: "DELIVERED",
-        keepUntil: new Date(0),
-      }),
-      ShardIndex.single(),
-    );
-    fake.reply(create(GuardedInboxResultSchema, { matched: false }));
-    await expect(inbox.removeDelivered(readDelivered, undefined, session)).resolves.toBe(false);
-    fake.reply(create(GuardedInboxResultSchema, { matched: true }));
+    fake.reply(create(EmptySchema));
+    await expect(
+      inbox.removeExpiredDelivered(ShardIndex.single(), undefined, session),
+    ).resolves.toBe(true);
+    fake.reply(create(InboxWorkResultSchema, { matched: true }));
     await expect(inbox.removeDuplicate(readPending, undefined, session)).resolves.toBe(true);
     expect(fake.unary.mock.calls.map((call) => (call[0] as { name: string }).name)).toEqual([
       "PickShardForDelivery",
       "RemoveExpiredDelivered",
-      "RemovePendingDuplicate",
+      "RemoveDuplicate",
     ]);
   });
 
-  it("rejects malformed guarded acknowledgement and deletion replies", async () => {
+  it("acknowledges the inbox ID from a page in one RPC", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
     fake.replyPickup();
@@ -156,52 +150,30 @@ describe("delivery codec and immutable snapshots", () => {
       value: "run",
     });
     if (pickup.kind !== "PICKED") throw new Error("Expected a managed session.");
-    const row = domainMessage("guarded-reply");
-    const expected = DeliveryMessageCodec.encode(row);
-    fake.reply(create(OptionalInboxMessageSchema, { message: expected }));
-    const original = await client.findOne(row.id);
-    if (original === undefined) throw new Error("Expected the stored inbox row.");
-    const completed = clone(InboxMessageSchema, expected);
-    completed.status = InboxMessageStatus.DELIVERED;
-    completed.keepUntil = create(TimestampSchema, { seconds: 10n, nanos: 123 });
-    const changed = clone(InboxMessageSchema, completed);
-    if (changed.id === undefined) throw new Error("Expected an Inbox row ID.");
-    changed.id.uuid = "different";
-    const pending = clone(InboxMessageSchema, expected);
-    const invalidDeadline = clone(InboxMessageSchema, completed);
-    invalidDeadline.keepUntil = create(TimestampSchema, { seconds: 10n, nanos: 1_000_000_000 });
-    const missingUnknown = fromBinary(
-      InboxMessageSchema,
-      new Uint8Array([...toBinary(InboxMessageSchema, expected), 0x98, 0x06, 0x7b]),
+    const pending = domainMessage("c58e2dc3-e0f8-4ba4-a728-a19c9ec0dbe1");
+    fake.reply(create(PageOfMessagesSchema, { message: [DeliveryMessageCodec.encode(pending)] }));
+    const [item] = await client.readPage(ShardIndex.single());
+    if (item === undefined) throw new Error("Expected a pending inbox message.");
+    fake.reply(
+      create(InboxWorkResultSchema, {
+        matched: true,
+        whenKeepUntil: { seconds: 15n },
+      }),
     );
-
-    for (const message of [undefined, pending, changed, invalidDeadline]) {
-      fake.reply(create(GuardedInboxResultSchema, { matched: true, message }));
-      await expect(client.acknowledgeGuarded(pickup.session, original)).rejects.toBeInstanceOf(
-        DeliveryProtocolError,
-      );
-    }
-    fake.reply(create(GuardedInboxResultSchema, { matched: true, message: completed }));
-    await expect(
-      client.acknowledgeGuarded(
-        pickup.session,
-        DeliveryMessageCodec.decode(missingUnknown, ShardIndex.single()),
-      ),
-    ).rejects.toBeInstanceOf(DeliveryProtocolError);
-    fake.reply(create(GuardedInboxResultSchema, { matched: false, message: completed }));
-    await expect(client.acknowledgeGuarded(pickup.session, original)).rejects.toBeInstanceOf(
-      DeliveryProtocolError,
-    );
-    fake.reply(create(GuardedInboxResultSchema, { matched: false }));
-    await expect(client.acknowledgeGuarded(pickup.session, original)).resolves.toBeUndefined();
-    fake.reply(create(GuardedInboxResultSchema, { matched: true, message: completed }));
-    await expect(client.removeDuplicateGuarded(pickup.session, original)).rejects.toBeInstanceOf(
-      DeliveryProtocolError,
-    );
-    fake.reply(create(GuardedInboxResultSchema, { matched: false, message: completed }));
-    await expect(client.removeDeliveredGuarded(pickup.session, original)).rejects.toBeInstanceOf(
-      DeliveryProtocolError,
-    );
+    expect((await client.markDelivered(pickup.session, item.id)).whenKeepUntil).toMatchObject({
+      seconds: 15n,
+    });
+    expect(fake.unary.mock.calls.map(([method]) => (method as { name: string }).name)).toEqual([
+      "PickShardForDelivery",
+      "FindManyInShard",
+      "MarkDelivered",
+    ]);
+    const request: unknown = fake.unary.mock.calls.at(-1)?.[4];
+    expect(request).toMatchObject({
+      id: { uuid: item.id.value },
+      session: { sessionId: pickup.session.sessionId },
+    });
+    expect(request).not.toHaveProperty("expected");
   });
 
   it("validates an empty-filter read cursor and caller cancellation before remote I/O", async () => {

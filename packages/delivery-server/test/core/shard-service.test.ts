@@ -18,7 +18,7 @@ import { Code } from "@connectrpc/connect";
 import { describe, expect, it, vi } from "vitest";
 import {
   DeliveryShardPickupSchema,
-  GuardedInboxRequestSchema,
+  InboxWorkRequestSchema,
   WriteMessageSchema,
   PickUpShardSchema,
   ReleaseExpiredSessionsSchema,
@@ -115,8 +115,8 @@ describe("typed Shard sessions", () => {
         code: Code.InvalidArgument,
       });
       await expect(
-        core.guarded.acknowledge(
-          create(GuardedInboxRequestSchema, { session: malformed, expected: row }),
+        core.managed.markDelivered(
+          create(InboxWorkRequestSchema, { session: malformed, id: row.id }),
           context,
         ),
       ).rejects.toMatchObject({ code: Code.InvalidArgument });

@@ -426,24 +426,20 @@ They return typed IDs, detached complete states, and restored application
 Entity instances, respectively. The read scope closes when the route finishes.
 When explicit handler metadata is supplied, repository routing
 calculates command and event routes by generated message full type name,
-readiness metadata, producer ID, or first-field ID. Built bounded contexts
-register repository dispatcher adapters internally so aggregate commands can
-load or create one aggregate, invoke one assignee in a framework
-transaction, persist the latest managed state, append the optional state history
-and diagnostic event journal, then store returned domain events in the framework
-event store before queueing them for event-bus delivery without appending them
-again. Process-manager repositories
-also participate in those adapters: command assignees are invoked from the
-command bus through a durable process-manager inbox handoff. The local
-runtime notifies Delivery immediately after a successful Inbox write and resolves
-after recipient Inbox acceptance. Live projection subscribers use the same local handoff shape with
-`UPDATE_SUBSCRIBER` rows, original event IDs as dedup signal IDs, and exact-row
-stored-target dispatch through the Inbox delivery lifecycle. Live
-process-manager event reactors and event-commanding handlers use the same
-durable inbox handoff with `REACT_UPON_EVENT` rows, original `Event`
-envelopes, and stored-row target dispatch. Before handler code runs, delivery
-validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
-target type URL, and routed target ID.
+readiness metadata, producer ID, or first-field ID. When an Aggregate handles a Command, the repository loads or creates the
+Aggregate, invokes its handler, and saves its state. It records emitted Events
+in the Aggregate type's Event history. For example, the Order repository can
+read the Events emitted by Order `order-17` when its double-dispatch guard is
+enabled. The framework also publishes those Events through the Bounded
+Context's Event Store and Event Bus.
+
+For delivery to a Process Manager or Projection, the framework first stores an
+inbox message identifying the recipient. For example, the inbox message for a
+Projection subscriber contains the Event and the label `UPDATE_SUBSCRIBER`.
+The worker reads the message in a shard page, checks the recipient and tenant,
+and invokes the registered subscriber. After successful dispatch it marks the
+inbox ID delivered. The Process Manager follows the same sequence when an
+Event arrives for a handler registered with `REACT_UPON_EVENT`.
 State is stored in tenant-scoped `Stand` records with Spine `Version`
 messages, returned commands are wrapped and posted after state storage, and
 returned event messages are wrapped using the invoked handler's declared Event schemas
@@ -1139,6 +1135,14 @@ only when their tenant boundary, source type, and group identity match; two
 omitted groups identify the same ungrouped family. Bounded Context names are
 diagnostic and never enter physical storage identity. Each call still returns
 an independently closeable storage handle.
+`InboxRecordMutations` describes the storage operations that Delivery uses to
+mark an inbox ID delivered and delete expired delivered messages for a shard.
+`InboxRecordStorageCapabilities.hasMutations(storage)` checks a record handle
+for those operations. A provider can return an `InboxRecordEntry` from the
+ordinary page query when it needs native database metadata for the update.
+For example, Datastore returns a revision with each pending message. The
+framework passes it back to the same provider when the handler succeeds.
+
 `RecordStorage.delete(id)`, `read(id)`, and
 `compareAndSet(id, expected, next)` address actual storage slot IDs.
 `RecordStorage.query()` and `RecordStorage.queryEntries()` also filter

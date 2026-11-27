@@ -151,7 +151,7 @@ export class ShardSessionRuntime {
           this.receivedRevision(request.shard),
         );
       },
-    };
+    } as ServiceImpl<typeof ManagedShardService>;
   }
 
   /**

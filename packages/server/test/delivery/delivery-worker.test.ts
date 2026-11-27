@@ -516,111 +516,6 @@ describe("Delivery direct worker", () => {
     expect(removals).toBe(1);
   });
 
-  it.each([
-    { offset: 60_000, expectedDelivery: 1, expectedRemoval: 1 },
-    { offset: -60_000, expectedDelivery: 0, expectedRemoval: 0 },
-    { offset: 0, expectedDelivery: 1, expectedRemoval: 1 },
-  ])(
-    "uses the inbox clock for retained identity and cleanup at offset $offset",
-    async ({ offset, expectedDelivery, expectedRemoval }) => {
-      const shard = ShardIndex.single();
-      const boundary = Date.now();
-      const retained = {
-        ...message("retained", "target", shard),
-        status: "DELIVERED" as const,
-        keepUntil: new Date(boundary),
-      };
-      const pending = { ...message("pending", "target", shard), signalId: retained.signalId };
-      const pages = [[retained, pending], []];
-      const removed: string[] = [];
-      const duplicates: string[] = [];
-      const delivery = createDelivery({
-        now: () => new Date(boundary + offset),
-        read: async () => pages.shift() ?? [],
-        remove: async (row) => {
-          removed.push(row.id.value);
-          return true;
-        },
-        removeDuplicate: async (row) => {
-          duplicates.push(row.id.value);
-          return true;
-        },
-      });
-
-      const run = await delivery.drain(shard, { onMessage: () => undefined });
-
-      expect(run.delivered).toBe(expectedDelivery);
-      expect(removed).toHaveLength(expectedRemoval);
-      expect(duplicates).toHaveLength(1 - expectedDelivery);
-    },
-  );
-
-  it("skips per-record checks for future retained rows", async () => {
-    const shard = ShardIndex.single();
-    const future = {
-      ...message("future", "target", shard),
-      status: "DELIVERED" as const,
-      keepUntil: new Date(Date.now() + 60_000),
-    };
-    let checks = 0;
-    let removals = 0;
-    const delivery = createDelivery({
-      rows: [future],
-      registry: {
-        pickUp: async () => session(shard),
-        renew: async () => {
-          checks += 1;
-          return session(shard);
-        },
-        release: async () => true,
-      },
-      remove: async () => {
-        removals += 1;
-        return false;
-      },
-    });
-
-    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
-      status: "DRAINED",
-    });
-    expect(checks).toBe(1);
-    expect(removals).toBe(0);
-  });
-
-  it("delivers after an expired retained identity is cleaned from a new wrapper", async () => {
-    const shard = ShardIndex.single();
-    const expired = {
-      ...message("expired", "target", shard),
-      keepUntil: new Date(Date.now() - 60_000),
-      status: "DELIVERED" as const,
-    };
-    const pending = { ...message("pending", "target", shard), signalId: expired.signalId };
-    const rows = [expired, pending];
-    const dispatched: string[] = [];
-    const removed: string[] = [];
-    const delivery = createDelivery({
-      rows,
-      mark: async (row) => {
-        remove(rows, row);
-        return { ...row, status: "DELIVERED" as const };
-      },
-      remove: async (row) => {
-        removed.push(row.id.value);
-        remove(rows, row);
-        return true;
-      },
-    });
-
-    await delivery.drain(shard, {
-      onMessage: (row) => {
-        dispatched.push(row.id.value);
-      },
-    });
-
-    expect(dispatched).toEqual([pending.id.value]);
-    expect(removed).toEqual([expired.id.value]);
-  });
-
   it("delivers the same signal to different typed targets", async () => {
     const shard = ShardIndex.single();
     const firstTarget = message("same-signal", "first", shard);
@@ -853,7 +748,7 @@ describe("Delivery direct worker", () => {
     "dispatches a Command and Event with the same ID text in %s order",
     async (order) => {
       const shard = ShardIndex.single();
-      const signalId = "same-uuid-text";
+      const signalId = "c58e2dc3-e0f8-4ba4-a728-a19c9ec0dbe1";
       const command = {
         ...message(signalId, "target", shard),
         id: { value: "command-row", shard },
@@ -993,244 +888,27 @@ describe("Delivery direct worker", () => {
     expect(rows).toEqual([]);
   });
 
-  it("runs one owned delivered cleanup page after each delivery page and on an empty drain", async () => {
+  it("applies one shard cleanup predicate before reading pending messages", async () => {
     const shard = ShardIndex.single();
-    const pending = message("pending", "target", shard);
-    const delivered = { ...pending, status: "DELIVERED" as const };
-    let reads = 0;
-    let removals = 0;
+    const calls: string[] = [];
     const delivery = createDelivery({
-      pageSize: 1,
-      read: async () => (reads++ === 0 ? [pending] : reads === 2 ? [delivered] : []),
-      remove: async () => {
-        removals += 1;
+      cleanup: async (selected) => {
+        expect(selected).toEqual(shard);
+        calls.push("cleanup");
         return true;
       },
-    });
-
-    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
-      status: "DRAINED",
-      delivered: 1,
-    });
-    expect(reads).toBe(4);
-    expect(removals).toBe(1);
-  });
-
-  it("keeps a completed cleanup deletion when cancellation stops later work", async () => {
-    const shard = ShardIndex.single();
-    const delivered = { ...message("delivered", "target", shard), status: "DELIVERED" as const };
-    const pending = message("pending", "other-target", shard);
-    const rows = [delivered, pending];
-    const controller = new AbortController();
-    let removals = 0;
-    let dispatched = 0;
-    const delivery = createDelivery({
-      pageSize: 1,
-      read: async (options) => {
-        const cursor = options?.after?.messageId;
-        return rows.filter((row) => cursor === undefined || row.id.value > cursor).slice(0, 1);
-      },
-      remove: async (row) => {
-        removals += 1;
-        remove(rows, row);
-        controller.abort();
-        return true;
-      },
-    });
-    await expect(
-      delivery.drain(shard, {
-        onMessage: () => {
-          dispatched += 1;
-        },
-        operation: { signal: controller.signal },
-      }),
-    ).resolves.toMatchObject({ status: "STOPPED", delivered: 0 });
-    expect(removals).toBe(1);
-    expect(dispatched).toBe(0);
-    expect(rows).toEqual([pending]);
-  });
-
-  it("leaves a delivered row retryable when cancellation arrives before cleanup deletion", async () => {
-    const shard = ShardIndex.single();
-    const delivered = { ...message("delivered", "target", shard), status: "DELIVERED" as const };
-    const controller = new AbortController();
-    let removals = 0;
-    const delivery = createDelivery({
       read: async () => {
-        controller.abort();
-        return [delivered];
-      },
-      remove: async () => {
-        removals += 1;
-        return true;
-      },
-    });
-
-    await expect(
-      delivery.drain(shard, {
-        onMessage: () => undefined,
-        operation: { signal: controller.signal },
-      }),
-    ).resolves.toMatchObject({ status: "STOPPED", delivered: 0 });
-    expect(removals).toBe(0);
-  });
-
-  it("removes every delivered row returned by one bounded cleanup page", async () => {
-    const shard = ShardIndex.single();
-    const delivered = [
-      { ...message("first", "first", shard), status: "DELIVERED" as const },
-      { ...message("second", "second", shard), status: "DELIVERED" as const },
-    ];
-    const removed: string[] = [];
-    const pages = [delivered, []] as DeliveryEndpointMessage[][];
-    const delivery = createDelivery({
-      pageSize: 2,
-      read: async () => pages.shift() ?? [],
-      remove: async (row) => {
-        removed.push(row.signalId);
-        return true;
-      },
-    });
-
-    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
-      status: "DRAINED",
-    });
-    expect(removed).toEqual(["first", "second"]);
-  });
-
-  it("continues past one full protected cleanup page to remove a later eligible row", async () => {
-    const shard = ShardIndex.single();
-    const protectedRows = [
-      { ...message("protected-one", "one", shard), status: "DELIVERED" as const },
-      { ...message("protected-two", "two", shard), status: "DELIVERED" as const },
-    ];
-    const eligible = { ...message("eligible", "three", shard), status: "DELIVERED" as const };
-    const catalog = [...protectedRows, eligible];
-    const removed: string[] = [];
-    const delivery = createDelivery({
-      pageSize: 2,
-      read: async (options) => {
-        const after = options?.after?.messageId;
-        const start =
-          after === undefined ? 0 : catalog.findIndex((row) => row.id.value === after) + 1;
-        return catalog.slice(start, start + 2);
-      },
-      remove: async (row) => {
-        if (row.signalId === "eligible") removed.push(row.signalId);
-        return row.signalId === "eligible";
-      },
-    });
-
-    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
-      status: "DRAINED",
-    });
-    expect(removed).toEqual(["eligible"]);
-  });
-
-  it("retains a delivered row when cleanup refuses deletion without a post-delete lease check", async () => {
-    const shard = ShardIndex.single();
-    const delivered = { ...message("delivered", "target", shard), status: "DELIVERED" as const };
-    let validations = 0;
-    let removals = 0;
-    const delivery = createDelivery({
-      read: async () => [delivered],
-      remove: async () => {
-        removals += 1;
-        return false;
-      },
-      registry: {
-        pickUp: async () => session(shard),
-        renew: async () => (validations++ < 2 ? session(shard) : undefined),
-        release: async () => true,
-      },
-    });
-
-    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
-      status: "DRAINED",
-    });
-    expect(removals).toBe(1);
-    expect(validations).toBe(2);
-  });
-
-  it("omits cleanup for custom Inbox ports and forwards operation deadlines to cleanup reads", async () => {
-    const shard = ShardIndex.single();
-    const observed: number[] = [];
-    const delivery = createDelivery({
-      read: async (options) => {
-        if (options?.timeoutMs !== undefined) observed.push(options.timeoutMs);
+        calls.push("read");
         return [];
       },
-      remove: async () => true,
-    });
-    await delivery.drain(shard, { onMessage: () => undefined, operation: { timeoutMs: 123 } });
-    expect(observed).toEqual([123]);
-
-    let customCleanupReads = 0;
-    await expect(
-      createDelivery({
-        read: async () => {
-          customCleanupReads += 1;
-          return [];
-        },
-      }).drain(shard, { onMessage: () => undefined }),
-    ).resolves.toMatchObject({ status: "DRAINED" });
-    expect(customCleanupReads).toBe(1);
-  });
-
-  it("stops before cleanup deletion when the shard fence is lost", async () => {
-    const shard = ShardIndex.single();
-    let removals = 0;
-    const delivery = createDelivery({
-      read: async () => [{ ...message("old", "target", shard), status: "DELIVERED" as const }],
-      remove: async () => {
-        removals += 1;
-        return true;
-      },
-      registry: {
-        pickUp: async () => session(shard),
-        renew: async () => undefined,
-        release: async () => true,
-      },
-    });
-    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
-      status: "STOPPED",
-    });
-    expect(removals).toBe(0);
-  });
-
-  it("stops after a delivery page when ownership is lost before its maintenance pass", async () => {
-    const shard = ShardIndex.single();
-    const rows = [message("one", "target", shard)];
-    let ownsShard = true;
-    let cleanupReads = 0;
-    const delivery = createDelivery({
-      rows,
-      read: async (options) => {
-        if (options?.statuses?.includes("DELIVERED")) {
-          cleanupReads += 1;
-          return [];
-        }
-        return rows;
-      },
-      mark: async (row) => {
-        remove(rows, row);
-        ownsShard = false;
-        return row;
-      },
-      remove: async () => true,
-      registry: {
-        pickUp: async () => session(shard),
-        renew: async () => (ownsShard ? session(shard) : undefined),
-        release: async () => true,
-      },
     });
 
     await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
-      status: "STOPPED",
-      delivered: 1,
+      status: "DRAINED",
     });
-    expect(cleanupReads).toBe(0);
+    expect(calls).toEqual(["cleanup", "read"]);
   });
+
   it("passes its complete opaque WorkerId to shard pickup and skips an owned shard", async () => {
     const shard = ShardIndex.single();
     const worker = workerId("node-a", "restart-a");
@@ -2165,7 +1843,7 @@ function createDelivery(config: {
   newestPending?: () => Promise<DeliveryEndpointMessage | undefined>;
   mark?: (row: DeliveryEndpointMessage) => Promise<DeliveryEndpointMessage | undefined>;
   removeDuplicate?: (row: DeliveryEndpointMessage) => Promise<boolean>;
-  remove?: (row: DeliveryEndpointMessage) => Promise<boolean>;
+  cleanup?: (shard: ShardIndex) => Promise<boolean>;
   monitor?: DeliveryMonitor;
   pageSize?: number;
   now?: () => Date;
@@ -2191,10 +1869,10 @@ function createDelivery(config: {
       remove(rows, snapshot);
       return true;
     },
-    ...(config.remove === undefined
+    ...(config.cleanup === undefined
       ? {}
       : {
-          removeDelivered: async (row: InboxMessage) => config.remove!(row),
+          removeExpiredDelivered: async (shard: ShardIndex) => config.cleanup!(shard),
         }),
   };
   if (config.now !== undefined) {

@@ -1710,41 +1710,28 @@ acknowledgement remain separate operations.
 Inbox reads return an `InboxMessage` with a Protobuf `Timestamp` in
 `whenReceived`. For example, two messages recorded a nanosecond apart retain
 their order even when a JavaScript `Date` would display the same millisecond.
-Writes, acknowledgements, and exact removals preserve this precision.
+This ordering also determines where the next page begins.
 
 One worker at a time can hold a shard session. Storage keeps pending and
 delivered inbox messages. The worker uses a retained completion to recognize
-a second copy of the same signal addressed to the same Entity. A handler
-effect and the exact pending-to-delivered compare-and-set are not one
-transaction, so a lost acknowledgement can redeliver after restart. Downstream
-signal handling must be idempotent. A customized `DeliveryWorkRegistry`
-implements `validateOwnership()` so delivery can validate before dispatch, before
-the Entity transaction commit, and before acknowledgement. These checks stop a worker
-after it detects that another worker has taken the shard. They do not make
-delivery and handler storage part of one distributed transaction.
+a second copy of the same signal addressed to the same Entity. If a handler
+commits and the connection fails before acknowledgement, a later worker can
+encounter the pending message again. A custom `DeliveryWorkRegistry` provides
+`validateOwnership()` so a worker can check its session before dispatch, Entity
+commit and acknowledgement. Entity persistence and inbox acknowledgement use
+separate operations.
 
-New inbox messages have no `keepUntil`. The first successful local acknowledgement
-stores `DELIVERED` and a deadline five seconds after that transition in one
-compare-and-set. A repeated acknowledgement returns the first stored
-deadline. The worker passes that stored completion to delivery observers. This
-timing applies to Aggregate, Process Manager, and Projection delivery through
-the local Inbox.
+New inbox messages have no retention deadline. After the handler succeeds, the
+worker uses the inbox ID from its page to mark the message delivered. The first
+successful acknowledgement sets the five-second retention deadline. A retry
+preserves it. For example, a message acknowledged at noon becomes eligible for
+cleanup at 12:00:05 even if the first acknowledgement reply was lost.
 
-`keepUntil` is the deduplication-protection deadline on a delivered message, not a second
-retention setting. A delivered message is cleanup-eligible when that deadline is
-absent or elapsed (`keepUntil <= now`). Delivery skips per-record mutation checks
-and deletion attempts for messages whose deadline is still in the future. Cleanup
-and retained message duplicate recognition use the same applicable clock. Eligible
-messages still receive final time and shard checks before deletion.
-With application-managed storage, the worker checks the delivered status and
-deadline on the message it read, then deletes by inbox ID. Suppose the worker
-reads an expired completion under ID `M7`. An explicit storage write replaces
-`M7` with a pending Command before cleanup. Deleting `M7` also deletes that
-replacement. Ordinary Command and Event posts generate fresh inbox IDs.
-
-With remote storage, the worker sends its session handle and the exact inbox
-message it read. The Delivery server checks both in the operation that deletes
-the message. In the same `M7` example, the pending Command survives.
+Cleanup asks storage to remove the delivered messages in the selected shard
+whose deadline is absent or has passed. A pending Command remains available
+to its handler. Relational storage applies the conditions in a single DELETE.
+Datastore cannot delete by this predicate in one request. Its inbox retains
+delivered messages while pending work continues to run.
 
 Configure one Delivery strategy for the environment before setup. It maps
 targets to shards across all Bounded Contexts; the default is one shard. For example:
@@ -2007,26 +1994,30 @@ when returned or passed as envelopes. Aggregate domain Events use the loaded pre
 version, while persisted Aggregate state advances to the next version. History caching accepts descending retained
 versions with gaps, while continuing to reject equal or newer continuations.
 
-### Duplicate dispatch at an Entity
+### Duplicate dispatch at an Aggregate
 
-Suppose Command `C42` makes a Project Aggregate emit `ProjectCreated`. The
-emitted Event records that Command as its immediate cause. When the repository
-enables `doubleDispatchGuard`, it checks the configured number of recent
-emitted Events before invoking the handler. A match for Command `C42` produces
-`DUPLICATE_COMMAND`. If an incoming Event caused a recent emitted Event, the
-corresponding outcome is `DUPLICATE_EVENT`. The guard distinguishes a Command
-and an Event even when their IDs contain the same text. The worker acknowledges
-the inbox message after recognizing the duplicate. An application using remote
-delivery can already have received acknowledgement of its original post by
-then. That acknowledgement confirms that the Command was accepted for delivery.
+Suppose a Project Aggregate handles `CreateProject` and emits `ProjectCreated`.
+The emitted Event records the typed Command ID as its immediate cause. If the
+worker loses its connection before it can acknowledge the inbox message, a
+second worker can deliver the same Command again.
 
-Aggregate repositories retain emitted Events. A Process Manager needs
-`processManagerEventHistory: true` to enable this guard. Both guard settings
-are optional. With `doubleDispatchGuard: true`, the guard considers the latest
-100 emitted Events. Earlier committed outputs in the same delivery pass are
-visible to later dispatches. A handler that emitted no qualifying Event leaves
-no evidence for this check. The Agent's optional Event guard remembers its
-completed inputs in process memory, so restarting the process clears that memory.
+Set `doubleDispatchGuard: { depth: 20 }` on the Aggregate repository to compare
+the incoming signal with the immediate causes of the last 20 Events emitted by
+that Project. A matching Command produces `DUPLICATE_COMMAND`. A matching
+Event produces `DUPLICATE_EVENT`. The framework skips the handler and can
+acknowledge the inbox message. Omit the option to disable the check.
+
+The live Aggregate can reuse Events it already has, including successful
+outputs from earlier in the delivery batch. When it needs older Events, the
+repository reads the missing history for that Project from its Entity
+storage. The Bounded Context-wide Event Store serves a separate purpose.
+The depth counts outputs. A handler that emitted no qualifying Event leaves
+no evidence for this check.
+
+Process Managers can enable `processManagerEventHistory: true` to read their
+emitted Events for other purposes. Process Managers, Agents and Projections
+do not use the Aggregate double-dispatch guard. The worker's short-lived
+inbox duplicate check still applies to these recipients.
 
 # Dynamic unary discovery
 

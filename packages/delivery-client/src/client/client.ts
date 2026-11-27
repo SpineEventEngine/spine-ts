@@ -26,9 +26,8 @@ import {
   AdminService,
   ShardService,
   ManagedShardService,
-  GuardedInboxService,
-  GuardedInboxRequestSchema,
-  type GuardedInboxResult,
+  InboxWorkRequestSchema,
+  type InboxWorkResult,
   DeliveryShardPickupSchema,
   type DeliveryShardPickup,
   type DeliveryShardPickupOutcome,
@@ -43,7 +42,6 @@ import {
   WriteMessagesSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import { InboxMessageIdSchema } from "@spine-event-engine/proto/delivery";
-import type { InboxMessage as WireInboxMessage } from "@spine-event-engine/proto/delivery";
 import {
   DeliveryOutcomeUnknownError,
   type DeliveryClientOptions,
@@ -109,8 +107,6 @@ export class DeliveryClient {
 
   readonly #managed: ReturnType<typeof createClient<typeof ManagedShardService>>;
 
-  readonly #guarded: ReturnType<typeof createClient<typeof GuardedInboxService>>;
-
   readonly #admin: ReturnType<typeof createClient<typeof AdminService>>;
 
   readonly #observing: ReturnType<typeof createClient<typeof ShardObservingService>>;
@@ -152,7 +148,6 @@ export class DeliveryClient {
     this.#inbox = createClient(InboxService, transport);
     this.#shards = createClient(ShardService, transport);
     this.#managed = createClient(ManagedShardService, transport);
-    this.#guarded = createClient(GuardedInboxService, transport);
     this.#admin = createClient(AdminService, transport);
     this.#observing = createClient(ShardObservingService, transport);
     this.#onCloseOwnedTransport = onCloseOwnedTransport;
@@ -808,115 +803,105 @@ export class DeliveryClient {
   }
 
   /**
-   * Completes an exact original wire read row, including unknown fields, with
-   * one guarded RPC under the current managed session. An unknown outcome
-   * raises `DeliveryOutcomeUnknownError` with its full message ID.
+   * Marks the current inbox message at the given ID delivered under a managed session.
    *
    * @param session Supplies the managed session handle.
-   * @param expected Supplies the original row returned by a remote read.
-   * @param options Bounds or cancels the guarded mutation.
-   * @returns The stored completion, or `undefined` for a stale row.
+   * @param id Identifies the inbox message from the current page.
+   * @param options Bounds or cancels the mutation.
+   * @returns Whether the ID was marked delivered and its first retention deadline when present.
    */
-  async acknowledgeGuarded(
+  async markDelivered(
     session: RemoteShardSession,
-    expected: InboxMessage,
+    id: InboxMessageId,
     options: DeliveryMutationOptions = {},
-  ): Promise<InboxMessage | undefined> {
-    const original = DeliveryMessageCodec.readWire(expected);
-    const result = await this.#guardedMutation(
-      "ACKNOWLEDGE",
-      session,
-      original,
-      options,
-      (request, call) => this.#guarded.acknowledge(request, call),
+  ): Promise<InboxWorkResult> {
+    const result = await this.#workMutation("ACKNOWLEDGE", session, id, options, (request, call) =>
+      this.#managed.markDelivered(request, call),
     );
-    if (!result.matched) return undefined;
-    if (result.message === undefined) throw DeliveryRequestCodec.protocol();
-    DeliveryMessageCodec.validateAcknowledgement(original, result.message);
-    return DeliveryMessageCodec.decode(result.message, expected.shard);
+    if (result.whenKeepUntil !== undefined) DeliveryShardCodec.timestamp(result.whenKeepUntil);
+    return result;
   }
 
   /**
-   * Removes an exact original pending wire read row, including unknown fields,
-   * with one guarded RPC under the current managed session. An unknown outcome
-   * raises `DeliveryOutcomeUnknownError` with its full message ID.
+   * Removes the current pending inbox message at the given ID.
    *
    * @param session Supplies the managed session handle.
-   * @param expected Supplies the original row returned by a remote read.
-   * @param options Bounds or cancels the guarded mutation.
-   * @returns Whether the row matched or was already absent.
+   * @param id Identifies the inbox message from the current page.
+   * @param options Bounds or cancels the mutation.
+   * @returns Whether the session-checked removal completed.
    */
-  async removeDuplicateGuarded(
+  async removeDuplicate(
     session: RemoteShardSession,
-    expected: InboxMessage,
+    id: InboxMessageId,
     options: DeliveryMutationOptions = {},
   ): Promise<boolean> {
-    return this.#guardedMutation(
-      "REMOVE_DUPLICATE_GUARDED",
+    const result = await this.#workMutation(
+      "REMOVE_DUPLICATE",
       session,
-      DeliveryMessageCodec.readWire(expected),
+      id,
       options,
-      (request, call) => this.#guarded.removePendingDuplicate(request, call),
-    ).then((result) => result.matched);
+      (request, call) => this.#managed.removeDuplicate(request, call),
+    );
+    return result.matched;
   }
 
   /**
-   * Removes an exact original delivered wire read row, including unknown fields,
-   * with one guarded RPC under the current managed session. An unknown outcome
-   * raises `DeliveryOutcomeUnknownError` with its full message ID.
+   * Removes expired delivered inbox messages in the managed session's shard.
    *
    * @param session Supplies the managed session handle.
-   * @param expected Supplies the original row returned by a remote read.
-   * @param options Bounds or cancels the guarded mutation.
-   * @returns Whether the row matched or was already absent.
+   * @param options Bounds or cancels the mutation.
+   * @returns Completion after the server applies one shard predicate.
    */
-  async removeDeliveredGuarded(
+  async removeExpiredDelivered(
     session: RemoteShardSession,
-    expected: InboxMessage,
     options: DeliveryMutationOptions = {},
-  ): Promise<boolean> {
-    return this.#guardedMutation(
-      "REMOVE_DELIVERED_GUARDED",
-      session,
-      DeliveryMessageCodec.readWire(expected),
+  ): Promise<void> {
+    await this.#mutation(
+      "REMOVE_EXPIRED_DELIVERED",
+      [DeliveryShardCodec.snapshot(session.shard)],
       options,
-      (request, call) => this.#guarded.removeExpiredDelivered(request, call),
-    ).then((result) => result.matched);
+      (signal, timeoutMs) =>
+        this.#managed.removeExpiredDelivered(
+          this.#encodeSession(session),
+          DeliveryRequestCodec.callOptions(signal, timeoutMs),
+        ),
+    );
   }
 
   /**
-   * Sends one row and session atomically to the guarded Inbox service.
+   * Sends one complete inbox ID with the live managed session.
    *
    * @param operation Names the mutation for uncertain-outcome reporting.
    * @param session Supplies the managed session handle.
-   * @param expected Supplies the exact read row.
+   * @param id Identifies the current inbox message.
    * @param options Bounds or cancels the request.
-   * @param invoke Calls the selected guarded method.
-   * @returns The validated guarded result.
+   * @param invoke Calls the selected managed method.
+   * @returns The server's mutation result.
    */
-  async #guardedMutation(
+  async #workMutation(
     operation: DeliveryOutcomeUnknownError["operation"],
     session: RemoteShardSession,
-    expected: WireInboxMessage,
+    id: InboxMessageId,
     options: DeliveryMutationOptions,
     invoke: (
-      request: ReturnType<typeof create<typeof GuardedInboxRequestSchema>>,
+      request: ReturnType<typeof create<typeof InboxWorkRequestSchema>>,
       call: ReturnType<typeof DeliveryRequestCodec.callOptions>,
-    ) => Promise<GuardedInboxResult>,
-  ): Promise<GuardedInboxResult> {
-    const request = create(GuardedInboxRequestSchema, {
+    ) => Promise<InboxWorkResult>,
+  ): Promise<InboxWorkResult> {
+    const request = create(InboxWorkRequestSchema, {
       session: this.#encodeSession(session),
-      expected: DeliveryMessageCodec.copyWire(expected),
+      id: create(InboxMessageIdSchema, {
+        uuid: DeliveryMessageCodec.encodeId(id),
+        index: DeliveryShardCodec.encode(id.shard),
+      }),
     });
-
     const result = await this.#mutation(
       operation,
-      [DeliveryMessageCodec.fullId(expected)],
+      [`${String(id.shard.index)}/${String(id.shard.ofTotal)}:${id.value}`],
       options,
       (signal, timeoutMs) => invoke(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
-
-    if (result.message !== undefined && (operation !== "ACKNOWLEDGE" || !result.matched))
+    if (result.whenKeepUntil !== undefined && (operation !== "ACKNOWLEDGE" || !result.matched))
       throw DeliveryRequestCodec.protocol();
     return result;
   }

@@ -123,6 +123,16 @@ export class Inbox {
   }
 
   /**
+   * Deletes expired delivered messages in one shard storage operation.
+   *
+   * @param shard Selects the shard to clean.
+   * @returns Whether the storage provider supports this predicate mutation.
+   */
+  removeExpiredDelivered(shard: ShardIndex): Promise<boolean> {
+    return this.storage.removeExpiredDelivered(shard);
+  }
+
+  /**
    * Removes one pending duplicate by ID before cancellation or deadline.
    *
    * @param message Supplies the pending duplicate ID.
@@ -131,17 +141,6 @@ export class Inbox {
    */
   removeDuplicate(message: InboxMessage, options?: DeliveryOperationOptions): Promise<boolean> {
     return this.storage.removeDuplicate(message, options);
-  }
-
-  /**
-   * Removes one eligible delivered message directly by ID.
-   *
-   * @param message Supplies the delivered ID and cleanup eligibility.
-   * @param options Propagates cancellation and a delivery deadline.
-   * @returns Whether direct ID deletion removed a row.
-   */
-  removeDelivered(message: InboxMessage, options?: DeliveryOperationOptions): Promise<boolean> {
-    return this.storage.removeDelivered(message, options);
   }
 
   #inputObject(value: unknown, label: string): Record<string, unknown> {

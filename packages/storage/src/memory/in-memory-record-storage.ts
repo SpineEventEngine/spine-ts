@@ -12,7 +12,14 @@
  * the License.
  */
 
-import type { Message } from "@bufbuild/protobuf";
+import { clone, type Message } from "@bufbuild/protobuf";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  InboxMessageSchema,
+  InboxMessageStatus,
+  type InboxMessage,
+  type ShardIndex,
+} from "@spine-event-engine/proto/delivery";
 
 import type { RecordEntry } from "../record/record-storage.js";
 import type { RecordQuery } from "../record/record-query.js";
@@ -54,6 +61,70 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     super(context, recordSpec);
     const localTenants = new Map<string | symbol, TenantRecords<I, R>>();
     this.#records = tenantRecords ?? (() => this.localRecords(localTenants));
+  }
+
+  /**
+   * Marks the existing inbox message at an ID delivered without replacing its payload.
+   *
+   * @param id Complete inbox message ID.
+   * @param deadline First completion deadline.
+   * @returns Whether a pending message was changed.
+   */
+  markInboxDelivered(id: I, deadline: Timestamp): Promise<Timestamp | undefined> {
+    if (!this.isOpen()) throw new Error("In-memory record storage is closed.");
+    if (!this.isInboxLayout()) throw new TypeError("Inbox mutation requires inbox record storage.");
+    const records = this.records();
+    const current = records.read(id) as InboxMessage | undefined;
+    if (current?.status === InboxMessageStatus.DELIVERED) return Promise.resolve(current.keepUntil);
+    if (current?.status !== InboxMessageStatus.TO_DELIVER) return Promise.resolve(undefined);
+    const completed = clone(InboxMessageSchema, current);
+    completed.status = InboxMessageStatus.DELIVERED;
+    completed.keepUntil = clone(TimestampSchema, deadline);
+    records.write(this.recordSpec.materialize(completed as unknown as R));
+    return Promise.resolve(deadline);
+  }
+
+  /**
+   * Removes expired delivered inbox messages in one shard storage call.
+   *
+   * @param shard Selected shard.
+   * @param now Inclusive retention deadline.
+   * @returns Whether the provider applied the cleanup predicate.
+   */
+  removeExpiredInbox(shard: ShardIndex, now: Timestamp): Promise<boolean> {
+    if (!this.isOpen()) throw new Error("In-memory record storage is closed.");
+    if (!this.isInboxLayout()) throw new TypeError("Inbox cleanup requires inbox record storage.");
+    const records = this.records();
+    const entries = records.queryEntries(this.recordSpec, {
+      filters: [
+        { column: "shard_index", value: shard.index },
+        { column: "shard_total", value: shard.ofTotal },
+        { column: "status", value: InboxMessageStatus.DELIVERED },
+      ],
+    });
+    for (const entry of entries) {
+      const until = (entry.record as unknown as InboxMessage).keepUntil;
+      if (
+        until === undefined ||
+        until.seconds < now.seconds ||
+        (until.seconds === now.seconds && until.nanos <= now.nanos)
+      )
+        records.delete(entry.id);
+    }
+    return Promise.resolve(true);
+  }
+
+  /**
+   * Checks the columns required by framework inbox mutations.
+   *
+   * @returns Whether this handle uses the framework inbox layout.
+   */
+  private isInboxLayout(): boolean {
+    const names = new Set(this.recordSpec.columns.map((column) => column.name));
+    return (
+      this.recordSpec.recordType.typeName === InboxMessageSchema.typeName &&
+      ["status", "when_keep_until", "shard_index", "shard_total"].every((name) => names.has(name))
+    );
   }
 
   /**

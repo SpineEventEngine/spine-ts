@@ -28,7 +28,6 @@ import {
   InboxService,
   ShardService,
   ManagedShardService,
-  GuardedInboxService,
   ShardObservingService,
   AdminService,
 } from "@spine-event-engine/proto/delivery-server";
@@ -460,7 +459,7 @@ class GatedDeliveryListener {
           router.service(InboxService, this.#assembly.inbox);
           router.service(ShardService, this.#assembly.shards);
           router.service(ManagedShardService, this.#assembly.managed);
-          router.service(GuardedInboxService, this.#assembly.guarded);
+
           router.service(AdminService, this.#assembly.admin);
           router.service(ShardObservingService, {
             observeAll: (request, context) => {

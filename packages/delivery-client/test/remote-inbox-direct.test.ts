@@ -17,6 +17,7 @@ import { ShardIndex } from "@spine-event-engine/server";
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
+import { InboxWorkResultSchema } from "@spine-event-engine/proto/delivery-server";
 import { Time } from "@spine-event-engine/core/time";
 
 import { DeliveryPagingError, DeliveryProtocolError } from "../src/client/types.js";
@@ -31,9 +32,8 @@ class Client {
   readonly findOne = vi.fn<DeliveryClient["findOne"]>();
   readonly newestPending = vi.fn<DeliveryClient["newestPending"]>();
   readonly readPage = vi.fn<DeliveryClient["readPage"]>();
-  readonly acknowledgeGuarded = vi.fn<DeliveryClient["acknowledgeGuarded"]>();
-  readonly removeDuplicateGuarded = vi.fn<DeliveryClient["removeDuplicateGuarded"]>();
-  readonly removeDeliveredGuarded = vi.fn<DeliveryClient["removeDeliveredGuarded"]>();
+  readonly markDelivered = vi.fn<DeliveryClient["markDelivered"]>();
+  readonly removeDuplicate = vi.fn<DeliveryClient["removeDuplicate"]>();
   readonly pickUpForDelivery = vi.fn<DeliveryClient["pickUpForDelivery"]>();
   pageSize = 2;
 }
@@ -44,16 +44,11 @@ class Client {
  * @param client Supplies the recording client.
  * @returns The Inbox adapter and acquired session.
  */
-async function guarded(client: Client) {
+async function withSession(client: Client) {
   const fake = transport();
   const deliveryClient = DeliveryClient.usingTransport(fake.transport);
-  vi.spyOn(deliveryClient, "acknowledgeGuarded").mockImplementation(client.acknowledgeGuarded);
-  vi.spyOn(deliveryClient, "removeDuplicateGuarded").mockImplementation(
-    client.removeDuplicateGuarded,
-  );
-  vi.spyOn(deliveryClient, "removeDeliveredGuarded").mockImplementation(
-    client.removeDeliveredGuarded,
-  );
+  vi.spyOn(deliveryClient, "markDelivered").mockImplementation(client.markDelivered);
+  vi.spyOn(deliveryClient, "removeDuplicate").mockImplementation(client.removeDuplicate);
   echoPickup(fake);
   const inbox = new RemoteInbox(deliveryClient);
   const registry = new RemoteWorkRegistry(deliveryClient);
@@ -69,7 +64,7 @@ async function guarded(client: Client) {
  * Recreates the detached result of a remote Inbox read.
  *
  * @param message Supplies the authored row.
- * @returns A domain row with its exact wire snapshot retained.
+ * @returns The decoded inbox message.
  */
 function read(message: ReturnType<typeof domainMessage>) {
   return DeliveryMessageCodec.decode(DeliveryMessageCodec.encode(message), message.shard);
@@ -165,25 +160,23 @@ describe("RemoteInbox direct behavior", () => {
     expect(client.writeOne.mock.calls[0]?.[0].keepUntil).toBeUndefined();
   });
 
-  it("uses the server completion and exact read snapshot on retry", async () => {
+  it("uses the first server deadline on retry", async () => {
     const client = new Client();
-    const { inbox, session } = await guarded(client);
+    const { inbox, session } = await withSession(client);
     const pending = read(domainMessage("completed"));
-    const completedWire = DeliveryMessageCodec.encode({
-      ...pending,
-      status: "DELIVERED",
-      keepUntil: new Date(125_000),
-    });
-    client.acknowledgeGuarded.mockResolvedValue(
-      DeliveryMessageCodec.decode(completedWire, pending.shard),
+    client.markDelivered.mockResolvedValue(
+      create(InboxWorkResultSchema, {
+        matched: true,
+        whenKeepUntil: { seconds: 125n },
+      }),
     );
 
     const first = await inbox.markDelivered(pending, undefined, session);
     const second = await inbox.markDelivered(pending, undefined, session);
     expect(first?.keepUntil).toEqual(new Date(125_000));
     expect(second).toEqual(first);
-    expect(client.acknowledgeGuarded).toHaveBeenCalledTimes(2);
-    expect(client.acknowledgeGuarded.mock.calls[0]?.[1]).toEqual(pending);
+    expect(client.markDelivered).toHaveBeenCalledTimes(2);
+    expect(client.markDelivered.mock.calls[0]?.[1]).toEqual(pending.id);
     expect(client.writeOne).not.toHaveBeenCalled();
     expect(client.findOne).not.toHaveBeenCalled();
   });
@@ -280,33 +273,14 @@ describe("RemoteInbox direct behavior", () => {
     await expect(inbox.readMessage(first.id)).resolves.toBe(first);
   });
 
-  it("returns a stale-row result without a raw write", async () => {
+  it("returns an absent result for a missing inbox ID without a raw write", async () => {
     const client = new Client();
-    const { inbox, session } = await guarded(client);
+    const { inbox, session } = await withSession(client);
     const pending = read(domainMessage("pending"));
-    client.acknowledgeGuarded.mockResolvedValue(undefined);
+    client.markDelivered.mockResolvedValue(create(InboxWorkResultSchema));
 
     await expect(inbox.markDelivered(pending, undefined, session)).resolves.toBeUndefined();
-    expect(client.acknowledgeGuarded).toHaveBeenCalledOnce();
-    expect(client.writeOne).not.toHaveBeenCalled();
-  });
-
-  it("accepts an idempotent completed result from the guarded service", async () => {
-    const client = new Client();
-    const { inbox, session } = await guarded(client);
-    const pending = read(domainMessage("pending"));
-    client.acknowledgeGuarded.mockResolvedValue(
-      read({
-        ...pending,
-        status: "DELIVERED",
-        keepUntil: new Date(5_000),
-      }),
-    );
-
-    await expect(inbox.markDelivered(pending, undefined, session)).resolves.toMatchObject({
-      status: "DELIVERED",
-      keepUntil: new Date(5_000),
-    });
+    expect(client.markDelivered).toHaveBeenCalledOnce();
     expect(client.writeOne).not.toHaveBeenCalled();
   });
 
@@ -365,42 +339,14 @@ describe("RemoteInbox direct behavior", () => {
     expect(client.readPage).toHaveBeenCalledTimes(1);
   });
 
-  it("passes the exact read row to guarded acknowledgement", async () => {
+  it("removes a pending duplicate only through the session", async () => {
     const client = new Client();
-    const { inbox, session } = await guarded(client);
-    const pending = read(domainMessage("pending"));
-    client.acknowledgeGuarded.mockResolvedValue(
-      read({
-        ...pending,
-        status: "DELIVERED",
-        keepUntil: new Date(5_000),
-      }),
-    );
-
-    const delivered = await inbox.markDelivered(pending, { timeoutMs: 50 }, session);
-    expect(Object.isFrozen(delivered)).toBe(true);
-    expect(client.acknowledgeGuarded).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: "fixture-session",
-      }),
-      pending,
-      { timeoutMs: 50 },
-    );
-    expect(client.findOne).not.toHaveBeenCalled();
-  });
-
-  it("removes a pending duplicate only through its guarded RPC", async () => {
-    const client = new Client();
-    const { inbox, session } = await guarded(client);
+    const { inbox, session } = await withSession(client);
     const duplicate = read(domainMessage("duplicate"));
-    client.removeDuplicateGuarded.mockResolvedValue(true);
+    client.removeDuplicate.mockResolvedValue(true);
 
     await expect(inbox.removeDuplicate(duplicate, undefined, session)).resolves.toBe(true);
-    expect(client.removeDuplicateGuarded).toHaveBeenCalledWith(
-      expect.anything(),
-      duplicate,
-      undefined,
-    );
+    expect(client.removeDuplicate).toHaveBeenCalledWith(expect.anything(), duplicate.id, undefined);
     expect(client.removeOne).not.toHaveBeenCalled();
   });
 
@@ -409,23 +355,7 @@ describe("RemoteInbox direct behavior", () => {
     const inbox = new RemoteInbox(client as never);
     const duplicate = read(domainMessage("duplicate"));
     await expect(inbox.removeDuplicate(duplicate)).rejects.toBeInstanceOf(DeliveryProtocolError);
-    expect(client.removeDuplicateGuarded).not.toHaveBeenCalled();
-    expect(client.removeOne).not.toHaveBeenCalled();
-  });
-
-  it("delegates delivered-row eligibility to the guarded server", async () => {
-    const client = new Client();
-    const { inbox, session } = await guarded(client);
-    const retained = read({
-      ...domainMessage("retained"),
-      status: "DELIVERED",
-      keepUntil: new Date(Date.now() + 60_000),
-    });
-    client.removeDeliveredGuarded.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-
-    await expect(inbox.removeDelivered(retained, undefined, session)).resolves.toBe(false);
-    await expect(inbox.removeDelivered(retained, undefined, session)).resolves.toBe(true);
-    expect(client.removeDeliveredGuarded).toHaveBeenCalledTimes(2);
+    expect(client.removeDuplicate).not.toHaveBeenCalled();
     expect(client.removeOne).not.toHaveBeenCalled();
   });
 });

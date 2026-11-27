@@ -795,16 +795,7 @@ class Events<I, S extends Message> implements EntityEventHistoryPort<I> {
     depth: number,
     startingFromVersion?: bigint,
   ): Promise<readonly Event[]> {
-    const all = await this.records.query({ sort: [{ field: "version", direction: "desc" }] });
-    return all
-      .filter(
-        (event) =>
-          event.context?.producerId !== undefined &&
-          sameEntityId(this.input, event.context.producerId, id) &&
-          (startingFromVersion === undefined ||
-            BigInt(event.context.version?.number ?? 0) <= startingFromVersion),
-      )
-      .slice(0, depth);
+    return this.records.queryEntityEvents(this.input.id.pack(id), depth, startingFromVersion);
   }
 
   /**

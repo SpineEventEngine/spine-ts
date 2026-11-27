@@ -20,11 +20,7 @@ import { Time } from "@spine-event-engine/core/time";
 import { DeliveryBuilder, ShardIndex } from "@spine-event-engine/server";
 import { DeliveryServer } from "@spine-event-engine/delivery-server";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
-import {
-  InboxService,
-  ManagedShardService,
-  GuardedInboxService,
-} from "@spine-event-engine/proto/delivery-server";
+import { InboxService, ManagedShardService } from "@spine-event-engine/proto/delivery-server";
 import { DeliveryClient, RemoteWorkRegistry } from "../src/index.js";
 import { RemoteInbox } from "../src/remote/adapters.js";
 import { domainMessage } from "./shared-fixtures.js";
@@ -37,8 +33,8 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.close()));
 });
 
-describe("guarded framework delivery over gRPC", () => {
-  it("drains a pending Command through one managed session and guarded acknowledgement", async () => {
+describe("framework shard delivery over gRPC", () => {
+  it("drains a pending Command through one managed session", async () => {
     const server = new DeliveryServer({ port: 0 });
     servers.push(server);
     await server.start();
@@ -46,10 +42,10 @@ describe("guarded framework delivery over gRPC", () => {
     clients.push(client);
     const inbox = new RemoteInbox(client);
     const registry = new RemoteWorkRegistry(client);
-    const message = domainMessage("guarded-drain");
+    const message = domainMessage("remote-drain");
     await client.writeOne(message);
     const delivery = new DeliveryBuilder()
-      .withContext({ name: "GuardedRemoteDrain", multitenant: false })
+      .withContext({ name: "RemoteDrain", multitenant: false })
       .withStorageFactory({} as never)
       .withInbox(inbox)
       .withWorkRegistry(registry)
@@ -77,14 +73,13 @@ describe("guarded framework delivery over gRPC", () => {
       const transport = createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
         router.service(ManagedShardService, core.managed);
-        router.service(GuardedInboxService, core.guarded);
       });
       const client = DeliveryClient.usingTransport(transport);
       clients.push(client);
       const message = domainMessage("long-handler");
       await client.writeOne(message);
       const delivery = new DeliveryBuilder()
-        .withContext({ name: "GuardedLongHandler", multitenant: false })
+        .withContext({ name: "RemoteLongHandler", multitenant: false })
         .withStorageFactory({} as never)
         .withInbox(new RemoteInbox(client))
         .withWorkRegistry(new RemoteWorkRegistry(client))
@@ -133,7 +128,7 @@ describe("guarded framework delivery over gRPC", () => {
       let failRenew = false;
       const firstTransport = createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
-        router.service(GuardedInboxService, core.guarded);
+
         router.service(ManagedShardService, {
           ...core.managed,
           renewShardSession: (request, context) =>
@@ -144,7 +139,7 @@ describe("guarded framework delivery over gRPC", () => {
       });
       const nextTransport = createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
-        router.service(GuardedInboxService, core.guarded);
+
         router.service(ManagedShardService, core.managed);
       });
       const firstClient = DeliveryClient.usingTransport(firstTransport);

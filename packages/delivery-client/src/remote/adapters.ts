@@ -289,14 +289,13 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Completes the original decoded read row with one guarded RPC. Its retained
-   * wire snapshot, including unknown fields, must match under the live handle.
+   * Completes the current inbox message by ID under the live session.
    *
-   * @param message Supplies the original decoded pending read result.
-   * @param options Bounds or cancels the guarded RPC.
+   * @param message Supplies the pending message from the current page.
+   * @param options Bounds or cancels the mutation.
    * @param session Supplies the current local exclusive session.
-   * @returns The completed row written by this attempt, or a matching completed
-   * row already found with its stored deadline. A stale row returns `undefined`.
+   * @returns The completion with its first stored deadline, or `undefined` when
+   * the ID is absent.
    * An unknown outcome raises `DeliveryOutcomeUnknownError` for reconciliation.
    */
   async markDelivered(
@@ -305,35 +304,41 @@ export class RemoteInbox implements DeliveryInbox {
     session?: DeliveryWorkSession,
   ): Promise<InboxMessage | undefined> {
     const remote = this.#session(session);
-    return this.client.acknowledgeGuarded(remote, message, options);
+    const { matched, whenKeepUntil } = await this.client.markDelivered(remote, message.id, options);
+    if (!matched) return undefined;
+    const completed = { ...message, status: "DELIVERED" as const };
+    if (whenKeepUntil === undefined) delete completed.keepUntil;
+    else completed.keepUntil = DeliveryShardCodec.date(whenKeepUntil);
+    return Object.freeze(completed);
   }
 
   /**
-   * Removes an exact expired delivered read row with one guarded RPC. The
-   * retained wire snapshot includes unknown fields and requires a live handle.
+   * Removes expired delivered inbox messages for the current shard session.
    *
-   * @param message Supplies the original decoded delivered read result.
-   * @param options Bounds or cancels the guarded RPC.
+   * @param shard Selects the current shard.
+   * @param options Bounds or cancels the managed mutation.
    * @param session Supplies the current local exclusive session.
-   * @returns Whether the row matched or was already absent. An unknown outcome
-   * raises `DeliveryOutcomeUnknownError` for reconciliation.
+   * @returns True after the server applies its shard predicate.
    */
-  async removeDelivered(
-    message: InboxMessage,
+  async removeExpiredDelivered(
+    shard: ShardIndex,
     options?: DeliveryOperationOptions,
     session?: DeliveryWorkSession,
   ): Promise<boolean> {
-    return this.client.removeDeliveredGuarded(this.#session(session), message, options);
+    const remote = this.#session(session);
+    if (remote.shard.index !== shard.index || remote.shard.ofTotal !== shard.ofTotal)
+      throw new TypeError("Inbox cleanup shard differs from session.");
+    await this.client.removeExpiredDelivered(remote, options);
+    return true;
   }
 
   /**
-   * Removes an exact pending duplicate read row with one guarded RPC. The
-   * retained wire snapshot includes unknown fields and requires a live handle.
+   * Removes a pending duplicate by ID under the live session.
    *
-   * @param message Supplies the original decoded pending read result.
-   * @param options Bounds or cancels the guarded RPC.
+   * @param message Supplies the pending message from the current page.
+   * @param options Bounds or cancels the mutation.
    * @param session Supplies the current local exclusive session.
-   * @returns Whether the row matched or was already absent. An unknown outcome
+   * @returns Whether the pending message was removed or its ID was already absent. An unknown outcome
    * raises `DeliveryOutcomeUnknownError` for reconciliation.
    */
   async removeDuplicate(
@@ -341,7 +346,7 @@ export class RemoteInbox implements DeliveryInbox {
     options?: DeliveryOperationOptions,
     session?: DeliveryWorkSession,
   ): Promise<boolean> {
-    return this.client.removeDuplicateGuarded(this.#session(session), message, options);
+    return this.client.removeDuplicate(this.#session(session), message.id, options);
   }
 
   /**

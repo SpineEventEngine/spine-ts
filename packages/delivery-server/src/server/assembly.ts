@@ -20,7 +20,6 @@ import {
   AdminService,
   InboxService,
   ManagedShardService,
-  GuardedInboxService,
   ShardObservingService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
@@ -28,7 +27,7 @@ import {
 import { AdminPublisher, type AdminPublisherHandle } from "../admin/admin-service.js";
 import { InMemoryDeliveryState } from "../core/in-memory-delivery-state.js";
 import { InboxHandlers } from "../core/inbox-service.js";
-import { GuardedInboxRuntime } from "../core/guarded-inbox-service.js";
+import { InboxWorkRuntime } from "../core/inbox-work-service.js";
 import { MutationAdmission } from "../core/mutation-admission.js";
 import { ShardSessionRuntime } from "../core/shard-service.js";
 import { ShardObserving, type ShardObservingHandle } from "../core/shard-observing-service.js";
@@ -64,11 +63,6 @@ export interface DeliveryAssembly {
    * Exposes session revision operations used by local service handlers.
    */
   readonly sessionRuntime: ShardSessionRuntime;
-
-  /**
-   * Serves session-guarded Inbox acknowledgement and cleanup.
-   */
-  readonly guarded: ServiceImpl<typeof GuardedInboxService>;
 
   /**
    * Streams advisory notifications for free pending shards.
@@ -123,7 +117,7 @@ export const DeliveryAssembly: Readonly<{
     const admin = AdminPublisher.create(state);
     const observing = ShardObserving.create(state, configuration.reminderIntervalMs ?? 10_000);
     const onStoredChange = admin.publish.bind(admin);
-    const { sessions, guarded } = DeliverySessionAssembly.create(
+    const { sessions, work } = DeliverySessionAssembly.create(
       state,
       admission,
       configuration,
@@ -134,7 +128,7 @@ export const DeliveryAssembly: Readonly<{
       onStoredChange,
       observing.changed.bind(observing),
     );
-    return DeliveryAssemblyWiring.create(state, admission, admin, observing, sessions, guarded);
+    return DeliveryAssemblyWiring.create(state, admission, admin, observing, sessions, work);
   },
 });
 
@@ -150,7 +144,7 @@ const DeliveryAssemblyWiring = Object.freeze({
    * @param admin Publishes stored shard changes.
    * @param observing Publishes available work.
    * @param sessions Serves raw and managed session calls.
-   * @param guarded Serves guarded Inbox mutations.
+   * @param work Serves session-checked Inbox mutations.
    * @returns The complete in-process service assembly.
    */
   create(
@@ -159,7 +153,7 @@ const DeliveryAssemblyWiring = Object.freeze({
     admin: AdminPublisherHandle,
     observing: ShardObservingHandle,
     sessions: ShardSessionRuntime,
-    guarded: GuardedInboxRuntime,
+    work: InboxWorkRuntime,
   ): DeliveryAssembly {
     return Object.freeze({
       state,
@@ -170,9 +164,8 @@ const DeliveryAssemblyWiring = Object.freeze({
         observing.changed.bind(observing),
       ),
       shards: sessions.raw,
-      managed: sessions.managed,
+      managed: { ...sessions.managed, ...work.handlers() },
       sessionRuntime: sessions,
-      guarded: guarded.service,
       admin: admin.service,
       observing: observing.service,
       closeAdmission: admission.close.bind(admission),
@@ -184,11 +177,11 @@ const DeliveryAssemblyWiring = Object.freeze({
 });
 
 /**
- * Constructs the session and guarded Inbox handlers over one admission queue.
+ * Constructs session and inbox work handlers over one admission queue.
  */
 const DeliverySessionAssembly = Object.freeze({
   /**
-   * Creates coupled session and guarded Inbox handlers.
+   * Creates coupled session and inbox work handlers.
    *
    * @param state Stores canonical rows and sessions.
    * @param admission Serializes mutations.
@@ -215,7 +208,7 @@ const DeliverySessionAssembly = Object.freeze({
       onShardTransition,
       configuration.monotonicNow ?? (() => Time.monotonicTime()),
     );
-    const guarded = new GuardedInboxRuntime(
+    const work = new InboxWorkRuntime(
       state,
       admission,
       sessions,
@@ -223,7 +216,7 @@ const DeliverySessionAssembly = Object.freeze({
       onStoredChange,
       onWorkChange,
     );
-    return { sessions, guarded };
+    return { sessions, work };
   },
 });
 

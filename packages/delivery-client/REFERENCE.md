@@ -96,24 +96,15 @@ and `whenReleased`. Admin observations expose the same precision in
 
 ## Worker acknowledgement and cleanup
 
-A remote worker sends its current session and the exact inbox message it read when
-acknowledging a Command, removing a pending duplicate, or removing an expired
-completion. The server checks both in the same operation as the change.
-
-The framework passes the message it read straight to the client. Code using the
-public `DeliveryClient` can do the same. For example, after a worker has picked
-up a shard, it can pass the result of `await client.findOne(id)`, when present,
-to `await client.acknowledgeGuarded(session, message)`. The same read result
-works with `removeDuplicateGuarded` and `removeDeliveredGuarded`. Keep that
-object. The client retains the original Protobuf data with it, including fields
-the current schema cannot interpret.
-
-Suppose a worker reads message 7 and enters its Command handler. Another caller
-replaces message 7 before the handler returns. Even a one-nanosecond difference in
-the stored timestamp identifies a different message for this check. The server
-leaves the replacement intact. If the first acknowledgement succeeded and
-only its reply was lost, repeating it for the same message preserves the original
-retention deadline.
+A worker takes a shard and reads its inbox messages a page at a time. Each
+message contains the signal, its recipient and its inbox ID. After a handler
+succeeds, the worker uses its live session to mark that inbox ID delivered.
+For example, when a page contains two Commands, the worker already has both
+IDs. Each successful acknowledgement starts that message's five-second
+retention period on the server. Retrying it preserves the original deadline.
+For code using the transport client directly, `client.markDelivered(session, message.id)`
+returns `matched` and, when present, the original `whenKeepUntil` timestamp.
+Only the session and the inbox ID travel back to the server.
 
 Workers renew while handlers run. With the default 60-second session, a
 healthy worker renews every 20 seconds. If its connection fails, the server
@@ -126,19 +117,11 @@ advances through bounded raw pages by their last received timestamp within one
 total read deadline, including pages containing only excluded statuses. The
 caller's `AbortSignal` also covers that complete multi-page collection, including
 later pages. The read is live: inserts behind the timestamp position require a later fresh
-scan. The server
-delivery policy compares pending messages with
-delivered messages in the current page and those acknowledged locally within the five-second retention window, then
-removes exact duplicates without treating them as delivered acknowledgements.
-The server compares the worker's exact read snapshot within the removal
-operation. If a later write replaced the duplicate, the later message survives.
-
-The remote adapter writes a pending message without `keep_until`. A successful
-guarded acknowledgement sets the status to `DELIVERED` and records the
-server's acknowledgement time plus five seconds in `keep_until`. Before
-deleting a completion, the server checks its deadline and that it still
-matches the worker's read. A quiet shard can retain a completion past the
-deadline until another drain visits it.
+scan. The application worker checks each pending message against the delivered messages it read on the page and the messages it acknowledged within the five-second retention period. If it finds a duplicate for the same recipient, it removes that pending inbox ID and continues with the next message.
+When cleanup runs, the server removes the delivered messages in that shard
+whose retention deadlines have passed. A pending Command stays in the inbox.
+A delivered message on a quiet shard can remain visible to Admin until the
+next cleanup.
 
 ## Remote delivery in an environment
 
@@ -146,7 +129,7 @@ deadline until another drain visits it.
 
 Built-in notifications open `ShardObservingService.ObserveAll` after endpoints are ready. Every connected application node receives current free shards with pending messages when it connects or reconnects. A disconnected reader reopens with the established increasing reconnect delay, starting at 100 milliseconds and rising to 30 seconds; an unsupported method ends that reader with the original gRPC status. The server repeats an available shard after its configured reminder interval, 10 seconds by default, while it remains free and unclaimed. A write to a busy shard is observed after release or expiry. Admin snapshots and updates report state for administration; they do not trigger application work.
 
-By default, distinct shards can run simultaneously on one node. Remote nodes accept an optional positive `maxConcurrentDeliveries`; the node reserves a place before pickup and drops excess notices. The server's later reminder can offer a still-free shard again. Calls for the same shard on one node share the active delivery attempt. If a second caller cancels its wait or reaches its deadline, that caller receives `stopped`. The first caller can still finish the delivery. Another node may compete for the shard, while the Delivery server grants one live session. The result of `deliverMessagesFrom(shard)` is `completed`, `busy`, `noWork`, or `stopped`; an unrecovered read, processing, release, or post-release lookup error rejects the call. A stream notice is advisory, and only the retained message and current session permit processing.
+By default, distinct shards can run simultaneously on one node. An application can set `maxConcurrentDeliveries` when configuring remote notifications. For example, if the limit is two and the node already has two deliveries in progress, it skips the next notice. The server's later reminder can offer a still-free shard again. Calls for the same shard on one node share the active delivery attempt. If a second caller cancels its wait or reaches its deadline, that caller receives `stopped`. The first caller can still finish the delivery. Another node may compete for the shard, while the Delivery server grants one live session. The result of `deliverMessagesFrom(shard)` is `completed`, `busy`, `noWork`, or `stopped`; an unrecovered read, processing, release, or post-release lookup error rejects the call. A stream notice is advisory, and only the retained message and current session permit processing.
 
 Remote storage always uses the server work stream. For an inbox in a shared
 application database, use `DeliveryBuilder.local({ storageFactory, shardObserver })`.
@@ -157,7 +140,7 @@ consumer calls `environment.delivery.deliverMessagesFrom(shard)`. A callback
 failure is logged after the successful write, and the application decides how
 to recover its notification.
 
-Environment shutdown cancels the work reader, waits for admitted runs, and closes the client HTTP/2 session. A failure in a close phase remains retryable. A handler effect and Inbox acknowledgement remain separate operations; a lost acknowledgement may cause redelivery after session expiry. Guarded acknowledgements and cleanup require the same live session and exact message snapshot, while a current Entity write can still finish after another worker takes over.
+Environment shutdown cancels the work reader, waits for admitted runs, and closes the client HTTP/2 session. A failure in a close phase remains retryable. A handler effect and Inbox acknowledgement remain separate operations; a lost acknowledgement may cause redelivery after session expiry. An Entity write already in progress can still finish after another worker takes the shard.
 
 Retained messages in the current page or recent-delivery cache suppress the same
 Command or Event ID at the same typed Inbox target until `keep_until`. Remote pagination

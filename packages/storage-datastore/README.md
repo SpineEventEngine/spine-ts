@@ -227,9 +227,9 @@ them automatically.
 
 ## 📏 Understand query limits
 
-For a record query such as an inbox read, the factory follows Datastore cursors
-until it has read the rows needed for the result. It applies the requested
-ordering and offset before returning the page. A custom record provider can
+For an inbox page, the query orders messages by receive seconds, nanoseconds,
+inbox version and UUID. Datastore applies the continuation and page size.
+The newest-pending query asks Datastore for one matching message. A custom record provider can
 set a limit on the number of rows it examines. Normalized queries use the
 scan policy described in the package reference.
 
@@ -259,7 +259,10 @@ test substitutes for production index, quota, or consistency planning.
 
 Deploy every composite index used by the application, select quotas and retry
 policy for its workload, and keep Google credentials outside source control.
-Inbox reads follow provider cursors until they have the rows needed for the requested result. A query that requires local sorting can use memory proportional to the matching data.
+Pending inbox delivery works with Datastore. Expired delivered messages remain stored
+because Datastore cannot delete by shard, status and deadline in a single database
+operation. A general record query that requires local sorting can use memory
+proportional to its matching data.
 
 ## 🔗 Learn more
 

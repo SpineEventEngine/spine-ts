@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { createHash } from "node:crypto";
 import { OrderedMap } from "@js-sdsl/ordered-map";
 import {
   InboxMessageStatus,
@@ -97,8 +96,6 @@ export class InMemoryDeliveryState {
    */
   readonly shards: Map<string, ShardRecord> = new Map<string, ShardRecord>();
 
-  readonly #acknowledgements = new Map<string, string>();
-
   readonly #buckets = new Map<string, ShardBucket>();
 
   /**
@@ -138,7 +135,6 @@ export class InMemoryDeliveryState {
     const current = this.messages.get(key);
     if (current === undefined) return false;
     this.messages.delete(key);
-    this.#acknowledgements.delete(key);
     this.#removeFromBucket(current);
     this.#pruneBucket(DeliveryShards.key(this.#requiredShard(current)));
     return true;
@@ -163,7 +159,6 @@ export class InMemoryDeliveryState {
       if (current === undefined) continue;
       changed = true;
       this.messages.delete(key);
-      this.#acknowledgements.delete(key);
       this.#removeFromBucket(current);
       pendingChanged ||= current.status === InboxMessageStatus.TO_DELIVER;
     }
@@ -171,27 +166,6 @@ export class InMemoryDeliveryState {
     const shardKey = DeliveryShards.key(shard);
     this.#pruneBucket(shardKey);
     return { changed, pendingChanged };
-  }
-
-  /**
-   * Records the exact wire transition performed by a guarded acknowledgement.
-   *
-   * @param key Identifies the retained row.
-   * @param expected Encodes its original pending snapshot.
-   */
-  rememberAcknowledgement(key: string, expected: Uint8Array): void {
-    this.#acknowledgements.set(key, DeliveryBytes.digest(expected));
-  }
-
-  /**
-   * Checks a retry against the exact first guarded completion.
-   *
-   * @param key Identifies the retained row.
-   * @param expected Encodes its original pending snapshot.
-   * @returns Whether the first completion remains unchanged.
-   */
-  sameAcknowledgement(key: string, expected: Uint8Array): boolean {
-    return this.#acknowledgements.get(key) === DeliveryBytes.digest(expected);
   }
 
   /**
@@ -252,6 +226,31 @@ export class InMemoryDeliveryState {
       if (page.length === size) break;
     }
     return page;
+  }
+
+  /**
+   * Removes delivered messages whose retention has ended in the requested shard.
+   *
+   * @param shard Selects the shard being drained.
+   * @param now Supplies the server time at cleanup.
+   * @returns Whether any stored message was removed.
+   */
+  removeExpiredDelivered(shard: ShardIndex, now: Timestamp): boolean {
+    const bucket = this.#buckets.get(DeliveryShards.key(shard));
+    if (bucket === undefined || bucket.ordered.size() === bucket.pending.size()) return false;
+    const expired: InboxMessage[] = [];
+    for (const [, message] of bucket.ordered) {
+      if (message.status !== InboxMessageStatus.DELIVERED) continue;
+      const until = message.keepUntil;
+      if (
+        until === undefined ||
+        until.seconds < now.seconds ||
+        (until.seconds === now.seconds && until.nanos <= now.nanos)
+      ) {
+        expired.push(message);
+      }
+    }
+    return this.deleteMany(shard, expired).changed;
   }
 
   /**
@@ -338,7 +337,6 @@ export class InMemoryDeliveryState {
   }
 
   #replace(key: string, message: InboxMessage): boolean {
-    this.#acknowledgements.delete(key);
     const prior = this.messages.get(key);
     if (prior !== undefined) {
       this.#removeFromBucket(prior);
@@ -387,21 +385,6 @@ export class InMemoryDeliveryState {
     return message.id.index;
   }
 }
-
-/**
- * Digests encoded row snapshots without retaining a second payload.
- */
-const DeliveryBytes = Object.freeze({
-  /**
-   * Calculates one exact wire encoding's digest.
-   *
-   * @param value Supplies the encoding.
-   * @returns Its fixed-size SHA-256 digest.
-   */
-  digest(value: Uint8Array): string {
-    return createHash("sha256").update(value).digest("hex");
-  },
-});
 
 /**
  * Maintains the per-shard receive-time, version, and UTF-8 UUID order.

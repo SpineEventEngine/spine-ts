@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, create, toBinary } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import {
   AnySchema,
   type Duration,
@@ -149,8 +149,6 @@ const DeliveryValues = Object.freeze({
   },
 });
 
-const readWireRows = new WeakMap<InboxMessage, WireInboxMessage>();
-
 const DeliveryTargetIds = Object.freeze({
   /**
    * Checks known Protobuf target identifier encodings before delivery serialization.
@@ -206,38 +204,6 @@ type DeliveryMessageCodecApi = Readonly<{
   decode(message: WireInboxMessage, expectedShard: ShardIndex): InboxMessage;
 
   /**
-   * Copies the exact wire row retained during a remote read.
-   *
-   * @param message Supplies the decoded read result.
-   * @returns The original wire row including unknown fields.
-   */
-  readWire(message: InboxMessage): WireInboxMessage;
-
-  /**
-   * Validates that an acknowledgement changed only status and completion deadline.
-   *
-   * @param expected Supplies the original pending wire row.
-   * @param completed Supplies the server's claimed completion.
-   */
-  validateAcknowledgement(expected: WireInboxMessage, completed: WireInboxMessage): void;
-
-  /**
-   * Returns one complete wire Inbox row identity across shards.
-   *
-   * @param message Supplies the wire Inbox row.
-   * @returns Its full shard and message ID key.
-   */
-  fullId(message: WireInboxMessage): string;
-
-  /**
-   * Copies a wire Inbox row without dropping unknown fields.
-   *
-   * @param message Supplies the original wire row.
-   * @returns A detached wire row.
-   */
-  copyWire(message: WireInboxMessage): WireInboxMessage;
-
-  /**
    * Validates the wire identifiers and requested shard before decoding the payload.
    * @param message The wire inbox record.
    * @param expectedShard The shard requested by the caller.
@@ -264,7 +230,7 @@ type DeliveryMessageCodecApi = Readonly<{
   encodeId(id: InboxMessageId): string;
 
   /**
-   * Copies an inbox message for later exact-snapshot checks.
+   * Copies the caller's inbox message before an asynchronous write.
    *
    * @param value Supplies the message to copy.
    * @returns A detached immutable message.
@@ -442,67 +408,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
       version: BigInt(message.version),
       ...(keepUntil === undefined ? {} : { keepUntil }),
     });
-    readWireRows.set(decoded, clone(InboxMessageSchema, message));
     return decoded;
-  },
-
-  /**
-   * Copies the exact wire snapshot retained during decoding.
-   *
-   * @param message Supplies the decoded read result.
-   * @returns The original wire row including unknown fields.
-   */
-  readWire(message: InboxMessage): WireInboxMessage {
-    const wire = readWireRows.get(message);
-    if (wire === undefined) throw DeliveryRequestCodec.protocol();
-    return clone(InboxMessageSchema, wire);
-  },
-
-  /**
-   * Validates a completed row against every immutable wire field.
-   *
-   * @param expected Supplies the original pending wire row.
-   * @param completed Supplies the server's claimed completion.
-   */
-  validateAcknowledgement(expected: WireInboxMessage, completed: WireInboxMessage): void {
-    if (
-      expected.status !== InboxMessageStatus.TO_DELIVER ||
-      completed.status !== InboxMessageStatus.DELIVERED ||
-      completed.keepUntil === undefined
-    )
-      throw DeliveryRequestCodec.protocol();
-    DeliveryShardCodec.timestamp(completed.keepUntil);
-    const allowed = clone(InboxMessageSchema, expected);
-    allowed.status = InboxMessageStatus.DELIVERED;
-    allowed.keepUntil = clone(TimestampSchema, completed.keepUntil);
-    const left = toBinary(InboxMessageSchema, allowed);
-    const right = toBinary(InboxMessageSchema, completed);
-    if (left.length !== right.length || left.some((byte, index) => byte !== right[index]))
-      throw DeliveryRequestCodec.protocol();
-  },
-
-  /**
-   * Returns a complete shard and message ID for uncertain-outcome reports.
-   *
-   * @param message Supplies the wire Inbox row.
-   * @returns Its full storage identity.
-   */
-  fullId(message: WireInboxMessage): string {
-    const id = message.id;
-    if (id?.index === undefined || !DeliveryValues.hasText(id.uuid))
-      throw DeliveryRequestCodec.protocol();
-    const shard = DeliveryShardCodec.decode(id.index);
-    return `${String(shard.index)}/${String(shard.ofTotal)}:${id.uuid}`;
-  },
-
-  /**
-   * Copies a wire Inbox row without dropping unknown fields.
-   *
-   * @param message Supplies the original wire row.
-   * @returns A detached wire row.
-   */
-  copyWire(message: WireInboxMessage): WireInboxMessage {
-    return clone(InboxMessageSchema, message);
   },
 
   /**
@@ -554,7 +460,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
   },
 
   /**
-   * Copies an inbox message for later exact-snapshot checks.
+   * Copies the caller's inbox message before an asynchronous write.
    *
    * @param value Supplies the message to copy.
    * @returns A detached immutable message.

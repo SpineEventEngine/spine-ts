@@ -18,7 +18,6 @@ import { Code, ConnectError, type ConnectRouter, type Interceptor } from "@conne
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 import {
   AdminService,
-  GuardedInboxService,
   InboxService,
   ManagedShardService,
   ShardObservingService,
@@ -111,7 +110,6 @@ export class PrivateDeliveryChild {
     router.service(InboxService, this.#assembly.inbox);
     router.service(ShardService, this.#assembly.shards);
     router.service(ManagedShardService, this.#assembly.managed);
-    router.service(GuardedInboxService, this.#assembly.guarded);
     router.service(AdminService, this.#assembly.admin);
     router.service(ShardObservingService, this.#assembly.observing);
   }

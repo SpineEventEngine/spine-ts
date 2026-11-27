@@ -13,7 +13,7 @@
  */
 
 import { Time } from "@spine-event-engine/core/time";
-import { clone, create, toBinary } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 import type {
@@ -21,7 +21,14 @@ import type {
   InboxMessageId as WireInboxMessageId,
 } from "@spine-event-engine/proto/delivery";
 import { InboxMessageIdSchema } from "@spine-event-engine/proto/delivery";
-import type { RecordStorage, StorageContext, StorageFactory } from "@spine-event-engine/storage";
+import {
+  InboxRecordStorageCapabilities,
+  type InboxRecordEntry,
+  type RecordQuery,
+  type RecordStorage,
+  type StorageContext,
+  type StorageFactory,
+} from "@spine-event-engine/storage";
 
 import {
   InboxMessageError,
@@ -65,6 +72,8 @@ export class InboxStorage {
 
   #retained: RecordStorage<WireInboxMessageId, WireInboxMessage> | undefined;
 
+  readonly #mutationTokens = new WeakMap<InboxMessage, unknown>();
+
   #active = 0;
 
   #closing = false;
@@ -102,7 +111,7 @@ export class InboxStorage {
     const after = Values.after(options.after, requested);
     const storage = this.#storage();
     try {
-      const rows = await storage.queryEntries({
+      const rows = await this.#queryEntries(storage, {
         filters: [
           { column: "shard_index", value: requested.index },
           { column: "shard_total", value: requested.ofTotal },
@@ -120,7 +129,7 @@ export class InboxStorage {
         ...(offset === undefined ? {} : { offset }),
         ...(after === undefined ? {} : { after }),
       });
-      return Object.freeze(rows.map((row) => InboxRecords.read(row.record, row.id)));
+      return Object.freeze(rows.map((row) => this.#decodeEntry(row)));
     } finally {
       this.#finish();
     }
@@ -136,7 +145,7 @@ export class InboxStorage {
     const requested = Values.shard(shard);
     const storage = this.#storage();
     try {
-      const rows = await storage.queryEntries({
+      const rows = await this.#queryEntries(storage, {
         filters: [
           { column: "shard_index", value: requested.index },
           { column: "shard_total", value: requested.ofTotal },
@@ -151,7 +160,7 @@ export class InboxStorage {
         limit: 1,
       });
       const row = rows[0];
-      return row === undefined ? undefined : InboxRecords.read(row.record, row.id);
+      return row === undefined ? undefined : this.#decodeEntry(row);
     } finally {
       this.#finish();
     }
@@ -193,82 +202,55 @@ export class InboxStorage {
   }
 
   /**
-   * Marks one exact pending row delivered and starts its retention period.
+   * Marks the current inbox message at its complete ID delivered.
    *
-   * @param message Supplies the expected pending snapshot.
-   * @returns The first stored completion, or `undefined` when immutable content differs.
+   * @param message Supplies the ID and page result returned to the worker.
+   * @returns The local work result when a pending message was changed.
    */
   async markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
-    const expected = InboxRecords.write(message);
-    const id = Values.wireId(expected);
+    const id = Values.id(message.id);
+    const deadline = InboxRetention.deadline(Values.now(this.#now));
     const storage = this.#storage();
     try {
-      Values.atomic(storage);
-      const current = await storage.read(id);
-      if (current === undefined) return undefined;
-      const decoded = InboxRecords.read(current, id);
-      if (decoded.status === "DELIVERED") {
-        return this.#sameCompletion(current, message, decoded) ? decoded : undefined;
-      }
-      if (decoded.status !== "TO_DELIVER" || !Values.same(current, expected)) return undefined;
-      const delivered = InboxRecords.write({
-        ...decoded,
-        status: "DELIVERED",
-        keepUntil: InboxRetention.deadline(Values.now(this.#now)),
-      });
-      if (await storage.compareAndSet(id, current, delivered))
-        return InboxRecords.read(delivered, id);
-      const successor = await storage.read(id);
-      if (successor === undefined) return undefined;
-      const completed = InboxRecords.read(successor, id);
-      return completed.status === "DELIVERED" && this.#sameCompletion(successor, message, completed)
-        ? completed
-        : undefined;
+      if (!InboxRecordStorageCapabilities.hasMutations(storage))
+        throw new InboxMessageError("Inbox storage does not support ID-based acknowledgement.");
+      const first = await storage.markInboxDelivered(
+        id,
+        Values.timestamp(deadline.getTime()),
+        this.#mutationTokens.get(message),
+      );
+      return first === undefined
+        ? undefined
+        : {
+            ...message,
+            status: "DELIVERED",
+            keepUntil: new Date(
+              Number(first.seconds) * 1_000 + Math.floor(first.nanos / 1_000_000),
+            ),
+          };
     } finally {
       this.#finish();
     }
   }
 
   /**
-   * Compares a completed row with the expected immutable pending content.
+   * Deletes expired delivered inbox messages for one shard in one storage call.
    *
-   * @param current Supplies the persisted completed wire row.
-   * @param message Supplies the caller's pending snapshot.
-   * @param completed Supplies the decoded persisted completion.
-   * @returns Whether the persisted row only differs by status and completion deadline.
+   * @param shard Selects the shard to clean.
+   * @returns Whether the provider supports the required predicate mutation.
    */
-  #sameCompletion(
-    current: WireInboxMessage,
-    message: InboxMessage,
-    completed: InboxMessage,
-  ): boolean {
-    const { keepUntil: previousDeadline, ...pending } = message;
-    void previousDeadline;
-    const expected = InboxRecords.write({
-      ...pending,
-      status: "DELIVERED",
-      ...(completed.keepUntil === undefined ? {} : { keepUntil: completed.keepUntil }),
-    });
-    return Values.same(current, expected);
-  }
-
-  /**
-   * Removes one eligible delivered row by ID before cancellation or deadline.
-   *
-   * @param message Supplies the delivered ID and cleanup eligibility.
-   * @param options Propagates cancellation and a delivery deadline.
-   * @returns Whether direct ID deletion removed a row.
-   */
-  async removeDelivered(
-    message: InboxMessage,
-    options?: import("./delivery-ports.js").DeliveryOperationOptions,
-  ): Promise<boolean> {
-    if (
-      message.status !== "DELIVERED" ||
-      (message.keepUntil !== undefined && message.keepUntil.getTime() > Values.now(this.#now))
-    )
-      return false;
-    return this.#remove(message, options);
+  async removeExpiredDelivered(shard: ShardIndex): Promise<boolean> {
+    const storage = this.#storage();
+    try {
+      if (
+        !InboxRecordStorageCapabilities.hasMutations(storage) ||
+        storage.removeExpiredInbox === undefined
+      )
+        return false;
+      return await storage.removeExpiredInbox(shard, Values.timestamp(Values.now(this.#now)));
+    } finally {
+      this.#finish();
+    }
   }
 
   /**
@@ -313,6 +295,35 @@ export class InboxStorage {
       options?.timeoutMs === undefined ? undefined : Values.now(this.#now) + options.timeoutMs;
     return () =>
       !options?.signal?.aborted && (deadline === undefined || Values.now(this.#now) < deadline);
+  }
+
+  /**
+   * Reads the provider's ordinary page with private mutation metadata when available.
+   *
+   * @param storage Retained inbox record handle.
+   * @param query Ordered page request.
+   * @returns Ordered records with optional provider tokens.
+   */
+  #queryEntries(
+    storage: RecordStorage<WireInboxMessageId, WireInboxMessage>,
+    query: RecordQuery<WireInboxMessageId>,
+  ): Promise<readonly InboxRecordEntry<WireInboxMessageId, WireInboxMessage>[]> {
+    return InboxRecordStorageCapabilities.hasMutations(storage) &&
+      storage.queryInboxEntries !== undefined
+      ? storage.queryInboxEntries(query)
+      : storage.queryEntries(query);
+  }
+
+  /**
+   * Converts one provider entry and associates its private mutation token.
+   *
+   * @param entry Provider page entry.
+   * @returns The decoded inbox message.
+   */
+  #decodeEntry(entry: InboxRecordEntry<WireInboxMessageId, WireInboxMessage>): InboxMessage {
+    const message = InboxRecords.read(entry.record, entry.id);
+    if (entry.mutationToken !== undefined) this.#mutationTokens.set(message, entry.mutationToken);
+    return message;
   }
 
   #storage(): RecordStorage<WireInboxMessageId, WireInboxMessage> {
@@ -436,19 +447,6 @@ const Values = Object.freeze({
   wireId(value: WireInboxMessage): WireInboxMessageId {
     if (value.id === undefined) throw new InboxMessageError("Inbox message ID is invalid.");
     return value.id;
-  },
-
-  /**
-   * Compares two wire inbox messages by their encoded record data.
-   *
-   * @param left Supplies the first wire message.
-   * @param right Supplies the second wire message.
-   * @returns Whether both messages encode to the same data.
-   */
-  same(left: WireInboxMessage, right: WireInboxMessage): boolean {
-    return Buffer.from(toBinary(inboxRecordSpec.recordType, left)).equals(
-      Buffer.from(toBinary(inboxRecordSpec.recordType, right)),
-    );
   },
 
   /**

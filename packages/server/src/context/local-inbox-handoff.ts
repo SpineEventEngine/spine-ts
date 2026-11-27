@@ -338,8 +338,6 @@ const settledHandoff: DeliveryHandoff = Object.freeze({
   abandon: () => undefined,
 });
 
-const drainLimit = 8;
-
 /**
  * Configures one bounded attempt to drain a local inbox message.
  */
@@ -457,12 +455,11 @@ export const InboxHandoff: Readonly<{
   },
 
   async runDrain(options: LocalInboxDrainOptions): Promise<void> {
-    for (let attempt = 0; attempt < drainLimit; attempt += 1) {
+    for (;;) {
       const outcome = await InboxHandoff.drainAttempt(options);
       if (outcome === "ACKNOWLEDGED") return;
-      if (outcome === "IDLE") break;
+      if (outcome === "IDLE") throw new Error(options.unfinishedMessage);
     }
-    throw new Error(options.unfinishedMessage);
   },
 
   async drainAttempt(options: LocalInboxDrainOptions): Promise<"ACKNOWLEDGED" | "IDLE" | "RETRY"> {
@@ -478,8 +475,6 @@ export const InboxHandoff: Readonly<{
     const run =
       direct.run ?? (direct.outcome?.kind === "unresolved" ? direct.outcome.run : undefined);
     if (run === undefined) return "RETRY";
-    if ((await options.delivery.inbox.readMessage(options.received.id))?.status === "DELIVERED")
-      return "ACKNOWLEDGED";
     const failure = run.failures.find(({ message }) =>
       InboxHandoff.sameDelivery(message, options.received),
     );

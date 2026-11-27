@@ -12,7 +12,14 @@
  * the License.
  */
 
-import { fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  InboxMessageSchema,
+  InboxMessageStatus,
+  type InboxMessage,
+  type ShardIndex,
+} from "@spine-event-engine/proto/delivery";
 import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import {
   ColumnMappings,
@@ -545,6 +552,127 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
+   * Marks one existing inbox ID delivered with its first retention deadline.
+   *
+   * @param id Complete inbox message ID.
+   * @param deadline First completion deadline.
+   * @returns Whether a pending inbox message changed.
+   */
+  markInboxDelivered(id: I, deadline: Timestamp): Promise<Timestamp | undefined> {
+    this.requireInbox();
+    return this.using(async (client) => {
+      const changed = await client.query<{ when_keep_until: bigint | string | null }>(
+        `UPDATE ${this.qualified()} SET "status" = $2, "when_keep_until" = $3 ` +
+          `WHERE "ID" = $1 AND "status" = $4 RETURNING "when_keep_until"`,
+        [
+          this.id(id),
+          this.historyColumn("status", InboxMessageStatus.DELIVERED),
+          this.historyColumn("when_keep_until", deadline),
+          this.historyColumn("status", InboxMessageStatus.TO_DELIVER),
+        ],
+      );
+      const current = changed.rows[0];
+      if (current !== undefined) return this.inboxDeadline(current.when_keep_until);
+      const retry = await client.query<{
+        status: number | string;
+        when_keep_until: bigint | string | null;
+      }>(`SELECT "status", "when_keep_until" FROM ${this.qualified()} WHERE "ID" = $1`, [
+        this.id(id),
+      ]);
+      const row = retry.rows[0];
+      const deliveredStatus: number = InboxMessageStatus.DELIVERED;
+      return Number(row?.status) === deliveredStatus
+        ? this.inboxDeadline(row?.when_keep_until)
+        : undefined;
+    });
+  }
+
+  /**
+   * Deletes expired delivered inbox messages in one database statement.
+   *
+   * @param shard Selected shard.
+   * @param now Inclusive retention deadline.
+   * @returns Whether the provider applied the cleanup predicate.
+   */
+  removeExpiredInbox(shard: ShardIndex, now: Timestamp): Promise<boolean> {
+    this.requireInbox();
+    return this.using(async (client) => {
+      await client.query(
+        `DELETE FROM ${this.qualified()} WHERE "shard_index" = $1 AND "shard_total" = $2 ` +
+          `AND "status" = $3 AND ("when_keep_until" IS NULL OR "when_keep_until" <= $4)`,
+        [
+          this.historyColumn("shard_index", shard.index),
+          this.historyColumn("shard_total", shard.ofTotal),
+          this.historyColumn("status", InboxMessageStatus.DELIVERED),
+          this.historyColumn("when_keep_until", now),
+        ],
+      );
+      return true;
+    });
+  }
+
+  /**
+   * Validates the generated inbox layout before updating status or retention columns.
+   */
+  private requireInbox(): void {
+    if (!this.isInboxLayout())
+      throw new TypeError("Inbox mutation requires the framework inbox record layout.");
+  }
+
+  /**
+   * Checks for the framework inbox layout and its mutable query columns.
+   *
+   * @returns Whether this record family supports inbox mutations.
+   */
+  private isInboxLayout(): boolean {
+    const names = new Set(this.recordSpec.columns.map((column) => column.name));
+    return (
+      this.recordSpec.recordType.typeName === InboxMessageSchema.typeName &&
+      ["status", "when_keep_until", "shard_index", "shard_total"].every((name) => names.has(name))
+    );
+  }
+
+  /**
+   * Adds authoritative mutable columns to inbox record reads.
+   *
+   * @returns Additional selected column names.
+   */
+  private inboxReadColumns(): string {
+    return this.isInboxLayout() ? ', "status", "when_keep_until"' : "";
+  }
+
+  /**
+   * Applies mutable inbox columns over the original stored Protobuf bytes.
+   *
+   * @param record Decoded stored payload.
+   * @param row Selected database row.
+   * @returns The current record view.
+   */
+  private projectInbox(record: R, row: Row): R {
+    if (!this.isInboxLayout()) return record;
+    const inbox = record as unknown as InboxMessage;
+    inbox.status = Number(row.status);
+    inbox.keepUntil = this.inboxDeadline(row.when_keep_until);
+    return record;
+  }
+
+  /**
+   * Decodes the queryable first completion deadline at nanosecond precision.
+   *
+   * @param encoded Stored epoch nanoseconds, when present.
+   * @returns The original deadline.
+   */
+  private inboxDeadline(encoded: bigint | string | null | undefined): Timestamp | undefined {
+    if (encoded === null || encoded === undefined) return undefined;
+    const nanos = BigInt(encoded);
+    const seconds = nanos >= 0n ? nanos / 1_000_000_000n : (nanos - 999_999_999n) / 1_000_000_000n;
+    return create(TimestampSchema, {
+      seconds,
+      nanos: Number(nanos - seconds * 1_000_000_000n),
+    });
+  }
+
+  /**
    * Deletes one record by storage ID.
    *
    * @param id Identifies the record to delete.
@@ -848,12 +976,15 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    */
   private async readOn(client: PoolClient, id: I, locked = false): Promise<R | undefined> {
     const result = await client.query<Row>(
-      `SELECT "bytes" FROM ${this.qualified()} WHERE "ID" = $1${locked ? " FOR UPDATE" : ""}`,
+      `SELECT "bytes"${this.inboxReadColumns()} FROM ${this.qualified()} WHERE "ID" = $1${locked ? " FOR UPDATE" : ""}`,
       [this.id(id)],
     );
     if (result.rows[0] === undefined) return undefined;
     try {
-      return fromBinary(this.recordSpec.recordType, bytes(result.rows[0].bytes));
+      return this.projectInbox(
+        fromBinary(this.recordSpec.recordType, bytes(result.rows[0].bytes)),
+        result.rows[0],
+      );
     } catch (error) {
       throw new PostgresStorageDataError("Stored PostgreSQL record data is invalid.", {
         cause: error,
@@ -876,7 +1007,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     try {
       return result.rows.map((row) => ({
         id: this.#idColumn.read(row.ID),
-        record: fromBinary(this.recordSpec.recordType, bytes(row.bytes)),
+        record: this.projectInbox(fromBinary(this.recordSpec.recordType, bytes(row.bytes)), row),
       }));
     } catch (error) {
       throw new PostgresStorageDataError("Stored PostgreSQL record data is invalid.", {
@@ -994,7 +1125,9 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     const clauses = this.recordClauses(query, bind);
     const order = this.recordOrder(query);
     if (query.after !== undefined) clauses.push(this.continuation(query, bind));
-    let sql = `SELECT "ID", "bytes" FROM ${this.qualified()}${where(clauses)} ORDER BY ${order}`;
+    let sql =
+      `SELECT "ID", "bytes"${this.inboxReadColumns()} FROM ${this.qualified()}` +
+      `${where(clauses)} ORDER BY ${order}`;
     if (query.limit !== undefined) sql += ` LIMIT ${bind.add(query.limit)}`;
     if (query.offset !== undefined)
       sql +=
@@ -1023,13 +1156,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       throw new PostgresStorageOperationError(
         "PostgreSQL normalized query exceeds the 1000-parameter bind budget.",
       );
-    const order = [
-      ...(plan.order ?? []).map(
-        (item) =>
-          `${this.column(item.column)} ${item.direction === "desc" ? "DESC NULLS LAST" : "ASC NULLS FIRST"}`,
-      ),
-      '"ID" ASC',
-    ].join(", ");
+    const order = this.planOrder(plan);
     const limit = plan.exhaustive
       ? plan.limit
       : Math.min(
@@ -1041,8 +1168,26 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       (!scanAll && safePredicate === plan.predicate && this.exhaustiveOrderMatches(plan));
     const limitClause = limit !== undefined && exactLimit ? ` LIMIT ${bind.add(limit)}` : "";
     return bind.done(
-      `SELECT "ID", "bytes" FROM ${this.qualified()}${predicate} ORDER BY ${order}` + limitClause,
+      `SELECT "ID", "bytes"${this.inboxReadColumns()} FROM ${this.qualified()}${predicate} ORDER BY ${order}` +
+        limitClause,
     );
+  }
+
+  /**
+   * Builds provider ordering for a normalized record query.
+   *
+   * @param plan Supplies the declared column order.
+   * @returns SQL ordering with the ID tie-breaker.
+   */
+  private planOrder(plan: NormalizedQueryPlan<I>): string {
+    return [
+      ...(plan.order ?? []).map(
+        (item) =>
+          `${this.column(item.column)} ` +
+          (item.direction === "desc" ? "DESC NULLS LAST" : "ASC NULLS FIRST"),
+      ),
+      '"ID" ASC',
+    ].join(", ");
   }
 
   /**
@@ -1444,6 +1589,8 @@ type Materialized<I, R extends Message> = ReturnType<RecordSpec<I, R>["materiali
 interface Row {
   readonly ID: unknown;
   readonly bytes: Uint8Array | Buffer;
+  readonly status?: number | string;
+  readonly when_keep_until?: bigint | string | null;
 }
 
 /**

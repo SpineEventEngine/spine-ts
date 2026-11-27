@@ -171,6 +171,26 @@ replays captured input with unchanged versions and Event IDs. Standalone
 history operations remain separate; a delivery Event alone does not prove the
 current-state write completed.
 
+### Recent Events emitted by an Aggregate
+
+With `doubleDispatchGuard: { depth: 2 }`, an Order repository may need the two
+most recent Events emitted by Order `order-17`. MySQL reads the table for
+Events emitted by Orders. The bound `entity_id` identifies this particular
+Order. For example, the first history read has this form, with an illustrative
+table name:
+
+```sql
+SELECT bytes FROM order_events
+WHERE entity_id = ?
+ORDER BY version DESC, created DESC
+LIMIT 2;
+```
+
+When reading older Events through a supplied Entity version, the query adds
+`AND version <= ?` before the ordering. Both queries apply the requested depth
+in MySQL. The repository can inspect each returned Event's immediate cause
+without reading the Bounded Context's Event Store.
+
 ## Agent history
 
 The provider-only Agent history handle stores original complete

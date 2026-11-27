@@ -12,7 +12,14 @@
  * the License.
  */
 
-import { fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  InboxMessageSchema,
+  InboxMessageStatus,
+  type InboxMessage,
+  type ShardIndex,
+} from "@spine-event-engine/proto/delivery";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
@@ -493,6 +500,151 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   }
 
   /**
+   * Reads one producer's newest retained Events with the version bound in SQL.
+   *
+   * @param producer Packed Entity ID stored in the history column.
+   * @param depth Maximum number of Events to return.
+   * @param startingFromVersion Inclusive version ceiling, when continuing history.
+   * @returns Decoded Events in reverse Entity version order.
+   */
+  queryEntityEvents(
+    producer: unknown,
+    depth: number,
+    startingFromVersion?: bigint,
+  ): Promise<readonly R[]> {
+    if (!Number.isSafeInteger(depth) || depth <= 0)
+      throw new RangeError("Entity Event history depth must be a positive safe integer.");
+    return this.using(async (connection) => {
+      const values: unknown[] = [this.queryValue("entity_id", producer)];
+      const bound = startingFromVersion === undefined ? "" : " AND version <= ?";
+      if (startingFromVersion !== undefined) values.push(startingFromVersion.toString());
+      const [rows] = await connection.execute<PayloadRow[]>(
+        `SELECT bytes FROM \`${this.table.tableName}\` WHERE entity_id = ?${bound} ` +
+          `ORDER BY version DESC, created DESC LIMIT ${String(depth)}`,
+        values as never,
+      );
+      return rows.map((row) => this.decode(row.bytes));
+    });
+  }
+
+  /**
+   * Marks the existing inbox message at an ID delivered without replacing its payload.
+   *
+   * @param id Complete inbox message ID.
+   * @param deadline First completion deadline.
+   * @returns Whether a pending inbox message changed.
+   */
+  markInboxDelivered(id: I, deadline: Timestamp): Promise<Timestamp | undefined> {
+    this.requireInbox();
+    return this.using(async (connection) => {
+      const [result] = await connection.execute<ResultSetHeader>(
+        `UPDATE \`${this.table.tableName}\` SET status=?, when_keep_until=? WHERE ID=? AND status=?`,
+        [
+          this.queryValue("status", InboxMessageStatus.DELIVERED),
+          this.queryValue("when_keep_until", deadline),
+          this.idKey(id),
+          this.queryValue("status", InboxMessageStatus.TO_DELIVER),
+        ] as never,
+      );
+      if (result.affectedRows === 1) return deadline;
+      const [rows] = await connection.execute<PayloadRow[]>(
+        `SELECT status, when_keep_until FROM \`${this.table.tableName}\` WHERE ID=?`,
+        [this.idKey(id)] as never,
+      );
+      const row = rows[0];
+      const deliveredStatus: number = InboxMessageStatus.DELIVERED;
+      return Number(row?.status) === deliveredStatus
+        ? this.inboxDeadline(row?.when_keep_until)
+        : undefined;
+    });
+  }
+
+  /**
+   * Deletes expired delivered inbox messages in one database statement.
+   *
+   * @param shard Selected shard.
+   * @param now Inclusive retention deadline.
+   * @returns Whether the provider applied the cleanup predicate.
+   */
+  removeExpiredInbox(shard: ShardIndex, now: Timestamp): Promise<boolean> {
+    this.requireInbox();
+    return this.using(async (connection) => {
+      await connection.execute(
+        `DELETE FROM \`${this.table.tableName}\` WHERE shard_index=? AND shard_total=? ` +
+          `AND status=? AND (when_keep_until IS NULL OR when_keep_until<=?)`,
+        [
+          this.queryValue("shard_index", shard.index),
+          this.queryValue("shard_total", shard.ofTotal),
+          this.queryValue("status", InboxMessageStatus.DELIVERED),
+          this.queryValue("when_keep_until", now),
+        ] as never,
+      );
+      return true;
+    });
+  }
+
+  /**
+   * Validates the generated inbox layout before updating status or retention columns.
+   */
+  private requireInbox(): void {
+    if (!this.isInboxLayout())
+      throw new TypeError("Inbox mutation requires the framework inbox record layout.");
+  }
+
+  /**
+   * Checks for the framework inbox layout and its mutable query columns.
+   *
+   * @returns Whether this record family supports inbox mutations.
+   */
+  private isInboxLayout(): boolean {
+    const names = new Set(this.recordSpec.columns.map((column) => column.name));
+    return (
+      this.recordSpec.recordType.typeName === InboxMessageSchema.typeName &&
+      ["status", "when_keep_until", "shard_index", "shard_total"].every((name) => names.has(name))
+    );
+  }
+
+  /**
+   * Adds authoritative mutable columns to inbox record reads.
+   *
+   * @returns Additional selected column names.
+   */
+  private inboxReadColumns(): string {
+    return this.isInboxLayout() ? ", status, when_keep_until" : "";
+  }
+
+  /**
+   * Applies mutable inbox columns over the original stored Protobuf bytes.
+   *
+   * @param record Decoded stored payload.
+   * @param row Selected database row.
+   * @returns The current record view.
+   */
+  private projectInbox(record: R, row: PayloadRow): R {
+    if (!this.isInboxLayout()) return record;
+    const inbox = record as unknown as InboxMessage;
+    inbox.status = Number(row.status);
+    inbox.keepUntil = this.inboxDeadline(row.when_keep_until);
+    return record;
+  }
+
+  /**
+   * Decodes the queryable first completion deadline at nanosecond precision.
+   *
+   * @param encoded Stored epoch nanoseconds, when present.
+   * @returns The original deadline.
+   */
+  private inboxDeadline(encoded: bigint | string | null | undefined): Timestamp | undefined {
+    if (encoded === null || encoded === undefined) return undefined;
+    const nanos = BigInt(encoded);
+    const seconds = nanos >= 0n ? nanos / 1_000_000_000n : (nanos - 999_999_999n) / 1_000_000_000n;
+    return create(TimestampSchema, {
+      seconds,
+      nanos: Number(nanos - seconds * 1_000_000_000n),
+    });
+  }
+
+  /**
    * Deletes one stored record.
    *
    * @param id Identifies the record to delete.
@@ -533,7 +685,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       try {
         return rows.map((row) => ({
           id: this.decodeId(row.ID),
-          record: fromBinary(this.recordSpec.recordType, row.bytes),
+          record: this.projectInbox(fromBinary(this.recordSpec.recordType, row.bytes), row),
         }));
       } catch (error) {
         throw mysqlError(MysqlStorageDataError, "Stored MySQL record data is invalid.", error);
@@ -568,7 +720,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       try {
         return rows.map((row) => ({
           id: this.decodeId(row.ID),
-          record: fromBinary(this.recordSpec.recordType, row.bytes),
+          record: this.projectInbox(fromBinary(this.recordSpec.recordType, row.bytes), row),
         }));
       } catch (error) {
         throw mysqlError(MysqlStorageDataError, "Stored MySQL record data is invalid.", error);
@@ -731,12 +883,13 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     locked = false,
   ): Promise<R | undefined> {
     const [rows] = await connection.execute<PayloadRow[]>(
-      `SELECT bytes FROM \`${this.table.tableName}\` WHERE ID=?${locked ? " FOR UPDATE" : ""}`,
+      `SELECT bytes${this.inboxReadColumns()} FROM \`${this.table.tableName}\` ` +
+        `WHERE ID=?${locked ? " FOR UPDATE" : ""}`,
       [this.idKey(id)] as never,
     );
     if (rows[0] === undefined) return undefined;
     try {
-      return fromBinary(this.recordSpec.recordType, rows[0].bytes);
+      return this.projectInbox(fromBinary(this.recordSpec.recordType, rows[0].bytes), rows[0]);
     } catch (error) {
       throw mysqlError(MysqlStorageDataError, "Stored MySQL record data is invalid.", error);
     }
@@ -944,7 +1097,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       "ID ASC",
     ];
     let sql =
-      `SELECT ID, bytes FROM \`${this.table.tableName}\` ` +
+      `SELECT ID, bytes${this.inboxReadColumns()} FROM \`${this.table.tableName}\` ` +
       (clauses.length === 0 ? "" : `WHERE ${clauses.join(" AND ")} `) +
       `ORDER BY ${orders.join(", ")}`;
     if (query.limit !== undefined) {
@@ -1068,7 +1221,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     const limitClause = limit !== undefined && exactLimit ? " LIMIT ?" : "";
     return {
       sql:
-        `SELECT ID, bytes FROM \`${this.table.tableName}\` ` +
+        `SELECT ID, bytes${this.inboxReadColumns()} FROM \`${this.table.tableName}\` ` +
         (predicate === undefined ? "" : `WHERE ${predicate} `) +
         `ORDER BY ${this.planOrder(plan)}` +
         limitClause,
@@ -1712,6 +1865,8 @@ interface PairRow extends RowDataPacket {
  */
 interface PayloadRow extends RowDataPacket {
   bytes: Uint8Array;
+  status?: number | string;
+  when_keep_until?: bigint | string | null;
 }
 
 interface Row extends PayloadRow {

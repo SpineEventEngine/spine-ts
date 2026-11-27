@@ -177,6 +177,7 @@ import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { EventDispatcherOriginSchemas } from "../bus/event-dispatcher-origin-schemas.js";
 import type { Delivery } from "../delivery/delivery.js";
 import { receptionObservation } from "../delivery/reception-observation.js";
+import { deliveryRunScopes } from "../delivery/delivery-run-scope.js";
 import { DuplicateDispatch } from "../delivery/duplicate-dispatch.js";
 import { commitFenced, withoutDeliveryCommitFence } from "./commit-fence.js";
 import {
@@ -612,16 +613,6 @@ interface RepositoryOptionsBase<
    * Aggregate Events are retained.
    */
   readonly processManagerEventHistory?: boolean;
-
-  /**
-   * Checks recent emitted Event causes before dispatching to an Aggregate or Process Manager.
-   *
-   * Disabled by default. When enabled without an explicit depth, it inspects
-   * up to 100 committed emitted Events. Aggregate history is retained already;
-   * Process Managers require `processManagerEventHistory`. Agent guarding is
-   * process-local and does not survive a restart. Projections cannot enable it.
-   */
-  readonly doubleDispatchGuard?: boolean | { readonly depth?: number };
 }
 
 /**
@@ -718,7 +709,16 @@ type OnCreate<EntityType extends RepositoryEntityType> = (
  */
 export type RepositoryOptions<
   EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
-> = RepositoryOptionsBase<EntityType> & RepositoryCreationOption<EntityType>;
+> = RepositoryOptionsBase<EntityType> &
+  RepositoryCreationOption<EntityType> &
+  (EntityType["prototype"] extends Aggregate<unknown, DescriptorMessageSchema>
+    ? {
+        /**
+         * Checks the specified number of recent emitted Event causes for an Aggregate.
+         */
+        readonly doubleDispatchGuard?: { readonly depth: number };
+      }
+    : { readonly doubleDispatchGuard?: never });
 
 /**
  * Immutable copy-safe repository identity snapshot.
@@ -1545,13 +1545,13 @@ const repositoryHistoryConfigurations = new WeakMap<
 const repositoryAiConfigurations = new WeakMap<RepositoryView, RepositoryAiOptions>();
 
 /**
- * Serialized dispatch lane with bounded completion memory and in-flight count.
+ * Serialized Aggregate dispatch lane and in-flight count.
  */
 interface DispatchGuard {
-  readonly completed: Set<string>;
-  readonly order: string[];
   chain: Promise<void>;
   active: number;
+  recent?: readonly Event[];
+  version?: bigint;
 }
 
 /**
@@ -1566,9 +1566,12 @@ type GuardedEntitySignal =
  */
 interface RepositoryDispatchGuards {
   readonly lanes: Map<string, DispatchGuard>;
-  readonly order: string[];
 }
 const repositoryDispatchGuards = new WeakMap<RepositoryView, RepositoryDispatchGuards>();
+const drainDispatchEvidence = new WeakMap<
+  object,
+  Map<RepositoryView, Map<string, { recent: readonly Event[]; version: bigint }>>
+>();
 
 /**
  * Installs repository routing, history, and callback state after identity validation.
@@ -3140,6 +3143,13 @@ class AggregateExecutionSupport {
     try {
       await this.#commitAggregateRecord(loaded, entityId, events, diagnostics, deferred);
       entityStateHistoryCaches.get(loaded.entity)?.clear();
+      DispatchGuards.recordCommitted(
+        this.#repository,
+        this.#storageContext,
+        entityId,
+        events,
+        BigInt(versionMessage.number),
+      );
     } catch (error) {
       deferred.cancel();
       throw error;
@@ -3324,13 +3334,17 @@ class AggregateCommandExecution {
    * Validates the Command and executes its assignee when registered.
    *
    * @param deliveredRoute Accepted route from durable inbox delivery, when present.
+   * @param check Checks the loaded Aggregate's recent emitted Event causes.
    * @returns Completion after processing and outgoing handoff attempts.
    */
-  async run(deliveredRoute?: RepositoryCommandRoute): Promise<void> {
+  async run(
+    deliveredRoute?: RepositoryCommandRoute,
+    check?: (loaded: LoadedAggregate) => Promise<void>,
+  ): Promise<void> {
     void RepositorySignals.requireCommandId(this.#command);
     const intake = await this.#readIntake(deliveredRoute);
     if (intake === undefined) return undefined;
-    await this.#runAssignee(intake);
+    await this.#runAssignee(intake, check);
   }
 
   /**
@@ -3363,14 +3377,19 @@ class AggregateCommandExecution {
    * Invokes the assignee, persists its Events, or publishes a declared rejection.
    *
    * @param intake Decoded Command, target route, and assignee.
+   * @param check Checks the loaded Aggregate's recent emitted Event causes.
    * @returns Completion after processing and outgoing handoff attempts.
    */
-  async #runAssignee(intake: {
-    readonly message: unknown;
-    readonly route: RepositoryCommandRoute;
-    readonly assignee: RepositoryCommandAssignee;
-  }): Promise<void> {
+  async #runAssignee(
+    intake: {
+      readonly message: unknown;
+      readonly route: RepositoryCommandRoute;
+      readonly assignee: RepositoryCommandAssignee;
+    },
+    check?: (loaded: LoadedAggregate) => Promise<void>,
+  ): Promise<void> {
     const loaded = await this.#support.loadAggregate(intake.route.entityId);
+    await check?.(loaded);
     this.#publishCommandDispatch(intake.route.entityId);
     let produced: unknown;
     try {
@@ -3663,7 +3682,7 @@ class AggregateEventExecution {
       this.#runtime,
       { case: "event", value: this.#event },
       entityId,
-      () => this.#executeEntity(entityId, intake),
+      (check) => this.#executeEntity(entityId, intake, check),
     );
   }
 
@@ -3703,6 +3722,7 @@ class AggregateEventExecution {
    *
    * @param entityId Target Aggregate identifier.
    * @param intake Decoded Event and matching reactors.
+   * @param check Checks the loaded Aggregate's recent emitted Event causes.
    * @returns Completion after persistence and journaling.
    */
   async #executeEntity(
@@ -3712,8 +3732,10 @@ class AggregateEventExecution {
       readonly route: RepositoryEventRoute;
       readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
     },
+    check?: (loaded: LoadedAggregate) => Promise<void>,
   ): Promise<void> {
     const loaded = await this.#support.loadAggregate(entityId);
+    await check?.(loaded);
     const produced = await this.#invokeHandlers(entityId, loaded, intake);
     await this.#persistProducedEvents(loaded, entityId, produced);
 
@@ -7085,15 +7107,7 @@ class ProcessManagerEventExecution {
     }
 
     this.#validateSourceEventIdForFollowUps(intake);
-    await DispatchGuards.guardedEntityDispatch(
-      this.#repository,
-      this.#runtime,
-      { case: "event", value: this.#event },
-      entityId,
-      async () => {
-        await this.#executeEntity(entityId, intake);
-      },
-    );
+    await this.#executeEntity(entityId, intake);
   }
 
   /**
@@ -11646,29 +11660,27 @@ const RepositoryStorage = {
     options: {
       readonly stateHistory?: boolean;
       readonly processManagerEventHistory?: boolean;
-      readonly doubleDispatchGuard?: boolean | { readonly depth?: number };
+      readonly doubleDispatchGuard?: { readonly depth: number };
     },
     family: EntityFamily,
   ): RepositoryHistoryConfiguration {
-    const guard = options.doubleDispatchGuard;
-    const depth =
-      guard === true
-        ? 100
-        : guard === false || guard === undefined
-          ? undefined
-          : (guard.depth ?? 100);
-    if (depth !== undefined && (!Number.isSafeInteger(depth) || depth <= 0)) {
-      throw new RangeError("Repository doubleDispatchGuard.depth must be a positive safe integer.");
+    const rawGuard: unknown = options.doubleDispatchGuard;
+    if (rawGuard !== undefined && (typeof rawGuard !== "object" || rawGuard === null)) {
+      throw new TypeError("Repository doubleDispatchGuard requires a depth object.");
     }
-    if (depth !== undefined && family === "projection") {
-      throw new Error("Repository doubleDispatchGuard is unavailable for Projections.");
+    const guard = rawGuard as { readonly depth?: unknown } | undefined;
+    const depth = guard?.depth;
+    if (guard !== undefined && depth === undefined) {
+      throw new TypeError("Repository doubleDispatchGuard.depth is required.");
     }
     if (
       depth !== undefined &&
-      family === "process-manager" &&
-      options.processManagerEventHistory !== true
+      (typeof depth !== "number" || !Number.isSafeInteger(depth) || depth <= 0)
     ) {
-      throw new Error("Process Manager doubleDispatchGuard requires processManagerEventHistory.");
+      throw new RangeError("Repository doubleDispatchGuard.depth must be a positive safe integer.");
+    }
+    if (guard !== undefined && family !== "aggregate") {
+      throw new Error("Repository doubleDispatchGuard is available only for Aggregates.");
     }
     return {
       stateHistory: options.stateHistory ?? false,
@@ -12379,7 +12391,7 @@ class RepositoryHistoryCache<T> {
 }
 
 /**
- * Serializes guarded Event delivery and remembers recent completed dispatches.
+ * Serializes guarded Aggregate delivery.
  */
 const DispatchGuards = {
   /**
@@ -12397,7 +12409,7 @@ const DispatchGuards = {
     runtime: RepositoryRuntime,
     signal: GuardedEntitySignal,
     entityId: unknown,
-    dispatch: () => Promise<void>,
+    dispatch: (check: (loaded: LoadedAggregate) => Promise<void>) => Promise<void>,
   ): Promise<void> {
     const depth = RepositoryStorage.historyConfiguration(repository).dispatchGuardDepth;
     const signalId = signal.case === "command" ? signal.value.id?.uuid : signal.value.id?.value;
@@ -12407,17 +12419,15 @@ const DispatchGuards = {
       signalId.length === 0 ||
       entityId === undefined
     )
-      return dispatch();
+      return dispatch(() => Promise.resolve());
     const key = DispatchGuards.laneKey(repository, runtime, signal, entityId);
     const { guard, guards } = DispatchGuards.guardLane(repository, key);
-    DispatchGuards.touchGuardLane(guards, key);
     guard.active += 1;
     return DispatchGuards.scheduleDispatch(
       repository,
       runtime,
       signal,
       entityId,
-      signalId,
       depth,
       key,
       guard,
@@ -12433,7 +12443,6 @@ const DispatchGuards = {
    * @param runtime Storage runtime for the selected tenant.
    * @param signal Incoming Command or Event.
    * @param entityId Target Entity identifier.
-   * @param signalId Identifier retained for Agent process-local checks.
    * @param depth Number of emitted Events to inspect.
    * @param key Lane key for the Entity and tenant.
    * @param guard Serialized lane for the Entity.
@@ -12446,29 +12455,33 @@ const DispatchGuards = {
     runtime: RepositoryRuntime,
     signal: GuardedEntitySignal,
     entityId: unknown,
-    signalId: string,
     depth: number,
     key: string,
     guard: DispatchGuard,
     guards: RepositoryDispatchGuards,
-    dispatch: () => Promise<void>,
+    dispatch: (check: (loaded: LoadedAggregate) => Promise<void>) => Promise<void>,
   ): Promise<void> {
     const next = guard.chain.then(async () => {
-      if (repository.entityFamily === "agent") {
-        if (guard.completed.has(signalId)) return;
-        await dispatch();
-        DispatchGuards.rememberGuardCompletion(guard, signalId, depth);
-        return;
-      }
-      if (await DispatchGuards.wasDispatched(repository, runtime, signal, entityId, depth))
-        throw new DuplicateDispatch(signal.case);
-      await dispatch();
+      await dispatch(async (loaded) => {
+        if (
+          await DispatchGuards.wasDispatched(
+            repository,
+            runtime,
+            signal,
+            entityId,
+            depth,
+            guard,
+            loaded,
+          )
+        )
+          throw new DuplicateDispatch(signal.case);
+      });
     });
     // spine-log-boundary: server.repository_dispatch_guard
     guard.chain = next
       .catch(() => undefined)
       .finally(() => {
-        DispatchGuards.finishLane(repository, key, guard, guards, depth);
+        DispatchGuards.finishLane(repository, key, guard, guards);
       });
     return next;
   },
@@ -12492,6 +12505,18 @@ const DispatchGuards = {
       signal.case === "command"
         ? RepositoryTenants.storageContextForCommand(runtime.context, signal.value)
         : RepositoryTenants.storageContextForEvent(runtime.context, signal.value);
+    return DispatchGuards.keyForContext(repository, context, entityId);
+  },
+
+  /**
+   * Builds the same lane key from a committed Aggregate's storage location.
+   *
+   * @param repository Aggregate repository.
+   * @param context Tenant-aware storage location.
+   * @param entityId Aggregate identifier.
+   * @returns Key for the live dispatch lane.
+   */
+  keyForContext(repository: RepositoryView, context: StorageContext, entityId: unknown): string {
     const tenant =
       context.tenantId === undefined
         ? ""
@@ -12500,27 +12525,55 @@ const DispatchGuards = {
   },
 
   /**
-   * Clears an inactive Entity lane or retains bounded Agent memory.
+   * Adds committed Events to an active lane's recent history.
+   *
+   * @param repository Aggregate repository.
+   * @param context Tenant-aware storage location.
+   * @param entityId Aggregate identifier.
+   * @param events Events persisted by the Aggregate commit.
+   * @param version Version persisted by the Aggregate commit.
+   */
+  recordCommitted(
+    repository: RepositoryView,
+    context: StorageContext,
+    entityId: unknown,
+    events: readonly Event[],
+    version: bigint,
+  ): void {
+    const key = this.keyForContext(repository, context, entityId);
+    const guard = repositoryDispatchGuards.get(repository)?.lanes.get(key);
+    const depth = RepositoryStorage.historyConfiguration(repository).dispatchGuardDepth;
+    if (depth === undefined) return;
+    if (guard?.recent !== undefined) {
+      guard.recent = Object.freeze([...events].reverse().concat(guard.recent).slice(0, depth));
+      guard.version = version;
+    }
+    const evidence = this.drainEvidence(repository)?.get(key);
+    if (evidence !== undefined) {
+      this.drainEvidence(repository)?.set(key, {
+        recent: Object.freeze([...events].reverse().concat(evidence.recent).slice(0, depth)),
+        version,
+      });
+    }
+  },
+
+  /**
+   * Clears an inactive Aggregate lane.
    *
    * @param repository Repository whose lane completed.
    * @param key Canonical lane key.
    * @param guard Completed lane.
    * @param guards Repository lane collection.
-   * @param depth Configured Agent memory depth.
    */
   finishLane(
     repository: RepositoryView,
     key: string,
     guard: DispatchGuard,
     guards: RepositoryDispatchGuards,
-    depth: number,
   ): void {
     guard.active -= 1;
-    if (repository.entityFamily === "agent") DispatchGuards.trimGuardLanes(guards, depth);
-    else if (guard.active === 0) {
+    if (guard.active === 0) {
       guards.lanes.delete(key);
-      const index = guards.order.indexOf(key);
-      if (index >= 0) guards.order.splice(index, 1);
     }
   },
 
@@ -12537,15 +12590,39 @@ const DispatchGuards = {
   ): { guard: DispatchGuard; guards: RepositoryDispatchGuards } {
     let guards = repositoryDispatchGuards.get(repository);
     if (guards === undefined) {
-      guards = { lanes: new Map(), order: [] };
+      guards = { lanes: new Map() };
       repositoryDispatchGuards.set(repository, guards);
     }
     let guard = guards.lanes.get(key);
     if (guard === undefined) {
-      guard = { completed: new Set(), order: [], chain: Promise.resolve(), active: 0 };
+      guard = { chain: Promise.resolve(), active: 0 };
       guards.lanes.set(key, guard);
     }
     return { guard, guards };
+  },
+
+  /**
+   * Finds evidence retained only until the current shard drain finishes.
+   *
+   * @param repository Aggregate repository.
+   * @returns The current drain's evidence by Entity key.
+   */
+  drainEvidence(
+    repository: RepositoryView,
+  ): Map<string, { recent: readonly Event[]; version: bigint }> | undefined {
+    const run = deliveryRunScopes.current();
+    if (run === undefined) return undefined;
+    let byRepository = drainDispatchEvidence.get(run);
+    if (byRepository === undefined) {
+      byRepository = new Map();
+      drainDispatchEvidence.set(run, byRepository);
+    }
+    let evidence = byRepository.get(repository);
+    if (evidence === undefined) {
+      evidence = new Map();
+      byRepository.set(repository, evidence);
+    }
+    return evidence;
   },
 
   /**
@@ -12556,6 +12633,8 @@ const DispatchGuards = {
    * @param signal Incoming Command or Event.
    * @param entityId Target Entity identifier.
    * @param depth Number of emitted Events to inspect.
+   * @param guard Current serialized lane.
+   * @param loaded Aggregate restored by the ordinary dispatch path.
    * @returns Whether one emitted Event records this exact cause.
    */
   async wasDispatched(
@@ -12564,21 +12643,21 @@ const DispatchGuards = {
     signal: GuardedEntitySignal,
     entityId: unknown,
     depth: number,
+    guard: DispatchGuard,
+    loaded: LoadedAggregate,
   ): Promise<boolean> {
-    const context =
-      signal.case === "command"
-        ? RepositoryTenants.storageContextForCommand(runtime.context, signal.value)
-        : RepositoryTenants.storageContextForEvent(runtime.context, signal.value);
-    const input = RepositoryStorage.entityStorageInput(repository, context);
-    return RepositoryStorage.track(repository, async () => {
-      const storage = RepositoryStorage.repositoryReadEntityStorage(
-        repository,
-        runtime.storageFactory,
-        input,
-      );
-      const emitted = await storage.events.backward(entityId, depth);
-      return emitted.some((candidate) => DispatchGuards.sameCause(candidate, signal));
-    });
+    const key = this.laneKey(repository, runtime, signal, entityId);
+    const cached = this.drainEvidence(repository)?.get(key);
+    const valid = cached?.version === loaded.version ? cached : undefined;
+    if (valid !== undefined)
+      return valid.recent.some((candidate) => this.sameCause(candidate, signal));
+    if (guard.recent !== undefined && guard.version === loaded.version)
+      return guard.recent.some((candidate) => this.sameCause(candidate, signal));
+    const emitted = await loaded.events.backward(entityId, depth);
+    guard.recent = Object.freeze([...emitted]);
+    guard.version = loaded.version;
+    this.drainEvidence(repository)?.set(key, { recent: guard.recent, version: loaded.version });
+    return emitted.some((candidate) => this.sameCause(candidate, signal));
   },
 
   /**
@@ -12596,52 +12675,6 @@ const DispatchGuards = {
     return signal.case === "command"
       ? AnyPacker.tryUnpack(id, CommandIdSchema)?.uuid === signal.value.id?.uuid
       : AnyPacker.tryUnpack(id, EventIdSchema)?.value === signal.value.id?.value;
-  },
-
-  /**
-   * Records a successful delivery and discards the oldest excess identifiers.
-   *
-   * @param guard Recent completion records for this Entity.
-   * @param eventId Identifier of the completed Event.
-   * @param depth Maximum number of identifiers to retain.
-   */
-  rememberGuardCompletion(guard: DispatchGuard, eventId: string, depth: number): void {
-    if (!guard.completed.has(eventId)) {
-      guard.completed.add(eventId);
-      guard.order.push(eventId);
-    }
-    while (guard.order.length > depth) {
-      const expired = guard.order.shift();
-      if (expired !== undefined) guard.completed.delete(expired);
-    }
-  },
-
-  /**
-   * Updates the queue list to place this Entity at its most recently used end.
-   *
-   * @param guards Repository collection of Entity queues.
-   * @param key Canonical key of the queue being used.
-   */
-  touchGuardLane(guards: RepositoryDispatchGuards, key: string): void {
-    const index = guards.order.indexOf(key);
-    if (index >= 0) guards.order.splice(index, 1);
-    guards.order.push(key);
-  },
-
-  /**
-   * Removes least-recently-used inactive queues beyond the configured limit.
-   *
-   * @param guards Repository collection of Entity queues.
-   * @param depth Maximum queue count when enough queues are inactive.
-   */
-  trimGuardLanes(guards: RepositoryDispatchGuards, depth: number): void {
-    while (guards.order.length > depth) {
-      const index = guards.order.findIndex((key) => guards.lanes.get(key)?.active === 0);
-      if (index < 0) return;
-      const [key] = guards.order.splice(index, 1);
-      if (key === undefined) return;
-      guards.lanes.delete(key);
-    }
   },
 
   /**
@@ -12841,7 +12874,8 @@ const InboxDelivery = {
       runtime,
       { case: "command", value: command },
       route.entityId,
-      () => new AggregateCommandExecution(repository, routing, runtime, command).run(route),
+      (check) =>
+        new AggregateCommandExecution(repository, routing, runtime, command).run(route, check),
     );
   },
 
@@ -13117,9 +13151,7 @@ const InboxDelivery = {
         handlers,
         new AbortController().signal,
       ).run();
-    if (source.case === "event")
-      await DispatchGuards.guardedEntityDispatch(repository, runtime, source, entityId, run);
-    else await run();
+    await run();
   },
 
   /**
@@ -13149,13 +13181,7 @@ const InboxDelivery = {
     InboxDelivery.validateDeliveredCommandPayload(routing, command);
     const route = InboxDelivery.deliverCommandRoute(repository, routing, message, command);
 
-    await DispatchGuards.guardedEntityDispatch(
-      repository,
-      runtime,
-      { case: "command", value: command },
-      route.entityId,
-      () => new ProcessManagerCommandExecution(repository, routing, runtime, command).run(route),
-    );
+    await new ProcessManagerCommandExecution(repository, routing, runtime, command).run(route);
   },
 
   /**

@@ -12,7 +12,11 @@
  * the License.
  */
 
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { clearField, fromBinary, toBinary, isMessage, type Message } from "@bufbuild/protobuf";
+import { timestampFromDate, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { InboxMessageSchema, InboxMessageStatus } from "@spine-event-engine/proto/delivery";
+import type { google } from "@google-cloud/datastore/build/protos/protos.js";
+import type { DatastoreInboxMutations } from "./inbox-mutations.js";
 import { and, Datastore, or, PropertyFilter } from "@google-cloud/datastore";
 import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
@@ -23,6 +27,7 @@ import {
   type NormalizedQueryPlan,
   type NormalizedQueryPredicate,
   type RecordEntry,
+  type InboxRecordEntry,
   type RecordQuery,
   type RecordSpec,
   type RecordIndex,
@@ -161,6 +166,11 @@ class FlatEntityCodec<I, R extends Message> {
   readonly #columnMapping: DatastoreColumnMapping;
 
   /**
+   * Indicates that status and retention are mutable inbox properties.
+   */
+  readonly inbox: boolean;
+
+  /**
    * Initializes the Datastore kind, tenant namespace, ID codec, and column mapping.
    *
    * @param context Storage tenant context.
@@ -184,6 +194,9 @@ class FlatEntityCodec<I, R extends Message> {
     stringifiers: StringifierRegistry,
     namespace?: string,
   ) {
+    this.inbox =
+      recordSpec.recordType.typeName === InboxMessageSchema.typeName &&
+      recordSpec.columns.some((column) => column.name === "when_keep_until");
     DatastoreRecordIndexes.validate(recordSpec.indexes);
     this.#kind =
       kind ?? RecordKinds.of(recordSpec.sourceType.typeName, recordSpec.recordType.typeName, group);
@@ -280,6 +293,35 @@ class FlatEntityCodec<I, R extends Message> {
       columns: new Map(
         this.recordSpec.columns.map((column) => [column.name, column.valueIn(record)]),
       ),
+    };
+  }
+
+  /**
+   * Decodes the message and storage revision returned in a single inbox page result.
+   *
+   * @param item Native entity and storage metadata.
+   * @returns A detached entry with the revision of a pending inbox message.
+   */
+  inboxEntry(item: google.datastore.v1.IEntityResult): InboxRecordEntry<I, R> {
+    const properties = item.entity?.properties;
+    const key = item.entity?.key?.path?.at(-1)?.name;
+    const bytes = properties?.bytes?.blobValue;
+    if (!key || bytes == null) throw new Error("Datastore inbox message is incomplete.");
+    const status: InboxMessageStatus = Number(properties?.status?.integerValue);
+    const until = properties?.when_keep_until?.timestampValue;
+    const record = this.decode({
+      bytes: typeof bytes === "string" ? Buffer.from(bytes, "base64") : bytes,
+      status,
+      when_keep_until: until
+        ? new Date(Number(until.seconds) * 1000 + Math.floor((until.nanos ?? 0) / 1_000_000))
+        : undefined,
+    });
+    return {
+      id: this.#idColumn.read(key),
+      record,
+      ...(status === InboxMessageStatus.TO_DELIVER && item.version != null
+        ? { mutationToken: String(item.version) }
+        : {}),
     };
   }
 
@@ -405,9 +447,16 @@ class FlatEntityCodec<I, R extends Message> {
 
     try {
       const bytes = Buffer.isBuffer(payload) ? Uint8Array.from(payload) : payload;
-      return fromBinary(this.recordSpec.recordType, bytes, {
+      const record = fromBinary(this.recordSpec.recordType, bytes, {
         readUnknownFields: this.recordSpec.recordType.typeName === AgentHistoryEntrySchema.typeName,
       });
+      if (this.inbox && isMessage(record, InboxMessageSchema)) {
+        record.status = Number(entity.status);
+        if (entity.when_keep_until instanceof Date)
+          record.keepUntil = timestampFromDate(entity.when_keep_until);
+        else clearField(record, InboxMessageSchema.field.keepUntil);
+      }
+      return record;
     } catch {
       throw new Error("Datastore entity cannot be decoded.");
     }
@@ -482,6 +531,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
    * @param namespaceConverter Converts complete tenants to native namespaces.
    * @param stringifiers Converts message-valued IDs and declared columns.
    * @param namespace Preselected native tenant namespace.
+   * @param inboxMutations Native inbox channel shared by the factory.
    */
   constructor(
     context: StorageContext,
@@ -493,6 +543,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     namespaceConverter: NamespaceConverter = new DefaultNamespaceConverter(),
     stringifiers: StringifierRegistry = defaultStringifierRegistry,
     namespace?: string,
+    private readonly inboxMutations?: DatastoreInboxMutations | undefined,
   ) {
     super(context, recordSpec);
     this.#codec = new FlatEntityCodec(
@@ -608,6 +659,36 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       throw new Error(
         "Datastore provider page limit must be a positive integer no greater than 128.",
       );
+    const query = this.providerQuery(request);
+    const order = request.order ?? [];
+    const response = await this.provider(() => this.client.runQuery(query, wrappedReadOptions));
+    const entities = DatastoreResults.entities(response);
+    const info = DatastoreResults.queryInfo(response);
+    const entries = entities.map((entity) => ({
+      id: this.#codec.id(entity, this.client),
+      record: this.#codec.decode(entity),
+    }));
+    const cursor = entities.at(-1);
+    if (info.more && cursor === undefined)
+      throw new Error("Datastore provider page continuation is malformed.");
+    const next =
+      cursor === undefined ? undefined : this.#codec.pageCursor(cursor, order, this.client.KEY);
+    if (info.more && request.cursor !== undefined && sameCursor(request.cursor, next))
+      throw new Error("Datastore provider page continuation did not advance.");
+    return {
+      entries,
+      cursor: info.more ? next : undefined,
+      hasMore: info.more,
+    };
+  }
+
+  /**
+   * Builds the ordered query for a provider history page.
+   *
+   * @param request The ordered filters, page size and any continuation.
+   * @returns A native Datastore query ready to execute.
+   */
+  private providerQuery(request: DatastorePageQuery): ReturnType<Datastore["createQuery"]> {
     const query = this.#codec.createQuery(this.client);
     for (const filter of request.filters ?? []) {
       query.filter(
@@ -629,25 +710,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       query.filter(continuation);
     }
     query.limit(request.limit);
-    const response = await this.provider(() => this.client.runQuery(query, wrappedReadOptions));
-    const entities = DatastoreResults.entities(response);
-    const info = DatastoreResults.queryInfo(response);
-    const entries = entities.map((entity) => ({
-      id: this.#codec.id(entity, this.client),
-      record: this.#codec.decode(entity),
-    }));
-    const cursor = entities.at(-1);
-    if (info.more && cursor === undefined)
-      throw new Error("Datastore provider page continuation is malformed.");
-    const next =
-      cursor === undefined ? undefined : this.#codec.pageCursor(cursor, order, this.client.KEY);
-    if (info.more && request.cursor !== undefined && sameCursor(request.cursor, next))
-      throw new Error("Datastore provider page continuation did not advance.");
-    return {
-      entries,
-      cursor: info.more ? next : undefined,
-      hasMore: info.more,
-    };
+    return query;
   }
 
   /**
@@ -684,6 +747,57 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
     await this.provider(() => this.client.delete(key));
     return true;
+  }
+
+  /**
+   * Reads an exact shard page with the native revision for each pending message.
+   *
+   * @param request Framework inbox filters, chronological ordering and continuation.
+   * @returns The requested inbox entries and their private update metadata.
+   */
+  async queryInboxEntries(request: RecordQuery<I>): Promise<readonly InboxRecordEntry<I, R>[]> {
+    const inbox = this.requireInbox();
+    if (request.filters?.some((filter) => Array.isArray(filter.value) && !filter.value.length))
+      return [];
+    const query = this.#codec.createQuery(this.client);
+    DatastoreQueryPushdown.translate(
+      query,
+      request,
+      (id) => this.transactionKey(id),
+      (name) => this.#codec.columnProperty(name),
+      (name, value) => this.#codec.columnValue(name, value),
+      true,
+    );
+    if (request.limit === undefined) throw new TypeError("An inbox page needs a page size.");
+    query.limit(request.limit);
+    if (request.offset !== undefined) query.offset(request.offset);
+    const messages = await this.provider(() => inbox.page(query));
+    return messages.map((item) => this.#codec.inboxEntry(item));
+  }
+
+  /**
+   * Marks the current inbox ID delivered without writing the signal payload.
+   *
+   * @param id Complete inbox ID.
+   * @param deadline Deadline supplied by the application storage clock.
+   * @param token Native revision returned by the page.
+   * @returns First stored deadline or undefined if the message cannot be acknowledged.
+   */
+  markInboxDelivered(id: I, deadline: Timestamp, token?: unknown): Promise<Timestamp | undefined> {
+    const inbox = this.requireInbox();
+    const key = this.transactionKey(id);
+    return this.provider(() => inbox.markDelivered(key, deadline, token));
+  }
+
+  /**
+   * Returns the native operations for an open framework inbox handle.
+   *
+   * @returns The factory's native inbox adapter.
+   */
+  private requireInbox(): DatastoreInboxMutations {
+    if (!this.isOpen() || !this.#codec.inbox || !this.inboxMutations)
+      throw new Error("Datastore inbox operations require an open inbox handle.");
+    return this.inboxMutations;
   }
 
   /**
@@ -1442,29 +1556,6 @@ class DatastoreRecordQueryMethods {
     const order = query.sort;
     const continuation = query.after;
     const continuationValue = continuation?.values[0];
-    const inboxOrder = [
-      "when_received_seconds",
-      "when_received_nanos",
-      "version",
-      "message_id",
-    ];
-    const isInboxPage =
-      query.limit !== undefined &&
-      query.ids === undefined &&
-      query.offset === undefined &&
-      query.filters?.length !== undefined &&
-      (query.filters.length === 2 || query.filters.length === 3) &&
-      query.filters[0]?.column === "shard_index" &&
-      query.filters[1]?.column === "shard_total" &&
-      (query.filters.length === 2 || query.filters[2]?.column === "status") &&
-      query.filters.every((filter) => !Array.isArray(filter.value)) &&
-      order?.length === inboxOrder.length &&
-      order.every((item, index) => item.field === inboxOrder[index]) &&
-      order.every((item) => (item.direction ?? "asc") === (order[0]?.direction ?? "asc")) &&
-      (continuation === undefined ||
-        (continuation.values.length === inboxOrder.length &&
-          continuation.values.every((item, index) => item.field === inboxOrder[index])));
-    if (isInboxPage) return true;
     return (
       query.limit !== undefined &&
       query.ids === undefined &&

@@ -55,6 +55,7 @@ import {
   DatastoreEntityStorage,
   type OpenEntityRecords,
 } from "./entity-history.js";
+import { DatastoreInboxMutations } from "./inbox-mutations.js";
 import { DatastoreRecordStorage } from "./record-storage.js";
 import { DatastoreRecordIndexes } from "./record-indexes.js";
 import { RecordKinds } from "./record-kind.js";
@@ -378,6 +379,11 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   readonly #client: Datastore;
 
   /**
+   * Shares the native inbox channel across record handles.
+   */
+  readonly #inbox: DatastoreInboxMutations;
+
+  /**
    * Custom record creators indexed by source and record type.
    */
   readonly #recordCreators: ReadonlyMap<string, CreateRecordStorage>;
@@ -412,7 +418,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   /**
    * Complete admitted preparation and connection-check operations.
    */
-  readonly #work = new Set<Promise<void>>();
+  readonly #work = new Set<Promise<unknown>>();
 
   /**
    * Remembered shared metadata check outcome while successful or in progress.
@@ -495,6 +501,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   ) {
     super();
     this.#client = client;
+    this.#inbox = new DatastoreInboxMutations(client, (operation) => this.admit(operation));
     this.#recordCreators = recordCreators;
     this.#recordPreparers = recordPreparers;
     this.#layouts = layouts;
@@ -505,6 +512,13 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     this.#stringifiers = shared ? stringifiers : new StringifierRegistry(stringifiers);
     this.#eventStoreKinds = eventStoreKinds;
     this.#catalog = new DatastoreTenantCatalog(client, this.#namespaceConverter);
+    this.registerPreparation();
+  }
+
+  /**
+   * Registers the storage preparation methods offered by this factory.
+   */
+  private registerPreparation(): void {
     StoragePreparations.register(this, {
       supportsRecordIndexes: true,
       prepareRecord: (context, spec, group, mode) => this.prepareRecord(context, spec, group, mode),
@@ -550,11 +564,13 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   }
 
   /**
-   * Admits asynchronous physical preparation before invoking callbacks.
+   * Executes preparation or a native inbox operation before the factory closes.
+   *
+   * @typeParam T Result of the admitted operation.
    * @param operation Work to perform within the factory lifetime.
    * @returns Completion or rejection from the admitted work.
    */
-  private admit(operation: () => Promise<void>): Promise<void> {
+  private admit<T>(operation: () => Promise<T>): Promise<T> {
     if (!this.isOpen()) return Promise.reject(new Error("StorageFactory is closed."));
     const pending = Promise.resolve().then(operation);
     this.#work.add(pending);
@@ -1242,6 +1258,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
       this.#namespaceConverter,
       this.#stringifiers,
       mapping.namespace,
+      this.#inbox,
     );
     return storage;
   }
@@ -1331,6 +1348,11 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
       if (result.status === "rejected") errors.push(result.reason);
     try {
       await this.#catalog.close();
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      await this.#inbox.close();
     } catch (error) {
       errors.push(error);
     }
