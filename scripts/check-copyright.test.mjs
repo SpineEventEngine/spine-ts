@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import { COPYRIGHT_HEADER, checkCopyright, gitComparison, gitFiles } from "./check-copyright.mjs";
@@ -127,6 +128,21 @@ describe("copyright checker", () => {
         year: 2026,
       }),
     ).toEqual([`${path}: forbidden CodeMatters header`]);
+  });
+
+  it("preserves a CodeMatters notice supplied by the pinned upstream source", () => {
+    const path = "packages/proto/proto/upstream.proto";
+    const upstream = '/* Copyright 2026 CodeMatters, Lda. */\nsyntax = "proto3";\n';
+    const sha256 = createHash("sha256").update(upstream).digest("hex");
+    const check = (content) =>
+      checkCopyright({
+        files: [path],
+        readFile: () => content,
+        readManifest: () => ({ sources: [{ localPath: path, sha256 }] }),
+      });
+
+    expect(check(upstream)).toEqual([]);
+    expect(check(COPYRIGHT_HEADER + upstream)).toEqual([`${path}: forbidden CodeMatters header`]);
   });
 
   it("requires the current year only for new or content-changed future files", () => {

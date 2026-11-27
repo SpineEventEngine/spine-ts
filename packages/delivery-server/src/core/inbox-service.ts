@@ -97,7 +97,10 @@ const InboxOperations = {
     async (request, context) => {
       const messages = request.message.map(InboxMessages.required);
       await admission.run(context.signal, () => {
-        for (const [shard, group] of groupByShard(messages, (item) => item.message)) {
+        for (const [shard, group] of InboxOperations.groupByShard(
+          messages,
+          (item) => item.message,
+        )) {
           const affectsWork = state.putAll(group);
           onStoredChange?.(shard);
           if (affectsWork) onWorkChange?.(shard);
@@ -113,7 +116,7 @@ const InboxOperations = {
       onWorkChange?: (shard: ShardIndex) => void,
     ): ServiceImpl<typeof InboxService>["removeOne"] =>
     async (request, context) => {
-      const message = requiredRemoval(request.message);
+      const message = InboxOperations.requiredRemoval(request.message);
       await admission.run(context.signal, () => {
         const prior = state.messages.get(DeliveryMessages.key(message));
         if (state.delete(message)) {
@@ -132,9 +135,9 @@ const InboxOperations = {
       onWorkChange?: (shard: ShardIndex) => void,
     ): ServiceImpl<typeof InboxService>["removeMany"] =>
     async (request, context) => {
-      const messages = request.message.map(requiredRemoval);
+      const messages = request.message.map((message) => InboxOperations.requiredRemoval(message));
       await admission.run(context.signal, () => {
-        for (const [shard, group] of groupByShard(messages, (item) => item)) {
+        for (const [shard, group] of InboxOperations.groupByShard(messages, (item) => item)) {
           const { changed, pendingChanged } = state.deleteMany(shard, group);
           if (changed) onStoredChange?.(shard);
           if (pendingChanged) onWorkChange?.(shard);
@@ -176,6 +179,45 @@ const InboxOperations = {
       const newest = state.newestPending(InboxShards.required(shard));
       return create(OptionalInboxMessageSchema, newest === undefined ? {} : { message: newest });
     },
+
+  /**
+   * Validates the inbox identity used by a removal.
+   *
+   * @param message Supplies the inbox message carrying the identity.
+   * @returns The inbox message after its identity is checked.
+   */
+  requiredRemoval(message: InboxMessage | undefined): InboxMessage {
+    if (message?.id?.index === undefined || message.id.uuid.trim().length === 0)
+      throw InboxResponses.invalid("Delivery message identity is missing.");
+    InboxShards.required(message.id.index);
+    return message;
+  },
+
+  /**
+   * Groups a batch by the actual inbox identity shard in first-seen order.
+   *
+   * @typeParam Item The type of a validated batch item.
+   * @param items Supplies the validated batch.
+   * @param message Selects each item’s inbox message.
+   * @returns Per-shard groups retaining input order.
+   */
+  groupByShard<Item>(
+    items: readonly Item[],
+    message: (item: Item) => InboxMessage,
+  ): readonly (readonly [ShardIndex, Item[]])[] {
+    const groups = new Map<string, { shard: ShardIndex; items: Item[] }>();
+    for (const item of items) {
+      const shard = InboxShards.required(message(item).id?.index);
+      const key = DeliveryShards.key(shard);
+      let group = groups.get(key);
+      if (group === undefined) {
+        group = { shard, items: [] };
+        groups.set(key, group);
+      }
+      group.items.push(item);
+    }
+    return [...groups.values()].map(({ shard, items }) => [shard, items] as const);
+  },
 };
 
 /**
@@ -188,45 +230,6 @@ interface InboxRecord {
    * Holds the detached validated Inbox message.
    */
   readonly message: InboxMessage;
-}
-
-/**
- * Validates the inbox identity used by a removal.
- *
- * @param message Supplies the row carrying the identity.
- * @returns The row after its identity is checked.
- */
-function requiredRemoval(message: InboxMessage | undefined): InboxMessage {
-  if (message?.id?.index === undefined || message.id.uuid.trim().length === 0)
-    throw InboxResponses.invalid("Delivery message identity is missing.");
-  InboxShards.required(message.id.index);
-  return message;
-}
-
-/**
- * Groups a batch by the actual inbox identity shard in first-seen order.
- *
- * @typeParam Item The type of a validated batch item.
- * @param items Supplies the validated batch.
- * @param message Selects each item’s inbox message.
- * @returns Per-shard groups retaining input order.
- */
-function groupByShard<Item>(
-  items: readonly Item[],
-  message: (item: Item) => InboxMessage,
-): readonly (readonly [ShardIndex, Item[]])[] {
-  const groups = new Map<string, { shard: ShardIndex; items: Item[] }>();
-  for (const item of items) {
-    const shard = InboxShards.required(message(item).id?.index);
-    const key = DeliveryShards.key(shard);
-    let group = groups.get(key);
-    if (group === undefined) {
-      group = { shard, items: [] };
-      groups.set(key, group);
-    }
-    group.items.push(item);
-  }
-  return [...groups.values()].map(({ shard, items }) => [shard, items] as const);
 }
 
 /**

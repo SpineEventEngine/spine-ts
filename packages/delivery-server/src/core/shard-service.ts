@@ -5,18 +5,23 @@
  * in compliance with the License. You may obtain a copy of the License at
  *
  * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
  */
 
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import {
-  DeliveryPickUpOutcomeSchema,
+  DeliveryPickUpOutcomeSchema as PickUpOutcomeSchema,
   ExpiredSessionSchema,
   ExpiredSessionsReleasedSchema,
   ShardService,
   ShardPickedUpSchema,
-  ShardAlreadyPickedUpSchema,
+  ShardAlreadyPickedUpSchema as AlreadyPickedSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import type { ShardIndex, WorkerId } from "@spine-event-engine/proto/delivery";
 
@@ -66,7 +71,16 @@ export class ShardSessionRuntime {
     this.#now = now;
     this.#timeoutNs = BigInt(timeoutMs) * 1_000_000n;
     this.#onTransition = onTransition;
-    this.service = {
+    this.service = this.#handlers();
+  }
+
+  /**
+   * Creates the three JVM shard RPC handlers.
+   *
+   * @returns The shard service implementation.
+   */
+  #handlers(): ServiceImpl<typeof ShardService> {
+    return {
       pickShard: (request, context) => {
         const shard = SessionValues.requireShard(request.shard);
         const worker = SessionValues.requireWorker(request.worker);
@@ -113,16 +127,7 @@ export class ShardSessionRuntime {
         this.#timeoutNs === 0n ||
         SessionValues.ns(sampled) - SessionValues.ns(last) <= this.#timeoutNs
       )
-        return create(DeliveryPickUpOutcomeSchema, {
-          value: {
-            case: "alreadyPickedUp",
-            value: create(ShardAlreadyPickedUpSchema, {
-              shard: DeliveryShards.copy(shard),
-              worker: DeliveryWorkers.copy(SessionValues.requireWorker(current.worker)),
-              whenPicked: SessionValues.copyTime(last),
-            }),
-          },
-        });
+        return this.#alreadyPickedUp(shard, current, last);
     }
     const last =
       current === undefined || !SessionValues.sameWorker(current.worker, worker)
@@ -130,13 +135,34 @@ export class ShardSessionRuntime {
         : SessionValues.later(sampled, SessionValues.requireTime(current));
     this.#state.setSession(shard, worker, last);
     this.#onTransition?.(shard);
-    return create(DeliveryPickUpOutcomeSchema, {
+    return create(PickUpOutcomeSchema, {
       value: {
         case: "pickedUp",
         value: create(ShardPickedUpSchema, {
           shard: DeliveryShards.copy(shard),
           worker: DeliveryWorkers.copy(worker),
           whenPicked: this.#sample(),
+        }),
+      },
+    });
+  }
+
+  /**
+   * Builds the outcome for a shard held by a different worker.
+   *
+   * @param shard Identifies the requested shard.
+   * @param current Supplies the active record.
+   * @param last Supplies its exact pickup time.
+   * @returns The rejected pickup outcome.
+   */
+  #alreadyPickedUp(shard: ShardIndex, current: ShardRecord, last: Timestamp) {
+    return create(PickUpOutcomeSchema, {
+      value: {
+        case: "alreadyPickedUp",
+        value: create(AlreadyPickedSchema, {
+          shard: DeliveryShards.copy(shard),
+          worker: DeliveryWorkers.copy(SessionValues.requireWorker(current.worker)),
+          whenPicked: SessionValues.copyTime(last),
         }),
       },
     });

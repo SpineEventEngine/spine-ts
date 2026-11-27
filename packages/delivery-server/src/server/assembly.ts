@@ -81,7 +81,6 @@ export interface DeliveryAssembly {
    * Clears work-observation streams and reminders.
    */
   closeObserving(): void;
-
 }
 
 /**

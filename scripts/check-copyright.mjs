@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
@@ -22,6 +23,7 @@ import {
 } from "./copyright-header.mjs";
 import { isGeneratedTypeScriptPath } from "./generated-source-policy.mjs";
 import { findPrimaryMergeBase } from "./git-primary-branch.mjs";
+import { restoreUpstreamSource } from "./verify-proto-sources.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const manifestPath = "packages/proto/proto/spine-sources.json";
@@ -43,6 +45,16 @@ function isEligible(path, excluded) {
   return (
     /\.(?:ts|tsx|proto)$/u.test(path) && !excluded.has(path) && !isGeneratedTypeScriptPath(path)
   );
+}
+
+function matchesUpstream(source, content) {
+  if (source.sha256 === undefined) return false;
+  try {
+    const original = restoreUpstreamSource(source, Buffer.from(content));
+    return createHash("sha256").update(original).digest("hex") === source.sha256;
+  } catch {
+    return false;
+  }
 }
 
 function usesCopyrightSpacingPolicy(path) {
@@ -116,7 +128,9 @@ export function checkCopyright({
   ...options
 }) {
   const manifest = readManifest();
-  const excluded = new Set((manifest.sources ?? []).map((source) => source.localPath ?? source));
+  const excluded = new Map(
+    (manifest.sources ?? []).map((source) => [source.localPath ?? source, source]),
+  );
   const problems = [];
 
   for (const path of [...files].sort((left, right) => left.localeCompare(right))) {
@@ -127,7 +141,8 @@ export function checkCopyright({
       continue;
     }
     if (excluded.has(path)) {
-      if (content.includes("CodeMatters")) problems.push(`${path}: forbidden CodeMatters header`);
+      if (content.includes("CodeMatters") && !matchesUpstream(excluded.get(path), content))
+        problems.push(`${path}: forbidden CodeMatters header`);
       else if (!/[Cc]opyright/u.test(content))
         problems.push(`${path}: missing upstream copyright notice`);
       continue;

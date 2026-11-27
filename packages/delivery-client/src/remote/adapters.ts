@@ -106,40 +106,64 @@ export class RemoteInbox implements DeliveryInbox {
   ): Promise<boolean> {
     const now = Time.currentTime();
     const nowNs = now.seconds * 1_000_000_000n + BigInt(now.nanos);
-    const removals = messages.filter((message) => {
-      if (message.status !== "DELIVERED") return false;
-      const deadline = DeliveryMessageCodec.retentionDeadline(message);
-      return (
-        deadline === undefined || nowNs > deadline.seconds * 1_000_000_000n + BigInt(deadline.nanos)
-      );
-    });
-    const page = { writes: [] as InboxMessage[], removals };
+    const page = { writes: [] as InboxMessage[], removals: this.#expired(messages, nowNs) };
     this.#pages.set(session, page);
     try {
-      if (
-        !(await process((message) => {
-          const deadline = DeliveryMessageCodec.retentionDeadline(message);
-          return (
-            deadline !== undefined &&
-            deadline.seconds * 1_000_000_000n + BigInt(deadline.nanos) > nowNs
-          );
-        }))
-      )
-        return false;
-      if (page.writes.length > 0) {
-        await this.client.writeMany(page.writes, options);
-        onWritesStored((message) => {
-          const deadline = DeliveryMessageCodec.retentionDeadline(message);
-          return deadline === undefined
-            ? undefined
-            : deadline.seconds * 1_000_000_000n + BigInt(deadline.nanos);
-        });
-      }
-      if (page.removals.length > 0) await this.client.removeMany(page.removals, options);
+      if (!(await process((message) => (this.#deadlineNs(message) ?? 0n) > nowNs))) return false;
+      await this.#flushPage(page.writes, page.removals, options, onWritesStored);
       return true;
     } finally {
       this.#pages.delete(session);
     }
+  }
+
+  /**
+   * Finds delivered inbox messages whose stored deadline has passed.
+   *
+   * @param messages Supplies the inbox messages in the page.
+   * @param nowNs Supplies the page clock sample.
+   * @returns Rows to remove after completion writes.
+   */
+  #expired(messages: readonly InboxMessage[], nowNs: bigint): InboxMessage[] {
+    return messages.filter((message) => {
+      if (message.status !== "DELIVERED") return false;
+      const deadline = this.#deadlineNs(message);
+      return deadline === undefined || nowNs > deadline;
+    });
+  }
+
+  /**
+   * Reads the exact stored retention deadline.
+   *
+   * @param message Supplies a decoded or completed inbox message.
+   * @returns Deadline nanoseconds when present.
+   */
+  #deadlineNs(message: InboxMessage): bigint | undefined {
+    const deadline = DeliveryMessageCodec.retentionDeadline(message);
+    return deadline === undefined
+      ? undefined
+      : deadline.seconds * 1_000_000_000n + BigInt(deadline.nanos);
+  }
+
+  /**
+   * Writes completions before removing expired and duplicate inbox messages.
+   *
+   * @param writes Supplies changed completion inbox messages.
+   * @param removals Supplies inbox messages selected for removal.
+   * @param options Carries cancellation for the batch RPCs.
+   * @param onWritesStored Reports durable writes and their exact deadlines.
+   */
+  async #flushPage(
+    writes: readonly InboxMessage[],
+    removals: readonly InboxMessage[],
+    options: DeliveryOperationOptions | undefined,
+    onWritesStored: (deadlineNs: (message: InboxMessage) => bigint | undefined) => void,
+  ): Promise<void> {
+    if (writes.length > 0) {
+      await this.client.writeMany(writes, options);
+      onWritesStored((message) => this.#deadlineNs(message));
+    }
+    if (removals.length > 0) await this.client.removeMany(removals, options);
   }
 
   /**

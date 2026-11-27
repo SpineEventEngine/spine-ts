@@ -1565,10 +1565,7 @@ class DeliveryDrain {
    * @returns Whether page processing may continue.
    */
   async #processPage(messages: readonly InboxMessage[]): Promise<boolean> {
-    this.#settledInPage.length = 0;
-    this.#deliveredInPage.length = 0;
-    this.#duplicatesInPage.length = 0;
-    this.#reportedInPage.length = 0;
+    this.#resetPageResults();
     const now = this.#retentionTime();
     const process = async (
       isRecent: (message: InboxMessage) => boolean = (message) =>
@@ -1581,61 +1578,76 @@ class DeliveryDrain {
       return true;
     };
     try {
-      const remote = this.input.inbox as DeliveryInbox & {
-        [deliveryPortAccess]?: (
-          messages: readonly InboxMessage[],
-          session: DeliveryWorkSession,
-          options: DeliveryOperationOptions | undefined,
-          process: (isRecent?: (message: InboxMessage) => boolean) => Promise<boolean>,
-          onWritesStored: (deadlineNs: (message: InboxMessage) => bigint | undefined) => void,
-        ) => Promise<boolean>;
-      };
-      const continued =
-        remote[deliveryPortAccess] === undefined
-          ? await process()
-          : await remote[deliveryPortAccess](
-              messages,
-              this.#current,
-              this.input.options.operation,
-              process,
-              (deadlineNs) => {
-                this.#commitPageWrites(deadlineNs);
-              },
-            );
+      const continued = await this.#runPage(messages, process);
       if (!continued) {
         this.#failUnflushed(new Error("Delivery page stopped before storage completed."));
         return false;
       }
       this.#commitPageWrites();
-      for (const message of this.#duplicatesInPage) {
-        try {
-          this.input.options.onDuplicateRemoved?.(message);
-        } catch {
-          /* Storage already succeeded. */
-        }
-      }
-      for (const message of this.#reportedInPage) {
-        const outcome = this.#messageOutcomes.get(message);
-        if (outcome !== undefined) {
-          try {
-            this.input.options.onMessageOutcome?.(message, outcome);
-          } catch {
-            /* Storage already succeeded. */
-          }
-        }
-      }
-      for (const message of this.#settledInPage)
-        try {
-          controlledMessageSettlers.get(this.input.options)?.(message);
-        } catch {
-          /* Storage already succeeded. */
-        }
-      this.#settledInPage.length = 0;
+      this.#commitPageRemovals();
       return true;
     } catch (error) {
       this.#failUnflushed(error);
       throw error;
     }
+  }
+
+  /**
+   * Clears observations from the preceding page.
+   */
+  #resetPageResults(): void {
+    this.#settledInPage.length = 0;
+    this.#deliveredInPage.length = 0;
+    this.#duplicatesInPage.length = 0;
+    this.#reportedInPage.length = 0;
+  }
+
+  /**
+   * Processes a local page or the remote batch operation.
+   *
+   * @param messages Supplies the inbox page.
+   * @param process Dispatches its messages.
+   * @returns Whether processing continued through the page.
+   */
+  #runPage(
+    messages: readonly InboxMessage[],
+    process: (isRecent?: (message: InboxMessage) => boolean) => Promise<boolean>,
+  ): Promise<boolean> {
+    const remote = this.input.inbox as DeliveryInbox & {
+      [deliveryPortAccess]?: (
+        messages: readonly InboxMessage[],
+        session: DeliveryWorkSession,
+        options: DeliveryOperationOptions | undefined,
+        process: (isRecent?: (message: InboxMessage) => boolean) => Promise<boolean>,
+        onWritesStored: (deadlineNs: (message: InboxMessage) => bigint | undefined) => void,
+      ) => Promise<boolean>;
+    };
+    if (remote[deliveryPortAccess] === undefined) return process();
+    return remote[deliveryPortAccess](
+      messages,
+      this.#current,
+      this.input.options.operation,
+      process,
+      (deadlineNs) => {
+        this.#commitPageWrites(deadlineNs);
+      },
+    );
+  }
+
+  /**
+   * Completes stored removals and remaining outcomes after the batch succeeds.
+   */
+  #commitPageRemovals(): void {
+    for (const message of this.#duplicatesInPage) {
+      try {
+        this.input.options.onDuplicateRemoved?.(message);
+      } catch {
+        /* Storage already succeeded. */
+      }
+    }
+    this.#notifyPageOutcomes(this.#reportedInPage);
+    this.#settlePageMessages(this.#settledInPage);
+    this.#settledInPage.length = 0;
   }
 
   /**
@@ -1654,23 +1666,8 @@ class DeliveryDrain {
         /* Storage already succeeded. */
       }
     }
-    for (const message of this.#reportedInPage.filter((candidate) => written.has(candidate))) {
-      const outcome = this.#messageOutcomes.get(message);
-      if (outcome !== undefined) {
-        try {
-          this.input.options.onMessageOutcome?.(message, outcome);
-        } catch {
-          /* Storage already succeeded. */
-        }
-      }
-    }
-    for (const message of this.#settledInPage.filter((candidate) => written.has(candidate))) {
-      try {
-        controlledMessageSettlers.get(this.input.options)?.(message);
-      } catch {
-        /* Storage already succeeded. */
-      }
-    }
+    this.#notifyPageOutcomes(this.#reportedInPage.filter((message) => written.has(message)));
+    this.#settlePageMessages(this.#settledInPage.filter((message) => written.has(message)));
     this.#reportedInPage.splice(
       0,
       this.#reportedInPage.length,
@@ -1682,6 +1679,39 @@ class DeliveryDrain {
       ...this.#settledInPage.filter((message) => !written.has(message)),
     );
     this.#deliveredInPage.length = 0;
+  }
+
+  /**
+   * Notifies observers after the corresponding storage operation succeeds.
+   *
+   * @param messages Supplies the inbox messages whose outcomes are durable.
+   */
+  #notifyPageOutcomes(messages: readonly InboxMessage[]): void {
+    for (const message of messages) {
+      const outcome = this.#messageOutcomes.get(message);
+      if (outcome !== undefined) {
+        try {
+          this.input.options.onMessageOutcome?.(message, outcome);
+        } catch {
+          /* Storage already succeeded. */
+        }
+      }
+    }
+  }
+
+  /**
+   * Completes controlled callers after their corresponding storage operation succeeds.
+   *
+   * @param messages Supplies the inbox messages whose storage operation is complete.
+   */
+  #settlePageMessages(messages: readonly InboxMessage[]): void {
+    for (const message of messages) {
+      try {
+        controlledMessageSettlers.get(this.input.options)?.(message);
+      } catch {
+        /* Storage already succeeded. */
+      }
+    }
   }
 
   /**
