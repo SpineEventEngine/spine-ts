@@ -13,6 +13,7 @@
  */
 
 import { Time } from "@spine-event-engine/core/time";
+import { randomUUID } from "node:crypto";
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/require-await */
 
@@ -32,6 +33,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
+import { deliveryPortAccess } from "../../src/delivery/delivery-port-access.js";
 import { DuplicateDispatch } from "../../src/delivery/duplicate-dispatch.js";
 import type { DeliveryInbox, DeliveryOperationOptions } from "../../src/delivery/delivery-ports.js";
 import { Inbox, type InboxMessage, type InboxReadOptions } from "../../src/delivery/inbox.js";
@@ -496,6 +498,79 @@ describe("Delivery direct worker", () => {
     expect(acknowledged).toEqual([first.id.value]);
     expect(removed).toEqual([duplicate.id.value]);
     expect(reads).toEqual([undefined, undefined]);
+  });
+
+  it("reports remote page outcomes after both batches are stored", async () => {
+    const shard = ShardIndex.single();
+    const first = message(randomUUID(), "target", shard);
+    const duplicate = { ...first, id: { ...first.id, value: randomUUID() } };
+    const messages = [first, duplicate];
+    const steps: string[] = [];
+    const inbox = {
+      sessionKind: "LEASED" as const,
+      receive: async () => {
+        throw new Error("not used");
+      },
+      read: async () => [...messages],
+      readMessage: async () => undefined,
+      newestPending: async () => undefined,
+      markDelivered: async (candidate: InboxMessage) => ({
+        ...candidate,
+        status: "DELIVERED" as const,
+        keepUntil: new Date(Time.currentTimeMillis() + InboxRetention.durationMs),
+      }),
+      removeDuplicate: async () => true,
+      [deliveryPortAccess]: async (
+        _page: readonly InboxMessage[],
+        _session: unknown,
+        _options: unknown,
+        process: () => Promise<boolean>,
+        onWritesStored: (deadlineNs: (message: InboxMessage) => bigint | undefined) => void,
+      ) => {
+        if (!(await process())) return false;
+        remove(messages, first);
+        steps.push("stored completion");
+        onWritesStored(() => undefined);
+        remove(messages, duplicate);
+        steps.push("stored removal");
+        return true;
+      },
+    };
+    const delivery = new Delivery({
+      context: { name: "RemotePageCallbacks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      inbox,
+      workRegistry: localRegistry(shard),
+    });
+
+    const result = await delivery.drain(shard, {
+      onMessage: () => {
+        steps.push("dispatched");
+      },
+      onDelivered: () => {
+        steps.push("reported completion");
+        throw new Error("completion observer failed after storage");
+      },
+      onDuplicateRemoved: () => {
+        steps.push("reported removal");
+        throw new Error("removal observer failed after storage");
+      },
+      onMessageOutcome: () => {
+        steps.push("reported outcome");
+        throw new Error("outcome observer failed after storage");
+      },
+    });
+    expect(result).toMatchObject({ delivered: 1 });
+    expect(messages).toEqual([]);
+    expect(steps).toEqual([
+      "dispatched",
+      "stored completion",
+      "reported completion",
+      "reported outcome",
+      "stored removal",
+      "reported removal",
+      "reported outcome",
+    ]);
   });
 
   it("continues after productive pages and restarts once after the whole scan", async () => {

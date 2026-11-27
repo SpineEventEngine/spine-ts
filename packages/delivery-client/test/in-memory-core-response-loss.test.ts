@@ -24,7 +24,11 @@ import {
 import { InboxMessageStatus } from "@spine-event-engine/proto/delivery";
 import { Time } from "@spine-event-engine/core/time";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
-import { ShardIndex, type DeliveryWorkSession } from "@spine-event-engine/server";
+import {
+  ShardIndex,
+  type DeliveryWorkSession,
+  type InboxMessage,
+} from "@spine-event-engine/server";
 import { deliveryPortAccess } from "@spine-event-engine/server/spi/delivery";
 import { DeliveryClient, DeliveryOutcomeUnknownError } from "../src/client/client.js";
 import { RemoteInbox } from "../src/remote/adapters.js";
@@ -32,6 +36,18 @@ import { DeliveryMessageCodec } from "../src/wire/codec.js";
 import { domainMessage } from "./shared-fixtures.js";
 
 const session = { kind: "EXCLUSIVE", shard: ShardIndex.single() } as DeliveryWorkSession;
+
+type PageOperation = (
+  messages: readonly InboxMessage[],
+  session: DeliveryWorkSession,
+  options: undefined,
+  process: (isRecent: (message: InboxMessage) => boolean) => Promise<boolean>,
+  onWritesStored: (deadlineNs: (message: InboxMessage) => bigint | undefined) => void,
+) => Promise<boolean>;
+
+function pageOperation(inbox: RemoteInbox): PageOperation {
+  return (inbox as RemoteInbox & { [deliveryPortAccess]: PageOperation })[deliveryPortAccess];
+}
 
 describe("remote page persistence", () => {
   it("writes changed rows and then removes duplicates in one batch per page", async () => {
@@ -49,17 +65,7 @@ describe("remote page persistence", () => {
     const duplicate = domainMessage("page-duplicate");
     await client.writeMany([delivered, duplicate]);
     writes.mockClear();
-    await (
-      inbox as RemoteInbox & {
-        [deliveryPortAccess]: (
-          messages: readonly import("@spine-event-engine/server").InboxMessage[],
-          session: DeliveryWorkSession,
-          options: undefined,
-          process: () => Promise<boolean>,
-          onWritesStored: () => void,
-        ) => Promise<boolean>;
-      }
-    )[deliveryPortAccess](
+    await pageOperation(inbox)(
       [delivered, duplicate],
       session,
       undefined,
@@ -99,17 +105,7 @@ describe("remote page persistence", () => {
     await client.writeOne(delivered);
     await client.writeOne(duplicate);
     await expect(
-      (
-        inbox as RemoteInbox & {
-          [deliveryPortAccess]: (
-            messages: readonly import("@spine-event-engine/server").InboxMessage[],
-            session: DeliveryWorkSession,
-            options: undefined,
-            process: () => Promise<boolean>,
-            onWritesStored: () => void,
-          ) => Promise<boolean>;
-        }
-      )[deliveryPortAccess](
+      pageOperation(inbox)(
         [delivered, duplicate],
         session,
         undefined,
@@ -146,17 +142,7 @@ describe("remote page persistence", () => {
     const delivered = domainMessage("stored-before-removal");
     const duplicate = domainMessage("still-pending");
     await client.writeMany([delivered, duplicate]);
-    const apply = (
-      inbox as RemoteInbox & {
-        [deliveryPortAccess]: (
-          messages: readonly import("@spine-event-engine/server").InboxMessage[],
-          session: DeliveryWorkSession,
-          options: undefined,
-          process: () => Promise<boolean>,
-          onWritesStored: () => void,
-        ) => Promise<boolean>;
-      }
-    )[deliveryPortAccess];
+    const apply = pageOperation(inbox);
     await expect(
       apply(
         [delivered, duplicate],
@@ -197,22 +183,110 @@ describe("remote page persistence", () => {
     let now = create(TimestampSchema, { seconds: 1n, nanos: 123_456_789 });
     const prior = Time.setProvider({ currentTime: () => now });
     try {
-      const apply = (
-        inbox as RemoteInbox & {
-          [deliveryPortAccess]: (
-            messages: readonly import("@spine-event-engine/server").InboxMessage[],
-            session: DeliveryWorkSession,
-            options: undefined,
-            process: () => Promise<boolean>,
-            onWritesStored: () => void,
-          ) => Promise<boolean>;
-        }
-      )[deliveryPortAccess];
+      const apply = pageOperation(inbox);
       await apply([row], session, undefined, () => Promise.resolve(true), vi.fn());
       expect(removals).not.toHaveBeenCalled();
       now = create(TimestampSchema, { seconds: 1n, nanos: 123_456_790 });
       await apply([row], session, undefined, () => Promise.resolve(true), vi.fn());
       expect(removals).toHaveBeenCalledTimes(1);
+    } finally {
+      Time.setProvider(prior);
+      client.close();
+      core.close();
+    }
+  });
+
+  it("discards a stopped page and lets the same session process a later page", async () => {
+    const core = InMemoryDelivery.create();
+    const writes = vi.fn(core.inbox.writeMany);
+    const removals = vi.fn(core.inbox.removeMany);
+    const client = DeliveryClient.usingTransport(
+      createRouterTransport((router) => {
+        router.service(InboxService, { ...core.inbox, writeMany: writes, removeMany: removals });
+      }),
+    );
+    const inbox = new RemoteInbox(client);
+    const pending = domainMessage("stopped-page");
+    await client.writeOne(pending);
+    const apply = pageOperation(inbox);
+    expect(
+      await apply(
+        [pending],
+        session,
+        undefined,
+        async () => {
+          await inbox.markDelivered(pending, undefined, session);
+          return false;
+        },
+        vi.fn(),
+      ),
+    ).toBe(false);
+    expect(writes).not.toHaveBeenCalled();
+    expect(removals).not.toHaveBeenCalled();
+    expect((await client.findOne(pending.id))?.status).toBe("TO_DELIVER");
+    expect(
+      await apply(
+        [pending],
+        session,
+        undefined,
+        async () => {
+          await inbox.markDelivered(pending, undefined, session);
+          return true;
+        },
+        vi.fn(),
+      ),
+    ).toBe(true);
+    expect((await client.findOne(pending.id))?.status).toBe("DELIVERED");
+    client.close();
+    core.close();
+  });
+
+  it("classifies a mixed page by exact retention deadlines and removes expired completions", async () => {
+    const core = InMemoryDelivery.create();
+    const client = DeliveryClient.usingTransport(
+      createRouterTransport((router) => {
+        router.service(InboxService, core.inbox);
+      }),
+    );
+    const inbox = new RemoteInbox(client);
+    const future = DeliveryMessageCodec.encode(domainMessage("future-retained"));
+    future.status = InboxMessageStatus.DELIVERED;
+    future.keepUntil = create(TimestampSchema, { seconds: 10n, nanos: 400_000_001 });
+    const expired = DeliveryMessageCodec.encode(domainMessage("expired-retained"));
+    expired.status = InboxMessageStatus.DELIVERED;
+    expired.keepUntil = create(TimestampSchema, { seconds: 10n, nanos: 399_999_999 });
+    const undated = DeliveryMessageCodec.encode(domainMessage("undated-retained"));
+    undated.status = InboxMessageStatus.DELIVERED;
+    await core.inbox.writeMany(
+      { message: [future, expired, undated] } as never,
+      { signal: new AbortController().signal } as never,
+    );
+    const rows = await client.readPage(ShardIndex.single());
+    const now = create(TimestampSchema, { seconds: 10n, nanos: 400_000_000 });
+    const prior = Time.setProvider({ currentTime: () => now });
+    try {
+      const recent = new Map<string, boolean>();
+      const apply = pageOperation(inbox);
+      await apply(
+        rows,
+        session,
+        undefined,
+        (isRecent) => {
+          for (const row of rows) recent.set(row.signalId, isRecent(row));
+          return Promise.resolve(true);
+        },
+        vi.fn(),
+      );
+      expect(recent).toEqual(
+        new Map([
+          [domainMessage("future-retained").signalId, true],
+          [domainMessage("expired-retained").signalId, false],
+          [domainMessage("undated-retained").signalId, false],
+        ]),
+      );
+      expect((await client.findOne(domainMessage("future-retained").id))?.status).toBe("DELIVERED");
+      expect(await client.findOne(domainMessage("expired-retained").id)).toBeUndefined();
+      expect(await client.findOne(domainMessage("undated-retained").id)).toBeUndefined();
     } finally {
       Time.setProvider(prior);
       client.close();

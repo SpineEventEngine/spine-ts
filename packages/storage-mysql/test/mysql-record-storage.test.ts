@@ -13,7 +13,7 @@
  */
 
 import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
-import { AnyPacker } from "@spine-event-engine/core";
+import { AnyPacker, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import {
   InboxLabel,
@@ -34,6 +34,7 @@ import {
   TaskIdSchema,
   TaskListIdSchema,
 } from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskCreatedSchema } from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import {
   TaskSchema,
   type Task,
@@ -49,6 +50,7 @@ import {
   RecordSpec,
   type NormalizedQueryPlan,
 } from "@spine-event-engine/storage";
+import { eventHistorySpec } from "@spine-event-engine/storage/provider";
 import { describe, expect, it } from "vitest";
 
 import { MysqlRecordStorage, MysqlTableInitializer } from "../src/mysql/record-storage.js";
@@ -1734,6 +1736,48 @@ describe("MysqlRecordStorage", () => {
     });
 
     expect(calls.at(-1)).toContain("ID > ?");
+  });
+
+  it("asks MySQL for only the missing Events from one Aggregate's history", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const taskId = create(TaskIdSchema, { value: "task-7" });
+    const producer = AnyPacker.pack(TaskIdSchema, taskId);
+    const emitted = create(EventSchema, {
+      id: { value: "task-created-7" },
+      message: AnyPacker.pack(TaskCreatedSchema, create(TaskCreatedSchema, { id: taskId })),
+      context: { producerId: producer, version: { number: 7 } },
+    });
+    const { spec, group } = eventHistorySpec(TaskSchema);
+    const table = new MysqlTableResolver().resolve(EventSchema.typeName, group.name);
+    const connection = readyConnection(calls, {
+      columns: ["ID", "bytes", "entity_id", "created", "version"],
+      select: () => [{ bytes: toBinary(EventSchema, emitted) }],
+    });
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(new TypeRegistry([TaskIdSchema]));
+    const history = new MysqlRecordStorage(
+      { name: "Tasks", multitenant: false },
+      spec,
+      table,
+      lifecycle(connection),
+      () => undefined,
+      undefined,
+      undefined,
+      stringifiers,
+    );
+    try {
+      expect(await history.queryEntityEvents(producer, 3)).toEqual([emitted]);
+      await history.queryEntityEvents(producer, 2, 7n);
+      const reads = calls.filter(({ sql }) => sql.startsWith("SELECT bytes"));
+      expect(reads.map(({ sql }) => sql)).toEqual([
+        `SELECT bytes FROM \`${table.tableName}\` WHERE entity_id = ? ORDER BY version DESC, created DESC LIMIT 3`,
+        `SELECT bytes FROM \`${table.tableName}\` WHERE entity_id = ? AND version <= ? ORDER BY version DESC, created DESC LIMIT 2`,
+      ]);
+      expect(reads[0]?.values).toEqual([expect.stringContaining("task-7")]);
+      expect(reads[1]?.values).toEqual([reads[0]?.values?.[0], "7"]);
+    } finally {
+      history.close();
+    }
   });
 
   it("binds a mixed-direction Event cursor in lexicographic order", async () => {

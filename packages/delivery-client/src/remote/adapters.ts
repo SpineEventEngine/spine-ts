@@ -122,7 +122,7 @@ export class RemoteInbox implements DeliveryInbox {
    *
    * @param messages Supplies the inbox messages in the page.
    * @param nowNs Supplies the page clock sample.
-   * @returns Rows to remove after completion writes.
+   * @returns Inbox messages to remove after completion writes.
    */
   #expired(messages: readonly InboxMessage[], nowNs: bigint): InboxMessage[] {
     return messages.filter((message) => {

@@ -240,6 +240,13 @@ describe("direct InboxMessage storage", () => {
     now = new Date(250_000);
     expect(await storage.markDelivered(pending)).toEqual(first);
     expect(await storage.readMessage(pending.id)).toEqual(first);
+
+    // A worker still holding the pending page must respect the stored completion.
+    expect(await storage.removeDuplicate(pending)).toBe(false);
+    expect(await storage.readMessage(pending.id)).toEqual(first);
+    await storage.removeExpiredDelivered(ShardIndex.single());
+    expect(await storage.readMessage(pending.id)).toBeUndefined();
+    expect(await storage.removeDuplicate(pending)).toBe(true);
   });
 
   it("starts separate deadlines when one Event reaches two recipients", async () => {

@@ -14,6 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { Code } from "@connectrpc/connect";
 import { describe, expect, it } from "vitest";
 import {
   PickUpShardSchema,
@@ -74,6 +75,61 @@ describe("ShardService", () => {
     );
     now = create(TimestampSchema, { seconds: 2n, nanos: 1 });
     expect((await core.shards.pickShard(pickup(rival), context)).value?.case).toBe("pickedUp");
+    core.close();
+  });
+
+  it("keeps zero-timeout shards held and keeps a repeat pickup monotonic", async () => {
+    let now = create(TimestampSchema, { seconds: 10n, nanos: 50 });
+    const core = InMemoryDelivery.create({ now: () => now, processingTimeoutMs: 0 });
+    await core.shards.pickShard(pickup(), context);
+    now = create(TimestampSchema, { seconds: 9n });
+    await core.shards.pickShard(pickup(), context);
+    now = create(TimestampSchema, { seconds: 20n });
+    const busy = await core.shards.pickShard(pickup(rival), context);
+    expect(busy.value?.case).toBe("alreadyPickedUp");
+    if (busy.value?.case === "alreadyPickedUp")
+      expect(busy.value.value.whenPicked).toMatchObject({ seconds: 10n, nanos: 50 });
+    core.close();
+  });
+
+  it("leaves younger sessions held and reports each explicit inactivity release once", async () => {
+    let now = create(TimestampSchema, { seconds: 5n, nanos: 100 });
+    const core = InMemoryDelivery.create({ now: () => now });
+    await core.shards.pickShard(pickup(), context);
+    now = create(TimestampSchema, { seconds: 6n, nanos: 99 });
+    const period = create(ReleaseExpiredSessionsSchema, {
+      inactivityPeriod: { seconds: 1n },
+    });
+    expect((await core.shards.releaseSessions(period, context)).shard).toEqual([]);
+    now = create(TimestampSchema, { seconds: 6n, nanos: 100 });
+    expect((await core.shards.releaseSessions(period, context)).shard).toHaveLength(1);
+    expect((await core.shards.releaseSessions(period, context)).shard).toEqual([]);
+    core.close();
+  });
+
+  it("rejects malformed pickup and inactivity requests before mutation", async () => {
+    const core = InMemoryDelivery.create();
+    expect(() => core.shards.pickShard(create(PickUpShardSchema, { shard }), context)).toThrow(
+      expect.objectContaining({ code: Code.InvalidArgument }),
+    );
+    expect(() =>
+      core.shards.pickShard(
+        create(PickUpShardSchema, {
+          shard,
+          worker: create(WorkerIdSchema, { nodeId: { value: "node" } }),
+        }),
+        context,
+      ),
+    ).toThrow(expect.objectContaining({ code: Code.InvalidArgument }));
+    expect(() =>
+      core.shards.releaseSessions(
+        create(ReleaseExpiredSessionsSchema, {
+          inactivityPeriod: { seconds: -1n },
+        }),
+        context,
+      ),
+    ).toThrow(expect.objectContaining({ code: Code.InvalidArgument }));
+    expect((await core.shards.pickShard(pickup(), context)).value?.case).toBe("pickedUp");
     core.close();
   });
 
