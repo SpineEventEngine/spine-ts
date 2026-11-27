@@ -339,21 +339,12 @@ describe("LocalEntityInbox", () => {
     expect(readMessage).not.toHaveBeenCalled();
   });
 
-  it("accepts a persisted row before aggregate delivery counts settle", async () => {
+  it("returns the stored inbox message while its delivery is still in progress", async () => {
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
-    const input = processInput(targetTypeUrl, "missing-target");
+    const input = processInput(targetTypeUrl, "pending-delivery");
     const persisted = writtenResult(input, 1n);
-    const drainMessage = vi.fn().mockResolvedValue({
-      acknowledged: false,
-      run: {
-        status: "DRAINED",
-        processed: 9,
-        accepted: 9,
-        delivered: 9,
-        failed: 0,
-        failures: [],
-      },
-    });
+    const completion = Promise.withResolvers<{ acknowledged: true }>();
+    const drainMessage = vi.fn(() => completion.promise);
     const delivery = {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -375,8 +366,10 @@ describe("LocalEntityInbox", () => {
     await expect(inbox.receive(delivery, input)).resolves.toMatchObject({
       signalId: input.signalId,
     });
+    expect(drainMessage).toHaveBeenCalledOnce();
+    completion.resolve({ acknowledged: true });
     await expect(readiness.close()).resolves.toBeUndefined();
-    expect(drainMessage).toHaveBeenCalledTimes(8);
+    expect(drainMessage).toHaveBeenCalledOnce();
   });
 
   it("accepts a persisted row despite an unrelated delivery result", async () => {
