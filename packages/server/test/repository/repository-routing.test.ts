@@ -10443,56 +10443,67 @@ describe("repository signal routing", () => {
     expect(SplitRouteProcessManager.completedIds).toEqual(["pm-one", "pm-two"]);
   });
 
-  it("guards repeated Agent dispatch in one running repository without optional PM history", async () => {
-    const setup = createTestSetup(true);
-    GuardedSupportAgent.reactions = 0;
-    const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-guard" });
-    expect(() => createGuardedSupportAgentRepository(agent, false)).not.toThrow();
+  it.each([true, false])(
+    "uses the process-local Agent guard after Inbox retention with guard enabled=%s",
+    async (guarded) => {
+      const setup = createTestSetup(true);
+      GuardedSupportAgent.reactions = 0;
+      const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-guard" });
+      expect(() => createGuardedSupportAgentRepository(agent, false, guarded)).not.toThrow();
 
-    const factory = new HistoryReadTrackingFactory();
-    await configureStorage(setup, factory);
-    const event = SignalEnvelopes.event({
-      schema: SupportTicketUpdatedSchema,
-      message: create(SupportTicketUpdatedSchema, { agent, question: "Delivery?" }),
-      context: create(EventContextSchema, {
-        producerId: AnyPacker.pack(SupportReplyAgentIdSchema, agent),
-        version: create(VersionSchema, { number: 1 }),
-      }),
-    });
-    const repository = createGuardedSupportAgentRepository(agent, false);
-    const context = await buildContext(
-      BoundedContext.singleTenant("SupportGuard")
-        .add(repository)
-        .withAi(
-          AiRegistry.create({
-            defaultModels: {},
-            invocationLimits: {
-              operations: 1,
-              modelRequests: 1,
-              toolCalls: 0,
-              recordedReads: 0,
-              deadlineMs: 1_000,
-              totalInputBytes: 4_000,
-              totalOutputBytes: 4_000,
-            },
-          }),
-        )
-        .persistSystemEvents(),
-      setup,
-    );
-    try {
-      const dispatcher = repositoryAccess.eventDispatcher(repository);
-      if (dispatcher === undefined) throw new Error("Expected Agent Event dispatcher.");
-      await dispatcher.dispatch(event);
-      await waitForCondition(() => GuardedSupportAgent.reactions === 1);
-      await dispatcher.dispatch(event);
-      await delay(50);
-    } finally {
-      await context.close();
-    }
-    expect(GuardedSupportAgent.reactions).toBe(1);
-    expect(factory.historyReads).toBe(0);
-  });
+      const factory = new HistoryReadTrackingFactory();
+      await configureStorage(setup, factory);
+      const event = SignalEnvelopes.event({
+        schema: SupportTicketUpdatedSchema,
+        message: create(SupportTicketUpdatedSchema, { agent, question: "Delivery?" }),
+        context: create(EventContextSchema, {
+          producerId: AnyPacker.pack(SupportReplyAgentIdSchema, agent),
+          version: create(VersionSchema, { number: 1 }),
+        }),
+      });
+      const repository = createGuardedSupportAgentRepository(agent, false, guarded);
+      const context = await buildContext(
+        BoundedContext.singleTenant("SupportGuard")
+          .add(repository)
+          .withAi(
+            AiRegistry.create({
+              defaultModels: {},
+              invocationLimits: {
+                operations: 1,
+                modelRequests: 1,
+                toolCalls: 0,
+                recordedReads: 0,
+                deadlineMs: 1_000,
+                totalInputBytes: 4_000,
+                totalOutputBytes: 4_000,
+              },
+            }),
+          )
+          .persistSystemEvents(),
+        setup,
+      );
+      let now = 1_900_000_000_000;
+      const previousTime = Time.setProvider({
+        currentTime: () => timestampFromDate(new Date(now)),
+        monotonicTime: () => now,
+      });
+      try {
+        const dispatcher = repositoryAccess.eventDispatcher(repository);
+        if (dispatcher === undefined) throw new Error("Expected Agent Event dispatcher.");
+        await dispatcher.dispatch(event);
+        await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
+        expect(GuardedSupportAgent.reactions).toBe(1);
+        now += 5_001;
+        await dispatcher.dispatch(event);
+        await serverEnvironmentAccess.whenDeliveryIdle(environmentFor(setup));
+      } finally {
+        await context.close();
+        Time.setProvider(previousTime);
+      }
+      expect(GuardedSupportAgent.reactions).toBe(guarded ? 1 : 2);
+      expect(factory.historyReads).toBe(0);
+    },
+  );
 
   it("suppresses a duplicate Aggregate Event using its delivered Inbox receipt", async () => {
     const setup = createTestSetup(true);
@@ -17219,6 +17230,7 @@ function createDiagnosticOnlyProcessManagerRepository(
 function createGuardedSupportAgentRepository(
   agent: SupportReplyAgentId,
   retainHistory: boolean,
+  guarded = true,
 ): Repository<typeof GuardedSupportAgent> {
   const handlers = HandlerMetadataValues.defineArity(
     GuardedSupportAgent,
@@ -17245,7 +17257,7 @@ function createGuardedSupportAgentRepository(
       () => [agent],
     ),
     ...(retainHistory ? { processManagerEventHistory: true } : {}),
-    doubleDispatchGuard: true,
+    ...(guarded ? { doubleDispatchGuard: true } : {}),
   });
 }
 

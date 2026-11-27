@@ -460,7 +460,7 @@ export class Delivery {
       return Promise.resolve(Object.freeze({ status: "stopped" as const }));
     const key = shard.key();
     const active = this.#managedAttempts.get(key);
-    if (active !== undefined) return active;
+    if (active !== undefined) return this.#joinManagedAttempt(active, options);
     const budget = this.#managedBudget(options);
     const attempt = this.#executeManaged(shard, options, budget.operation);
     this.#managedAttempts.set(key, attempt);
@@ -473,6 +473,36 @@ export class Delivery {
       })
       .catch(() => undefined);
     return attempt;
+  }
+
+  /**
+   * Bounds one caller's wait for an existing physical attempt without cancelling it.
+   *
+   * @param attempt Shared shard completion.
+   * @param options Join caller's cancellation signal or positive timeout.
+   * @returns The shared outcome, or stopped when this caller stops waiting.
+   */
+  #joinManagedAttempt(
+    attempt: Promise<DeliveryAttempt>,
+    options: DeliveryOperationOptions,
+  ): Promise<DeliveryAttempt> {
+    if (options.signal === undefined && options.timeoutMs === undefined) return attempt;
+    const stopped = Object.freeze({ status: "stopped" as const });
+    const budget = this.#managedBudget(options);
+    const signal = budget.operation.signal;
+    if (signal === undefined || signal.aborted) {
+      budget.cancel();
+      return Promise.resolve(stopped);
+    }
+    const cancelled = Promise.withResolvers<DeliveryAttempt>();
+    const stop = () => {
+      cancelled.resolve(stopped);
+    };
+    signal.addEventListener("abort", stop, { once: true });
+    return Promise.race([attempt, cancelled.promise]).finally(() => {
+      signal.removeEventListener("abort", stop);
+      budget.cancel();
+    });
   }
 
   /**

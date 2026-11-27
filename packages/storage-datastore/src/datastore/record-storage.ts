@@ -266,15 +266,21 @@ class FlatEntityCodec<I, R extends Message> {
   }
 
   /**
-   * Reads declared column values from a decoded entity record.
+   * Decodes a query result once and reads its declared columns from that record.
    *
-   * @param entity Raw Datastore entity.
-   * @returns Declared column values by name.
+   * @param entity Datastore entity returned by the query.
+   * @param client Client that supplies the key for this entity.
+   * @returns The record, its identifier, and its column values.
    */
-  columns(entity: Record<string | symbol, unknown>): ReadonlyMap<string, unknown> {
-    return new Map(
-      this.recordSpec.columns.map((column) => [column.name, column.valueIn(this.decode(entity))]),
-    );
+  queryEntry(entity: Record<string | symbol, unknown>, client: Datastore): QueriedEntry<I, R> {
+    const record = this.decode(entity);
+    return {
+      id: this.id(entity, client),
+      record,
+      columns: new Map(
+        this.recordSpec.columns.map((column) => [column.name, column.valueIn(record)]),
+      ),
+    };
   }
 
   /**
@@ -714,13 +720,12 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     ) {
       throw new DatastoreQueryLimitError(providerLimit - 1);
     }
-    const entries = entities.map((entity) => ({
-      id: this.#codec.id(entity, this.client),
-      record: this.#codec.decode(entity),
-      columns: this.#codec.columns(entity),
-    }));
-
-    if (exactPage) return entries.map(({ id, record }) => ({ id, record }));
+    if (exactPage)
+      return entities.map((entity) => ({
+        id: this.#codec.id(entity, this.client),
+        record: this.#codec.decode(entity),
+      }));
+    const entries = entities.map((entity) => this.#codec.queryEntry(entity, this.client));
     return LocalQueryResults.apply(entries, _query);
   }
 
@@ -750,11 +755,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       if (cursor !== undefined) query.start(cursor);
       const response = await this.provider(() => this.client.runQuery(query, wrappedReadOptions));
       for (const entity of DatastoreResults.entities(response))
-        entries.push({
-          id: this.#codec.id(entity, this.client),
-          record: this.#codec.decode(entity),
-          columns: this.#codec.columns(entity),
-        });
+        entries.push(this.#codec.queryEntry(entity, this.client));
       const info = DatastoreResults.queryInfo(response);
       if (!info.more) return LocalQueryResults.apply(entries, request);
       const next = info.cursor;

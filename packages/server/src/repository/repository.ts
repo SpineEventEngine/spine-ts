@@ -13107,15 +13107,19 @@ const InboxDelivery = {
       recipientId: clone(AnySchema, message.inboxId.targetId),
       source,
     };
-    await new AgentLiveRunner(
-      repository,
-      runtime,
-      tenantId,
-      entityId,
-      invocation,
-      handlers,
-      new AbortController().signal,
-    ).run();
+    const run = () =>
+      new AgentLiveRunner(
+        repository,
+        runtime,
+        tenantId,
+        entityId,
+        invocation,
+        handlers,
+        new AbortController().signal,
+      ).run();
+    if (source.case === "event")
+      await DispatchGuards.guardedEntityDispatch(repository, runtime, source, entityId, run);
+    else await run();
   },
 
   /**

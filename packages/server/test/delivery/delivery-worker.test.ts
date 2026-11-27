@@ -49,6 +49,83 @@ import { CreateTaskSchema } from "../../../../examples/todo/generated/spine/exam
 import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 describe("Delivery direct worker", () => {
+  it.each(["pre-aborted", "late-abort", "timeout"])(
+    "stops only the %s caller while a physical shard attempt continues",
+    async (mode) => {
+      if (mode === "timeout") vi.useFakeTimers();
+      const shard = ShardIndex.single();
+      const entered = Promise.withResolvers<undefined>();
+      const held = Promise.withResolvers<DeliveryEndpointMessage[]>();
+      const delivery = createDelivery({
+        newestPending: async () => message("held", "target", shard),
+        read: async () => {
+          entered.resolve(undefined);
+          return held.promise;
+        },
+      });
+      delivery.setDispatcher(() => undefined);
+      const first = delivery.deliverMessagesFrom(shard);
+      try {
+        await entered.promise;
+        expect(delivery.deliverMessagesFrom(shard)).toBe(first);
+        const controller = new AbortController();
+        if (mode === "pre-aborted") controller.abort();
+        const joined = delivery.deliverMessagesFrom(
+          shard,
+          mode === "timeout" ? { timeoutMs: 10 } : { signal: controller.signal },
+        );
+        if (mode === "late-abort") controller.abort();
+        if (mode === "timeout") await vi.advanceTimersByTimeAsync(10);
+        await expect(joined).resolves.toEqual({ status: "stopped" });
+        const settled = vi.fn();
+        void first.then(settled);
+        await Promise.resolve();
+        expect(settled).not.toHaveBeenCalled();
+        held.resolve([]);
+        await expect(first).resolves.toEqual({ status: "completed" });
+      } finally {
+        held.resolve([]);
+        await delivery.close();
+        if (mode === "timeout") vi.useRealTimers();
+      }
+    },
+  );
+
+  it("cleans a joiner's signal listener and timeout when the shared attempt completes", async () => {
+    vi.useFakeTimers();
+    const shard = ShardIndex.single();
+    const entered = Promise.withResolvers<undefined>();
+    const held = Promise.withResolvers<DeliveryEndpointMessage[]>();
+    const delivery = createDelivery({
+      newestPending: async () => message("held-cleanup", "target", shard),
+      read: async () => {
+        entered.resolve(undefined);
+        return held.promise;
+      },
+    });
+    delivery.setDispatcher(() => undefined);
+    const first = delivery.deliverMessagesFrom(shard);
+    const remove = vi.spyOn(AbortSignal.prototype, "removeEventListener");
+    try {
+      await entered.promise;
+      const controller = new AbortController();
+      const joined = delivery.deliverMessagesFrom(shard, {
+        signal: controller.signal,
+        timeoutMs: 1_000,
+      });
+      held.resolve([]);
+      await expect(joined).resolves.toEqual({ status: "completed" });
+      await expect(first).resolves.toEqual({ status: "completed" });
+      expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      held.resolve([]);
+      await delivery.close();
+      remove.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("closes a direct run during sustained shard pickup conflicts", async () => {
     let attempts = 0;
     const handle = {
@@ -2085,6 +2162,7 @@ function createDelivery(config: {
   read?: (
     options?: InboxReadOptions & DeliveryOperationOptions,
   ) => Promise<DeliveryEndpointMessage[]>;
+  newestPending?: () => Promise<DeliveryEndpointMessage | undefined>;
   mark?: (row: DeliveryEndpointMessage) => Promise<DeliveryEndpointMessage | undefined>;
   removeDuplicate?: (row: DeliveryEndpointMessage) => Promise<boolean>;
   remove?: (row: DeliveryEndpointMessage) => Promise<boolean>;
@@ -2102,7 +2180,7 @@ function createDelivery(config: {
     },
     read: async (_shard, options) => config.read?.(options) ?? [...rows],
     readMessage: async () => undefined,
-    newestPending: async () => undefined,
+    newestPending: config.newestPending ?? (async () => undefined),
     markDelivered: async (row) => {
       const snapshot = row;
       return config.mark?.(snapshot) ?? snapshot;

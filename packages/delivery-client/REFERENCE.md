@@ -100,10 +100,13 @@ A remote worker sends its current session and the exact inbox message it read wh
 acknowledging a Command, removing a pending duplicate, or removing an expired
 completion. The server checks both in the same operation as the change.
 
-When calling the remote inbox adapter directly, pass the object returned by a
-read. The client keeps the original Protobuf message with that object, including
-fields unknown to the application. Reconstructing a message from its TypeScript
-properties loses that evidence, so the client rejects such a mutation.
+The framework passes the message it read straight to the client. Code using the
+public `DeliveryClient` can do the same. For example, after a worker has picked
+up a shard, it can pass the result of `await client.findOne(id)`, when present,
+to `await client.acknowledgeGuarded(session, message)`. The same read result
+works with `removeDuplicateGuarded` and `removeDeliveredGuarded`. Keep that
+object. The client retains the original Protobuf data with it, including fields
+the current schema cannot interpret.
 
 Suppose a worker reads message 7 and enters its Command handler. Another caller
 replaces message 7 before the handler returns. Even a one-nanosecond difference in
@@ -143,7 +146,7 @@ deadline until another drain visits it.
 
 Built-in notifications open `ShardObservingService.ObserveAll` after endpoints are ready. Every connected application node receives current free shards with pending messages when it connects or reconnects. A disconnected reader reopens with the established increasing reconnect delay, starting at 100 milliseconds and rising to 30 seconds; an unsupported method ends that reader with the original gRPC status. The server repeats an available shard after its configured reminder interval, 10 seconds by default, while it remains free and unclaimed. A write to a busy shard is observed after release or expiry. Admin snapshots and updates report state for administration; they do not trigger application work.
 
-By default, distinct shards can run simultaneously on one node. Remote nodes accept an optional positive `maxConcurrentDeliveries`; the node reserves a place before pickup and drops excess notices. The server's later reminder can offer a still-free shard again. Two local calls for the same shard join one in-flight attempt and share its result. Another node may compete for the shard, while the Delivery server grants one live session. The result of `deliverMessagesFrom(shard)` is `completed`, `busy`, `noWork`, or `stopped`; an unrecovered read, processing, release, or post-release lookup error rejects the call. A stream notice is advisory, and only the retained message and current session permit processing.
+By default, distinct shards can run simultaneously on one node. Remote nodes accept an optional positive `maxConcurrentDeliveries`; the node reserves a place before pickup and drops excess notices. The server's later reminder can offer a still-free shard again. Calls for the same shard on one node share the active delivery attempt. If a second caller cancels its wait or reaches its deadline, that caller receives `stopped`. The first caller can still finish the delivery. Another node may compete for the shard, while the Delivery server grants one live session. The result of `deliverMessagesFrom(shard)` is `completed`, `busy`, `noWork`, or `stopped`; an unrecovered read, processing, release, or post-release lookup error rejects the call. A stream notice is advisory, and only the retained message and current session permit processing.
 
 Remote storage always uses the server work stream. For an inbox in a shared
 application database, use `DeliveryBuilder.local({ storageFactory, shardObserver })`.

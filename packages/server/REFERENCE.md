@@ -1736,15 +1736,15 @@ absent or elapsed (`keepUntil <= now`). Delivery skips per-record mutation check
 and deletion attempts for messages whose deadline is still in the future. Cleanup
 and retained message duplicate recognition use the same applicable clock. Eligible
 messages still receive final time and shard checks before deletion.
-Direct local storage checks the supplied delivered status and deadline again,
-then deletes by ID while the operation is active. It does not re-read the stored
-message or compare its snapshot, and the shard session is not checked again after
-deletion. A message changed between the checks and deletion can therefore be
-removed. Cancellation stops subsequent cleanup attempts; deletions already
-completed remain. With remote storage, the worker sends its session handle
-and the exact inbox message it observed. The Delivery server checks both in the
-same operation that deletes it. For example, if a new message replaced that
-inbox ID after the worker read it, cleanup leaves the replacement in storage.
+With application-managed storage, the worker checks the delivered status and
+deadline on the message it read, then deletes by inbox ID. Suppose the worker
+reads an expired completion under ID `M7`. An explicit storage write replaces
+`M7` with a pending Command before cleanup. Deleting `M7` also deletes that
+replacement. Ordinary Command and Event posts generate fresh inbox IDs.
+
+With remote storage, the worker sends its session handle and the exact inbox
+message it read. The Delivery server checks both in the operation that deletes
+the message. In the same `M7` example, the pending Command survives.
 
 Configure one Delivery strategy for the environment before setup. It maps
 targets to shards across all Bounded Contexts; the default is one shard. For example:
