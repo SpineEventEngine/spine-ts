@@ -14,12 +14,12 @@
 
 import { expect, it } from "vitest";
 
-import type { DeliverySource } from "@spine-event-engine/server";
+import type { ApplicationWorkSource } from "@spine-event-engine/server";
 
 import { DeliveryClient } from "../src/index.js";
 
-it("is structurally assignable to the server delivery source", () => {
-  const asSource = (client: DeliveryClient): DeliverySource => client;
+it("is structurally assignable to the application work source", () => {
+  const asSource = (client: DeliveryClient): ApplicationWorkSource => client;
 
   expect(asSource).toBeTypeOf("function");
 });

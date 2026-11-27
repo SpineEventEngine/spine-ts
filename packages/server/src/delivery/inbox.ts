@@ -52,9 +52,9 @@ export class Inbox {
    * Stores one pending message without a completion deadline.
    *
    * @param input Describes the message to make durable.
-   * @returns The write or deduplication outcome.
+   * @returns The stored message.
    */
-  async receive(input: InboxMessageInput): Promise<InboxWriteResult> {
+  async receive(input: InboxMessageInput): Promise<InboxMessage> {
     const messageInput = this.#inputObject(input, "Inbox message input");
     const shard = this.#readInput(messageInput, "shard", "Inbox message shard") as ShardIndex;
     const signal = this.#readInput(messageInput, "signal", "Inbox signal") as Any | undefined;
@@ -101,15 +101,34 @@ export class Inbox {
   }
 
   /**
-   * Updates one pending message to delivered when its snapshot still matches.
+   * Reads the newest pending row in one shard after normal release.
+   *
+   * @param shard Selects the shard to inspect.
+   * @returns The last pending row in delivery order, when present.
+   */
+  newestPending(shard: ShardIndex): Promise<InboxMessage | undefined> {
+    return this.storage.newestPending(shard);
+  }
+
+  /**
+   * Updates one pending message to delivered by its inbox identity.
    *
    * @param message Supplies the pending message snapshot.
    * @returns The first stored completion and deadline, or `undefined` when the
-   * durable row is missing or its immutable content differs. Matching delivered
-   * rows return idempotently so concurrent workers converge without re-dispatching.
+   * durable row is missing. Matching delivered rows return idempotently.
    */
   markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
     return this.storage.markDelivered(message);
+  }
+
+  /**
+   * Deletes expired delivered messages in one shard storage operation.
+   *
+   * @param shard Selects the shard to clean.
+   * @returns Whether the storage provider supports this predicate mutation.
+   */
+  removeExpiredDelivered(shard: ShardIndex): Promise<boolean> {
+    return this.storage.removeExpiredDelivered(shard);
   }
 
   /**
@@ -121,17 +140,6 @@ export class Inbox {
    */
   removeDuplicate(message: InboxMessage, options?: DeliveryOperationOptions): Promise<boolean> {
     return this.storage.removeDuplicate(message, options);
-  }
-
-  /**
-   * Removes one eligible delivered message directly by ID.
-   *
-   * @param message Supplies the delivered ID and cleanup eligibility.
-   * @param options Propagates cancellation and a delivery deadline.
-   * @returns Whether direct ID deletion removed a row.
-   */
-  removeDelivered(message: InboxMessage, options?: DeliveryOperationOptions): Promise<boolean> {
-    return this.storage.removeDelivered(message, options);
   }
 
   #inputObject(value: unknown, label: string): Record<string, unknown> {
@@ -368,7 +376,7 @@ export interface InboxReadOptions {
   readonly statuses?: readonly DeliveryStatus[];
 
   /**
-   * Optional page limit for one ordered page; must be positive and at most 1000.
+   * Optional page limit for one ordered page; must be a positive safe integer.
    */
   readonly limit?: number;
 
@@ -403,21 +411,4 @@ export interface InboxReadContinuation {
    * Version from the last row of the previous page.
    */
   readonly version: bigint;
-}
-
-/**
- * Durable inbox write outcome.
- */
-export interface InboxWriteResult {
-  // prettier-ignore
-
-  /**
-   * Whether the message was written or matched an existing dedup key.
-   */
-  readonly outcome: "WRITTEN" | "DUPLICATE";
-
-  /**
-   * Stored message selected for the outcome.
-   */
-  readonly message: InboxMessage;
 }

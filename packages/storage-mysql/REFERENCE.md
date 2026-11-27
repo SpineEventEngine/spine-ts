@@ -171,6 +171,39 @@ replays captured input with unchanged versions and Event IDs. Standalone
 history operations remain separate; a delivery Event alone does not prove the
 current-state write completed.
 
+### Recent Events emitted by an Aggregate
+
+With `doubleDispatchGuard: { depth: 2 }`, an Order repository inspects at most
+two Events emitted by the particular Order receiving the input. It first uses
+the live Aggregate's recent history. When that history is empty, its reader asks
+MySQL for one additional Event to see whether the last Entity version in the
+page has more outputs. The ordinary cold read has this SQL shape. The table
+name illustrates an Order repository.
+
+```sql
+SELECT bytes FROM order_events
+WHERE entity_id = ?
+ORDER BY version DESC, created DESC
+LIMIT 3;
+```
+
+Suppose the saved state of Order `order-17` is at version 7. A previous
+attempt might have written an Event for version 8 before its state write
+failed. The guard ignores that Event. If newer entries filled the page and
+the guard still needs older evidence, it can ask MySQL directly for the two
+Events through the saved version.
+
+```sql
+SELECT bytes FROM order_events
+WHERE entity_id = ? AND version <= 7
+ORDER BY version DESC, created DESC
+LIMIT 2;
+```
+
+A handler asking the live Aggregate for the same recent history can reuse
+entries fetched by the guard. The handler's configured history access still
+applies. The Bounded Context-wide Event Store serves a separate purpose.
+
 ## Agent history
 
 The provider-only Agent history handle stores original complete

@@ -12,6 +12,7 @@
  * the License.
  */
 
+export { Inbox } from "../dist/delivery/inbox.js";
 import { commitFenced } from "../dist/repository/commit-fence.js";
 import { managedServerApplicationAccess } from "../dist/server/managed-server-application.js";
 import { NodeCoordinator } from "../dist/server/node-coordinator.js";

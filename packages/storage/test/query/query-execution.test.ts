@@ -13,6 +13,8 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 
 import { StorageQueryEvaluator, type NormalizedQueryEntry } from "../../src/index.js";
 import { StorageQueryValues } from "../../src/query/query-execution.js";
@@ -29,6 +31,14 @@ const rows: readonly NormalizedQueryEntry<string, Row>[] = [
 ];
 
 describe("StorageQueryEvaluator", () => {
+  it("compares Timestamp seconds before nanos through the stable provider entrypoint", () => {
+    const earlier = create(TimestampSchema, { seconds: 100n, nanos: 900_000_000 });
+    const later = create(TimestampSchema, { seconds: 101n, nanos: 100_000_000 });
+    expect(StorageQueryValues.compare(earlier, later)).toBeLessThan(0);
+    expect(StorageQueryValues.compare(later, earlier)).toBeGreaterThan(0);
+    expect(StorageQueryValues.compare(earlier, earlier)).toBe(0);
+  });
+
   it("compares byte values in unsigned order through the stable provider entrypoint", () => {
     expect(StorageQueryValues.compare(new Uint8Array([0xff]), new Uint8Array([0x01]))).toBe(1);
     expect(StorageQueryValues.compare(new Uint8Array([0x01]), new Uint8Array([0xff]))).toBe(-1);

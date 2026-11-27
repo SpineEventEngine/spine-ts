@@ -21,7 +21,12 @@ import {
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { EntityStateKeySchema } from "@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js";
-import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
+import {
+  ColumnTypes,
+  RecordColumn,
+  RecordSpec,
+  type RecordQuery,
+} from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -338,7 +343,31 @@ function fakeRecords(values: object[]) {
       this.immutable.push(value);
       return Promise.resolve();
     },
-    query: () => Promise.resolve([...values].sort((a, b) => versionOf(b) - versionOf(a))),
+    query: (query: RecordQuery<unknown> = {}) => {
+      const producer = query.filters?.find((filter) => filter.column === "entity_id")?.value;
+      const matching = values.filter((value) => {
+        if (producer === undefined) return true;
+        if (!isMessage(producer, AnySchema)) return false;
+        const stored = isMessage(value, EventSchema) ? value.context?.producerId : undefined;
+        return (
+          AnyPacker.tryUnpack(stored, TaskIdSchema)?.value ===
+          AnyPacker.tryUnpack(producer, TaskIdSchema)?.value
+        );
+      });
+      matching.sort((a, b) => versionOf(b) - versionOf(a));
+      return Promise.resolve(query.limit === undefined ? matching : matching.slice(0, query.limit));
+    },
+    queryEntityEvents(producer: object, depth: number, startingFromVersion?: bigint) {
+      const filtered = values.filter((value) => {
+        if (!isMessage(value, EventSchema) || !isMessage(producer, AnySchema)) return false;
+        return (
+          AnyPacker.tryUnpack(value.context?.producerId, TaskIdSchema)?.value ===
+            AnyPacker.tryUnpack(producer, TaskIdSchema)?.value &&
+          (startingFromVersion === undefined || BigInt(versionOf(value)) <= startingFromVersion)
+        );
+      });
+      return Promise.resolve(filtered.sort((a, b) => versionOf(b) - versionOf(a)).slice(0, depth));
+    },
     delete: (key: object) => {
       const index = values.findIndex((value) => {
         if (isMessage(key, EntityStateKeySchema) && isMessage(value, EntityRecordSchema))

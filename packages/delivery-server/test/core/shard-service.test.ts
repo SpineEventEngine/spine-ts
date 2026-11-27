@@ -13,449 +13,141 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { Code, ConnectError } from "@connectrpc/connect";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { Code } from "@connectrpc/connect";
 import { describe, expect, it } from "vitest";
-
 import {
   PickUpShardSchema,
   ReleaseExpiredSessionsSchema,
   ReleaseShardSchema,
-  RemoveMessageSchema,
-  WriteMessageSchema,
 } from "@spine-event-engine/proto/delivery-server";
-import { CommandSchema } from "@spine-event-engine/proto";
-import {
-  InboxMessageSchema,
-  InboxMessageStatus,
-  ShardIndexSchema,
-  WorkerIdSchema,
-} from "@spine-event-engine/proto/delivery";
-
+import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { InMemoryDelivery } from "../../src/index.js";
 
 const context = { signal: new AbortController().signal } as never;
 const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
 const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
+const rival = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "rival" });
+const pickup = (who = worker) => create(PickUpShardSchema, { shard, worker: who });
+const release = (who = worker) => create(ReleaseShardSchema, { shard, worker: who });
 
-describe("in-memory Shards", () => {
-  it("refreshes the same live worker but never lets a delayed owner release its replacement", async () => {
-    const core = InMemoryDelivery.create();
-    const first = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "first" });
-    const second = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "second" });
-    const firstPickup = create(PickUpShardSchema, { shard, worker: first });
-    const secondPickup = create(PickUpShardSchema, { shard, worker: second });
-
-    const revalidate = {
-      signal: new AbortController().signal,
-      requestHeader: new Headers([["x-spine-delivery-revalidate", "true"]]),
-      responseHeader: new Headers(),
-    } as never;
-    await core.shards.pickShard(firstPickup, context);
-    await expect(core.shards.pickShard(firstPickup, revalidate)).resolves.toMatchObject({
-      value: { case: "pickedUp", value: { worker: first } },
-    });
-    expect(
-      (revalidate as { responseHeader: Headers }).responseHeader.get(
-        "x-spine-delivery-revalidation",
-      ),
-    ).toBe("refreshed");
-    await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker: first }), context);
-    await core.shards.pickShard(secondPickup, context);
-    await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker: first }), context);
-
-    await expect(core.shards.pickShard(secondPickup, context)).resolves.toMatchObject({
-      value: { case: "alreadyPickedUp", value: { worker: second } },
-    });
+describe("ShardService", () => {
+  it("picks a free shard and reports a full-precision reply timestamp", async () => {
+    const now = create(TimestampSchema, { seconds: 12n, nanos: 123_456_789 });
+    const core = InMemoryDelivery.create({ now: () => now });
+    const result = await core.shards.pickShard(pickup(), context);
+    expect(result.value?.case).toBe("pickedUp");
+    if (result.value?.case === "pickedUp") expect(result.value.value.whenPicked).toMatchObject(now);
+    core.close();
   });
 
-  it("labels fresh and conflicting revalidation outcomes", async () => {
-    const core = InMemoryDelivery.create();
-    const first = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "first" });
-    const second = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "second" });
-    const revalidate = () =>
-      ({
-        signal: new AbortController().signal,
-        requestHeader: new Headers([["x-spine-delivery-revalidate", "true"]]),
-        responseHeader: new Headers(),
-      }) as never;
-    const fresh = revalidate();
-
-    await core.shards.pickShard(create(PickUpShardSchema, { shard, worker: first }), fresh);
-    expect(
-      (fresh as { responseHeader: Headers }).responseHeader.get("x-spine-delivery-revalidation"),
-    ).toBe("picked");
-
-    const conflicting = revalidate();
-    await expect(
-      core.shards.pickShard(create(PickUpShardSchema, { shard, worker: second }), conflicting),
-    ).resolves.toMatchObject({ value: { case: "alreadyPickedUp" } });
-    expect(
-      (conflicting as { responseHeader: Headers }).responseHeader.get(
-        "x-spine-delivery-revalidation",
-      ),
-    ).toBe("lost");
+  it("renews on a repeat pickup by the same worker and rejects another worker", async () => {
+    let now = create(TimestampSchema, { seconds: 12n, nanos: 1 });
+    const core = InMemoryDelivery.create({ now: () => now });
+    await core.shards.pickShard(pickup(), context);
+    now = create(TimestampSchema, { seconds: 12n, nanos: 2 });
+    expect((await core.shards.pickShard(pickup(), context)).value?.case).toBe("pickedUp");
+    const busy = await core.shards.pickShard(pickup(rival), context);
+    expect(busy.value?.case).toBe("alreadyPickedUp");
+    if (busy.value?.case === "alreadyPickedUp") expect(busy.value.value.whenPicked?.nanos).toBe(2);
+    core.close();
   });
 
-  it("counts only TO_DELIVER messages across replacement and deletion", async () => {
+  it("does not release another worker's shard", async () => {
     const core = InMemoryDelivery.create();
-    const pending = {
-      signal: new AbortController().signal,
-      requestHeader: new Headers([["x-spine-delivery-pickup-mode", "pending"]]),
-      responseHeader: new Headers(),
-    } as never;
-    const request = create(PickUpShardSchema, { shard, worker });
-    const message = pendingMessage("status");
-    await core.inbox.writeOne(create(WriteMessageSchema, { message }), context);
-    await expect(core.shards.pickShard(request, pending)).resolves.toMatchObject({
-      value: { case: "pickedUp" },
-    });
-    await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
-    const delivered = create(InboxMessageSchema, {
-      ...message,
-      status: InboxMessageStatus.DELIVERED,
-    });
-    await core.inbox.writeOne(create(WriteMessageSchema, { message: delivered }), context);
-    await expect(core.shards.pickShard(request, pending)).rejects.toMatchObject({
-      code: Code.FailedPrecondition,
-    });
-    await core.inbox.writeOne(create(WriteMessageSchema, { message }), context);
-    await expect(core.shards.pickShard(request, pending)).resolves.toMatchObject({
-      value: { case: "pickedUp" },
-    });
-    await core.inbox.removeOne(create(RemoveMessageSchema, { message }), context);
-    await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
-    await expect(core.shards.pickShard(request, pending)).rejects.toMatchObject({
-      code: Code.FailedPrecondition,
-    });
-  });
-  it("conditionally refuses an empty shard without creating a session", async () => {
-    const core = InMemoryDelivery.create();
-    const pending = {
-      signal: new AbortController().signal,
-      requestHeader: new Headers([["x-spine-delivery-pickup-mode", "pending"]]),
-      responseHeader: new Headers(),
-    } as never;
-    const request = create(PickUpShardSchema, { shard, worker });
-
-    let outcome: unknown;
-    try {
-      await core.shards.pickShard(request, pending);
-    } catch (error) {
-      outcome = error;
-    }
-    expect(outcome).toMatchObject({ code: Code.FailedPrecondition });
-    expect((outcome as ConnectError).metadata.get("x-spine-delivery-outcome")).toBe(
-      "no-pending-work",
+    await core.shards.pickShard(pickup(), context);
+    await core.shards.releaseSession(release(rival), context);
+    expect((await core.shards.pickShard(pickup(rival), context)).value?.case).toBe(
+      "alreadyPickedUp",
     );
-    await expect(core.shards.pickShard(request, context)).resolves.toMatchObject({
-      value: { case: "pickedUp" },
-    });
+    await core.shards.releaseSession(release(), context);
+    expect((await core.shards.pickShard(pickup(rival), context)).value?.case).toBe("pickedUp");
+    core.close();
   });
 
-  it("conditionally picks up a shard with retained pending work and rejects malformed pickup modes", async () => {
-    const core = InMemoryDelivery.create();
-    await core.inbox.writeOne(
-      create(WriteMessageSchema, { message: pendingMessage("pending") }),
-      context,
+  it("takes over only after the configured processing timeout", async () => {
+    let now = create(TimestampSchema, { seconds: 1n });
+    const core = InMemoryDelivery.create({ now: () => now, processingTimeoutMs: 1_000 });
+    await core.shards.pickShard(pickup(), context);
+    now = create(TimestampSchema, { seconds: 2n });
+    expect((await core.shards.pickShard(pickup(rival), context)).value?.case).toBe(
+      "alreadyPickedUp",
     );
-    const request = create(PickUpShardSchema, { shard, worker });
-    const pending = {
-      signal: new AbortController().signal,
-      requestHeader: new Headers([["x-spine-delivery-pickup-mode", "pending"]]),
-      responseHeader: new Headers(),
-    } as never;
-    const malformed = {
-      signal: new AbortController().signal,
-      requestHeader: new Headers([["x-spine-delivery-pickup-mode", "anything-else"]]),
-      responseHeader: new Headers(),
-    } as never;
-
-    await expect(core.shards.pickShard(request, pending)).resolves.toMatchObject({
-      value: { case: "pickedUp" },
-    });
-    expect(
-      (pending as { responseHeader: Headers }).responseHeader.get("x-spine-delivery-outcome"),
-    ).toBe("pending-acknowledged");
-    await expect(core.shards.pickShard(request, pending)).resolves.toMatchObject({
-      value: { case: "alreadyPickedUp" },
-    });
-    expect(
-      (pending as { responseHeader: Headers }).responseHeader.get("x-spine-delivery-outcome"),
-    ).toBe("pending-acknowledged");
-    await expect(core.shards.pickShard(request, malformed)).rejects.toMatchObject({
-      code: Code.InvalidArgument,
-    });
+    now = create(TimestampSchema, { seconds: 2n, nanos: 1 });
+    expect((await core.shards.pickShard(pickup(rival), context)).value?.case).toBe("pickedUp");
+    core.close();
   });
 
-  it("rejects a delayed conditional loser after removal and observes arrivals on either side", async () => {
+  it("keeps zero-timeout shards held and keeps a repeat pickup monotonic", async () => {
+    let now = create(TimestampSchema, { seconds: 10n, nanos: 50 });
+    const core = InMemoryDelivery.create({ now: () => now, processingTimeoutMs: 0 });
+    await core.shards.pickShard(pickup(), context);
+    now = create(TimestampSchema, { seconds: 9n });
+    await core.shards.pickShard(pickup(), context);
+    now = create(TimestampSchema, { seconds: 20n });
+    const busy = await core.shards.pickShard(pickup(rival), context);
+    expect(busy.value?.case).toBe("alreadyPickedUp");
+    if (busy.value?.case === "alreadyPickedUp")
+      expect(busy.value.value.whenPicked).toMatchObject({ seconds: 10n, nanos: 50 });
+    core.close();
+  });
+
+  it("leaves younger sessions held and reports each explicit inactivity release once", async () => {
+    let now = create(TimestampSchema, { seconds: 5n, nanos: 100 });
+    const core = InMemoryDelivery.create({ now: () => now });
+    await core.shards.pickShard(pickup(), context);
+    now = create(TimestampSchema, { seconds: 6n, nanos: 99 });
+    const period = create(ReleaseExpiredSessionsSchema, {
+      inactivityPeriod: { seconds: 1n },
+    });
+    expect((await core.shards.releaseSessions(period, context)).shard).toEqual([]);
+    now = create(TimestampSchema, { seconds: 6n, nanos: 100 });
+    expect((await core.shards.releaseSessions(period, context)).shard).toHaveLength(1);
+    expect((await core.shards.releaseSessions(period, context)).shard).toEqual([]);
+    core.close();
+  });
+
+  it("rejects malformed pickup and inactivity requests before mutation", async () => {
     const core = InMemoryDelivery.create();
-    const request = create(PickUpShardSchema, { shard, worker });
-    const release = create(ReleaseShardSchema, { shard, worker });
-    const pending = {
-      signal: new AbortController().signal,
-      requestHeader: new Headers([["x-spine-delivery-pickup-mode", "pending"]]),
-      responseHeader: new Headers(),
-    } as never;
-    const winnerMessage = pendingMessage("winner");
-    await core.inbox.writeOne(create(WriteMessageSchema, { message: winnerMessage }), context);
-    await core.shards.pickShard(request, context);
-    await core.inbox.removeOne(create(RemoveMessageSchema, { message: winnerMessage }), context);
-    await core.shards.releaseSession(release, context);
-
-    await expect(core.shards.pickShard(request, pending)).rejects.toMatchObject({
-      code: Code.FailedPrecondition,
-    });
-    const before = pendingMessage("before");
-    await core.inbox.writeOne(create(WriteMessageSchema, { message: before }), context);
-    await expect(core.shards.pickShard(request, pending)).resolves.toMatchObject({
-      value: { case: "pickedUp" },
-    });
-    await core.inbox.removeOne(create(RemoveMessageSchema, { message: before }), context);
-    await core.shards.releaseSession(release, context);
-    await expect(core.shards.pickShard(request, pending)).rejects.toMatchObject({
-      code: Code.FailedPrecondition,
-    });
-
-    await core.inbox.writeOne(
-      create(WriteMessageSchema, { message: pendingMessage("after") }),
-      context,
+    expect(() => core.shards.pickShard(create(PickUpShardSchema, { shard }), context)).toThrow(
+      expect.objectContaining({ code: Code.InvalidArgument }),
     );
-    await expect(core.shards.pickShard(request, pending)).resolves.toMatchObject({
-      value: { case: "pickedUp" },
-    });
-  });
-
-  it("allows exactly one active pickup and allows reacquisition after worker-agnostic release", async () => {
-    const core = InMemoryDelivery.create();
-    const request = create(PickUpShardSchema, { shard, worker });
-    const results = await Promise.all(
-      Array.from({ length: 20 }, () => Promise.resolve(core.shards.pickShard(request, context))),
-    );
-    expect(results.filter((value) => value.value?.case === "pickedUp")).toHaveLength(1);
-    await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
-    await expect(core.shards.pickShard(request, context)).resolves.toMatchObject({
-      value: { case: "pickedUp" },
-    });
-  });
-
-  it("detaches already-picked-up workers and requires a release worker", async () => {
-    const core = InMemoryDelivery.create();
-    const request = create(PickUpShardSchema, { shard, worker });
-    await core.shards.pickShard(request, context);
-    const rejected = await core.shards.pickShard(request, context);
-    if (rejected.value?.case !== "alreadyPickedUp") throw new Error("Expected rejection.");
-    if (rejected.value.value.worker === undefined) throw new Error("Expected worker.");
-    rejected.value.value.worker.value = "mutated";
-    const again = await core.shards.pickShard(request, context);
-    expect(again).toMatchObject({ value: { case: "alreadyPickedUp", value: { worker } } });
-    await expect(
-      core.shards.releaseSession(create(ReleaseShardSchema, { shard }), context),
-    ).rejects.toMatchObject({ code: Code.InvalidArgument });
-  });
-
-  it("uses strict automatic and inclusive manual expiration boundaries", async () => {
-    let now = 100;
-    const core = InMemoryDelivery.create({ processingTimeoutMs: 10, now: () => now });
-    const request = create(PickUpShardSchema, { shard, worker });
-    await core.shards.pickShard(request, context);
-    now = 110;
-    await expect(core.shards.pickShard(request, context)).resolves.toMatchObject({
-      value: { case: "alreadyPickedUp" },
-    });
-    const released = await core.shards.releaseSessions(
-      create(ReleaseExpiredSessionsSchema, {
-        inactivityPeriod: { seconds: 0n, nanos: 10_000_000 },
-      }),
-      context,
-    );
-    expect(released.shard).toHaveLength(1);
-    await expect(core.shards.pickShard(request, context)).resolves.toMatchObject({
-      value: { case: "pickedUp" },
-    });
-  });
-
-  it("takes over one millisecond after timeout and never takes over when timeout is zero", async () => {
-    let now = 0;
-    const request = create(PickUpShardSchema, { shard, worker });
-    const strict = InMemoryDelivery.create({ processingTimeoutMs: 10, now: () => now });
-    await strict.shards.pickShard(request, context);
-    now = 11;
-    await expect(strict.shards.pickShard(request, context)).resolves.toMatchObject({
-      value: { case: "pickedUp" },
-    });
-    const disabled = InMemoryDelivery.create({ processingTimeoutMs: 0, now: () => now });
-    await disabled.shards.pickShard(request, context);
-    now = 1_000_000;
-    await expect(disabled.shards.pickShard(request, context)).resolves.toMatchObject({
-      value: { case: "alreadyPickedUp" },
-    });
-  });
-
-  it("rejects an invalid clock before storing a shard session", async () => {
-    const request = create(PickUpShardSchema, { shard, worker });
-    for (const now of [Number.NaN, -62_135_596_800_001, 253_402_300_800_000]) {
-      const core = InMemoryDelivery.create({ now: () => now });
-      await expect(core.shards.pickShard(request, context)).rejects.toBeInstanceOf(RangeError);
-    }
-    const healthy = InMemoryDelivery.create({ now: () => 0 });
-    await expect(healthy.shards.pickShard(request, context)).resolves.toMatchObject({
-      value: { case: "pickedUp" },
-    });
-  });
-
-  it("treats absent and repeated releases as no-ops regardless of supplied worker", async () => {
-    const core = InMemoryDelivery.create();
-    const request = create(PickUpShardSchema, { shard, worker });
-    await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
-    await core.shards.pickShard(request, context);
-    await core.shards.releaseSession(
-      create(ReleaseShardSchema, {
-        shard,
-        worker: create(WorkerIdSchema, { nodeId: { value: "other" }, value: "other" }),
-      }),
-      context,
-    );
-    await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
-    await expect(core.shards.pickShard(request, context)).resolves.toMatchObject({
-      value: { case: "pickedUp" },
-    });
-  });
-
-  it("rejects malformed shard workers and protobuf-overflow durations", async () => {
-    const core = InMemoryDelivery.create();
-    await expect(
-      core.shards.releaseSessions(create(ReleaseExpiredSessionsSchema), context),
-    ).rejects.toMatchObject({ code: Code.InvalidArgument });
-    await expect(
-      core.shards.pickShard(
-        create(PickUpShardSchema, { shard: { index: -1, ofTotal: 1 }, worker }),
-        context,
-      ),
-    ).rejects.toMatchObject({ code: Code.InvalidArgument });
-    await expect(
-      core.shards.pickShard(create(PickUpShardSchema, { shard, worker: { value: "" } }), context),
-    ).rejects.toMatchObject({ code: Code.InvalidArgument });
-    await expect(
+    expect(() =>
       core.shards.pickShard(
         create(PickUpShardSchema, {
           shard,
-          worker: { nodeId: { value: "node" }, value: "x".repeat(129) },
+          worker: create(WorkerIdSchema, { nodeId: { value: "node" } }),
         }),
         context,
       ),
-    ).rejects.toMatchObject({ code: Code.InvalidArgument });
-    await expect(
+    ).toThrow(expect.objectContaining({ code: Code.InvalidArgument }));
+    expect(() =>
       core.shards.releaseSessions(
         create(ReleaseExpiredSessionsSchema, {
-          inactivityPeriod: { seconds: 315_576_000_001n, nanos: 0 },
+          inactivityPeriod: { seconds: -1n },
         }),
         context,
       ),
-    ).rejects.toMatchObject({ code: Code.InvalidArgument });
+    ).toThrow(expect.objectContaining({ code: Code.InvalidArgument }));
+    expect((await core.shards.pickShard(pickup(), context)).value?.case).toBe("pickedUp");
+    core.close();
   });
 
-  it("rejects impossible shard identities before pickup or release admission", async () => {
-    const core = InMemoryDelivery.create();
-    const impossible = create(ShardIndexSchema, { index: 1, ofTotal: 1 });
-    await expect(
-      core.shards.pickShard(create(PickUpShardSchema, { shard: impossible, worker }), context),
-    ).rejects.toMatchObject({ code: Code.InvalidArgument });
-    await expect(
-      core.shards.releaseSession(
-        create(ReleaseShardSchema, { shard: impossible, worker }),
-        context,
-      ),
-    ).rejects.toMatchObject({ code: Code.InvalidArgument });
-    await expect(
-      core.shards.pickShard(create(PickUpShardSchema, { shard, worker }), context),
-    ).resolves.toMatchObject({ value: { case: "pickedUp" } });
-  });
-
-  it("rejects a new session once tracked-shard capacity is full", async () => {
-    const core = InMemoryDelivery.create({ maxTrackedShards: 1 });
-    const other = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
-    await core.shards.pickShard(create(PickUpShardSchema, { shard, worker }), context);
-    await expect(
-      core.shards.pickShard(create(PickUpShardSchema, { shard: other, worker }), context),
-    ).rejects.toMatchObject({ code: Code.ResourceExhausted });
-  });
-
-  it("prunes released message-free shards so normal churn does not consume capacity", async () => {
-    const core = InMemoryDelivery.create({ maxTrackedShards: 1 });
-    const other = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
-    await core.shards.pickShard(create(PickUpShardSchema, { shard, worker }), context);
-    await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
-    await expect(
-      core.shards.pickShard(create(PickUpShardSchema, { shard: other, worker }), context),
-    ).resolves.toMatchObject({ value: { case: "pickedUp" } });
-  });
-
-  it("does not manually expire below the threshold", async () => {
-    let now = 0;
+  it("releases all sessions at the exact inactivity threshold without truncation", async () => {
+    let now = create(TimestampSchema, { seconds: 1n });
     const core = InMemoryDelivery.create({ now: () => now });
-    const request = create(PickUpShardSchema, { shard, worker });
-    await core.shards.pickShard(request, context);
-    now = 9;
+    for (let index = 0; index < 1_001; index++) {
+      const manyShard = create(ShardIndexSchema, { index, ofTotal: 1_001 });
+      await core.shards.pickShard(create(PickUpShardSchema, { shard: manyShard, worker }), context);
+    }
+    now = create(TimestampSchema, { seconds: 2n });
     const released = await core.shards.releaseSessions(
       create(ReleaseExpiredSessionsSchema, {
-        inactivityPeriod: { seconds: 0n, nanos: 10_000_000 },
+        inactivityPeriod: { seconds: 1n },
       }),
       context,
     );
-    expect(released.shard).toHaveLength(0);
-    await expect(core.shards.pickShard(request, context)).resolves.toMatchObject({
-      value: { case: "alreadyPickedUp" },
-    });
-  });
-
-  it("releases every eligible active shard atomically at the manual boundary", async () => {
-    let now = 0;
-    const core = InMemoryDelivery.create({ now: () => now });
-    const first = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
-    const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
-    await core.shards.pickShard(create(PickUpShardSchema, { shard: first, worker }), context);
-    await core.shards.pickShard(create(PickUpShardSchema, { shard: second, worker }), context);
-    now = 10;
-    const released = await core.shards.releaseSessions(
-      create(ReleaseExpiredSessionsSchema, {
-        inactivityPeriod: { seconds: 0n, nanos: 10_000_000 },
-      }),
-      context,
-    );
-    expect(released.shard?.map((value) => value.shard?.index)).toEqual([0, 1]);
-    expect(released.shard).toMatchObject([
-      {
-        worker,
-        whenPicked: { seconds: 0n, nanos: 0 },
-        whenReleased: { seconds: 0n, nanos: 10_000_000 },
-      },
-      {
-        worker,
-        whenPicked: { seconds: 0n, nanos: 0 },
-        whenReleased: { seconds: 0n, nanos: 10_000_000 },
-      },
-    ]);
-    await expect(
-      core.shards.pickShard(create(PickUpShardSchema, { shard: first, worker }), context),
-    ).resolves.toMatchObject({ value: { case: "pickedUp" } });
-    await expect(
-      core.shards.pickShard(create(PickUpShardSchema, { shard: second, worker }), context),
-    ).resolves.toMatchObject({ value: { case: "pickedUp" } });
+    expect(released.shard).toHaveLength(1_001);
+    core.close();
   });
 });
-
-function pendingMessage(uuid: string) {
-  return create(InboxMessageSchema, {
-    id: { uuid, index: shard },
-    signalId: { value: "signal" },
-    inboxId: { entityId: { id: { typeUrl: "example.Entity" } }, typeUrl: "example.State" },
-    payload: {
-      case: "command",
-      value: create(CommandSchema, { message: { typeUrl: "example.Command" } }),
-    },
-    label: 1,
-    status: 1,
-    whenReceived: { seconds: 1n, nanos: 0 },
-    version: 1,
-  });
-}

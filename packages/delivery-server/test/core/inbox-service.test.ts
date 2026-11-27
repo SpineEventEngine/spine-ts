@@ -39,6 +39,60 @@ const context = { signal: new AbortController().signal } as never;
 const shard = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
 
 describe("in-memory Inbox", () => {
+  it("accepts batches and pages beyond the former 100 and 1000 record cutoffs", async () => {
+    const core = InMemoryDelivery.create();
+    const records = Array.from({ length: 1_001 }, (_, index) =>
+      message(`unbounded-${String(index)}`, 1, index),
+    );
+    await core.inbox.writeMany(create(WriteMessagesSchema, { shard, message: records }), context);
+    const page = await core.inbox.findManyInShard(
+      create(ReadMessagesSinceTimeSchema, { shard, pageSize: 1_001 }),
+      context,
+    );
+    expect(page.message).toHaveLength(1_001);
+  });
+
+  it("removes a reverse-order batch while retaining survivor order and newest work", async () => {
+    const core = InMemoryDelivery.create();
+    const rows = Array.from({ length: 512 }, (_, index) =>
+      message(`batch-${String(index)}`, 1, index),
+    );
+    await core.inbox.writeMany(create(WriteMessagesSchema, { shard, message: rows }), context);
+    const removed = rows.filter((_row, index) => index % 2 === 1).reverse();
+    const duplicate = removed[0];
+    if (duplicate === undefined) throw new Error("Expected a batch row to remove.");
+    await core.inbox.removeMany(
+      create(RemoveMessagesSchema, {
+        shard,
+        message: [...removed, duplicate, message("missing-batch", 1, 0)],
+      }),
+      context,
+    );
+
+    const expected = rows.filter((_row, index) => index % 2 === 0);
+    const page = await core.inbox.findManyInShard(
+      create(ReadMessagesSinceTimeSchema, { shard, pageSize: 512 }),
+      context,
+    );
+    expect((page.message ?? []).map((row) => row.id?.uuid)).toEqual(
+      expected.map((row) => row.id?.uuid),
+    );
+    expect((await core.inbox.newestMessageToDeliver(shard, context)).message?.id?.uuid).toBe(
+      "batch-510",
+    );
+    core.close();
+  });
+
+  it("accepts a payload and response beyond the former byte cutoffs", async () => {
+    const core = InMemoryDelivery.create();
+    const large = message("large", 1, 1, shard, 0, 4_194_305);
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: large }), context);
+    const found = await core.inbox.findOne(id("large", shard), context);
+    expect(found.message?.payload?.case).toBe("command");
+    expect(
+      toBinary(OptionalInboxMessageSchema, create(OptionalInboxMessageSchema, found)).byteLength,
+    ).toBeGreaterThan(4_194_304);
+  });
   it("upserts duplicate identities and returns detached strict ordered pages", async () => {
     const core = InMemoryDelivery.create();
     await core.inbox.writeOne(create(WriteMessageSchema, { message: message("a", 1, 2) }), context);
@@ -67,6 +121,22 @@ describe("in-memory Inbox", () => {
       context,
     );
     expect(again.message?.[0]?.id?.index?.index).toBe(0);
+    const zeroCursor = await core.inbox.findManyInShard(
+      create(ReadMessagesSinceTimeSchema, { shard, pageSize: 10, sinceWhen: { seconds: 0n } }),
+      context,
+    );
+    expect(zeroCursor.message).toEqual(again.message);
+  });
+
+  it("returns UNKNOWN for a nonpositive wire page size", () => {
+    const core = InMemoryDelivery.create();
+    for (const pageSize of [0, -1])
+      expect(() =>
+        core.inbox.findManyInShard(
+          create(ReadMessagesSinceTimeSchema, { shard, pageSize }),
+          context,
+        ),
+      ).toThrow(expect.objectContaining({ code: Code.Unknown }));
   });
 
   it("rejects malformed direct messages before mutation", async () => {
@@ -104,16 +174,6 @@ describe("in-memory Inbox", () => {
     await expect(
       core.inbox.writeOne(create(WriteMessageSchema, { message: poison }), context),
     ).rejects.toMatchObject({ code: Code.InvalidArgument });
-    const oversized = message("oversized", 1, 1);
-    oversized.payload = {
-      case: "command",
-      value: create(CommandSchema, {
-        message: { typeUrl: "example.Payload", value: new Uint8Array(1_048_577) },
-      }),
-    };
-    await expect(
-      core.inbox.writeOne(create(WriteMessageSchema, { message: oversized }), context),
-    ).rejects.toMatchObject({ code: Code.InvalidArgument });
     const invalid = message("invalid", 1, 1);
     invalid.label = 0;
     await expect(
@@ -125,101 +185,82 @@ describe("in-memory Inbox", () => {
     expect((await core.inbox.findOne(id("safe", shard), context)).message).toBeUndefined();
   });
 
-  it("rejects retained message, byte, and shard capacity atomically", async () => {
-    const messages = InMemoryDelivery.create({ maxRetainedMessages: 1 });
-    await expect(
-      messages.inbox.writeMany(
-        create(WriteMessagesSchema, {
-          shard,
-          message: [message("one", 1, 1), message("two", 1, 1)],
-        }),
-        context,
-      ),
-    ).rejects.toMatchObject({ code: Code.ResourceExhausted });
-    expect((await messages.inbox.findOne(id("one", shard), context)).message).toBeUndefined();
-
-    const bytes = InMemoryDelivery.create({ maxRetainedBytes: 1 });
-    await expect(
-      bytes.inbox.writeOne(
-        create(WriteMessageSchema, { message: message("bytes", 1, 1) }),
-        context,
-      ),
-    ).rejects.toMatchObject({ code: Code.ResourceExhausted });
-
-    const shards = InMemoryDelivery.create({ maxTrackedShards: 1 });
-    const other = create(ShardIndexSchema, { index: 0, ofTotal: 3 });
-    await shards.inbox.writeOne(
-      create(WriteMessageSchema, { message: message("first", 1, 1) }),
-      context,
-    );
-    await expect(
-      shards.inbox.writeOne(
-        create(WriteMessageSchema, { message: message("second", 1, 1, other) }),
-        context,
-      ),
-    ).rejects.toMatchObject({ code: Code.ResourceExhausted });
-  });
-
-  it("bounds full records and explicitly rejects an oversized requested page", async () => {
+  it("returns a full page larger than the former RPC response ceiling", async () => {
     const core = InMemoryDelivery.create();
     const records = Array.from({ length: 5 }, (_, index) =>
       message(`large-${String(index)}`, 1, index, shard, 0, 900_000),
     );
     await core.inbox.writeMany(create(WriteMessagesSchema, { shard, message: records }), context);
-    const one = await core.inbox.findOne(id("large-0", shard), context);
-    expect(
-      toBinary(OptionalInboxMessageSchema, create(OptionalInboxMessageSchema, one)).byteLength,
-    ).toBeLessThanOrEqual(4_194_304);
-    const newest = await core.inbox.newestMessageToDeliver(shard, context);
-    expect(
-      toBinary(OptionalInboxMessageSchema, create(OptionalInboxMessageSchema, newest)).byteLength,
-    ).toBeLessThanOrEqual(4_194_304);
-    expect(() =>
-      core.inbox.findManyInShard(
-        create(ReadMessagesSinceTimeSchema, { shard, pageSize: 5 }),
-        context,
-      ),
-    ).toThrow(
-      expect.objectContaining({
-        code: Code.ResourceExhausted,
-        rawMessage: "Delivery page exceeds the 4 MiB response limit; request a smaller page.",
-      }),
-    );
     const page = await core.inbox.findManyInShard(
-      create(ReadMessagesSinceTimeSchema, { shard, pageSize: 4 }),
+      create(ReadMessagesSinceTimeSchema, { shard, pageSize: 5 }),
       context,
     );
+    expect(page.message).toHaveLength(5);
     expect(
       toBinary(PageOfMessagesSchema, create(PageOfMessagesSchema, page)).byteLength,
-    ).toBeLessThanOrEqual(4_194_304);
-
-    const oversizedRecord = message("record", 1, 1);
-    if (oversizedRecord.inboxId === undefined) throw new Error("Expected Inbox ID.");
-    oversizedRecord.inboxId.typeUrl = "x".repeat(4_194_304);
-    await expect(
-      core.inbox.writeOne(create(WriteMessageSchema, { message: oversizedRecord }), context),
-    ).rejects.toMatchObject({ code: Code.InvalidArgument });
+    ).toBeGreaterThan(4_194_304);
   });
 
-  it("rejects write and remove batch lengths before inspecting records", async () => {
+  it("keeps more than 32 MiB of separately written inbox rows", async () => {
+    const core = InMemoryDelivery.create();
+    try {
+      for (let i = 0; i < 9; i++) {
+        const row = message(`stored-${String(i)}`, 1, i, shard, 0, 4 * 1024 * 1024);
+        await core.inbox.writeOne(create(WriteMessageSchema, { message: row }), context);
+      }
+      for (const key of ["stored-0", "stored-8"]) {
+        const found = await core.inbox.findOne(id(key, shard), context);
+        expect(found.message?.id?.uuid).toBe(key);
+      }
+    } finally {
+      core.close();
+    }
+  });
+
+  it("accepts empty batches without a shard header and validates nonempty writes", async () => {
     const core = InMemoryDelivery.create();
     for (const request of [
+      core.inbox.writeMany(create(WriteMessagesSchema), context),
+      core.inbox.removeMany(create(RemoveMessagesSchema), context),
+    ]) {
+      await expect(request).resolves.toEqual({});
+    }
+    await expect(
       core.inbox.writeMany(
         create(WriteMessagesSchema, { shard, message: Array.from({ length: 101 }, () => ({})) }),
         context,
       ),
-      core.inbox.removeMany(
-        create(RemoveMessagesSchema, { shard, message: Array.from({ length: 101 }, () => ({})) }),
-        context,
-      ),
-      core.inbox.writeMany(create(WriteMessagesSchema, { shard, message: [] }), context),
-      core.inbox.removeMany(create(RemoveMessagesSchema, { shard, message: [] }), context),
-    ]) {
-      await expect(request).rejects.toMatchObject({
-        code: Code.InvalidArgument,
-        rawMessage: "Delivery message batch is invalid.",
-      });
-    }
+    ).rejects.toMatchObject({
+      code: Code.InvalidArgument,
+      rawMessage: "Delivery message identity is incomplete.",
+    });
+  });
+
+  it("groups mixed batches by inbox ID shard and removes by identity alone", async () => {
+    const core = InMemoryDelivery.create();
+    const other = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    const first = message("mixed-a", 1, 1);
+    const second = message("mixed-b", 1, 2, other);
+    const completed = { ...first, status: InboxMessageStatus.DELIVERED };
+    await core.inbox.writeMany(
+      create(WriteMessagesSchema, { message: [first, second, completed] }),
+      context,
+    );
+    expect((await core.inbox.findOne(id("mixed-a", shard), context)).message?.status).toBe(
+      InboxMessageStatus.DELIVERED,
+    );
+    expect((await core.inbox.findOne(id("mixed-b", other), context)).message).toBeDefined();
+    await core.inbox.removeMany(
+      create(RemoveMessagesSchema, {
+        message: [
+          create(InboxMessageSchema, { id: first.id }),
+          create(InboxMessageSchema, { id: second.id }),
+        ],
+      }),
+      context,
+    );
+    expect((await core.inbox.findOne(id("mixed-a", shard), context)).message).toBeUndefined();
+    expect((await core.inbox.findOne(id("mixed-b", other), context)).message).toBeUndefined();
   });
 
   it("rejects impossible shard identities before Inbox reads or admission", async () => {
@@ -297,7 +338,7 @@ describe("in-memory Inbox", () => {
     expect((await core.inbox.findOne(id("same", other), context)).message).toBeDefined();
   });
 
-  it("uses strict nanos and bounded pages and starts a new core empty", async () => {
+  it("uses strict nanos and starts a new core empty", async () => {
     const core = InMemoryDelivery.create();
     await core.inbox.writeOne(
       create(WriteMessageSchema, { message: message("nanos", 1, 1, shard, 5) }),
@@ -318,12 +359,6 @@ describe("in-memory Inbox", () => {
     expect(() =>
       core.inbox.findManyInShard(
         create(ReadMessagesSinceTimeSchema, { shard, pageSize: 0 }),
-        context,
-      ),
-    ).toThrow();
-    expect(() =>
-      core.inbox.findManyInShard(
-        create(ReadMessagesSinceTimeSchema, { shard, pageSize: 1001 }),
         context,
       ),
     ).toThrow();

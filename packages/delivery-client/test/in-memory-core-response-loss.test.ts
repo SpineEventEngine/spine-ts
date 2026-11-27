@@ -12,518 +12,285 @@
  * the License.
  */
 
-import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
-import { describe, expect, it, vi } from "vitest";
-
-import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
-import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
+import { createRouterTransport, ConnectError, Code } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
-import { timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { describe, expect, it, vi } from "vitest";
+import {
+  InboxService,
+  ShardService,
+  WriteMessageSchema,
+} from "@spine-event-engine/proto/delivery-server";
+import { InboxMessageStatus } from "@spine-event-engine/proto/delivery";
 import { Time } from "@spine-event-engine/core/time";
-import { DeliveryBuilder, ShardIndex, type InboxMessage } from "@spine-event-engine/server";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
-import { DeliveryClient, DeliveryOutcomeUnknownError, RemoteWorkRegistry } from "../src/index.js";
+import {
+  ShardIndex,
+  type DeliveryWorkSession,
+  type InboxMessage,
+} from "@spine-event-engine/server";
+import { deliveryPortAccess } from "@spine-event-engine/server/spi/delivery";
+import { DeliveryClient, DeliveryOutcomeUnknownError } from "../src/client/client.js";
 import { RemoteInbox } from "../src/remote/adapters.js";
+import { DeliveryMessageCodec } from "../src/wire/codec.js";
 import { domainMessage } from "./shared-fixtures.js";
 
-describe("in-memory delivery core response loss", () => {
-  it("persists an application-clock completion through the existing Inbox gRPC service", async () => {
+const session = { kind: "EXCLUSIVE", shard: ShardIndex.single() } as DeliveryWorkSession;
+
+type PageOperation = (
+  messages: readonly InboxMessage[],
+  session: DeliveryWorkSession,
+  options: undefined,
+  process: (isRecent: (message: InboxMessage) => boolean) => Promise<boolean>,
+  onWritesStored: (deadlineNs: (message: InboxMessage) => bigint | undefined) => void,
+) => Promise<boolean>;
+
+function pageOperation(inbox: RemoteInbox): PageOperation {
+  return (inbox as RemoteInbox & { [deliveryPortAccess]: PageOperation })[deliveryPortAccess];
+}
+
+describe("remote page persistence", () => {
+  it("writes changed rows and then removes duplicates in one batch per page", async () => {
     const core = InMemoryDelivery.create();
+    const writes = vi.fn(core.inbox.writeMany);
+    const removals = vi.fn(core.inbox.removeMany);
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
-        router.service(InboxService, core.inbox);
+        router.service(InboxService, { ...core.inbox, writeMany: writes, removeMany: removals });
+        router.service(ShardService, core.shards);
       }),
     );
     const inbox = new RemoteInbox(client);
-    const pending = domainMessage("completion-wire");
-    let now = 120_000;
-    const previous = Time.setProvider({
-      currentTime: () => timestampFromDate(new Date(now)),
-    });
+    const delivered = domainMessage("page-delivered");
+    const duplicate = domainMessage("page-duplicate");
+    await client.writeMany([delivered, duplicate]);
+    writes.mockClear();
+    await pageOperation(inbox)(
+      [delivered, duplicate],
+      session,
+      undefined,
+      async () => {
+        await inbox.markDelivered(delivered, undefined, session);
+        await inbox.removeDuplicate(duplicate, undefined, session);
+        return true;
+      },
+      vi.fn(),
+    );
+    expect(writes).toHaveBeenCalledTimes(1);
+    expect(removals).toHaveBeenCalledTimes(1);
+    expect((await client.findOne(delivered.id))?.status).toBe("DELIVERED");
+    expect(await client.findOne(duplicate.id)).toBeUndefined();
+    client.close();
+    core.close();
+  });
+
+  it("leaves removals untouched when the page write fails", async () => {
+    const core = InMemoryDelivery.create();
+    const removals = vi.fn(core.inbox.removeMany);
+    const client = DeliveryClient.usingTransport(
+      createRouterTransport((router) => {
+        router.service(InboxService, {
+          ...core.inbox,
+          writeMany: () => {
+            throw new ConnectError("store failed", Code.Unavailable);
+          },
+          removeMany: removals,
+        });
+        router.service(ShardService, core.shards);
+      }),
+    );
+    const inbox = new RemoteInbox(client);
+    const delivered = domainMessage("failed-delivered");
+    const duplicate = domainMessage("failed-duplicate");
+    await client.writeOne(delivered);
+    await client.writeOne(duplicate);
+    await expect(
+      pageOperation(inbox)(
+        [delivered, duplicate],
+        session,
+        undefined,
+        async () => {
+          await inbox.markDelivered(delivered, undefined, session);
+          await inbox.removeDuplicate(duplicate, undefined, session);
+          return true;
+        },
+        vi.fn(),
+      ),
+    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    expect(removals).not.toHaveBeenCalled();
+    expect((await client.findOne(delivered.id))?.status).toBe("TO_DELIVER");
+    expect((await client.findOne(duplicate.id))?.status).toBe("TO_DELIVER");
+    client.close();
+    core.close();
+  });
+
+  it("reports stored completions before a failed removal batch", async () => {
+    const core = InMemoryDelivery.create();
+    const stored = vi.fn();
+    const client = DeliveryClient.usingTransport(
+      createRouterTransport((router) => {
+        router.service(InboxService, {
+          ...core.inbox,
+          removeMany: () => {
+            throw new ConnectError("removal failed", Code.Unavailable);
+          },
+        });
+        router.service(ShardService, core.shards);
+      }),
+    );
+    const inbox = new RemoteInbox(client);
+    const delivered = domainMessage("stored-before-removal");
+    const duplicate = domainMessage("still-pending");
+    await client.writeMany([delivered, duplicate]);
+    const apply = pageOperation(inbox);
+    await expect(
+      apply(
+        [delivered, duplicate],
+        session,
+        undefined,
+        async () => {
+          await inbox.markDelivered(delivered, undefined, session);
+          await inbox.removeDuplicate(duplicate, undefined, session);
+          return true;
+        },
+        stored,
+      ),
+    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    expect(stored).toHaveBeenCalledTimes(1);
+    expect((await client.findOne(delivered.id))?.status).toBe("DELIVERED");
+    expect((await client.findOne(duplicate.id))?.status).toBe("TO_DELIVER");
+    client.close();
+    core.close();
+  });
+
+  it("compares retained deadlines with full nanosecond precision", async () => {
+    const core = InMemoryDelivery.create();
+    const removals = vi.fn(core.inbox.removeMany);
+    const client = DeliveryClient.usingTransport(
+      createRouterTransport((router) => {
+        router.service(InboxService, { ...core.inbox, removeMany: removals });
+      }),
+    );
+    const inbox = new RemoteInbox(client);
+    const wire = DeliveryMessageCodec.encode(domainMessage("precise-retention"));
+    wire.status = InboxMessageStatus.DELIVERED;
+    wire.keepUntil = create(TimestampSchema, { seconds: 1n, nanos: 123_456_789 });
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: wire }), {
+      signal: new AbortController().signal,
+    } as never);
+    const row = await client.findOne(domainMessage("precise-retention").id);
+    if (row === undefined) throw new Error("Stored row is missing.");
+    let now = create(TimestampSchema, { seconds: 1n, nanos: 123_456_789 });
+    const prior = Time.setProvider({ currentTime: () => now });
     try {
-      const received = await inbox.receive(pending);
-      expect((await client.findOne(received.message.id))?.keepUntil).toBeUndefined();
-
-      const completed = await inbox.markDelivered(received.message);
-      expect(completed?.keepUntil).toEqual(new Date(125_000));
-      expect((await client.findOne(received.message.id))?.keepUntil).toEqual(new Date(125_000));
-
-      now = 130_000;
-      expect(await inbox.markDelivered(received.message)).toEqual(completed);
-      expect((await client.findOne(received.message.id))?.keepUntil).toEqual(new Date(125_000));
+      const apply = pageOperation(inbox);
+      await apply([row], session, undefined, () => Promise.resolve(true), vi.fn());
+      expect(removals).not.toHaveBeenCalled();
+      now = create(TimestampSchema, { seconds: 1n, nanos: 123_456_790 });
+      await apply([row], session, undefined, () => Promise.resolve(true), vi.fn());
+      expect(removals).toHaveBeenCalledTimes(1);
     } finally {
-      Time.setProvider(previous);
+      Time.setProvider(prior);
+      client.close();
+      core.close();
     }
   });
 
-  it("removes a retained duplicate through shared delivery policy and the remote adapter", async () => {
+  it("discards a stopped page and lets the same session process a later page", async () => {
     const core = InMemoryDelivery.create();
+    const writes = vi.fn(core.inbox.writeMany);
+    const removals = vi.fn(core.inbox.removeMany);
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
-        router.service(InboxService, core.inbox);
+        router.service(InboxService, { ...core.inbox, writeMany: writes, removeMany: removals });
       }),
     );
     const inbox = new RemoteInbox(client);
-    const retained = {
-      ...domainMessage("retained"),
-      keepUntil: new Date(Date.now() + 60_000),
-    };
-    const duplicate = {
-      ...domainMessage("duplicate"),
-      signalId: retained.signalId,
-      keepUntil: retained.keepUntil,
-    };
-
-    await client.writeOne(retained);
-    await expect(inbox.markDelivered(retained)).resolves.toMatchObject({ status: "DELIVERED" });
-    await client.writeOne(duplicate);
-    const shard = ShardIndex.single();
-    const session = { kind: "EXCLUSIVE" as const, shard };
-    const onMessage = vi.fn();
-    const delivery = new DeliveryBuilder()
-      .withContext({ name: "RemoteRetainedDuplicate", multitenant: false })
-      .withStorageFactory({} as never)
-      .withInbox(inbox)
-      .withWorkRegistry({
-        sessionKind: "EXCLUSIVE",
-        pickUp: () => Promise.resolve(session),
-        validateOwnership: () => Promise.resolve(session),
-        release: () => Promise.resolve(true),
-      })
-      .build();
-
-    await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
-    expect(onMessage).not.toHaveBeenCalled();
-    await expect(client.findOne(duplicate.id)).resolves.toBeUndefined();
-  });
-
-  it("delivers after cleaning an expired retained identity through the remote adapter", async () => {
-    const core = InMemoryDelivery.create();
-    const client = DeliveryClient.usingTransport(
-      createRouterTransport((router) => {
-        router.service(InboxService, core.inbox);
-      }),
-    );
-    const inbox = new RemoteInbox(client);
-    const expired = {
-      ...domainMessage("expired"),
-      keepUntil: new Date(Date.now() - 60_000),
-    };
-    const pending = { ...domainMessage("pending"), signalId: expired.signalId };
-    await client.writeOne({ ...expired, status: "DELIVERED" });
+    const pending = domainMessage("stopped-page");
     await client.writeOne(pending);
-    expect((await client.findOne(expired.id))?.keepUntil?.getTime()).toBeLessThan(Date.now());
-    const shard = ShardIndex.single();
-    const session = { kind: "EXCLUSIVE" as const, shard };
-    const onMessage = vi.fn();
-    const delivery = new DeliveryBuilder()
-      .withContext({ name: "RemoteExpiredRetained", multitenant: false })
-      .withStorageFactory({} as never)
-      .withInbox(inbox)
-      .withWorkRegistry({
-        sessionKind: "EXCLUSIVE",
-        pickUp: () => Promise.resolve(session),
-        validateOwnership: () => Promise.resolve(session),
-        release: () => Promise.resolve(true),
-      })
-      .build();
-
-    await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
-    expect(onMessage).toHaveBeenCalledWith(expect.objectContaining({ id: pending.id }));
-    await expect(client.findOne(expired.id)).resolves.toBeUndefined();
-  });
-
-  it("continues a productive full remote page after cleanup removes its final cursor", async () => {
-    const core = InMemoryDelivery.create();
-    const client = DeliveryClient.usingTransport(
-      createRouterTransport((router) => {
-        router.service(InboxService, core.inbox);
-      }),
-    );
-    const inbox = new RemoteInbox(client);
-    const first = {
-      ...domainMessage("first"),
-      signalId: "first",
-      whenReceived: timestampFromDate(new Date(1_000)),
-    };
-    const expired = {
-      ...domainMessage("expired-cursor"),
-      signalId: "expired-cursor",
-      whenReceived: timestampFromDate(new Date(2_000)),
-      keepUntil: new Date(Date.now() - 60_000),
-    };
-    const later = {
-      ...domainMessage("later"),
-      signalId: "later",
-      whenReceived: timestampFromDate(new Date(2_000)),
-    };
-    await client.writeOne(first);
-    await client.writeOne({ ...expired, status: "DELIVERED" });
-    await client.writeOne(later);
-    const shard = ShardIndex.single();
-    const session = { kind: "EXCLUSIVE" as const, shard };
-    const onMessage = vi.fn((message: InboxMessage) => {
-      void message;
-    });
-    const delivery = new DeliveryBuilder()
-      .withContext({ name: "RemovedRemoteCursor", multitenant: false })
-      .withStorageFactory({} as never)
-      .withInbox(inbox)
-      .withWorkRegistry({
-        sessionKind: "EXCLUSIVE",
-        pickUp: () => Promise.resolve(session),
-        validateOwnership: () => Promise.resolve(session),
-        release: () => Promise.resolve(true),
-      })
-      .withPageSize(2)
-      .build();
-
-    await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
-    expect(onMessage.mock.calls.map(([message]) => message.id.value)).toEqual(["first", "later"]);
-    await expect(client.findOne(expired.id)).resolves.toBeUndefined();
-  });
-
-  it("keeps a surviving cursor through a fully removed remote page", async () => {
-    const core = InMemoryDelivery.create();
-    const client = DeliveryClient.usingTransport(
-      createRouterTransport((router) => {
-        router.service(InboxService, core.inbox);
-      }),
-    );
-    const inbox = new RemoteInbox(client);
-    const first = {
-      ...domainMessage("retained-first"),
-      signalId: "retained-first",
-      keepUntil: new Date(Date.now() + 60_000),
-    };
-    await client.writeOne(first);
-    for (const index of [1, 2, 3]) {
-      const expired = {
-        ...domainMessage(`expired-${String(index)}`),
-        signalId: `expired-${String(index)}`,
-        whenReceived: timestampFromDate(new Date((index + 1) * 1_000)),
-        keepUntil: new Date(Date.now() - 60_000),
-      };
-      await client.writeOne(expired);
-      await inbox.markDelivered(expired);
-    }
-    const later = {
-      ...domainMessage("after-removed-page"),
-      signalId: "after-removed-page",
-      whenReceived: timestampFromDate(new Date(5_000)),
-    };
-    await client.writeOne(later);
-    const shard = ShardIndex.single();
-    const session = { kind: "EXCLUSIVE" as const, shard };
-    const onMessage = vi.fn((message: InboxMessage) => {
-      void message;
-    });
-    const delivery = new DeliveryBuilder()
-      .withContext({ name: "AllRemovedRemotePage", multitenant: false })
-      .withStorageFactory({} as never)
-      .withInbox(inbox)
-      .withWorkRegistry({
-        sessionKind: "EXCLUSIVE",
-        pickUp: () => Promise.resolve(session),
-        validateOwnership: () => Promise.resolve(session),
-        release: () => Promise.resolve(true),
-      })
-      .withPageSize(2)
-      .build();
-
-    await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
-    expect(onMessage.mock.calls.map(([message]) => message.id.value)).toEqual([
-      "retained-first",
-      "after-removed-page",
-    ]);
-  });
-
-  it("starts at the beginning again when the first full page is wholly removed", async () => {
-    const core = InMemoryDelivery.create();
-    const client = DeliveryClient.usingTransport(
-      createRouterTransport((router) => {
-        router.service(InboxService, core.inbox);
-      }),
-    );
-    const inbox = new RemoteInbox(client);
-    for (const index of [1, 2]) {
-      const expired = {
-        ...domainMessage(`initial-expired-${String(index)}`),
-        signalId: `initial-expired-${String(index)}`,
-        whenReceived: timestampFromDate(new Date(index * 1_000)),
-        keepUntil: new Date(Date.now() - 60_000),
-      };
-      await client.writeOne(expired);
-      await inbox.markDelivered(expired);
-    }
-    const later = {
-      ...domainMessage("after-initial-removal"),
-      signalId: "after-initial-removal",
-      whenReceived: timestampFromDate(new Date(3_000)),
-    };
-    await client.writeOne(later);
-    const shard = ShardIndex.single();
-    const session = { kind: "EXCLUSIVE" as const, shard };
-    const onMessage = vi.fn((message: InboxMessage) => {
-      void message;
-    });
-    const delivery = new DeliveryBuilder()
-      .withContext({ name: "InitialRemovedRemotePage", multitenant: false })
-      .withStorageFactory({} as never)
-      .withInbox(inbox)
-      .withWorkRegistry({
-        sessionKind: "EXCLUSIVE",
-        pickUp: () => Promise.resolve(session),
-        validateOwnership: () => Promise.resolve(session),
-        release: () => Promise.resolve(true),
-      })
-      .withPageSize(2)
-      .build();
-
-    await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
-    expect(onMessage.mock.calls.map(([message]) => message.id.value)).toEqual([
-      "after-initial-removal",
-    ]);
-  });
-
-  it("continues after removing a duplicate at the end of a full remote page", async () => {
-    const core = InMemoryDelivery.create();
-    const client = DeliveryClient.usingTransport(
-      createRouterTransport((router) => {
-        router.service(InboxService, core.inbox);
-      }),
-    );
-    const inbox = new RemoteInbox(client);
-    const first = {
-      ...domainMessage("first-duplicate-source"),
-      signalId: "shared-signal",
-      keepUntil: new Date(Date.now() + 60_000),
-    };
-    const duplicate = {
-      ...domainMessage("duplicate-cursor"),
-      signalId: first.signalId,
-      whenReceived: timestampFromDate(new Date(2_000)),
-    };
-    const later = {
-      ...domainMessage("after-duplicate"),
-      signalId: "other-signal",
-      whenReceived: timestampFromDate(new Date(2_000)),
-    };
-    await client.writeOne(first);
-    await client.writeOne(duplicate);
-    await client.writeOne(later);
-    const shard = ShardIndex.single();
-    const session = { kind: "EXCLUSIVE" as const, shard };
-    const onMessage = vi.fn((message: InboxMessage) => {
-      void message;
-    });
-    const delivery = new DeliveryBuilder()
-      .withContext({ name: "DuplicateRemoteCursor", multitenant: false })
-      .withStorageFactory({} as never)
-      .withInbox(inbox)
-      .withWorkRegistry({
-        sessionKind: "EXCLUSIVE",
-        pickUp: () => Promise.resolve(session),
-        validateOwnership: () => Promise.resolve(session),
-        release: () => Promise.resolve(true),
-      })
-      .withPageSize(2)
-      .build();
-
-    await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
-    expect(onMessage.mock.calls.map(([message]) => message.id.value)).toEqual([
-      "first-duplicate-source",
-      "after-duplicate",
-    ]);
-    await expect(client.findOne(duplicate.id)).resolves.toBeUndefined();
-  });
-
-  it("recognizes a delivered acknowledgement committed before a lost response", async () => {
-    const core = InMemoryDelivery.create();
-    const normal = DeliveryClient.usingTransport(
-      createRouterTransport((router) => {
-        router.service(InboxService, core.inbox);
-      }),
-    );
-    const pending = domainMessage("lost-delivered");
-    await normal.writeOne(pending);
-    const lost = new RemoteInbox(
-      DeliveryClient.usingTransport(
-        createRouterTransport((router) => {
-          router.service(InboxService, {
-            ...core.inbox,
-            writeOne: async (request, context) => {
-              await core.inbox.writeOne(request, context);
-              throw new ConnectError("lost", Code.Unavailable);
-            },
-          });
-        }),
-      ),
-    );
-
-    await expect(lost.markDelivered(pending)).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
-    await expect(lost.markDelivered(pending)).resolves.toMatchObject({ status: "DELIVERED" });
-  });
-
-  it("makes a committed write reconcilable after its response is lost", async () => {
-    const core = InMemoryDelivery.create();
-    const transport = createRouterTransport((router) => {
-      router.service(InboxService, {
-        ...core.inbox,
-        writeOne: async (request, context) => {
-          await core.inbox.writeOne(request, context);
-          throw new ConnectError("lost", Code.Unavailable);
+    const apply = pageOperation(inbox);
+    expect(
+      await apply(
+        [pending],
+        session,
+        undefined,
+        async () => {
+          await inbox.markDelivered(pending, undefined, session);
+          return false;
         },
-      });
-    });
-    const client = DeliveryClient.usingTransport(transport);
-    const message = domainMessage();
-    await expect(client.writeOne(message)).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
-    await expect(client.findOne(message.id)).resolves.toMatchObject({ id: message.id });
-  });
-
-  it("makes a committed removal observable after its response is lost", async () => {
-    const core = InMemoryDelivery.create();
-    const initial = createRouterTransport((router) => {
-      router.service(InboxService, core.inbox);
-    });
-    const message = domainMessage("remove");
-    await DeliveryClient.usingTransport(initial).writeOne(message);
-    const transport = createRouterTransport((router) => {
-      router.service(InboxService, {
-        ...core.inbox,
-        removeOne: async (request, context) => {
-          await core.inbox.removeOne(request, context);
-          throw new ConnectError("lost", Code.Unavailable);
-        },
-      });
-    });
-    const client = DeliveryClient.usingTransport(transport);
-    await expect(client.removeOne(message)).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
-    await expect(client.findOne(message.id)).resolves.toBeUndefined();
-  });
-
-  it("retains no client-side marker after a lost pickup outcome", async () => {
-    const core = InMemoryDelivery.create();
-    let pickups = 0;
-    const transport = createRouterTransport((router) => {
-      router.service(ShardService, {
-        ...core.shards,
-        pickShard: async (request, context) => {
-          pickups += 1;
-          await core.shards.pickShard(request, context);
-          throw new ConnectError("lost", Code.Unavailable);
-        },
-      });
-    });
-    const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(transport));
-    await expect(
-      registry.pickUp(
-        ShardIndex.single(),
-        create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker-1" }),
+        vi.fn(),
       ),
-    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
-    await expect(
-      registry.pickUp(
-        ShardIndex.single(),
-        create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker-2" }),
+    ).toBe(false);
+    expect(writes).not.toHaveBeenCalled();
+    expect(removals).not.toHaveBeenCalled();
+    expect((await client.findOne(pending.id))?.status).toBe("TO_DELIVER");
+    expect(
+      await apply(
+        [pending],
+        session,
+        undefined,
+        async () => {
+          await inbox.markDelivered(pending, undefined, session);
+          return true;
+        },
+        vi.fn(),
       ),
-    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
-    expect(pickups).toBe(2);
+    ).toBe(true);
+    expect((await client.findOne(pending.id))?.status).toBe("DELIVERED");
+    client.close();
+    core.close();
   });
 
-  it("proves a lost release committed through a direct subsequent pickup", async () => {
+  it("classifies a mixed page by exact retention deadlines and removes expired completions", async () => {
     const core = InMemoryDelivery.create();
-    const normal = DeliveryClient.usingTransport(
-      createRouterTransport((router) => router.service(ShardService, core.shards)),
-    );
-    const session = await normal.pickUp(ShardIndex.single(), { nodeId: "node", value: "worker" });
-    if (session === undefined) throw new Error("Expected pickup.");
-    const lost = DeliveryClient.usingTransport(
-      createRouterTransport((router) => {
-        router.service(ShardService, {
-          ...core.shards,
-          releaseSession: async (request, context) => {
-            await core.shards.releaseSession(request, context);
-            throw new ConnectError("lost", Code.Unavailable);
-          },
-        });
-      }),
-    );
-    await expect(lost.release(session)).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
-    await expect(
-      normal.pickUp(ShardIndex.single(), { nodeId: "node", value: "next" }),
-    ).resolves.toBeDefined();
-  });
-
-  it("proves a lost expiration release committed through a direct pickup", async () => {
-    let now = 10;
-    const core = InMemoryDelivery.create({ now: () => now });
-    const normal = DeliveryClient.usingTransport(
-      createRouterTransport((router) => router.service(ShardService, core.shards)),
-    );
-    await normal.pickUp(ShardIndex.single(), { nodeId: "node", value: "worker" });
-    now = 11;
-    const lost = DeliveryClient.usingTransport(
-      createRouterTransport((router) => {
-        router.service(ShardService, {
-          ...core.shards,
-          releaseSessions: async (request, context) => {
-            await core.shards.releaseSessions(request, context);
-            throw new ConnectError("lost", Code.Unavailable);
-          },
-        });
-      }),
-    );
-    await expect(lost.releaseExpired(1)).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
-    await expect(
-      normal.pickUp(ShardIndex.single(), { nodeId: "node", value: "next" }),
-    ).resolves.toBeDefined();
-  });
-
-  it("observes 101 committed expired shard sessions", async () => {
-    let now = 0;
-    const core = InMemoryDelivery.create({ now: () => now });
     const client = DeliveryClient.usingTransport(
-      createRouterTransport((router) => router.service(ShardService, core.shards)),
+      createRouterTransport((router) => {
+        router.service(InboxService, core.inbox);
+      }),
     );
-    for (let index = 0; index < 101; index += 1) {
-      await client.pickUp(new ShardIndex(index, 101), {
-        nodeId: "node",
-        value: `worker-${String(index)}`,
-      });
+    const inbox = new RemoteInbox(client);
+    const future = DeliveryMessageCodec.encode(domainMessage("future-retained"));
+    future.status = InboxMessageStatus.DELIVERED;
+    future.keepUntil = create(TimestampSchema, { seconds: 10n, nanos: 400_000_001 });
+    const expired = DeliveryMessageCodec.encode(domainMessage("expired-retained"));
+    expired.status = InboxMessageStatus.DELIVERED;
+    expired.keepUntil = create(TimestampSchema, { seconds: 10n, nanos: 399_999_999 });
+    const undated = DeliveryMessageCodec.encode(domainMessage("undated-retained"));
+    undated.status = InboxMessageStatus.DELIVERED;
+    await core.inbox.writeMany(
+      { message: [future, expired, undated] } as never,
+      { signal: new AbortController().signal } as never,
+    );
+    const rows = await client.readPage(ShardIndex.single());
+    const now = create(TimestampSchema, { seconds: 10n, nanos: 400_000_000 });
+    const prior = Time.setProvider({ currentTime: () => now });
+    try {
+      const recent = new Map<string, boolean>();
+      const apply = pageOperation(inbox);
+      await apply(
+        rows,
+        session,
+        undefined,
+        (isRecent) => {
+          for (const row of rows) recent.set(row.signalId, isRecent(row));
+          return Promise.resolve(true);
+        },
+        vi.fn(),
+      );
+      expect(recent).toEqual(
+        new Map([
+          [domainMessage("future-retained").signalId, true],
+          [domainMessage("expired-retained").signalId, false],
+          [domainMessage("undated-retained").signalId, false],
+        ]),
+      );
+      expect((await client.findOne(domainMessage("future-retained").id))?.status).toBe("DELIVERED");
+      expect(await client.findOne(domainMessage("expired-retained").id)).toBeUndefined();
+      expect(await client.findOne(domainMessage("undated-retained").id)).toBeUndefined();
+    } finally {
+      Time.setProvider(prior);
+      client.close();
+      core.close();
     }
-    now = 1;
-    await expect(client.releaseExpired(1)).resolves.toHaveLength(101);
-  });
-
-  it("classifies an oversized post-commit expiration response as unknown", async () => {
-    let now = 0;
-    const core = InMemoryDelivery.create({ now: () => now });
-    const normal = DeliveryClient.usingTransport(
-      createRouterTransport((router) => router.service(ShardService, core.shards)),
-    );
-    await normal.pickUp(ShardIndex.single(), { nodeId: "node", value: "worker" });
-    now = 1;
-    const oversized = DeliveryClient.usingTransport(
-      createRouterTransport((router) =>
-        router.service(ShardService, {
-          ...core.shards,
-          releaseSessions: async (request, context) => {
-            const response = await core.shards.releaseSessions(request, context);
-            const first = response.shard?.[0];
-            if (first?.worker !== undefined) first.worker.value = "x".repeat(4_200_000);
-            return response;
-          },
-        }),
-      ),
-    );
-    await expect(oversized.releaseExpired(1)).rejects.toMatchObject({
-      operation: "RELEASE_EXPIRED",
-      reconciliation: { kind: "OBSERVE_SHARD", scope: "ALL_SHARDS" },
-    });
-    await expect(
-      normal.pickUp(ShardIndex.single(), { nodeId: "node", value: "next" }),
-    ).resolves.toBeDefined();
   });
 });

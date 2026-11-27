@@ -35,6 +35,51 @@ import { assertQueryProviderConformance } from "../query/query-provider-conforma
 import type { StorageContext } from "../../src/storage/storage.js";
 
 describe("InMemoryRecordStorage", () => {
+  it("orders Timestamp columns chronologically in both directions and across pages", async () => {
+    const spec = new RecordSpec({
+      recordType: EventSchema,
+      idSchema: EventIdSchema,
+      extractId: (event) => {
+        if (event.id === undefined) throw new Error("Expected an Event ID.");
+        return event.id;
+      },
+      columns: [
+        new RecordColumn<Event>(
+          "when_received",
+          ColumnTypes.message(TimestampSchema),
+          (event) => event.context?.timestamp,
+        ),
+      ],
+    });
+    const storage = new InMemoryRecordStorage(
+      { name: "AdjacentSecondColumns", multitenant: false },
+      spec,
+    );
+    const earlier = createEvent("earlier", "type.spine.io/tasks.TaskCreated", 100n, 999_000_000);
+    const later = createEvent("later", "type.spine.io/tasks.TaskCreated", 101n, 1_000_000);
+    await storage.writeAll([later, earlier]);
+    const firstPage = await storage.queryEntries({
+      sort: [{ field: "when_received", direction: "asc" }],
+      limit: 1,
+    });
+    expect(firstPage.map((entry) => entry.id.value)).toEqual(["earlier"]);
+    const following = await storage.queryEntries({
+      sort: [{ field: "when_received", direction: "asc" }],
+      after: {
+        values: [{ field: "when_received", value: earlier.context?.timestamp }],
+        id: create(EventIdSchema, { value: "earlier" }),
+      },
+    });
+    expect(following.map((entry) => entry.id.value)).toEqual(["later"]);
+    expect(
+      (
+        await storage.queryEntries({
+          sort: [{ field: "when_received", direction: "desc" }],
+          limit: 1,
+        })
+      ).map((entry) => entry.id.value),
+    ).toEqual(["later"]);
+  });
   it("keeps a tenant slice's compare-and-set and continued ordering atomic", () => {
     const spec = createSpec();
     const records = new TenantRecords<EventId, Event>();

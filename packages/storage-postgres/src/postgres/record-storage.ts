@@ -12,7 +12,14 @@
  * the License.
  */
 
-import { fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  InboxMessageSchema,
+  InboxMessageStatus,
+  type InboxMessage,
+  type ShardIndex,
+} from "@spine-event-engine/proto/delivery";
 import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import {
   ColumnMappings,
@@ -545,6 +552,150 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
+   * Marks one existing inbox ID delivered with its first retention deadline.
+   *
+   * @param id Complete inbox message ID.
+   * @param deadline First completion deadline.
+   * @returns Whether a pending inbox message changed.
+   */
+  markInboxDelivered(id: I, deadline: Timestamp): Promise<Timestamp | undefined> {
+    return this.mutateInbox(async (client) => {
+      const changed = await client.query<{ when_keep_until: bigint | string | null }>(
+        `UPDATE ${this.qualified()} SET "status" = $2, "when_keep_until" = $3 ` +
+          `WHERE "ID" = $1 AND "status" = $4 RETURNING "when_keep_until"`,
+        [
+          this.id(id),
+          this.historyColumn("status", InboxMessageStatus.DELIVERED),
+          this.historyColumn("when_keep_until", deadline),
+          this.historyColumn("status", InboxMessageStatus.TO_DELIVER),
+        ],
+      );
+      const current = changed.rows[0];
+      if (current !== undefined) return this.inboxDeadline(current.when_keep_until);
+      const retry = await client.query<{
+        status: number | string;
+        when_keep_until: bigint | string | null;
+      }>(`SELECT "status", "when_keep_until" FROM ${this.qualified()} WHERE "ID" = $1`, [
+        this.id(id),
+      ]);
+      const row = retry.rows[0];
+      const deliveredStatus: number = InboxMessageStatus.DELIVERED;
+      return Number(row?.status) === deliveredStatus
+        ? this.inboxDeadline(row?.when_keep_until)
+        : undefined;
+    });
+  }
+
+  /**
+   * Removes an inbox ID only while its current status is pending.
+   *
+   * @param id Complete inbox message ID.
+   * @returns True when removed or absent; false when already delivered.
+   */
+  removePendingInbox(id: I): Promise<boolean> {
+    return this.mutateInbox(async (client) => {
+      const removed = await client.query(
+        `DELETE FROM ${this.qualified()} WHERE "ID" = $1 AND "status" = $2`,
+        [this.id(id), this.historyColumn("status", InboxMessageStatus.TO_DELIVER)],
+      );
+      if (removed.rowCount === 1) return true;
+      const current = await client.query(`SELECT 1 FROM ${this.qualified()} WHERE "ID" = $1`, [
+        this.id(id),
+      ]);
+      return current.rowCount === 0;
+    });
+  }
+
+  /**
+   * Deletes expired delivered inbox messages in one database statement.
+   *
+   * @param shard Selected shard.
+   * @param now Inclusive retention deadline.
+   * @returns Whether the provider applied the cleanup predicate.
+   */
+  removeExpiredInbox(shard: ShardIndex, now: Timestamp): Promise<boolean> {
+    return this.mutateInbox(async (client) => {
+      await client.query(
+        `DELETE FROM ${this.qualified()} WHERE "shard_index" = $1 AND "shard_total" = $2 ` +
+          `AND "status" = $3 AND ("when_keep_until" IS NULL OR "when_keep_until" <= $4)`,
+        [
+          this.historyColumn("shard_index", shard.index),
+          this.historyColumn("shard_total", shard.ofTotal),
+          this.historyColumn("status", InboxMessageStatus.DELIVERED),
+          this.historyColumn("when_keep_until", now),
+        ],
+      );
+      return true;
+    });
+  }
+
+  /**
+   * Executes an inbox mutation while the record handle and its factory are open.
+   *
+   * @param work Issues the SQL for this inbox operation.
+   * @typeParam T The operation result.
+   * @returns The result from the admitted database operation.
+   */
+  private mutateInbox<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+    if (!this.isInboxLayout())
+      throw new TypeError("Inbox mutation requires the framework inbox record layout.");
+    return this.admit(() => this.using(work));
+  }
+
+  /**
+   * Checks for the framework inbox layout and its mutable query columns.
+   *
+   * @returns Whether this record family supports inbox mutations.
+   */
+  private isInboxLayout(): boolean {
+    const names = new Set(this.recordSpec.columns.map((column) => column.name));
+    return (
+      this.recordSpec.recordType.typeName === InboxMessageSchema.typeName &&
+      ["status", "when_keep_until", "shard_index", "shard_total"].every((name) => names.has(name))
+    );
+  }
+
+  /**
+   * Adds authoritative mutable columns to inbox record reads.
+   *
+   * @returns Additional selected column names.
+   */
+  private inboxReadColumns(): string {
+    return this.isInboxLayout() ? ', "status", "when_keep_until"' : "";
+  }
+
+  /**
+   * Applies mutable inbox columns over the original stored Protobuf bytes.
+   *
+   * @param record Decoded stored payload.
+   * @param row Selected database row.
+   * @returns The current record view.
+   */
+  private projectInbox(record: R, row: Row): R {
+    if (!this.isInboxLayout()) return record;
+    const inbox = record as unknown as InboxMessage;
+    inbox.status = Number(row.status);
+    inbox.keepUntil = this.inboxDeadline(row.when_keep_until);
+    return record;
+  }
+
+  /**
+   * Decodes the queryable first completion deadline at nanosecond precision.
+   *
+   * @param encoded Stored epoch nanoseconds, when present.
+   * @returns The original deadline.
+   */
+  private inboxDeadline(encoded: bigint | string | null | undefined): Timestamp | undefined {
+    if (encoded === null || encoded === undefined) return undefined;
+    const nanos = BigInt(encoded);
+    const seconds = nanos >= 0n ? nanos / 1_000_000_000n : (nanos - 999_999_999n) / 1_000_000_000n;
+    return create(TimestampSchema, {
+      seconds,
+      nanos: Number(nanos - seconds * 1_000_000_000n),
+    });
+  }
+
+  /**
    * Deletes one record by storage ID.
    *
    * @param id Identifies the record to delete.
@@ -622,7 +773,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
-   * Compares and conditionally mutates one row with a raw-byte SQL guard.
+   * Compares and conditionally mutates one complete logical record.
    *
    * @param id Identifies the record slot.
    * @param expected Specifies the current materialized record required to write.
@@ -680,19 +831,21 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     expected: Materialized<I, R> | undefined,
     next: Materialized<I, R> | undefined,
   ): Promise<boolean | undefined> {
-    const raw = await this.rawOn(client, id);
-    const current = raw === undefined ? undefined : this.decode(raw);
+    const row = await this.rawOn(client, id);
+    const raw = row === undefined ? undefined : bytes(row.bytes);
+    const current =
+      row === undefined ? undefined : this.projectInbox(this.decode(bytes(row.bytes)), row);
     if (!this.same(current, expected?.record)) return false;
     if (next === undefined) {
-      if (raw === undefined) return true;
+      if (row === undefined) return true;
       const deleted = await client.query(
-        `DELETE FROM ${this.qualified()} WHERE "ID" = $1 AND "bytes" = $2`,
-        [this.id(id), raw],
+        `DELETE FROM ${this.qualified()} WHERE "ID" = $1 AND "bytes" = $2${this.casInboxGuard(3)}`,
+        [this.id(id), raw, ...this.casInboxValues(row)],
       );
       return deleted.rowCount === 1 ? true : undefined;
     }
     if (this.same(current, next.record)) return true;
-    if (raw === undefined) {
+    if (row === undefined) {
       const inserted = await client.query(
         `${this.insertSql()} ON CONFLICT ("ID") DO NOTHING`,
         this.values(next.record, id),
@@ -703,6 +856,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       this.id(id),
       raw,
       ...this.values(next.record, id).slice(1),
+      ...this.casInboxValues(row),
     ]);
     return changed.rowCount === 1 ? true : undefined;
   }
@@ -711,14 +865,37 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * Reads the exact bytes used as a conditional-mutation guard.
    * @param client Provides the operation client.
    * @param id Identifies the row.
-   * @returns Stored bytes, if present.
+   * @returns Stored bytes and authoritative inbox columns, if present.
    */
-  private async rawOn(client: PoolClient, id: I): Promise<Uint8Array | undefined> {
+  private async rawOn(client: PoolClient, id: I): Promise<Row | undefined> {
     const result = await client.query<Row>(
-      `SELECT "bytes" FROM ${this.qualified()} WHERE "ID" = $1`,
+      `SELECT "bytes"${this.inboxReadColumns()} FROM ${this.qualified()} WHERE "ID" = $1`,
       [this.id(id)],
     );
-    return result.rows[0] === undefined ? undefined : bytes(result.rows[0].bytes);
+    return result.rows[0];
+  }
+
+  /**
+   * Adds mutable inbox columns to a conditional SQL guard.
+   *
+   * @param first First parameter number for the mutable columns.
+   * @returns The additional SQL condition.
+   */
+  private casInboxGuard(first: number): string {
+    return this.isInboxLayout()
+      ? ` AND "status" IS NOT DISTINCT FROM $${String(first)}` +
+          ` AND "when_keep_until" IS NOT DISTINCT FROM $${String(first + 1)}`
+      : "";
+  }
+
+  /**
+   * Reads the mutable inbox column values used by a conditional SQL guard.
+   *
+   * @param row Current database row.
+   * @returns Status and first retention deadline, if this is inbox storage.
+   */
+  private casInboxValues(row: Row): readonly unknown[] {
+    return this.isInboxLayout() ? [row.status, row.when_keep_until] : [];
   }
 
   /**
@@ -743,7 +920,10 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   private casUpdateSql(): string {
     const names = ["bytes", ...this.recordSpec.columns.map(({ name }) => name)];
     const assignments = names.map((name, index) => `${quote(name)} = $${String(index + 3)}`);
-    return `UPDATE ${this.qualified()} SET ${assignments.join(", ")} WHERE "ID" = $1 AND "bytes" = $2`;
+    return (
+      `UPDATE ${this.qualified()} SET ${assignments.join(", ")} WHERE "ID" = $1 AND "bytes" = $2` +
+      this.casInboxGuard(names.length + 3)
+    );
   }
 
   /**
@@ -848,12 +1028,15 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    */
   private async readOn(client: PoolClient, id: I, locked = false): Promise<R | undefined> {
     const result = await client.query<Row>(
-      `SELECT "bytes" FROM ${this.qualified()} WHERE "ID" = $1${locked ? " FOR UPDATE" : ""}`,
+      `SELECT "bytes"${this.inboxReadColumns()} FROM ${this.qualified()} WHERE "ID" = $1${locked ? " FOR UPDATE" : ""}`,
       [this.id(id)],
     );
     if (result.rows[0] === undefined) return undefined;
     try {
-      return fromBinary(this.recordSpec.recordType, bytes(result.rows[0].bytes));
+      return this.projectInbox(
+        fromBinary(this.recordSpec.recordType, bytes(result.rows[0].bytes)),
+        result.rows[0],
+      );
     } catch (error) {
       throw new PostgresStorageDataError("Stored PostgreSQL record data is invalid.", {
         cause: error,
@@ -876,7 +1059,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     try {
       return result.rows.map((row) => ({
         id: this.#idColumn.read(row.ID),
-        record: fromBinary(this.recordSpec.recordType, bytes(row.bytes)),
+        record: this.projectInbox(fromBinary(this.recordSpec.recordType, bytes(row.bytes)), row),
       }));
     } catch (error) {
       throw new PostgresStorageDataError("Stored PostgreSQL record data is invalid.", {
@@ -994,7 +1177,9 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     const clauses = this.recordClauses(query, bind);
     const order = this.recordOrder(query);
     if (query.after !== undefined) clauses.push(this.continuation(query, bind));
-    let sql = `SELECT "ID", "bytes" FROM ${this.qualified()}${where(clauses)} ORDER BY ${order}`;
+    let sql =
+      `SELECT "ID", "bytes"${this.inboxReadColumns()} FROM ${this.qualified()}` +
+      `${where(clauses)} ORDER BY ${order}`;
     if (query.limit !== undefined) sql += ` LIMIT ${bind.add(query.limit)}`;
     if (query.offset !== undefined)
       sql +=
@@ -1023,13 +1208,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       throw new PostgresStorageOperationError(
         "PostgreSQL normalized query exceeds the 1000-parameter bind budget.",
       );
-    const order = [
-      ...(plan.order ?? []).map(
-        (item) =>
-          `${this.column(item.column)} ${item.direction === "desc" ? "DESC NULLS LAST" : "ASC NULLS FIRST"}`,
-      ),
-      '"ID" ASC',
-    ].join(", ");
+    const order = this.planOrder(plan);
     const limit = plan.exhaustive
       ? plan.limit
       : Math.min(
@@ -1041,8 +1220,26 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       (!scanAll && safePredicate === plan.predicate && this.exhaustiveOrderMatches(plan));
     const limitClause = limit !== undefined && exactLimit ? ` LIMIT ${bind.add(limit)}` : "";
     return bind.done(
-      `SELECT "ID", "bytes" FROM ${this.qualified()}${predicate} ORDER BY ${order}` + limitClause,
+      `SELECT "ID", "bytes"${this.inboxReadColumns()} FROM ${this.qualified()}${predicate} ORDER BY ${order}` +
+        limitClause,
     );
+  }
+
+  /**
+   * Builds provider ordering for a normalized record query.
+   *
+   * @param plan Supplies the declared column order.
+   * @returns SQL ordering with the ID tie-breaker.
+   */
+  private planOrder(plan: NormalizedQueryPlan<I>): string {
+    return [
+      ...(plan.order ?? []).map(
+        (item) =>
+          `${this.column(item.column)} ` +
+          (item.direction === "desc" ? "DESC NULLS LAST" : "ASC NULLS FIRST"),
+      ),
+      '"ID" ASC',
+    ].join(", ");
   }
 
   /**
@@ -1444,6 +1641,8 @@ type Materialized<I, R extends Message> = ReturnType<RecordSpec<I, R>["materiali
 interface Row {
   readonly ID: unknown;
   readonly bytes: Uint8Array | Buffer;
+  readonly status?: number | string;
+  readonly when_keep_until?: bigint | string | null;
 }
 
 /**

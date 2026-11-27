@@ -12,14 +12,15 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import type { ServiceImpl } from "@connectrpc/connect";
-import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  InboxService,
+  ShardService,
+  ShardObservingService,
+} from "@spine-event-engine/proto/delivery-server";
 
-import { InboxHandlers } from "./inbox-service.js";
-import { InMemoryDeliveryState } from "./in-memory-delivery-state.js";
-import { MutationAdmission } from "./mutation-admission.js";
-import { ShardHandlers } from "./shard-service.js";
+import { DeliveryAssembly } from "../server/assembly.js";
 
 /**
  * Configures the listener-free in-memory delivery core.
@@ -28,31 +29,21 @@ export interface DeliveryCoreOptions {
   // prettier-ignore
 
   /**
-   * Automatic pickup expiry; zero disables automatic stale takeover.
+   * Processing timeout in milliseconds; zero disables stale pickup and is the default.
    */
   readonly processingTimeoutMs?: number;
 
   /**
-   * Returns a deterministic wall-clock value in Unix milliseconds.
+   * Milliseconds between notices while a shard is free with pending work. Defaults to 10,000.
+   */
+  readonly reminderIntervalMs?: number;
+
+  /**
+   * Returns a deterministic full-precision Protobuf timestamp.
    *
-   * @returns Provides the current Unix time in milliseconds.
+   * @returns Provides the current timestamp.
    */
-  readonly now?: () => number;
-
-  /**
-   * Maximum retained records; integer from 1 through 2,147,483,647.
-   */
-  readonly maxRetainedMessages?: number;
-
-  /**
-   * Maximum retained serialized record bytes; integer from 1 through 2,147,483,647.
-   */
-  readonly maxRetainedBytes?: number;
-
-  /**
-   * Maximum tracked shards; integer from 1 through 1,000.
-   */
-  readonly maxTrackedShards?: number;
+  readonly now?: () => Timestamp;
 }
 
 /**
@@ -70,6 +61,16 @@ export interface DeliveryCore {
    * Serves Shard RPCs.
    */
   readonly shards: ServiceImpl<typeof ShardService>;
+
+  /**
+   * Streams free shards with pending work to application nodes.
+   */
+  readonly observing: ServiceImpl<typeof ShardObservingService>;
+
+  /**
+   * Closes active work streams, rejects pending mutations, and cancels timers.
+   */
+  close(): void;
 }
 
 /**
@@ -81,9 +82,9 @@ export const InMemoryDelivery: Readonly<{
   /**
    * Creates an empty Inbox and Shard core.
    *
-   * @param options Configures state limits and stale pickup expiry.
+   * @param options Configures stale pickup expiry and work reminders.
    * @returns Provides the handlers without owning a listener or process lifecycle.
-   * @throws {RangeError} When the processing timeout is not a finite non-negative number.
+   * @throws {RangeError} When the processing timeout is not a nonnegative safe integer.
    */
   create(options?: DeliveryCoreOptions): DeliveryCore;
 }> = Object.freeze({
@@ -92,20 +93,24 @@ export const InMemoryDelivery: Readonly<{
   /**
    * Creates an empty Inbox and Shard core.
    *
-   * @param options Configures state limits and stale pickup expiry.
+   * @param options Configures stale pickup expiry and work reminders.
    * @returns Provides the handlers without owning a listener or process lifecycle.
-   * @throws {RangeError} When the processing timeout is not a finite non-negative number.
+   * @throws {RangeError} When the processing timeout is not a nonnegative safe integer.
    */
   create(options: DeliveryCoreOptions = {}): DeliveryCore {
     const timeout = options.processingTimeoutMs ?? 0;
-    if (!Number.isFinite(timeout) || timeout < 0)
+    if (!Number.isSafeInteger(timeout) || timeout < 0)
       throw new RangeError("Processing timeout is invalid.");
-    const state = new InMemoryDeliveryState(options);
-    const admission = new MutationAdmission();
-    const now = options.now ?? (() => Time.currentTimeMillis());
+    const assembly = DeliveryAssembly.create(options);
     return Object.freeze({
-      inbox: InboxHandlers.create(state, admission),
-      shards: ShardHandlers.create(state, admission, now, timeout),
+      inbox: assembly.inbox,
+      shards: assembly.shards,
+      observing: assembly.observing,
+      close() {
+        assembly.closeAdmission();
+        assembly.closeObserving();
+        assembly.closeAdmin();
+      },
     });
   },
 });

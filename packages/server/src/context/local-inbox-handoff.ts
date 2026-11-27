@@ -12,13 +12,13 @@
  * the License.
  */
 
-import type { Any } from "@bufbuild/protobuf/wkt";
 import type { TenantId } from "@spine-event-engine/proto";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
 
 import { Delivery, type DeliveryEndpointMessage } from "../delivery/delivery.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
-import type { DeliverySource } from "../delivery/delivery-supervisor.js";
+import type { ApplicationWorkSource } from "../delivery/application-work-observer.js";
+import type { DeliveryNotifications } from "../server/server-environment.js";
 import { InboxTargets, type InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 
@@ -88,9 +88,29 @@ export interface EnvironmentDeliveryPorts {
   readonly workRegistry: DeliveryWorkRegistry;
 
   /**
-   * Supplies remote Admin recovery and notification observations when delivery is remote.
+   * Sets the page size used by the environment's shared Delivery.
    */
-  readonly source?: DeliverySource;
+  readonly pageSize?: number;
+
+  /**
+   * Supplies built-in available-work observations when delivery is remote.
+   */
+  readonly source?: ApplicationWorkSource;
+
+  /**
+   * Selects built-in or custom application notifications.
+   */
+  readonly notifications?: DeliveryNotifications;
+
+  /**
+   * Identifies the work endpoint for diagnostics.
+   */
+  readonly endpoint?: string;
+
+  /**
+   * Keeps application storage observations on the local readiness path.
+   */
+  readonly local?: true;
 }
 
 /**
@@ -101,9 +121,11 @@ export class DeliveryReadiness {
 
   readonly #onWake: ((shard: ShardIndex) => void) | undefined;
 
-  readonly #remoteSupervised: boolean;
+  readonly #remoteObserved: boolean;
 
   readonly #onReady: OnDeliveryReady;
+
+  readonly #onMessage: ((message: InboxMessage) => void) | undefined;
 
   readonly #active = new Set<Promise<void>>();
 
@@ -119,19 +141,22 @@ export class DeliveryReadiness {
    * Creates a readiness coordinator for one context and its shared environment Delivery.
    * @param onReady Observes standalone direct routes after persistence.
    * @param shared Shared environment Delivery when this context is assembled.
-   * @param onWake Wakes the environment's local or supervised shard run.
-   * @param remoteSupervised Whether setup installed a remote source and supervisor.
+   * @param onWake Wakes the environment's local or remote shard run.
+   * @param remoteObserved Whether setup installed a remote work observation.
+   * @param onMessage Notifies a configured custom observer after persistence.
    */
   constructor(
     onReady: OnDeliveryReady = () => undefined,
     shared?: Delivery,
     onWake?: (shard: ShardIndex) => void,
-    remoteSupervised = false,
+    remoteObserved = false,
+    onMessage?: (message: InboxMessage) => void,
   ) {
     this.#onReady = onReady;
     this.#shared = shared;
     this.#onWake = onWake;
-    this.#remoteSupervised = remoteSupervised;
+    this.#remoteObserved = remoteObserved;
+    this.#onMessage = onMessage;
   }
 
   /**
@@ -193,11 +218,16 @@ export class DeliveryReadiness {
   /**
    * Notifies shared Delivery after persistence or returns a standalone completion claim.
    * @param ready Route made eligible by the write, if a recipient is registered.
+   * @param message Supplies a newly persisted row for a custom observer.
    * @returns A completion claim for that write.
    */
-  claim(ready?: DeliveryReady): DeliveryHandoff {
+  claim(ready?: DeliveryReady, message?: InboxMessage): DeliveryHandoff {
+    if (this.#onMessage !== undefined && message !== undefined) {
+      this.#onMessage(message);
+      return settledHandoff;
+    }
     if (ready === undefined) return settledHandoff;
-    if (this.#remoteSupervised && this.#shared !== undefined) {
+    if (this.#remoteObserved && this.#shared !== undefined) {
       this.notify(ready);
       return settledHandoff;
     }
@@ -313,8 +343,6 @@ const settledHandoff: DeliveryHandoff = Object.freeze({
   abandon: () => undefined,
 });
 
-const drainLimit = 8;
-
 /**
  * Configures one bounded attempt to drain a local inbox message.
  */
@@ -379,52 +407,16 @@ export interface LocalInboxDrainOptions {
 }
 
 /**
- * Identifies the fields that deduplicate an in-flight inbox handoff.
- */
-export interface LocalInboxKeyInput {
-  // prettier-ignore
-
-  /**
-   * Identifies the inbox target receiving the message.
-   */
-  readonly inboxId: {
-    readonly targetId: Any;
-    readonly targetTypeUrl: string;
-  };
-
-  /**
-   * Identifies the source signal persisted in the inbox.
-   */
-  readonly signalId: string;
-
-  /**
-   * Names the delivery action for the message.
-   */
-  readonly label: InboxMessage["label"];
-
-  /**
-   * Locates the message in its delivery shard set.
-   */
-  readonly shard: InboxMessage["shard"];
-}
-
-/**
  * Coordinates durable local inbox ownership and delivery handoffs.
  */
 export const InboxHandoff: Readonly<{
   ready(endpoint: DeliveryEndpoint, tenantId?: TenantId): DeliveryReady;
   isPromiseLike(value: unknown): value is PromiseLike<unknown>;
-  coordinate(options: {
-    readonly handoffs: Map<string, Promise<InboxMessage>>;
-    readonly key: string;
-    readonly onHandoff: () => Promise<InboxMessage>;
-  }): Promise<InboxMessage>;
   drain(options: LocalInboxDrainOptions): Promise<void>;
   runDrain(options: LocalInboxDrainOptions): Promise<void>;
   drainAttempt(options: LocalInboxDrainOptions): Promise<"ACKNOWLEDGED" | "IDLE" | "RETRY">;
   drainInput(options: LocalInboxDrainOptions): Parameters<Delivery["drainMessage"]>[1];
   deliveryFailure(error: unknown, message: string): Error;
-  key(input: LocalInboxKeyInput, tenantId?: TenantId): string;
   sameMessageId(
     left: {
       readonly value: string;
@@ -463,39 +455,16 @@ export const InboxHandoff: Readonly<{
     return "then" in value && typeof value.then === "function";
   },
 
-  async coordinate(options: {
-    readonly handoffs: Map<string, Promise<InboxMessage>>;
-    readonly key: string;
-    readonly onHandoff: () => Promise<InboxMessage>;
-  }): Promise<InboxMessage> {
-    const inFlightHandoff = options.handoffs.get(options.key);
-
-    if (inFlightHandoff !== undefined) {
-      return await inFlightHandoff;
-    }
-
-    const handoff = options.onHandoff();
-    options.handoffs.set(options.key, handoff);
-    try {
-      return await handoff;
-    } finally {
-      if (options.handoffs.get(options.key) === handoff) {
-        options.handoffs.delete(options.key);
-      }
-    }
-  },
-
   async drain(options: LocalInboxDrainOptions): Promise<void> {
     await InboxHandoff.runDrain(options);
   },
 
   async runDrain(options: LocalInboxDrainOptions): Promise<void> {
-    for (let attempt = 0; attempt < drainLimit; attempt += 1) {
+    for (;;) {
       const outcome = await InboxHandoff.drainAttempt(options);
       if (outcome === "ACKNOWLEDGED") return;
-      if (outcome === "IDLE") break;
+      if (outcome === "IDLE") throw new Error(options.unfinishedMessage);
     }
-    throw new Error(options.unfinishedMessage);
   },
 
   async drainAttempt(options: LocalInboxDrainOptions): Promise<"ACKNOWLEDGED" | "IDLE" | "RETRY"> {
@@ -511,8 +480,6 @@ export const InboxHandoff: Readonly<{
     const run =
       direct.run ?? (direct.outcome?.kind === "unresolved" ? direct.outcome.run : undefined);
     if (run === undefined) return "RETRY";
-    if ((await options.delivery.inbox.readMessage(options.received.id))?.status === "DELIVERED")
-      return "ACKNOWLEDGED";
     const failure = run.failures.find(({ message }) =>
       InboxHandoff.sameDelivery(message, options.received),
     );
@@ -535,18 +502,6 @@ export const InboxHandoff: Readonly<{
 
   deliveryFailure(error: unknown, message: string): Error {
     return error instanceof Error ? error : new Error(message, { cause: error });
-  },
-
-  key(input: LocalInboxKeyInput, deliveryTenantId?: TenantId): string {
-    return JSON.stringify([
-      tenantKey(deliveryTenantId),
-      input.label,
-      input.signalId,
-      input.inboxId.targetTypeUrl,
-      InboxTargets.key(input.inboxId.targetId),
-      input.shard.index,
-      input.shard.ofTotal,
-    ]);
   },
 
   sameMessageId(
@@ -609,7 +564,3 @@ export const InboxHandoff: Readonly<{
     );
   },
 });
-
-function tenantKey(tenantId: TenantId | undefined): string {
-  return tenantId === undefined ? "" : String(TenantBoundary.from(tenantId).key);
-}

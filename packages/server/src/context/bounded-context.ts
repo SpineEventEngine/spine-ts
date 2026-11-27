@@ -1513,7 +1513,8 @@ export class BoundedContext {
       (shard) => {
         serverEnvironmentAccess.notifyDelivery(this.#environment, shard);
       },
-      serverEnvironmentAccess.remoteSupervised(this.#environment),
+      serverEnvironmentAccess.remoteObserved(this.#environment),
+      serverEnvironmentAccess.shardObserver(this.#environment),
     );
   }
 

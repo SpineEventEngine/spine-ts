@@ -501,7 +501,7 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
    *
    * @param entityId Supplies the entity identifier to inspect.
    * @param depth Limits the number of events returned.
-   * @param startingFromVersion Excludes events at or after this producer version.
+   * @param startingFromVersion Includes Events at or below this producer version.
    * @returns Resolves to immutable event snapshots.
    */
   async backward(
@@ -525,20 +525,47 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
       this.pageSize(),
       (record, field) =>
         field === "version" ? record.context?.version?.number : record.context?.timestamp,
-      (page) => {
-        for (const { record } of page) {
-          const version = record.context?.version?.number;
-          if (
-            startingFromVersion === undefined ||
-            (version !== undefined && BigInt(version) < startingFromVersion)
-          ) {
-            selected.push(record);
-            if (selected.length === depth) return false;
-          }
-        }
-        return true;
-      },
+      (page) => this.acceptEventPage(page, selected, depth, startingFromVersion),
     );
+    return this.orderedEvents(selected, depth);
+  }
+
+  /**
+   * Collects one page within the requested inclusive version and depth.
+   *
+   * @param page Selected provider entries.
+   * @param selected Events already collected.
+   * @param depth Maximum result size.
+   * @param startingFromVersion Inclusive producer version, when supplied.
+   * @returns Whether scanning should continue.
+   */
+  private acceptEventPage(
+    page: readonly { readonly record: Event }[],
+    selected: Event[],
+    depth: number,
+    startingFromVersion?: bigint,
+  ): boolean {
+    for (const { record } of page) {
+      const version = record.context?.version?.number;
+      if (
+        startingFromVersion === undefined ||
+        (version !== undefined && BigInt(version) <= startingFromVersion)
+      ) {
+        selected.push(record);
+        if (selected.length === depth) return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Returns independent Event snapshots in deterministic newest-first order.
+   *
+   * @param selected Collected Events.
+   * @param depth Maximum result size.
+   * @returns Immutable ordered Event snapshots.
+   */
+  private orderedEvents(selected: Event[], depth: number): readonly Event[] {
     return Object.freeze(
       selected
         .sort(

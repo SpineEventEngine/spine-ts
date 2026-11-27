@@ -61,7 +61,7 @@ vi.mock("@spine-event-engine/core", () => ({
   TypeRegistry: { from: vi.fn(() => calls.typeRegistry) },
 }));
 vi.mock("@spine-event-engine/delivery-client", () => ({
-  RemoteDelivery: { connectTo: vi.fn(() => calls.delivery) },
+  DeliveryBuilder: { remote: vi.fn(() => calls.delivery) },
 }));
 vi.mock("@spine-event-engine/storage-datastore", () => ({
   DatastoreStorageFactory: { newBuilder: vi.fn(() => calls.builder) },

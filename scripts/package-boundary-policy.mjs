@@ -431,12 +431,13 @@ export function siblingPackageTreeReachProblems(root) {
   for (const importer of localTestOrFixtureFiles(actualRoot)) {
     const ownRoot = packageRootFor(actualRoot, importer);
     if (ownRoot === undefined) continue;
+    const importerPackage = realpathSync(ownRoot);
     for (const specifier of relativeSpecifiers(importer, readFileSync(importer, "utf8"))) {
       const target = resolvedRelativeTarget(importer, specifier);
       if (target === undefined) continue;
       const siblingRoot = packageRoots.find(
         (packageRoot) =>
-          packageRoot !== realpathSync(ownRoot) &&
+          packageRoot !== importerPackage &&
           relative(packageRoot, target) !== "" &&
           isNestedPath(packageRoot, target),
       );

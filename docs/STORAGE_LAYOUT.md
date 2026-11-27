@@ -665,44 +665,51 @@ postgresBuilder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
 
 **Created by:** The PostgreSQL adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first Inbox storage use, normally when an Entity Inbox receives its first routed signal. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
-| Physical field     | Database type           | Exact source                                                                | Example value                                           |
-| ------------------ | ----------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}` |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array           |
-| `shard_index`      | INTEGER                 | `InboxMessage.id.index.index`                                               | `2`                                                     |
-| `shard_total`      | INTEGER                 | `InboxMessage.id.index.of_total`                                            | `16`                                                    |
-| `status`           | INTEGER                 | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                        |
-| `when_received`    | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                           |
-| `version`          | INTEGER                 | `InboxMessage.version`                                                      | `1`                                                     |
-| `message_id`       | TEXT                    | `InboxMessage.id.uuid`                                                      | `message-3`                                             |
+| Physical field          | Database type           | Exact source                                                                | Example value                                                                      |
+| ----------------------- | ----------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `ID` (primary key)      | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"f09fb90e-78d9-41da-a798-df165708b249","index":{"index":2,"ofTotal":16}}` |
+| `bytes`                 | BYTEA NOT NULL          | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array                                      |
+| `shard_index`           | INTEGER                 | `InboxMessage.id.index.index`                                               | `2`                                                                                |
+| `shard_total`           | INTEGER                 | `InboxMessage.id.index.of_total`                                            | `16`                                                                               |
+| `status`                | INTEGER                 | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                                                   |
+| `when_keep_until`       | BIGINT                  | `InboxMessage.keep_until` after acknowledgement                             | `47000000000`                                                                      |
+| `when_received`         | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                                                      |
+| `when_received_seconds` | BIGINT                  | `InboxMessage.when_received.seconds`                                        | `42`                                                                               |
+| `when_received_nanos`   | INTEGER                 | `InboxMessage.when_received.nanos`                                          | `7`                                                                                |
+| `version`               | INTEGER                 | `InboxMessage.version`                                                      | `1`                                                                                |
+| `message_id`            | TEXT                    | `InboxMessage.id.uuid`                                                      | `f09fb90e-78d9-41da-a798-df165708b249`                                             |
 
 Each Entity has a distinct Inbox. This table stores messages for those Inboxes,
 including messages for different tenants. The packed signal supplies the Tenant
-ID when Delivery dispatches it. The full signal, destination Inbox, signal ID,
-label, and retention time remain in `bytes`.
+ID when Delivery dispatches it. The full signal, destination Inbox, signal ID
+and label remain in `bytes`. The provider records the current delivery
+status and retention deadline in separate fields, so acknowledging a message
+can change just those two values.
 
-The six separate query fields have these uses:
+Delivery uses these fields when reading or cleaning a shard.
 
 - `shard_index` and `shard_total` select one Delivery shard.
-- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+- `status` filters messages when `DeliveryInbox.read()` is given a `statuses`
   option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
-- `when_received`, `version`, and `message_id` put the selected messages in a
-  stable order. The message ID resolves ties when time and version are equal,
-  so paging can continue without skipping or repeating equal-position rows.
+- `when_received_seconds` and `when_received_nanos` preserve the exact receive
+  time. If two messages arrived at the same time, the inbox counter (`version`)
+  and then the inbox UUID (`message_id`) determine their order.
+- `when_keep_until` records when a delivered message becomes eligible for
+  cleanup. A pending message remains available for delivery.
 
-For example, these reads use the same shard and ordering, but only the second
-adds a status condition:
+For example, the framework can ask a storage adapter for all messages in a
+shard or for pending messages in that same order.
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+import type { DeliveryInbox, ShardIndex } from "@spine-event-engine/server";
 
-declare const inboxStorage: InboxStorage;
+declare const inbox: DeliveryInbox;
 declare const shard: ShardIndex;
 
-await inboxStorage.read(shard);
-await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+await inbox.read(shard);
+await inbox.read(shard, { statuses: ["TO_DELIVER"] });
 ```
 
 The ordinary Delivery scan reads all states unless its operation options supply
@@ -710,8 +717,7 @@ a filter. This is why the Datastore checklist includes both query forms.
 
 `inbox_id` and `signal_id` have no separate query fields because Delivery does
 not filter or sort by them. They remain available in the complete record.
-For SQL this gives eight columns in total: `ID`, `bytes`, and those six query
-columns. The adapter creates the primary key; it does not create an additional
+The table has eleven columns, including the primary key and the encoded message. The adapter creates the primary key; it does not create an additional
 Inbox SQL index for every query column.
 
 JVM storage has a different column set. Its `InboxColumn` also declares
@@ -1193,44 +1199,51 @@ mysqlBuilder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
 
 **Created by:** The MySQL/MariaDB adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first Inbox storage use, normally when an Entity Inbox receives its first routed signal. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
-| Physical field     | Database type           | Exact source                                                                | Example value                                           |
-| ------------------ | ----------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}` |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array           |
-| `shard_index`      | INT                     | `InboxMessage.id.index.index`                                               | `2`                                                     |
-| `shard_total`      | INT                     | `InboxMessage.id.index.of_total`                                            | `16`                                                    |
-| `status`           | INT                     | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                        |
-| `when_received`    | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                           |
-| `version`          | INT                     | `InboxMessage.version`                                                      | `1`                                                     |
-| `message_id`       | TEXT                    | `InboxMessage.id.uuid`                                                      | `message-3`                                             |
+| Physical field          | Database type           | Exact source                                                                | Example value                                                                      |
+| ----------------------- | ----------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `ID` (primary key)      | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"f09fb90e-78d9-41da-a798-df165708b249","index":{"index":2,"ofTotal":16}}` |
+| `bytes`                 | BLOB NOT NULL           | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array                                      |
+| `shard_index`           | INT                     | `InboxMessage.id.index.index`                                               | `2`                                                                                |
+| `shard_total`           | INT                     | `InboxMessage.id.index.of_total`                                            | `16`                                                                               |
+| `status`                | INT                     | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                                                   |
+| `when_keep_until`       | BIGINT                  | `InboxMessage.keep_until` after acknowledgement                             | `47000000000`                                                                      |
+| `when_received`         | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                                                      |
+| `when_received_seconds` | BIGINT                  | `InboxMessage.when_received.seconds`                                        | `42`                                                                               |
+| `when_received_nanos`   | INT                     | `InboxMessage.when_received.nanos`                                          | `7`                                                                                |
+| `version`               | INT                     | `InboxMessage.version`                                                      | `1`                                                                                |
+| `message_id`            | TEXT                    | `InboxMessage.id.uuid`                                                      | `f09fb90e-78d9-41da-a798-df165708b249`                                             |
 
 Each Entity has a distinct Inbox. This table stores messages for those Inboxes,
 including messages for different tenants. The packed signal supplies the Tenant
-ID when Delivery dispatches it. The full signal, destination Inbox, signal ID,
-label, and retention time remain in `bytes`.
+ID when Delivery dispatches it. The full signal, destination Inbox, signal ID
+and label remain in `bytes`. The provider records the current delivery
+status and retention deadline in separate fields, so acknowledging a message
+can change just those two values.
 
-The six separate query fields have these uses:
+Delivery uses these fields when reading or cleaning a shard.
 
 - `shard_index` and `shard_total` select one Delivery shard.
-- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+- `status` filters messages when `DeliveryInbox.read()` is given a `statuses`
   option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
-- `when_received`, `version`, and `message_id` put the selected messages in a
-  stable order. The message ID resolves ties when time and version are equal,
-  so paging can continue without skipping or repeating equal-position rows.
+- `when_received_seconds` and `when_received_nanos` preserve the exact receive
+  time. If two messages arrived at the same time, the inbox counter (`version`)
+  and then the inbox UUID (`message_id`) determine their order.
+- `when_keep_until` records when a delivered message becomes eligible for
+  cleanup. A pending message remains available for delivery.
 
-For example, these reads use the same shard and ordering, but only the second
-adds a status condition:
+For example, the framework can ask a storage adapter for all messages in a
+shard or for pending messages in that same order.
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+import type { DeliveryInbox, ShardIndex } from "@spine-event-engine/server";
 
-declare const inboxStorage: InboxStorage;
+declare const inbox: DeliveryInbox;
 declare const shard: ShardIndex;
 
-await inboxStorage.read(shard);
-await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+await inbox.read(shard);
+await inbox.read(shard, { statuses: ["TO_DELIVER"] });
 ```
 
 The ordinary Delivery scan reads all states unless its operation options supply
@@ -1238,8 +1251,7 @@ a filter. This is why the Datastore checklist includes both query forms.
 
 `inbox_id` and `signal_id` have no separate query fields because Delivery does
 not filter or sort by them. They remain available in the complete record.
-For SQL this gives eight columns in total: `ID`, `bytes`, and those six query
-columns. The adapter creates the primary key; it does not create an additional
+The table has eleven columns, including the primary key and the encoded message. The adapter creates the primary key; it does not create an additional
 Inbox SQL index for every query column.
 
 JVM storage has a different column set. Its `InboxColumn` also declares
@@ -1611,44 +1623,51 @@ datastoreBuilder.organizeRecords(SubscriptionRecordSchema, { kind: "support_subs
 
 **Created by:** The Datastore adapter makes this kind visible on the first Inbox message write, normally when an Entity Inbox receives a routed signal. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build alone does not write a Delivery record.
 
-| Physical field                     | Database type      | Exact source                                                                | Example value                                           |
-| ---------------------------------- | ------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}` |
-| `bytes`                            | Unindexed Blob     | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array           |
-| `shard_index`                      | Integer            | `InboxMessage.id.index.index`                                               | `2`                                                     |
-| `shard_total`                      | Integer            | `InboxMessage.id.index.of_total`                                            | `16`                                                    |
-| `status`                           | Integer            | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                        |
-| `when_received`                    | Timestamp          | `InboxMessage.when_received`                                                | `1970-01-01T00:00:42.000000007Z`                        |
-| `version`                          | Integer            | `InboxMessage.version`                                                      | `1`                                                     |
-| `message_id`                       | String             | `InboxMessage.id.uuid`                                                      | `message-3`                                             |
+| Physical field                     | Database type      | Exact source                                                                | Example value                                                                      |
+| ---------------------------------- | ------------------ | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"f09fb90e-78d9-41da-a798-df165708b249","index":{"index":2,"ofTotal":16}}` |
+| `bytes`                            | Unindexed Blob     | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array                                      |
+| `shard_index`                      | Integer            | `InboxMessage.id.index.index`                                               | `2`                                                                                |
+| `shard_total`                      | Integer            | `InboxMessage.id.index.of_total`                                            | `16`                                                                               |
+| `status`                           | Integer            | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                                                   |
+| `when_keep_until`                  | Timestamp          | `InboxMessage.keep_until` after acknowledgement                             | `1970-01-01T00:00:47Z`                                                             |
+| `when_received`                    | Timestamp          | `InboxMessage.when_received`                                                | `1970-01-01T00:00:42Z`                                                             |
+| `when_received_seconds`            | Integer            | `InboxMessage.when_received.seconds`                                        | `42`                                                                               |
+| `when_received_nanos`              | Integer            | `InboxMessage.when_received.nanos`                                          | `7`                                                                                |
+| `version`                          | Integer            | `InboxMessage.version`                                                      | `1`                                                                                |
+| `message_id`                       | String             | `InboxMessage.id.uuid`                                                      | `f09fb90e-78d9-41da-a798-df165708b249`                                             |
 
 Each Entity has a distinct Inbox. This kind stores messages for those Inboxes,
 including messages for different tenants. The packed signal supplies the Tenant
-ID when Delivery dispatches it. The full signal, destination Inbox, signal ID,
-label, and retention time remain in `bytes`.
+ID when Delivery dispatches it. The full signal, destination Inbox, signal ID
+and label remain in `bytes`. The provider records the current delivery
+status and retention deadline in separate fields, so acknowledging a message
+can change just those two values.
 
-The six separate query fields have these uses:
+Delivery uses these fields when reading or cleaning a shard.
 
 - `shard_index` and `shard_total` select one Delivery shard.
-- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+- `status` filters messages when `DeliveryInbox.read()` is given a `statuses`
   option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
-- `when_received`, `version`, and `message_id` put the selected messages in a
-  stable order. The message ID resolves ties when time and version are equal,
-  so paging can continue without skipping or repeating equal-position rows.
+- `when_received_seconds` and `when_received_nanos` preserve the exact receive
+  time. If two messages arrived at the same time, the inbox counter (`version`)
+  and then the inbox UUID (`message_id`) determine their order.
+- `when_keep_until` records when a delivered message becomes eligible for
+  cleanup. A pending message remains available for delivery.
 
-For example, these reads use the same shard and ordering, but only the second
-adds a status condition:
+For example, the framework can ask a storage adapter for all messages in a
+shard or for pending messages in that same order.
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+import type { DeliveryInbox, ShardIndex } from "@spine-event-engine/server";
 
-declare const inboxStorage: InboxStorage;
+declare const inbox: DeliveryInbox;
 declare const shard: ShardIndex;
 
-await inboxStorage.read(shard);
-await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+await inbox.read(shard);
+await inbox.read(shard, { statuses: ["TO_DELIVER"] });
 ```
 
 The ordinary Delivery scan reads all states unless its operation options supply
@@ -1656,7 +1675,7 @@ a filter. This is why the Datastore checklist includes both query forms.
 
 `inbox_id` and `signal_id` have no separate query fields because Delivery does
 not filter or sort by them. They remain available in the complete record.
-Datastore has a native key, `bytes`, and those six query properties. The
+Datastore has a native key, `bytes`, and the nine delivery fields listed above. The
 composite-index checklist below supplies the indexes for these query shapes.
 
 JVM storage has a different column set. Its `InboxColumn` also declares
@@ -1783,22 +1802,23 @@ follows covers this example's declared application query and enabled framework
 features; arbitrary additional application queries cannot be predicted from the
 Entity schema alone.
 
-| Query                                                                | Required composite properties, in order                                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Ticket: priority equality, when_opened ascending                     | `priority`, `when_opened`                                                        |
-| Ticket state history: Entity/version backward page or retention trim | `entity_id`, `version DESC`, `created DESC`                                      |
-| Ticket state history: state at a time                                | `entity_id`, `created DESC`, `version DESC`                                      |
-| Ticket state history: truncate by time                               | `created`, `version`                                                             |
-| Ticket diagnostic Event history: backward page                       | `entity_id`, `version DESC`, `created DESC`                                      |
-| Ticket diagnostic Event history: truncate by time                    | `created`, `version`                                                             |
-| Inbox shard read without statuses                                    | `shard_index`, `shard_total`, `when_received`, `version`, `message_id`           |
-| Inbox shard read with statuses                                       | `shard_index`, `shard_total`, `status`, `when_received`, `version`, `message_id` |
-| Pending subscription expiry                                          | `status`, `when_activation_expires`                                              |
-| Full Agent history                                                   | `scope_digest`, `order_key`                                                      |
-| Agent history category                                               | `scope_digest`, `category`, `order_key`                                          |
-| Agent conversation history                                           | `scope_digest`, `conversation_digest`, `order_key`                               |
+| Query                                                                | Required composite properties, in order                                                                                                            |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ticket: priority equality, when_opened ascending                     | `priority`, `when_opened`                                                                                                                          |
+| Ticket state history: Entity/version backward page or retention trim | `entity_id`, `version DESC`, `created DESC`                                                                                                        |
+| Ticket state history: state at a time                                | `entity_id`, `created DESC`, `version DESC`                                                                                                        |
+| Ticket state history: truncate by time                               | `created`, `version`                                                                                                                               |
+| Ticket diagnostic Event history: backward page                       | `entity_id`, `version DESC`, `created DESC`                                                                                                        |
+| Ticket diagnostic Event history: truncate by time                    | `created`, `version`                                                                                                                               |
+| Inbox shard read without statuses                                    | `shard_index`, `shard_total`, `when_received_seconds`, `when_received_nanos`, `version`, `message_id`                                              |
+| Inbox shard read with statuses                                       | `shard_index`, `shard_total`, `status`, `when_received_seconds`, `when_received_nanos`, `version`, `message_id`                                    |
+| Newest pending inbox message                                         | `shard_index`, `shard_total`, `status`, `when_received_seconds DESC`, `when_received_nanos DESC`, `version DESC`, `message_id DESC`, `__key__ ASC` |
+| Pending subscription expiry                                          | `status`, `when_activation_expires`                                                                                                                |
+| Full Agent history                                                   | `scope_digest`, `order_key`                                                                                                                        |
+| Agent history category                                               | `scope_digest`, `category`, `order_key`                                                                                                            |
+| Agent conversation history                                           | `scope_digest`, `conversation_digest`, `order_key`                                                                                                 |
 
-The key is the final tie-breaker; `__key__` is implicit in these index definitions.
+The key is the final tie-breaker. The descending inbox indexes explicitly order `__key__` ascending.
 Ascending is the default direction. The Agent `order_key` encoding makes an
 ascending provider scan yield newest-first history.
 
@@ -1878,24 +1898,53 @@ indexes:
       - name: created
       - name: version
 
-  # Inbox direct reads without a status filter.
+  # Inbox pages and newest pending work, with complete receive-time precision.
   - kind: spine.server.delivery.InboxMessage
     properties:
       - name: shard_index
       - name: shard_total
-      - name: when_received
+      - name: when_received_seconds
+      - name: when_received_nanos
       - name: version
       - name: message_id
-
-  # Inbox direct reads that specify one or more statuses.
   - kind: spine.server.delivery.InboxMessage
     properties:
       - name: shard_index
       - name: shard_total
       - name: status
-      - name: when_received
+      - name: when_received_seconds
+      - name: when_received_nanos
       - name: version
       - name: message_id
+  - kind: spine.server.delivery.InboxMessage
+    properties:
+      - name: shard_index
+      - name: shard_total
+      - name: when_received_seconds
+        direction: desc
+      - name: when_received_nanos
+        direction: desc
+      - name: version
+        direction: desc
+      - name: message_id
+        direction: desc
+      - name: __key__
+        direction: asc
+  - kind: spine.server.delivery.InboxMessage
+    properties:
+      - name: shard_index
+      - name: shard_total
+      - name: status
+      - name: when_received_seconds
+        direction: desc
+      - name: when_received_nanos
+        direction: desc
+      - name: version
+        direction: desc
+      - name: message_id
+        direction: desc
+      - name: __key__
+        direction: asc
 
   # Pending-subscription activation expiry cleanup.
   - kind: spine.client.SubscriptionRecord
@@ -2435,44 +2484,51 @@ postgresBuilder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
 
 **Created by:** The PostgreSQL adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first Inbox storage use, normally when an Entity Inbox receives its first routed signal. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
-| Physical field     | Database type           | Exact source                                                                | Example value                                           |
-| ------------------ | ----------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}` |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array           |
-| `shard_index`      | INTEGER                 | `InboxMessage.id.index.index`                                               | `2`                                                     |
-| `shard_total`      | INTEGER                 | `InboxMessage.id.index.of_total`                                            | `16`                                                    |
-| `status`           | INTEGER                 | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                        |
-| `when_received`    | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                           |
-| `version`          | INTEGER                 | `InboxMessage.version`                                                      | `1`                                                     |
-| `message_id`       | TEXT                    | `InboxMessage.id.uuid`                                                      | `message-3`                                             |
+| Physical field          | Database type           | Exact source                                                                | Example value                                                                      |
+| ----------------------- | ----------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `ID` (primary key)      | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"f09fb90e-78d9-41da-a798-df165708b249","index":{"index":2,"ofTotal":16}}` |
+| `bytes`                 | BYTEA NOT NULL          | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array                                      |
+| `shard_index`           | INTEGER                 | `InboxMessage.id.index.index`                                               | `2`                                                                                |
+| `shard_total`           | INTEGER                 | `InboxMessage.id.index.of_total`                                            | `16`                                                                               |
+| `status`                | INTEGER                 | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                                                   |
+| `when_keep_until`       | BIGINT                  | `InboxMessage.keep_until` after acknowledgement                             | `47000000000`                                                                      |
+| `when_received`         | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                                                      |
+| `when_received_seconds` | BIGINT                  | `InboxMessage.when_received.seconds`                                        | `42`                                                                               |
+| `when_received_nanos`   | INTEGER                 | `InboxMessage.when_received.nanos`                                          | `7`                                                                                |
+| `version`               | INTEGER                 | `InboxMessage.version`                                                      | `1`                                                                                |
+| `message_id`            | TEXT                    | `InboxMessage.id.uuid`                                                      | `f09fb90e-78d9-41da-a798-df165708b249`                                             |
 
 Each Entity has a distinct Inbox. This table stores messages for those Inboxes,
 including messages for different tenants. The packed signal supplies the Tenant
-ID when Delivery dispatches it. The full signal, destination Inbox, signal ID,
-label, and retention time remain in `bytes`.
+ID when Delivery dispatches it. The full signal, destination Inbox, signal ID
+and label remain in `bytes`. The provider records the current delivery
+status and retention deadline in separate fields, so acknowledging a message
+can change just those two values.
 
-The six separate query fields have these uses:
+Delivery uses these fields when reading or cleaning a shard.
 
 - `shard_index` and `shard_total` select one Delivery shard.
-- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+- `status` filters messages when `DeliveryInbox.read()` is given a `statuses`
   option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
-- `when_received`, `version`, and `message_id` put the selected messages in a
-  stable order. The message ID resolves ties when time and version are equal,
-  so paging can continue without skipping or repeating equal-position rows.
+- `when_received_seconds` and `when_received_nanos` preserve the exact receive
+  time. If two messages arrived at the same time, the inbox counter (`version`)
+  and then the inbox UUID (`message_id`) determine their order.
+- `when_keep_until` records when a delivered message becomes eligible for
+  cleanup. A pending message remains available for delivery.
 
-For example, these reads use the same shard and ordering, but only the second
-adds a status condition:
+For example, the framework can ask a storage adapter for all messages in a
+shard or for pending messages in that same order.
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+import type { DeliveryInbox, ShardIndex } from "@spine-event-engine/server";
 
-declare const inboxStorage: InboxStorage;
+declare const inbox: DeliveryInbox;
 declare const shard: ShardIndex;
 
-await inboxStorage.read(shard);
-await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+await inbox.read(shard);
+await inbox.read(shard, { statuses: ["TO_DELIVER"] });
 ```
 
 The ordinary Delivery scan reads all states unless its operation options supply
@@ -2480,8 +2536,7 @@ a filter. This is why the Datastore checklist includes both query forms.
 
 `inbox_id` and `signal_id` have no separate query fields because Delivery does
 not filter or sort by them. They remain available in the complete record.
-For SQL this gives eight columns in total: `ID`, `bytes`, and those six query
-columns. The adapter creates the primary key; it does not create an additional
+The table has eleven columns, including the primary key and the encoded message. The adapter creates the primary key; it does not create an additional
 Inbox SQL index for every query column.
 
 JVM storage has a different column set. Its `InboxColumn` also declares
@@ -2981,44 +3036,51 @@ mysqlBuilder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
 
 **Created by:** The MySQL/MariaDB adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first Inbox storage use, normally when an Entity Inbox receives its first routed signal. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
-| Physical field     | Database type           | Exact source                                                                | Example value                                           |
-| ------------------ | ----------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}` |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array           |
-| `shard_index`      | INT                     | `InboxMessage.id.index.index`                                               | `2`                                                     |
-| `shard_total`      | INT                     | `InboxMessage.id.index.of_total`                                            | `16`                                                    |
-| `status`           | INT                     | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                        |
-| `when_received`    | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                           |
-| `version`          | INT                     | `InboxMessage.version`                                                      | `1`                                                     |
-| `message_id`       | TEXT                    | `InboxMessage.id.uuid`                                                      | `message-3`                                             |
+| Physical field          | Database type           | Exact source                                                                | Example value                                                                      |
+| ----------------------- | ----------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `ID` (primary key)      | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"f09fb90e-78d9-41da-a798-df165708b249","index":{"index":2,"ofTotal":16}}` |
+| `bytes`                 | BLOB NOT NULL           | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array                                      |
+| `shard_index`           | INT                     | `InboxMessage.id.index.index`                                               | `2`                                                                                |
+| `shard_total`           | INT                     | `InboxMessage.id.index.of_total`                                            | `16`                                                                               |
+| `status`                | INT                     | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                                                   |
+| `when_keep_until`       | BIGINT                  | `InboxMessage.keep_until` after acknowledgement                             | `47000000000`                                                                      |
+| `when_received`         | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                                                      |
+| `when_received_seconds` | BIGINT                  | `InboxMessage.when_received.seconds`                                        | `42`                                                                               |
+| `when_received_nanos`   | INT                     | `InboxMessage.when_received.nanos`                                          | `7`                                                                                |
+| `version`               | INT                     | `InboxMessage.version`                                                      | `1`                                                                                |
+| `message_id`            | TEXT                    | `InboxMessage.id.uuid`                                                      | `f09fb90e-78d9-41da-a798-df165708b249`                                             |
 
 Each Entity has a distinct Inbox. This table stores messages for those Inboxes,
 including messages for different tenants. The packed signal supplies the Tenant
-ID when Delivery dispatches it. The full signal, destination Inbox, signal ID,
-label, and retention time remain in `bytes`.
+ID when Delivery dispatches it. The full signal, destination Inbox, signal ID
+and label remain in `bytes`. The provider records the current delivery
+status and retention deadline in separate fields, so acknowledging a message
+can change just those two values.
 
-The six separate query fields have these uses:
+Delivery uses these fields when reading or cleaning a shard.
 
 - `shard_index` and `shard_total` select one Delivery shard.
-- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+- `status` filters messages when `DeliveryInbox.read()` is given a `statuses`
   option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
-- `when_received`, `version`, and `message_id` put the selected messages in a
-  stable order. The message ID resolves ties when time and version are equal,
-  so paging can continue without skipping or repeating equal-position rows.
+- `when_received_seconds` and `when_received_nanos` preserve the exact receive
+  time. If two messages arrived at the same time, the inbox counter (`version`)
+  and then the inbox UUID (`message_id`) determine their order.
+- `when_keep_until` records when a delivered message becomes eligible for
+  cleanup. A pending message remains available for delivery.
 
-For example, these reads use the same shard and ordering, but only the second
-adds a status condition:
+For example, the framework can ask a storage adapter for all messages in a
+shard or for pending messages in that same order.
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+import type { DeliveryInbox, ShardIndex } from "@spine-event-engine/server";
 
-declare const inboxStorage: InboxStorage;
+declare const inbox: DeliveryInbox;
 declare const shard: ShardIndex;
 
-await inboxStorage.read(shard);
-await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+await inbox.read(shard);
+await inbox.read(shard, { statuses: ["TO_DELIVER"] });
 ```
 
 The ordinary Delivery scan reads all states unless its operation options supply
@@ -3026,8 +3088,7 @@ a filter. This is why the Datastore checklist includes both query forms.
 
 `inbox_id` and `signal_id` have no separate query fields because Delivery does
 not filter or sort by them. They remain available in the complete record.
-For SQL this gives eight columns in total: `ID`, `bytes`, and those six query
-columns. The adapter creates the primary key; it does not create an additional
+The table has eleven columns, including the primary key and the encoded message. The adapter creates the primary key; it does not create an additional
 Inbox SQL index for every query column.
 
 JVM storage has a different column set. Its `InboxColumn` also declares
@@ -3475,44 +3536,51 @@ datastoreBuilder.organizeRecords(SubscriptionRecordSchema, { kind: "support_subs
 
 **Created by:** The Datastore adapter makes this kind visible on the first Inbox message write, normally when an Entity Inbox receives a routed signal. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build alone does not write a Delivery record.
 
-| Physical field                     | Database type      | Exact source                                                                | Example value                                           |
-| ---------------------------------- | ------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}` |
-| `bytes`                            | Unindexed Blob     | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array           |
-| `shard_index`                      | Integer            | `InboxMessage.id.index.index`                                               | `2`                                                     |
-| `shard_total`                      | Integer            | `InboxMessage.id.index.of_total`                                            | `16`                                                    |
-| `status`                           | Integer            | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                        |
-| `when_received`                    | Timestamp          | `InboxMessage.when_received`                                                | `1970-01-01T00:00:42.000000007Z`                        |
-| `version`                          | Integer            | `InboxMessage.version`                                                      | `1`                                                     |
-| `message_id`                       | String             | `InboxMessage.id.uuid`                                                      | `message-3`                                             |
+| Physical field                     | Database type      | Exact source                                                                | Example value                                                                      |
+| ---------------------------------- | ------------------ | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"f09fb90e-78d9-41da-a798-df165708b249","index":{"index":2,"ofTotal":16}}` |
+| `bytes`                            | Unindexed Blob     | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array                                      |
+| `shard_index`                      | Integer            | `InboxMessage.id.index.index`                                               | `2`                                                                                |
+| `shard_total`                      | Integer            | `InboxMessage.id.index.of_total`                                            | `16`                                                                               |
+| `status`                           | Integer            | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                                                   |
+| `when_keep_until`                  | Timestamp          | `InboxMessage.keep_until` after acknowledgement                             | `1970-01-01T00:00:47Z`                                                             |
+| `when_received`                    | Timestamp          | `InboxMessage.when_received`                                                | `1970-01-01T00:00:42Z`                                                             |
+| `when_received_seconds`            | Integer            | `InboxMessage.when_received.seconds`                                        | `42`                                                                               |
+| `when_received_nanos`              | Integer            | `InboxMessage.when_received.nanos`                                          | `7`                                                                                |
+| `version`                          | Integer            | `InboxMessage.version`                                                      | `1`                                                                                |
+| `message_id`                       | String             | `InboxMessage.id.uuid`                                                      | `f09fb90e-78d9-41da-a798-df165708b249`                                             |
 
 Each Entity has a distinct Inbox. This kind stores messages for those Inboxes,
 including messages for different tenants. The packed signal supplies the Tenant
-ID when Delivery dispatches it. The full signal, destination Inbox, signal ID,
-label, and retention time remain in `bytes`.
+ID when Delivery dispatches it. The full signal, destination Inbox, signal ID
+and label remain in `bytes`. The provider records the current delivery
+status and retention deadline in separate fields, so acknowledging a message
+can change just those two values.
 
-The six separate query fields have these uses:
+Delivery uses these fields when reading or cleaning a shard.
 
 - `shard_index` and `shard_total` select one Delivery shard.
-- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+- `status` filters messages when `DeliveryInbox.read()` is given a `statuses`
   option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
-- `when_received`, `version`, and `message_id` put the selected messages in a
-  stable order. The message ID resolves ties when time and version are equal,
-  so paging can continue without skipping or repeating equal-position rows.
+- `when_received_seconds` and `when_received_nanos` preserve the exact receive
+  time. If two messages arrived at the same time, the inbox counter (`version`)
+  and then the inbox UUID (`message_id`) determine their order.
+- `when_keep_until` records when a delivered message becomes eligible for
+  cleanup. A pending message remains available for delivery.
 
-For example, these reads use the same shard and ordering, but only the second
-adds a status condition:
+For example, the framework can ask a storage adapter for all messages in a
+shard or for pending messages in that same order.
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+import type { DeliveryInbox, ShardIndex } from "@spine-event-engine/server";
 
-declare const inboxStorage: InboxStorage;
+declare const inbox: DeliveryInbox;
 declare const shard: ShardIndex;
 
-await inboxStorage.read(shard);
-await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+await inbox.read(shard);
+await inbox.read(shard, { statuses: ["TO_DELIVER"] });
 ```
 
 The ordinary Delivery scan reads all states unless its operation options supply
@@ -3520,7 +3588,7 @@ a filter. This is why the Datastore checklist includes both query forms.
 
 `inbox_id` and `signal_id` have no separate query fields because Delivery does
 not filter or sort by them. They remain available in the complete record.
-Datastore has a native key, `bytes`, and those six query properties. The
+Datastore has a native key, `bytes`, and the nine delivery fields listed above. The
 composite-index checklist below supplies the indexes for these query shapes.
 
 JVM storage has a different column set. Its `InboxColumn` also declares
@@ -3655,22 +3723,23 @@ follows covers this example's declared application query and enabled framework
 features; arbitrary additional application queries cannot be predicted from the
 Entity schema alone.
 
-| Query                                                                | Required composite properties, in order                                          |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Ticket: priority equality, when_opened ascending                     | `priority`, `when_opened`                                                        |
-| Ticket state history: Entity/version backward page or retention trim | `entity_id`, `version DESC`, `created DESC`                                      |
-| Ticket state history: state at a time                                | `entity_id`, `created DESC`, `version DESC`                                      |
-| Ticket state history: truncate by time                               | `created`, `version`                                                             |
-| Ticket diagnostic Event history: backward page                       | `entity_id`, `version DESC`, `created DESC`                                      |
-| Ticket diagnostic Event history: truncate by time                    | `created`, `version`                                                             |
-| Inbox shard read without statuses                                    | `shard_index`, `shard_total`, `when_received`, `version`, `message_id`           |
-| Inbox shard read with statuses                                       | `shard_index`, `shard_total`, `status`, `when_received`, `version`, `message_id` |
-| Pending subscription expiry                                          | `status`, `when_activation_expires`                                              |
-| Full Agent history                                                   | `scope_digest`, `order_key`                                                      |
-| Agent history category                                               | `scope_digest`, `category`, `order_key`                                          |
-| Agent conversation history                                           | `scope_digest`, `conversation_digest`, `order_key`                               |
+| Query                                                                | Required composite properties, in order                                                                                                            |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ticket: priority equality, when_opened ascending                     | `priority`, `when_opened`                                                                                                                          |
+| Ticket state history: Entity/version backward page or retention trim | `entity_id`, `version DESC`, `created DESC`                                                                                                        |
+| Ticket state history: state at a time                                | `entity_id`, `created DESC`, `version DESC`                                                                                                        |
+| Ticket state history: truncate by time                               | `created`, `version`                                                                                                                               |
+| Ticket diagnostic Event history: backward page                       | `entity_id`, `version DESC`, `created DESC`                                                                                                        |
+| Ticket diagnostic Event history: truncate by time                    | `created`, `version`                                                                                                                               |
+| Inbox shard read without statuses                                    | `shard_index`, `shard_total`, `when_received_seconds`, `when_received_nanos`, `version`, `message_id`                                              |
+| Inbox shard read with statuses                                       | `shard_index`, `shard_total`, `status`, `when_received_seconds`, `when_received_nanos`, `version`, `message_id`                                    |
+| Newest pending inbox message                                         | `shard_index`, `shard_total`, `status`, `when_received_seconds DESC`, `when_received_nanos DESC`, `version DESC`, `message_id DESC`, `__key__ ASC` |
+| Pending subscription expiry                                          | `status`, `when_activation_expires`                                                                                                                |
+| Full Agent history                                                   | `scope_digest`, `order_key`                                                                                                                        |
+| Agent history category                                               | `scope_digest`, `category`, `order_key`                                                                                                            |
+| Agent conversation history                                           | `scope_digest`, `conversation_digest`, `order_key`                                                                                                 |
 
-The key is the final tie-breaker; `__key__` is implicit in these index definitions.
+The key is the final tie-breaker. The descending inbox indexes explicitly order `__key__` ascending.
 Ascending is the default direction. The Agent `order_key` encoding makes an
 ascending provider scan yield newest-first history.
 
@@ -3750,24 +3819,53 @@ indexes:
       - name: created
       - name: version
 
-  # Inbox direct reads without a status filter.
+  # Inbox pages and newest pending work, with complete receive-time precision.
   - kind: spine.server.delivery.InboxMessage
     properties:
       - name: shard_index
       - name: shard_total
-      - name: when_received
+      - name: when_received_seconds
+      - name: when_received_nanos
       - name: version
       - name: message_id
-
-  # Inbox direct reads that specify one or more statuses.
   - kind: spine.server.delivery.InboxMessage
     properties:
       - name: shard_index
       - name: shard_total
       - name: status
-      - name: when_received
+      - name: when_received_seconds
+      - name: when_received_nanos
       - name: version
       - name: message_id
+  - kind: spine.server.delivery.InboxMessage
+    properties:
+      - name: shard_index
+      - name: shard_total
+      - name: when_received_seconds
+        direction: desc
+      - name: when_received_nanos
+        direction: desc
+      - name: version
+        direction: desc
+      - name: message_id
+        direction: desc
+      - name: __key__
+        direction: asc
+  - kind: spine.server.delivery.InboxMessage
+    properties:
+      - name: shard_index
+      - name: shard_total
+      - name: status
+      - name: when_received_seconds
+        direction: desc
+      - name: when_received_nanos
+        direction: desc
+      - name: version
+        direction: desc
+      - name: message_id
+        direction: desc
+      - name: __key__
+        direction: asc
 
   # Pending-subscription activation expiry cleanup.
   - kind: spine.client.SubscriptionRecord
@@ -5143,8 +5241,7 @@ monitoring, and recovered Delivery can invoke handlers.
 
 Thus the 15-family inventory describes every physical family this fully used
 example eventually needs, not 15 tables synchronously created by one build call.
-A remote-source supervisor can touch Delivery earlier during completed-context
-recovery; the hosting application should still exercise all enabled facilities
+A built-in work observer can touch Delivery earlier after a remote notice; the hosting application should still exercise all enabled facilities
 before exposing traffic.
 
 | Operation                                                          | Effect                                                                                                                                |

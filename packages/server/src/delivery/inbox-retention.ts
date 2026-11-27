@@ -17,14 +17,20 @@ const deliveredRetentionMs = 5_000;
 /**
  * Applies the shared completed Inbox retention policy.
  */
-export const InboxRetention: Readonly<{ deadline(nowMs: number): Date }> = Object.freeze({
-  /**
-   * Returns the cleanup eligibility time for a completed Inbox delivery.
-   *
-   * @param nowMs Application time at the delivered transition, in milliseconds.
-   * @returns The deadline five seconds after completion.
-   */
-  deadline(nowMs: number): Date {
-    return new Date(nowMs + deliveredRetentionMs);
-  },
-});
+export const InboxRetention: Readonly<{ durationMs: number; deadline(nowMs: number): Date }> =
+  Object.freeze({
+    /**
+     * Duration of the deduplication window after acknowledgement.
+     */
+    durationMs: deliveredRetentionMs,
+
+    /**
+     * Returns the cleanup eligibility time for a completed Inbox delivery.
+     *
+     * @param nowMs Application time at the delivered transition, in milliseconds.
+     * @returns The deadline five seconds after completion.
+     */
+    deadline(nowMs: number): Date {
+      return new Date(nowMs + deliveredRetentionMs);
+    },
+  });

@@ -14,6 +14,7 @@
 
 import { randomUUID } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { TaskListIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
@@ -67,21 +68,23 @@ describe.skipIf(!providerEnabled(inboxProvider, "mysql", mysqlUrl !== undefined)
       await secondFactory.close();
     });
 
-    it("deletes eligible delivered IDs directly", async () => {
+    it("deletes expired delivered messages with one shard predicate", async () => {
       const context = {
         name: `t0191_mysql_${randomUUID()}`,
         multitenant: false,
       } as const;
-      await expect(removeExact(factory, context)).resolves.toBeUndefined();
+      await expect(removeExpired(factory, context)).resolves.toBeUndefined();
     });
 
-    it("shares direct ID deletion across independently opened factories", async () => {
+    it("shares expired-delivery cleanup across independently opened factories", async () => {
       const context = {
         name: `t0191_mysql_two_factory_${randomUUID()}`,
         multitenant: false,
       } as const;
       await expect(
-        removeAcrossFactories(factory, secondFactory, context, () => mysqlCount(factory, context)),
+        removeExpiredAcrossFactories(factory, secondFactory, context, () =>
+          mysqlCount(factory, context),
+        ),
       ).resolves.toBeUndefined();
     });
 
@@ -145,7 +148,7 @@ describe.skipIf(!providerEnabled(inboxProvider, "mysql", mysqlUrl !== undefined)
             );
             expect(rows[0]?.engine.toUpperCase()).toBe(mysqlEngine);
           }
-          await removeExact(factory, context);
+          await removeExpired(factory, context);
           const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
           const shard = ShardIndex.single();
           const worker = create(WorkerIdSchema, { nodeId: { value: "node-1" }, value: "worker-1" });
@@ -227,20 +230,22 @@ describe.skipIf(!providerEnabled(inboxProvider, "postgresql", postgresqlUrl !== 
       await secondFactory.close();
     });
 
-    it("deletes eligible delivered IDs directly", async () => {
+    it("deletes expired delivered messages with one shard predicate", async () => {
       const context = {
         name: `t0230_postgresql_${randomUUID()}`,
         multitenant: false,
       } as const;
-      await expect(removeExact(factory, context)).resolves.toBeUndefined();
+      await expect(removeExpired(factory, context)).resolves.toBeUndefined();
     });
 
-    it("shares direct ID deletion across independently opened factories", async () => {
+    it("shares expired-delivery cleanup across independently opened factories", async () => {
       const context = {
         name: `t0230_postgresql_two_factory_${randomUUID()}`,
         multitenant: false,
       } as const;
-      await expect(removeAcrossFactories(factory, secondFactory, context)).resolves.toBeUndefined();
+      await expect(
+        removeExpiredAcrossFactories(factory, secondFactory, context),
+      ).resolves.toBeUndefined();
     });
   },
 );
@@ -248,7 +253,7 @@ describe.skipIf(!providerEnabled(inboxProvider, "postgresql", postgresqlUrl !== 
 describe.skipIf(!providerEnabled(inboxProvider, "datastore", datastoreHost !== undefined))(
   "Datastore Inbox cleanup",
   () => {
-    it("deletes eligible delivered IDs directly", async () => {
+    it("reports the unsupported cleanup predicate without deleting messages", async () => {
       const stringifiers = new StringifierRegistry();
       stringifiers.setTypeRegistry(new TypeRegistry([TaskListIdSchema]));
       const factory = DatastoreStorageFactory.newBuilder()
@@ -260,13 +265,133 @@ describe.skipIf(!providerEnabled(inboxProvider, "datastore", datastoreHost !== u
         multitenant: false,
       } as const;
       try {
-        await expect(removeExact(factory, context)).resolves.toBeUndefined();
+        await expect(removeExpired(factory, context, false)).resolves.toBeUndefined();
       } finally {
         await factory.close();
       }
     });
 
-    it("shares direct ID deletion across independently opened factories", async () => {
+    it("reads a whole shard and finds its newest waiting row beyond 1,000 candidates", async () => {
+      const client = new Datastore({ projectId: datastoreProject });
+      const stringifiers = new StringifierRegistry();
+      stringifiers.setTypeRegistry(new TypeRegistry([TaskListIdSchema]));
+      const kind = `DeliveryInbox${randomUUID().replaceAll("-", "")}`;
+      const factory = DatastoreStorageFactory.newBuilder()
+        .setClient(client)
+        .setStringifierRegistry(stringifiers)
+        .organizeRecords(inboxRecordSpec.recordType, {
+          kind,
+        })
+        .build();
+      const context = { name: "DeliveryInboxPaging", multitenant: false } as const;
+      const rows = Array.from({ length: 1_002 }, (_, i) =>
+        createMessage(`task-${String(i)}`, `signal-${String(i)}`, BigInt(i)),
+      );
+      const records = factory.createRecordStorage(context, inboxRecordSpec);
+      const inbox = open(factory, context);
+      try {
+        for (let i = 0; i < rows.length; i += 200)
+          await records.writeAll(rows.slice(i, i + 200).map((row) => InboxRecords.write(row)));
+        const shard = ShardIndex.single();
+        expect(
+          (await inbox.read(shard, { limit: rows.length })).map((row) => row.id.value),
+        ).toEqual(rows.map((row) => row.id.value));
+        expect((await inbox.newestPending(shard))?.id.value).toBe(rows.at(-1)?.id.value);
+      } finally {
+        const [keys] = await client.runQuery(client.createQuery(kind).select("__key__"));
+        for (let i = 0; i < keys.length; i += 200)
+          await client.delete(
+            keys
+              .slice(i, i + 200)
+              .map(
+                (row: { [Datastore.KEY]: import("@google-cloud/datastore").Key }) =>
+                  row[Datastore.KEY],
+              ),
+          );
+        await inbox.storage.close();
+        records.close();
+        await factory.close();
+      }
+    }, 30_000);
+
+    it("orders one-microsecond inbox receipts before opposing versions and IDs", async () => {
+      const stringifiers = new StringifierRegistry();
+      stringifiers.setTypeRegistry(new TypeRegistry([TaskListIdSchema]));
+      const factory = DatastoreStorageFactory.newBuilder()
+        .setClient(new Datastore({ projectId: datastoreProject, namespace: randomUUID() }))
+        .setStringifierRegistry(stringifiers)
+        .build();
+      const context = {
+        name: `datastore_order_${randomUUID()}`,
+        multitenant: false,
+      } as const;
+      const inbox = open(factory, context);
+      const earlier = {
+        ...createMessage(`${context.name}-zeta`, "earlier-event", 100n),
+        whenReceived: create(TimestampSchema, { seconds: 100n, nanos: 100_000 }),
+      };
+      const later = {
+        ...createMessage(`${context.name}-alpha`, "later-event", 1n),
+        whenReceived: create(TimestampSchema, { seconds: 100n, nanos: 101_000 }),
+      };
+      const shard = ShardIndex.single();
+      try {
+        await inbox.storage.write(earlier);
+        await inbox.storage.write(later);
+        expect((await inbox.read(shard, { limit: 1 })).map((row) => row.id.value)).toEqual([
+          earlier.id.value,
+        ]);
+        expect(
+          (
+            await inbox.read(shard, {
+              limit: 1,
+              after: {
+                messageId: earlier.id.value,
+                whenReceived: earlier.whenReceived,
+                version: earlier.version,
+              },
+            })
+          ).map((row) => row.id.value),
+        ).toEqual([later.id.value]);
+        expect((await inbox.newestPending(shard))?.id.value).toBe(later.id.value);
+      } finally {
+        await inbox.storage.close();
+        await factory.close();
+      }
+    });
+
+    it("acknowledges the current ID after a page-sourced overwrite and preserves the first deadline", async () => {
+      const factory = DatastoreStorageFactory.newBuilder()
+        .setClient(new Datastore({ projectId: datastoreProject, namespace: randomUUID() }))
+        .build();
+      const context = { name: `datastore_ack_${randomUUID()}`, multitenant: false } as const;
+      let now = new Date("2026-07-01T00:00:00.000Z");
+      const inbox = open(factory, context, () => now);
+      const original = createMessage(`${context.name}-message`, "original", 1n);
+      try {
+        await inbox.storage.write(original);
+        const page = await inbox.read(ShardIndex.single(), { limit: 1 });
+        const pending = page[0];
+        if (pending === undefined) throw new Error("Expected the pending Datastore inbox message.");
+        expect(pending.id).toEqual(original.id);
+        await inbox.storage.write(createMessage(original.id.value, "replacement", 2n));
+        const first = await inbox.markDelivered(pending);
+        expect(first?.keepUntil).toEqual(new Date(now.getTime() + 5_000));
+        await expect(inbox.readMessage(original.id)).resolves.toMatchObject({
+          signalId: "replacement",
+          status: "DELIVERED",
+        });
+        now = new Date(now.getTime() + 1_000);
+        const retried = await inbox.markDelivered(pending);
+        expect(retried?.keepUntil).toEqual(first?.keepUntil);
+        expect((await inbox.readMessage(original.id))?.keepUntil).toEqual(first?.keepUntil);
+      } finally {
+        await inbox.storage.close();
+        await factory.close();
+      }
+    });
+
+    it("leaves expired messages visible across independently opened factories", async () => {
       const stringifiers = new StringifierRegistry();
       stringifiers.setTypeRegistry(new TypeRegistry([TaskListIdSchema]));
       const firstFactory = DatastoreStorageFactory.newBuilder()
@@ -283,8 +408,12 @@ describe.skipIf(!providerEnabled(inboxProvider, "datastore", datastoreHost !== u
       } as const;
       try {
         await expect(
-          removeAcrossFactories(firstFactory, secondFactory, context, (message) =>
-            datastoreCount(firstFactory, context, message),
+          removeExpiredAcrossFactories(
+            firstFactory,
+            secondFactory,
+            context,
+            (message) => datastoreCount(firstFactory, context, message),
+            false,
           ),
         ).resolves.toBeUndefined();
       } finally {
@@ -295,39 +424,55 @@ describe.skipIf(!providerEnabled(inboxProvider, "datastore", datastoreHost !== u
   },
 );
 
-async function removeExact(
+async function removeExpired(
   factory: Parameters<typeof open>[0],
   context: { readonly name: string; readonly multitenant: false },
+  supported = true,
 ): Promise<void> {
   let now = new Date(Date.now() + 7_200_000);
   const inbox = open(factory, context, () => now);
   const seed = `${context.name}-${randomUUID()}`;
   const message = createMessage(`${seed}-delivered`, "direct", 1n);
   await inbox.storage.write(message);
+  const recordStorage = factory.createRecordStorage(context, inboxRecordSpec);
+  const id = InboxRecords.write(message).id;
+  if (id === undefined) throw new Error("Expected an inbox storage ID.");
+  const stalePending = await recordStorage.read(id);
+  if (stalePending === undefined) throw new Error("Expected a pending inbox record.");
   const delivered = await inbox.markDelivered(message);
   if (delivered === undefined) throw new Error("Expected delivered provider row.");
-  now = new Date(now.getTime() + 5_000);
-  await expect(
-    inbox.removeDelivered({ ...delivered, version: delivered.version + 1n }),
-  ).resolves.toBe(true);
-  await expect(inbox.readMessage(message.id)).resolves.toBeUndefined();
-  await expect(inbox.removeDelivered(delivered)).resolves.toBe(false);
-
+  await expect(inbox.removeDuplicate(message)).resolves.toBe(false);
+  await expect(inbox.readMessage(message.id)).resolves.toMatchObject({
+    status: "DELIVERED",
+    keepUntil: delivered.keepUntil,
+  });
+  await expect(recordStorage.compareAndSet(id, stalePending, undefined)).resolves.toBe(false);
+  const current = await recordStorage.read(id);
+  if (current === undefined) throw new Error("Expected a delivered inbox record.");
+  await expect(recordStorage.compareAndSet(id, current, current)).resolves.toBe(true);
+  recordStorage.close();
+  now = new Date(now.getTime() + 1);
   const protectedMessage = createMessage(`${seed}-protected`, "protected", 2n);
   await inbox.storage.write(protectedMessage);
   const protectedDelivered = await inbox.markDelivered(protectedMessage);
   if (protectedDelivered === undefined) throw new Error("Expected protected provider row.");
-  await expect(inbox.removeDelivered(protectedDelivered)).resolves.toBe(false);
+  const pending = createMessage(`${seed}-pending`, "pending", 3n);
+  await inbox.storage.write(pending);
+  now = new Date(now.getTime() + 4_999);
+  await expect(inbox.removeExpiredDelivered(ShardIndex.single())).resolves.toBe(supported);
+  await expect(inbox.readMessage(message.id)).resolves.toEqual(supported ? undefined : delivered);
   await expect(inbox.readMessage(protectedMessage.id)).resolves.toMatchObject({
     status: "DELIVERED",
   });
+  await expect(inbox.readMessage(pending.id)).resolves.toMatchObject({ status: "TO_DELIVER" });
 }
 
-async function removeAcrossFactories(
+async function removeExpiredAcrossFactories(
   firstFactory: MysqlStorageFactory | PostgresStorageFactory | DatastoreStorageFactory,
   secondFactory: MysqlStorageFactory | PostgresStorageFactory | DatastoreStorageFactory,
   context: { readonly name: string; readonly multitenant: false },
-  count?: (message: Parameters<Inbox["removeDelivered"]>[0]) => Promise<number>,
+  count?: (message: Parameters<Inbox["markDelivered"]>[0]) => Promise<number>,
+  supported = true,
 ): Promise<void> {
   let now = new Date(Date.now());
   const firstInbox = open(firstFactory, context, () => now);
@@ -338,10 +483,11 @@ async function removeAcrossFactories(
   if (delivered === undefined) throw new Error("Expected delivered provider row.");
   now = new Date(now.getTime() + 5_000);
   if (count !== undefined) await expect(count(delivered)).resolves.toBe(1);
-  await expect(secondInbox.removeDelivered(delivered)).resolves.toBe(true);
-  if (count !== undefined) await expect(count(delivered)).resolves.toBe(0);
-  await expect(firstInbox.readMessage(message.id)).resolves.toBeUndefined();
-  await expect(firstInbox.removeDelivered(delivered)).resolves.toBe(false);
+  await expect(secondInbox.removeExpiredDelivered(ShardIndex.single())).resolves.toBe(supported);
+  if (count !== undefined) await expect(count(delivered)).resolves.toBe(supported ? 0 : 1);
+  await expect(firstInbox.readMessage(message.id)).resolves.toEqual(
+    supported ? undefined : delivered,
+  );
 }
 
 async function mysqlCount(
@@ -370,7 +516,7 @@ async function mysqlCount(
 async function datastoreCount(
   factory: DatastoreStorageFactory,
   context: { readonly name: string; readonly multitenant: false },
-  message: Parameters<Inbox["removeDelivered"]>[0],
+  message: Parameters<Inbox["markDelivered"]>[0],
 ): Promise<number> {
   const storage = factory.createRecordStorage(context, inboxRecordSpec) as unknown as {
     transactionEntity(value: ReturnType<typeof InboxRecords.write>): { key: unknown };

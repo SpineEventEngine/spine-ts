@@ -22,6 +22,103 @@ import { describe, expect, it } from "vitest";
 import { DatastoreRecordStorage } from "../src/datastore/record-storage.js";
 
 describe("DatastoreRecordStorage", () => {
+  it("reconciles composite filtered pages beyond the default scan cutoff", async () => {
+    const client = new PagingFlatDatastore();
+    const spec = new RecordSpec<string, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+      columns: [
+        new RecordColumn(
+          "shard",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (record) => record.value.split(":")[0],
+        ),
+        new RecordColumn(
+          "status",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (record) => record.value.split(":")[1],
+        ),
+        new RecordColumn(
+          "time",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (record) => record.value.split(":")[2],
+        ),
+        new RecordColumn(
+          "version",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (record) => record.value.split(":")[3],
+        ),
+        new RecordColumn(
+          "message_id",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (record) => record.value.split(":")[4],
+        ),
+      ],
+    });
+    const records = new DatastoreRecordStorage(
+      { name: "inbox", multitenant: false },
+      spec,
+      client as never,
+      undefined,
+    );
+    const values = Array.from({ length: 1_002 }, (_, index) =>
+      message(
+        `a:TO_DELIVER:${String(Math.floor(index / 2)).padStart(4, "0")}:${String((index % 2) + 1)}:${String(index)}`,
+      ),
+    );
+    values.push(message("a:SCHEDULED:9999:1:scheduled"));
+    values.push(message("b:TO_DELIVER:9999:1:other"));
+    await records.writeAll(values);
+    const query = {
+      filters: [
+        { column: "shard", value: "a" },
+        { column: "status", value: ["TO_DELIVER", "SCHEDULED"] },
+      ],
+      sort: [{ field: "time" }, { field: "version" }, { field: "message_id" }],
+      limit: 2,
+    };
+    const first = await records.queryEntries(query);
+    expect(first.map(({ id }) => id)).toEqual(["a:TO_DELIVER:0000:1:0", "a:TO_DELIVER:0000:2:1"]);
+    const next = await records.queryEntries({
+      ...query,
+      after: {
+        values: [
+          { field: "time", value: "0000" },
+          { field: "version", value: "2" },
+          { field: "message_id", value: "1" },
+        ],
+        id: "a:TO_DELIVER:0000:2:1",
+      },
+    });
+    expect(next.map(({ id }) => id)).toEqual(["a:TO_DELIVER:0001:1:2", "a:TO_DELIVER:0001:2:3"]);
+    const newest = await records.queryEntries({
+      filters: [
+        { column: "shard", value: "a" },
+        { column: "status", value: "TO_DELIVER" },
+      ],
+      sort: [
+        { field: "time", direction: "desc" },
+        { field: "version", direction: "desc" },
+        { field: "message_id", direction: "desc" },
+      ],
+      limit: 1,
+    });
+    expect(newest[0]?.id).toBe("a:TO_DELIVER:0500:2:1001");
+    const scheduled = await records.queryEntries({
+      filters: [
+        { column: "shard", value: "a" },
+        { column: "status", value: "SCHEDULED" },
+      ],
+      sort: [{ field: "time" }, { field: "version" }, { field: "message_id" }],
+      limit: 1,
+    });
+    expect(scheduled[0]?.id).toBe("a:SCHEDULED:9999:1:scheduled");
+    expect(client.pages).toBeGreaterThan(8);
+    expect(
+      client.queries.every((query) => query.filters.some((filter) => filter.name === "shard")),
+    ).toBe(true);
+  });
   it.each([
     ["two properties", ["initial", "value"]],
     ["ID before property", ["id", "initial"]],

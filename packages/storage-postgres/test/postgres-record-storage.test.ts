@@ -32,6 +32,14 @@ import {
 } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, type Event } from "@spine-event-engine/proto";
 import {
+  InboxLabel,
+  InboxMessageIdSchema,
+  InboxMessageSchema,
+  InboxMessageStatus,
+  ShardIndexSchema,
+  type InboxMessage,
+} from "@spine-event-engine/proto/delivery";
+import {
   ColumnTypes,
   InMemoryRecordStorage,
   RecordColumn,
@@ -2316,6 +2324,123 @@ describe("Postgres record storage", () => {
     const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
     expect(query?.values).toEqual([2]);
   });
+
+  it("acknowledges an inbox ID once and reads the first deadline only after an ambiguous retry", async () => {
+    const storage = inboxStorage();
+    await storage.prepare();
+    driver.calls.length = 0;
+    let current: "pending" | "delivered" | "absent" = "pending";
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.startsWith("UPDATE") && sql.includes('SET "status"')) {
+        if (current === "pending") {
+          current = "delivered";
+          return Promise.resolve({ rowCount: 1, rows: [{ when_keep_until: String(values?.[2]) }] });
+        }
+        return Promise.resolve({ rowCount: 0, rows: [] });
+      }
+      if (sql.startsWith('SELECT "status"'))
+        return Promise.resolve({
+          rows:
+            current === "absent"
+              ? []
+              : [
+                  {
+                    status:
+                      current === "delivered"
+                        ? InboxMessageStatus.DELIVERED
+                        : InboxMessageStatus.TO_DELIVER,
+                    when_keep_until: current === "delivered" ? "100000000000" : null,
+                  },
+                ],
+        });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+    const first = create(TimestampSchema, { seconds: 100n });
+    const later = create(TimestampSchema, { seconds: 200n });
+
+    await expect(storage.markInboxDelivered("ack", first)).resolves.toEqual(first);
+    expect(driver.calls.filter(({ sql }) => sql.startsWith('SELECT "status"'))).toHaveLength(0);
+    await expect(storage.markInboxDelivered("ack", later)).resolves.toEqual(first);
+    current = "absent";
+    await expect(storage.markInboxDelivered("ack", later)).resolves.toBeUndefined();
+    current = "pending";
+    await expect(storage.markInboxDelivered("ack", later)).resolves.toEqual(later);
+  });
+
+  it("deletes only pending inbox IDs and cleans expired delivered IDs with one predicate", async () => {
+    const storage = inboxStorage();
+    await storage.prepare();
+    driver.calls.length = 0;
+    let state: "pending" | "delivered" | "absent" = "pending";
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.startsWith("DELETE") && sql.includes('"ID" = $1 AND "status" = $2')) {
+        const removed = state === "pending";
+        if (removed) state = "absent";
+        return Promise.resolve({ rowCount: removed ? 1 : 0, rows: [] });
+      }
+      if (sql.startsWith("SELECT 1"))
+        return Promise.resolve({ rowCount: state === "absent" ? 0 : 1, rows: [] });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+    await expect(storage.removePendingInbox("ack")).resolves.toBe(true);
+    await expect(storage.removePendingInbox("ack")).resolves.toBe(true);
+    state = "delivered";
+    await expect(storage.removePendingInbox("ack")).resolves.toBe(false);
+    await expect(
+      storage.removeExpiredInbox(
+        create(ShardIndexSchema, { index: 2, ofTotal: 4 }),
+        create(TimestampSchema, { seconds: 100n }),
+      ),
+    ).resolves.toBe(true);
+    const cleanup = driver.calls.filter(
+      ({ sql }) => sql.startsWith("DELETE") && sql.includes("shard_index"),
+    );
+    expect(cleanup).toHaveLength(1);
+    expect(cleanup[0]?.sql).toContain('"when_keep_until" IS NULL OR "when_keep_until" <= $4');
+    expect(cleanup[0]?.values?.slice(0, 3)).toEqual([2, 4, InboxMessageStatus.DELIVERED]);
+
+    storage.close();
+    const statementsBefore = driver.calls.length;
+    const now = create(TimestampSchema, { seconds: 100n });
+    const shard = create(ShardIndexSchema, { index: 2, ofTotal: 4 });
+    await expect(storage.markInboxDelivered("ack", now)).rejects.toThrow(/closed/i);
+    await expect(storage.removePendingInbox("ack")).rejects.toThrow(/closed/i);
+    await expect(storage.removeExpiredInbox(shard, now)).rejects.toThrow(/closed/i);
+    expect(driver.calls).toHaveLength(statementsBefore);
+  });
+
+  it("compares authoritative inbox status and deadline before replacing payload bytes", async () => {
+    const storage = inboxStorage();
+    await storage.prepare();
+    driver.calls.length = 0;
+    const pending = inboxRecord("before", InboxMessageStatus.TO_DELIVER);
+    const completed = inboxRecord("before", InboxMessageStatus.DELIVERED, 100n);
+    const replacement = inboxRecord("after", InboxMessageStatus.DELIVERED, 100n);
+    const raw = toBinary(InboxMessageSchema, pending);
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.startsWith('SELECT "bytes"'))
+        return Promise.resolve({
+          rows: [
+            { bytes: raw, status: InboxMessageStatus.DELIVERED, when_keep_until: "100000000000" },
+          ],
+        });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+    await expect(storage.compareAndSet("ack", pending, undefined)).resolves.toBe(false);
+    expect(driver.calls.some(({ sql }) => sql.startsWith("DELETE"))).toBe(false);
+    await expect(storage.compareAndSet("ack", completed, replacement)).resolves.toBe(true);
+    const update = driver.calls.find(({ sql }) => sql.startsWith("UPDATE"));
+    expect(update?.sql).toContain('"status" IS NOT DISTINCT FROM');
+    expect(update?.sql).toContain('"when_keep_until" IS NOT DISTINCT FROM');
+    expect(Array.from(update?.values?.[2] as Uint8Array)).toEqual([
+      ...toBinary(InboxMessageSchema, replacement),
+    ]);
+    expect(update?.values?.at(-2)).toBe(InboxMessageStatus.DELIVERED);
+    expect(update?.values?.at(-1)).toBe("100000000000");
+  });
 });
 
 async function retainedGroupedPostgres() {
@@ -2355,6 +2480,86 @@ async function recordStorage() {
     .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
     .build();
   return factory.createRecordStorage({ name: "test", multitenant: false }, recordSpec());
+}
+
+function inboxStorage() {
+  const spec = inboxSpec();
+  const table = PostgresTableSpecs.resolvedPostgresTableSpec({
+    schema: "spine",
+    tableName: "inbox",
+    sourceType: spec.sourceType,
+    recordType: spec.recordType,
+    idType: spec.idType,
+    declaredColumns: spec.columns,
+  });
+  return new PostgresRecordStorage(
+    { name: "inbox", multitenant: false },
+    spec,
+    table.tableName,
+    () => table,
+    {
+      resolve: () => Promise.resolve(),
+      track: (work) => work,
+      prepare: () => Promise.resolve(),
+      publicOpen: () => true,
+      databaseName: "test",
+      schema: "spine",
+      acquire: () => driver.connect() as never,
+    },
+    () => undefined,
+    undefined,
+    undefined,
+    false,
+  );
+}
+
+function inboxSpec(): RecordSpec<string, InboxMessage> {
+  return new RecordSpec({
+    recordType: InboxMessageSchema,
+    idKind: "string",
+    extractId: (record) => record.id?.uuid ?? "",
+    columns: [
+      new RecordColumn(
+        "shard_index",
+        ColumnTypes.scalar(ScalarType.INT32),
+        (record) => record.id?.index?.index ?? 0,
+      ),
+      new RecordColumn(
+        "shard_total",
+        ColumnTypes.scalar(ScalarType.INT32),
+        (record) => record.id?.index?.ofTotal ?? 1,
+      ),
+      new RecordColumn(
+        "status",
+        ColumnTypes.fromField(InboxMessageSchema.field.status),
+        (record) => record.status,
+      ),
+      new RecordColumn(
+        "when_keep_until",
+        ColumnTypes.fromField(InboxMessageSchema.field.keepUntil),
+        (record) => record.keepUntil,
+      ),
+    ],
+  });
+}
+
+function inboxRecord(payload: string, status: InboxMessageStatus, deadline?: bigint): InboxMessage {
+  return create(InboxMessageSchema, {
+    id: create(InboxMessageIdSchema, {
+      uuid: "ack",
+      index: create(ShardIndexSchema, { index: 2, ofTotal: 4 }),
+    }),
+    label: InboxLabel.REACT_UPON_EVENT,
+    payload: {
+      case: "event",
+      value: create(EventSchema, { id: create(EventIdSchema, { value: payload }) }),
+    },
+    status,
+    version: 1,
+    ...(deadline === undefined
+      ? {}
+      : { keepUntil: create(TimestampSchema, { seconds: deadline }) }),
+  });
 }
 
 function recordSpec(): RecordSpec<string, StringValue> {

@@ -32,9 +32,9 @@ describe("Datastore public compile-consumer contract", () => {
       _context: StorageContext,
       _recordSpec: RecordSpec<I, Message>,
       _client: Datastore,
-      maxClientSideScan: number,
+      maxClientSideScan: number | undefined,
     ) => {
-      expect(maxClientSideScan).toBe(1_000);
+      expect(maxClientSideScan).toBeUndefined();
       return { close: () => undefined, isOpen: () => true } as never;
     };
     const entityCreator: CreateEntityStorage = () => ({

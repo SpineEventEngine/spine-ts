@@ -30,6 +30,7 @@ import {
 import { InboxRecords, inboxRecordSpec } from "../../src/delivery/inbox-records.js";
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
+import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { createMessage } from "./inbox-message-fixture.js";
 import { tenant } from "../tenant-fixture.js";
 
@@ -90,7 +91,10 @@ describe("direct InboxMessage storage", () => {
       ["shard_index", "scalar"],
       ["shard_total", "scalar"],
       ["status", "enum"],
+      ["when_keep_until", "message"],
       ["when_received", "message"],
+      ["when_received_seconds", "scalar"],
+      ["when_received_nanos", "scalar"],
       ["version", "scalar"],
       ["message_id", "scalar"],
     ]);
@@ -111,7 +115,7 @@ describe("direct InboxMessage storage", () => {
     expect(InboxRecords.read(InboxRecords.write(message))).toEqual(message);
   });
 
-  it("rejects every CAS mutation before touching a non-atomic inbox handle", async () => {
+  it("writes with provider upsert and acknowledges by ID without compare-and-set", async () => {
     const factory = new InMemoryStorageFactory();
     const original = factory.createRecordStorage.bind(factory);
     vi.spyOn(factory, "createRecordStorage").mockImplementation((context, spec) => {
@@ -124,8 +128,8 @@ describe("direct InboxMessage storage", () => {
       storageFactory: factory,
     });
     const message = createMessage("atomic", "atomic", 1n);
-    await expect(storage.write(message)).rejects.toThrow("atomic");
-    await expect(storage.markDelivered(message)).rejects.toThrow("atomic");
+    await expect(storage.write(message)).resolves.toEqual(message);
+    await expect(storage.markDelivered(message)).resolves.toMatchObject({ status: "DELIVERED" });
   });
 
   it("rejects corrupt generated inbox rows as storage corruption", () => {
@@ -199,7 +203,7 @@ describe("direct InboxMessage storage", () => {
     );
   });
 
-  it("changes only the exact pending snapshot to delivered and converges a matching delivery", async () => {
+  it("acknowledges the current pending ID without comparing a stale page snapshot", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -207,9 +211,10 @@ describe("direct InboxMessage storage", () => {
     const pending = createMessage("message-1", "signal-1", 1n);
 
     await storage.write(pending);
-    await expect(storage.markDelivered({ ...pending, version: 2n })).resolves.toBeUndefined();
-    await expect(storage.readMessage(pending.id)).resolves.toMatchObject({ status: "TO_DELIVER" });
-    await expect(storage.markDelivered(pending)).resolves.toMatchObject({ status: "DELIVERED" });
+    await expect(storage.markDelivered({ ...pending, version: 2n })).resolves.toMatchObject({
+      status: "DELIVERED",
+    });
+    await expect(storage.readMessage(pending.id)).resolves.toMatchObject({ status: "DELIVERED" });
     await expect(storage.markDelivered(pending)).resolves.toMatchObject({ status: "DELIVERED" });
   });
 
@@ -228,13 +233,20 @@ describe("direct InboxMessage storage", () => {
     now = new Date(240_000);
     expect((await storage.readMessage(pending.id))?.status).toBe("TO_DELIVER");
     expect((await storage.readMessage(pending.id))?.keepUntil).toBeUndefined();
-    await expect(storage.removeDelivered(pending)).resolves.toBe(false);
+    await expect(storage.removeExpiredDelivered(ShardIndex.single())).resolves.toBe(true);
 
     const first = await storage.markDelivered(pending);
     expect(first?.keepUntil).toEqual(new Date(245_000));
     now = new Date(250_000);
     expect(await storage.markDelivered(pending)).toEqual(first);
     expect(await storage.readMessage(pending.id)).toEqual(first);
+
+    // A worker still holding the pending page must respect the stored completion.
+    expect(await storage.removeDuplicate(pending)).toBe(false);
+    expect(await storage.readMessage(pending.id)).toEqual(first);
+    await storage.removeExpiredDelivered(ShardIndex.single());
+    expect(await storage.readMessage(pending.id)).toBeUndefined();
+    expect(await storage.removeDuplicate(pending)).toBe(true);
   });
 
   it("starts separate deadlines when one Event reaches two recipients", async () => {
@@ -276,44 +288,26 @@ describe("direct InboxMessage storage", () => {
     expect(await storage.readMessage(pending.id)).toEqual(results[0]);
   });
 
-  it("rereads only the exact delivered successor after a contested completion CAS", async () => {
-    for (const outcome of ["delivered", "different"] as const) {
-      const factory = new InMemoryStorageFactory();
-      const original = factory.createRecordStorage.bind(factory);
-      let race = false;
-      vi.spyOn(factory, "createRecordStorage").mockImplementation((context, spec) => {
-        const records = original(context, spec);
-        const compareAndSet = records.compareAndSet.bind(records);
-        vi.spyOn(records, "compareAndSet").mockImplementation(async (id, expected, next) => {
-          if (!race) return compareAndSet(id, expected, next);
-          if (outcome === "delivered") {
-            if (next === undefined) throw new Error("Expected delivered successor.");
-            await records.write(next);
-          } else
-            await records.write(
-              InboxRecords.write({ ...createMessage("message", "signal", 1n), version: 2n }),
-            );
-          return false;
-        });
-        return records;
-      });
-      const storage = new InboxStorage({
-        context: { name: `Contested-${outcome}`, multitenant: false },
-        storageFactory: factory,
-      });
-      const pending = createMessage("message", "signal", 1n);
+  it("acknowledges a same-ID replacement while retaining its current payload", async () => {
+    const storage = new InboxStorage({
+      context: { name: "ReplacementAck", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const original = createMessage("message", "original", 1n);
+    await storage.write(original);
+    const [page] = await storage.read(ShardIndex.single(), { limit: 1 });
+    if (page === undefined) throw new Error("Expected the pending inbox message.");
+    await storage.write(createMessage("message", "replacement", 2n));
 
-      await storage.write(pending);
-      race = true;
-      if (outcome === "delivered")
-        await expect(storage.markDelivered(pending)).resolves.toMatchObject({
-          status: "DELIVERED",
-        });
-      else await expect(storage.markDelivered(pending)).resolves.toBeUndefined();
-    }
+    await expect(storage.markDelivered(page)).resolves.toMatchObject({ status: "DELIVERED" });
+    await expect(storage.readMessage(original.id)).resolves.toMatchObject({
+      signalId: "replacement",
+      version: 2n,
+      status: "DELIVERED",
+    });
   });
 
-  it("orders filtered rows and handles duplicate, collision, missing, and non-pending paths", async () => {
+  it("orders pending messages and replaces an existing inbox message ID", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -321,22 +315,29 @@ describe("direct InboxMessage storage", () => {
     const first = createMessage("message-1", "signal-1", 1n, new Date(2_000));
     const second = createMessage("message-2", "signal-2", 2n, new Date(1_000));
 
-    await expect(storage.write(first)).resolves.toMatchObject({ outcome: "WRITTEN" });
-    await expect(storage.write(first)).resolves.toMatchObject({ outcome: "DUPLICATE" });
-    await expect(storage.write({ ...first, signalId: "conflict" })).rejects.toThrow(
-      "already exists",
-    );
+    await storage.write(first);
+    const replacement = createMessage("message-1", "replacement-signal", 1n, new Date(2_000));
+    await storage.write(replacement);
     await storage.write(second);
     await expect(storage.read(first.shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
       { id: second.id },
-      { id: first.id },
+      { id: first.id, signalId: replacement.signalId },
     ]);
     await expect(storage.read(first.shard, { limit: 0 })).rejects.toThrow("limit");
     await expect(storage.readMessage({ ...first.id, value: "missing" })).resolves.toBeUndefined();
     await expect(
       storage.markDelivered({ ...first, id: { ...first.id, value: "missing" } }),
     ).resolves.toBeUndefined();
-    await storage.markDelivered(first);
+    await expect(storage.markDelivered(first)).resolves.toMatchObject({
+      status: "DELIVERED",
+    });
+    await expect(storage.readMessage(first.id)).resolves.toMatchObject({
+      signalId: replacement.signalId,
+      status: "DELIVERED",
+    });
+    await expect(storage.markDelivered(replacement)).resolves.toMatchObject({
+      status: "DELIVERED",
+    });
   });
 
   it("removes only an exact pending duplicate under its current shard session", async () => {
@@ -427,7 +428,7 @@ describe("direct InboxMessage storage", () => {
 
     await storage.write(message);
     await expect(storage.read(message.shard)).resolves.toEqual([message]);
-    for (const limit of [-1, 1.5, 1_001, Number.MAX_SAFE_INTEGER + 1])
+    for (const limit of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1])
       await expect(storage.read(message.shard, { limit })).rejects.toThrow("limit");
     for (const offset of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1])
       await expect(storage.read(message.shard, { offset })).rejects.toThrow("offset");

@@ -60,11 +60,11 @@ self-introspection was unavailable; no mismatch or fallback was visible.
 ### Security correction batch
 
 The original implementation owner applied both accepted P1 corrections: finite
-validated retained message/byte/tracked-shard configuration with atomic
-admission, bounded batch/snapshot/expiration work, and complete canonical
+validated retained message and byte configuration with atomic
+admission, validation of batch and response sizes, and complete canonical
 inbox-record validation before persistence. Focused adversarial tests cover
 direct service admission, poison record rejection, atomic mixed-batch failure,
-and retained/session capacity. Style/maintainability, performance/reliability,
+and retained inbox limits. Style/maintainability, performance/reliability,
 TypeScript/API, and security re-review remain pending because this changes
 production capacity and public options.
 
@@ -85,9 +85,9 @@ self-introspection was unavailable; no mismatch or fallback was visible.
 Result: not clean; two P1 findings accepted as blocking.
 
 1. The standalone in-memory delivery server has no finite total retained
-   message/byte or tracked-shard bounds. Batch writes, full-state sorting,
+   message or byte limits. Batch writes, full-state sorting,
    Admin snapshots, and expired-session responses can also create unbounded
-   work or output. Existing RPC, pending-mutation, page, and subscriber limits
+   work or output. Existing RPC, page, and subscriber limits
    do not cap total server state. Correction must add finite safe defaults,
    reject admission at capacity, bound server-side batches/payloads, and keep
    snapshot/expiration response work within the RPC ceiling, with adversarial
@@ -120,13 +120,9 @@ Result: not clean; one consolidated final correction batch is required.
   because a count-bounded Inbox page can exceed the 4 MiB response ceiling;
   `removeMany` also lacks the declared 100-record cap.
 - Performance/reliability (`gpt-5.6-terra` / `high`): additionally found that
-  released message-free shard records accumulate until normal churn
-  permanently exhausts shard capacity, and that the server's 10,000-entry
-  Admin bound conflicts with the client's 1,000-entry decoder bound. Batch
+  released message-free shard records accumulate in memory. Batch
   length must be checked before per-record serialization/copying.
-- Style/maintainability (`gpt-5.6-terra` / `high`): the public listener-free
-  core bypasses the tracked-shard response ceiling, and default policy values
-  are duplicated across construction paths.
+- Style/maintainability (`gpt-5.6-terra` / `high`): default policy values are duplicated across construction paths.
 - TypeScript/API (`gpt-5.6-terra` / `high`): confirmed the response, Admin,
   batch, and public-core gaps; also found server/client drift for the 128-byte
   worker identity rule and undocumented inherited public core limit options.
@@ -148,15 +144,13 @@ loopback `EPERM` failures were independently reproduced as environment-only.
 2. Prune released shard records when no message retains the shard, including
    after the last message removal; prove normal shard churn does not exhaust
    capacity.
-3. Use one shared 1,000-shard Admin/expiration/client-compatible bound and
-   enforce it in every public construction path.
-4. Validate non-empty, at-most-100 write/remove batch lengths before any
+3. Validate non-empty, at-most-100 write/remove batch lengths before any
    per-record work.
-5. Centralize limit defaults and declare/document public core options directly
+4. Centralize limit defaults and declare/document public core options directly
    instead of inheriting an unexported internal type.
-6. Mirror the 128-byte combined worker/node identity rule in the delivery
+5. Mirror the 128-byte combined worker/node identity rule in the delivery
    client before RPC.
-7. Correct README, guide, TSDoc, threat model, and closure claims/ranges/failure
+6. Correct README, guide, TSDoc, threat model, and closure claims/ranges/failure
    behavior, with focused adversarial and public-contract regressions.
 
 ## Targeted Finding Rechecks
@@ -203,10 +197,10 @@ reopen a broad review wave.
 
 ### Final correction implementation
 
-All seven accepted items are implemented. The exact requested Inbox page is
+The accepted corrections are implemented. The exact requested Inbox page is
 encoded and rejected with `RESOURCE_EXHAUSTED` above 4 MiB; it is never silently
 shortened. Full records and single-record responses are bounded, released shard
-churn is pruned, every construction path shares the 1,000-shard ceiling,
+churn is pruned,
 write/remove batch lengths are checked before record work, defaults and public
 options are coherent, and client worker validation matches the server. All
 affected finding rechecks are clean; the deterministic P2 follow-ups passed

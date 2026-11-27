@@ -90,8 +90,7 @@ setting. Both retain the existing default of 100.
 Managed close drains Delivery, cancels subscription relays while child listeners
 remain reachable, and then completes child close. Failed cleanup remains
 observable and retryable. Private IPC acknowledgement and process reaping have
-separate bounded graces. Direct `DeliverySupervisor.close({ graceMs })` retains
-its active-work and release-cleanup bounds; these are Delivery policies.
+separate bounded graces. Delivery observation stops before the shared Delivery facility closes, and active runs finish through the ordinary server drain.
 
 The reference includes entry points for `@spine-event-engine/client-web`,
 `@spine-event-engine/client-node`, `@spine-event-engine/delivery-client`, and
@@ -319,17 +318,16 @@ Successful processing followed by failed acknowledgement gets finite
 acknowledgement-only retries; exhaustion leaves the row pending.
 Normal local and remote delivery reads every status in a bounded page. It
 removes a pending duplicate when its signal ID and typed Inbox target match a
-delivered row in that page or one of the 1,000 most recent deliveries remembered
-by the process. A different target or a new signal ID remains independently
+delivered row still within its retention window in that page, or an identity
+the process acknowledged within the last five seconds. A different target or a new signal ID remains independently
 deliverable, even when the domain payload is equal.
 
 Each Inbox read is bounded to one page, not to a total backlog: an active drain
 advances through later pages while it retains the shard. After reaching the end,
 it starts another scan only if it delivered messages during the completed scan.
 It stops after a scan with no deliveries, rather than returning to the beginning
-after every productive page. The 30-second Inbox
-deduplication window controls how long delivered rows remain available as
-duplicate evidence. It is not a delivery-retention period; ordinary accepted rows
+after every productive page. A delivered row supplies duplicate evidence for five seconds from acknowledgement.
+A later drain removes the row after that deadline. It is not a delivery-retention period; ordinary accepted rows
 follow their Inbox lifecycle and may be redelivered after the duplicate window has
 elapsed. Agent inputs use the same ordinary Inbox acknowledgement and redelivery rules.
 A saved `CallModel` request or pending call is not a durable execution queue;
@@ -428,24 +426,20 @@ They return typed IDs, detached complete states, and restored application
 Entity instances, respectively. The read scope closes when the route finishes.
 When explicit handler metadata is supplied, repository routing
 calculates command and event routes by generated message full type name,
-readiness metadata, producer ID, or first-field ID. Built bounded contexts
-register repository dispatcher adapters internally so aggregate commands can
-load or create one aggregate, invoke one assignee in a framework
-transaction, persist the latest managed state, append the optional state history
-and diagnostic event journal, then store returned domain events in the framework
-event store before queueing them for event-bus delivery without appending them
-again. Process-manager repositories
-also participate in those adapters: command assignees are invoked from the
-command bus through a durable process-manager inbox handoff. The local
-runtime notifies Delivery immediately after a successful Inbox write and resolves
-after recipient Inbox acceptance. Live projection subscribers use the same local handoff shape with
-`UPDATE_SUBSCRIBER` rows, original event IDs as dedup signal IDs, and exact-row
-stored-target dispatch through the Inbox delivery lifecycle. Live
-process-manager event reactors and event-commanding handlers use the same
-durable inbox handoff with `REACT_UPON_EVENT` rows, original `Event`
-envelopes, and stored-row target dispatch. Before handler code runs, delivery
-validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
-target type URL, and routed target ID.
+readiness metadata, producer ID, or first-field ID. When an Aggregate handles a Command, the repository loads or creates the
+Aggregate, invokes its handler, and saves its state. It records emitted Events
+in the Aggregate type's Event history. For example, the Order repository can
+read the Events emitted by Order `order-17` when its double-dispatch guard is
+enabled. The framework also publishes those Events through the Bounded
+Context's Event Store and Event Bus.
+
+For delivery to a Process Manager or Projection, the framework first stores an
+inbox message identifying the recipient. For example, the inbox message for a
+Projection subscriber contains the Event and the label `UPDATE_SUBSCRIBER`.
+The worker reads the message in a shard page, checks the recipient and tenant,
+and invokes the registered subscriber. After successful dispatch it marks the
+inbox ID delivered. The Process Manager follows the same sequence when an
+Event arrives for a handler registered with `REACT_UPON_EVENT`.
 State is stored in tenant-scoped `Stand` records with Spine `Version`
 messages, returned commands are wrapped and posted after state storage, and
 returned event messages are wrapped using the invoked handler's declared Event schemas
@@ -690,11 +684,10 @@ catch-up, read-side indexing, subscriptions, system events, or aggregate
 repository caching.
 Durable-delivery exports include the `Delivery` interface created by the builder,
 `DeliveryBuilder`, `DeliveryEndpointMessage`, `DeliveryMonitor`,
-`DeliveryResult`, `DeliveryRunOptions`, `DeliveryStrategy`, `DeliverySupervisor`,
-`UniformAcrossAllShards`, `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`,
-`InboxMessage`, `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
-`InboxReadContinuation`, `InboxReadOptions`, `InboxWriteResult`, `InboxStorage`,
-`InboxStorageOptions`, `DeliveryLabel`, `DeliveryStatus`, `ShardIndex`,
+`DeliveryResult`, `DeliveryRunOptions`, `DeliveryStrategy`, `DeliveryAttempt`,
+`UniformAcrossAllShards`, `DeliveryStorageCorruptionError`, `InboxId`,
+`InboxMessage`, `InboxMessageError`, `InboxMessageId`,
+`InboxReadContinuation`, `InboxReadOptions`, `DeliveryLabel`, `DeliveryStatus`, `ShardIndex`,
 `ShardSession`, `ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`.
 `ServerEnvironmentSettings.deliveryStrategy` maps routed receiver IDs and Entity
 state type URLs to shards for Aggregates, Process Managers, Agents, and
@@ -703,33 +696,31 @@ configured strategy, endpoint enumeration, and stored-shard validation. Configur
 it before environment resolution and retain the same mapping while rows remain
 pending. See [receiver-specific policies](../../packages/server/REFERENCE.md#receiver-specific-shard-policies).
 `DeliveryBuilder` snapshots storage, node, shard strategy, monitor, and bounded
-read options. A run takes one shard, checks the complete `WorkerId`, and
-reads direct pending rows in bounded, stable order. It neither exposes pages or
-retained summaries nor creates guard records, per-message claims, attempt
-history, a retry policy, or a scheduler. Direct inbox writes require
-`InboxMessage.id.shard` to match `InboxMessage.shard`; delivered rows are the
-deduplication fact. Framework delivery handles `HANDLE_COMMAND`,
-`UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; `CATCH_UP` remains pending and
-`IMPORT_EVENT` fails closed as storage corruption.
+read options. A remote run requests one shard with its complete `WorkerId`. A successful
+pickup lets it read the inbox in delivery order. Applications post signals to their
+Bounded Context's bus. After the repository selects a recipient, the framework
+stores a new `InboxMessage` in one create-or-update call. During a shard
+delivery the worker can recognize that two stored messages carry the same
+signal for the same recipient. Framework delivery handles `HANDLE_COMMAND`,
+`UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`. `CATCH_UP` remains pending and
+`IMPORT_EVENT` reports storage corruption.
 
-Pickup, renewal, and release each check and update the stored worker session
-atomically. Before acknowledging delivery, the worker validates or renews its
-session, then marks the Inbox row delivered in a separate operation. Another
-worker may take the shard between those operations. The same complete `WorkerId`
-can recover its unexpired session;
-a different worker is excluded until it expires, and a previous worker cannot
-release a newer session. `DeliveryMonitor` marks failed reception delivered by
-default and continues independent targets; a custom monitor may choose an
-immediate repeat of failed processing. The supervisor
-rescans pending shards every 10 seconds by default, independently of its
-60-second stale-session threshold and the configurable Delivery server processing
-timeout, which is disabled by default. See [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers)
-for the separate responsibilities and limits. After a failed run,
-release-generated remote observations of that shard are held locally until the next periodic rescan. Explicit notifications remain
-admissible; newly enqueued remote work on the failed shard may wait for the
-rescan, while other shards continue. Other processes can each make a failed
-attempt before applying their local suppression. The interval is not a
-per-message delivery deadline.
+`DeliveryBuilder.remote({ endpoint })` from `@spine-event-engine/delivery-client`
+opens the Delivery server work stream after startup. For example, if one node
+takes shard 3, a new Command written to that shard produces no work notice
+while the worker holds it. Releasing the shard makes pending work visible to all
+subscribers. Newly connected nodes discover available work on connection.
+The default reminder for a free shard is 10 seconds. Distinct shards can run
+concurrently on each node. Set `notifications: { kind: "delivery-server",
+maxConcurrentDeliveries: 2 }` to limit automatic pickup to two per node.
+
+With application-managed storage, `DeliveryBuilder.local({ storageFactory,
+shardObserver })` calls the application's observer after storing an inbox
+message and when a normal delivery pass releases a shard with pending work.
+An application can publish the shard identity to a queue. Its consumer calls
+`environment.delivery.deliverMessagesFrom(shard)` and receives `completed`,
+`busy`, `noWork`, or `stopped`. Two local calls for the same shard join one
+active delivery attempt. An observer error is logged after the write succeeds.
 
 `DeliveryMonitor` handles Entity handler failures and post-handler output or
 transition validation failures, including Agent reception. Delivery acknowledges
@@ -738,34 +729,25 @@ the row delivered; a custom monitor may repeat failed processing.
 Any selected reception action that completes normally leads to delivered
 acknowledgement; a rejected action leaves the row `TO_DELIVER` and propagates.
 Managed repository infrastructure failures propagate and leave the row pending.
-After successful processing, a failed acknowledgement is retried without
-deliberate handler rerun. Exhausted acknowledgement blocks later messages for
-that target in the current run; a later run can retry. Shard coordination
-protects concurrent workers, not
-endpoint effects. Therefore a
-lost acknowledgement can redeliver after a handler runs, and downstream effects
-must be idempotent. The delivery model has no persisted attempt history,
-exhaustion, claims, quarantine, receipts, markers, backoff, dead-letter storage,
-or scheduler state beyond the configured in-process recovery timer.
-The package does not expose a raw worker callback API; framework delivery
-uses the framework's validated endpoints. Delivery operations check that the
-worker still holds the shard, rather than renewing it on a timer around callbacks.
+With application-managed storage, a failed acknowledgement can be retried
+without invoking the handler again during that attempt. With remote storage,
+the application worker processes a page and sends changed inbox messages in
+`WriteMany`. It then sends the duplicates and expired completions it found in
+`RemoveMany`. If saving a page fails, the worker releases the shard and
+reports the error. For example, a handler may already have saved a new Entity
+state while its inbox message still says `TO_DELIVER`. A later delivery can
+invoke the handler again.
+
 `InboxReadOptions.limit` remains the page-size control for a single ordered
-inbox read and must be positive and at most `1000`.
+inbox read. Supply a positive safe integer. For example, `limit: 2000` asks
+for up to 2,000 rows.
 `InboxReadContinuation` names the stable row key used to read the next ordered
 inbox page after a previous message: message ID, receive time, and version.
-`ShardedWorkRegistryOptions.leaseMs` must be between `1000` and `2147483647`
-milliseconds inclusive. `Inbox.markDelivered()` and
-`InboxStorage.markDelivered()` return `undefined` for missing rows, non-pending
-rows, or caller snapshots that do not match the stored message;
-already-delivered matching rows are returned idempotently. Built contexts use
-this storage boundary internally for process-manager command rows,
-process-manager event reaction rows, and live projection subscriber rows. This
-implementation does not add retry schedulers, persistent attempt history,
-conveyor/station abstractions, generic repository delivery, projection catch-up
-through Inbox storage, or production read-side catch-up workers. A
-`DeliverySupervisor` repeatedly invokes finite drains, including over a remote
-delivery topology, without turning delivery failures into persisted retry jobs.
+`ShardedWorkRegistryOptions.leaseMs` sets the application-storage lease
+in milliseconds and accepts a positive safe integer. When acknowledging a
+message in application-managed storage, the framework checks that its saved contents still match the original
+read. Repeating a successful acknowledgement preserves its first retention deadline.
+
 Event import and aggregate importers are removed from the active plan by
 upstream ADR 0001 D1. Aggregate
 `@React` handlers are ordinary generated reactor handlers with
@@ -1152,6 +1134,15 @@ only when their tenant boundary, source type, and group identity match; two
 omitted groups identify the same ungrouped family. Bounded Context names are
 diagnostic and never enter physical storage identity. Each call still returns
 an independently closeable storage handle.
+`InboxRecordMutations` describes the storage operations that Delivery uses to
+mark an inbox ID delivered, remove a pending duplicate, and delete expired
+delivered messages for a shard.
+`InboxRecordStorageCapabilities.hasMutations(storage)` checks a record handle
+for those operations. A provider can return an `InboxRecordEntry` from the
+ordinary page query when it needs native database metadata for the update.
+For example, Datastore returns a revision with each pending message. The
+framework passes it back to the same provider when the handler succeeds.
+
 `RecordStorage.delete(id)`, `read(id)`, and
 `compareAndSet(id, expected, next)` address actual storage slot IDs.
 `RecordStorage.query()` and `RecordStorage.queryEntries()` also filter

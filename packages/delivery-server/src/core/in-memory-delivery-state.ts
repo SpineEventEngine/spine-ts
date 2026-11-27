@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { Code, ConnectError } from "@connectrpc/connect";
+import { OrderedMap } from "@js-sdsl/ordered-map";
 import {
   InboxMessageStatus,
   type InboxMessage,
@@ -20,7 +20,8 @@ import {
   type WorkerId,
 } from "@spine-event-engine/proto/delivery";
 
-import { DeliveryLimits, type DeliveryStateLimits } from "./limits.js";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+
 import { DeliveryMessages, DeliveryShards, DeliveryWorkers } from "./wire-values.js";
 
 /**
@@ -40,9 +41,28 @@ export interface ShardRecord {
   readonly worker: WorkerId | undefined;
 
   /**
-   * Records the pickup time in milliseconds.
+   * Records the latest pickup or renewal with full timestamp precision.
    */
-  readonly whenLastPicked: number | undefined;
+  readonly whenLastPicked: Timestamp | undefined;
+}
+
+/**
+ * Stores one shard's retained and pending rows in delivery order.
+ */
+interface ShardBucket {
+  readonly shard: ShardIndex;
+  readonly ordered: OrderedMap<DeliveryOrderKey, InboxMessage>;
+  readonly pending: OrderedMap<DeliveryOrderKey, InboxMessage>;
+}
+
+/**
+ * Keys the two shard trees by the JVM receive-time, version, and UTF-8 UUID order.
+ */
+interface DeliveryOrderKey {
+  readonly seconds: bigint;
+  readonly nanos: number;
+  readonly version: number;
+  readonly uuid: Buffer;
 }
 
 /**
@@ -60,43 +80,33 @@ export class InMemoryDeliveryState {
    * Stores sessions by stable shard identity.
    */
   readonly shards: Map<string, ShardRecord> = new Map<string, ShardRecord>();
-  readonly #messageBytes = new Map<string, number>();
-  readonly #messageShards = new Map<string, number>();
-  readonly #deliverableShards = new Map<string, number>();
-  readonly #limits: DeliveryStateLimits;
-  #retainedBytes = 0;
+
+  readonly #buckets = new Map<string, ShardBucket>();
 
   /**
-   * Creates empty state.
+   * Stores one validated inbox message and updates its shard's trees.
    *
-   * @param limits Configures retained-state limits.
+   * @param message Supplies the new contents of this inbox ID.
+   * @returns Whether the previous or new message is pending.
    */
-  constructor(limits: Partial<DeliveryStateLimits> = {}) {
-    this.#limits = DeliveryLimits.resolve(limits);
+  put(message: InboxMessage): boolean {
+    return this.#replace(DeliveryMessages.key(message), message);
   }
 
   /**
-   * Stores a validated batch atomically.
+   * Stores the last message for each inbox ID in a validated batch.
    *
-   * @param messages Supplies encoded messages.
-   * @returns Lists newly inserted messages.
+   * @param messages Supplies the messages in request order.
+   * @returns Whether the worker notification state needs to be checked.
    */
-  putAll(
-    messages: readonly { readonly message: InboxMessage; readonly bytes: number }[],
-  ): InboxMessage[] {
-    this.#ensureCapacity(messages);
-    const initial = new Set(this.messages.keys());
-    const inserted: InboxMessage[] = [];
-    const seen = new Set<string>();
-    const final = new Map<string, { readonly message: InboxMessage; readonly bytes: number }>();
-    for (const candidate of messages) {
-      const key = DeliveryMessages.key(candidate.message);
-      if (!initial.has(key) && !seen.has(key)) inserted.push(candidate.message);
-      seen.add(key);
-      final.set(key, candidate);
+  putAll(messages: readonly { readonly message: InboxMessage }[]): boolean {
+    const final = new Map<string, InboxMessage>();
+    for (const { message } of messages) final.set(DeliveryMessages.key(message), message);
+    let affectsWork = false;
+    for (const [key, message] of final) {
+      if (this.#replace(key, message)) affectsWork = true;
     }
-    for (const [key, candidate] of final) this.#replace(key, candidate.message, candidate.bytes);
-    return inserted;
+    return affectsWork;
   }
 
   /**
@@ -110,12 +120,37 @@ export class InMemoryDeliveryState {
     const current = this.messages.get(key);
     if (current === undefined) return false;
     this.messages.delete(key);
-    this.#retainedBytes -= this.#messageBytes.get(key) ?? 0;
-    this.#messageBytes.delete(key);
-    this.#decrementMessageShard(current);
-    this.#decrementDeliverableShard(current);
-    this.#pruneReleasedShard(DeliveryShards.key(this.#requiredShard(current)));
+    this.#removeFromBucket(current);
+    this.#pruneBucket(DeliveryShards.key(this.#requiredShard(current)));
     return true;
+  }
+
+  /**
+   * Deletes the stored members of a validated shard batch from both trees.
+   *
+   * @param shard Identifies the validated batch shard.
+   * @param messages Supplies requested row identities, including possible duplicates.
+   * @returns Whether stored or pending rows changed.
+   */
+  deleteMany(
+    shard: ShardIndex,
+    messages: readonly InboxMessage[],
+  ): { changed: boolean; pendingChanged: boolean } {
+    const keys = new Set(messages.map(DeliveryMessages.key));
+    let pendingChanged = false;
+    let changed = false;
+    for (const key of keys) {
+      const current = this.messages.get(key);
+      if (current === undefined) continue;
+      changed = true;
+      this.messages.delete(key);
+      this.#removeFromBucket(current);
+      pendingChanged ||= current.status === InboxMessageStatus.TO_DELIVER;
+    }
+    if (!changed) return { changed: false, pendingChanged: false };
+    const shardKey = DeliveryShards.key(shard);
+    this.#pruneBucket(shardKey);
+    return { changed, pendingChanged };
   }
 
   /**
@@ -136,7 +171,79 @@ export class InMemoryDeliveryState {
    * @returns Whether the shard has at least one retained `TO_DELIVER` message.
    */
   hasPending(shard: ShardIndex): boolean {
-    return this.#deliverableShards.has(DeliveryShards.key(shard));
+    return (this.#buckets.get(DeliveryShards.key(shard))?.pending.size() ?? 0) > 0;
+  }
+
+  /**
+   * Returns the count of all retained rows in one shard, including completed rows.
+   *
+   * @param shard Identifies the shard.
+   * @returns The exact stored-row count.
+   */
+  storedCount(shard: ShardIndex): number {
+    return this.#buckets.get(DeliveryShards.key(shard))?.ordered.size() ?? 0;
+  }
+
+  /**
+   * Reads one shard in delivery order, strictly after an optional receive time.
+   *
+   * @param shard Identifies the shard.
+   * @param sinceWhen Excludes rows received at or before this full timestamp.
+   * @param size Sets the page size already validated by the RPC handler.
+   * @returns A detached page in delivery order.
+   */
+  page(
+    shard: ShardIndex,
+    sinceWhen: { readonly seconds: bigint; readonly nanos: number } | undefined,
+    size: number,
+  ): InboxMessage[] {
+    const rows = this.#buckets.get(DeliveryShards.key(shard))?.ordered;
+    if (rows === undefined) return [];
+    const page: InboxMessage[] = [];
+    // Any stored Protobuf version is finite. This key skips every message at sinceWhen.
+    const start =
+      sinceWhen === undefined
+        ? rows.begin()
+        : rows.upperBound({ ...sinceWhen, version: Infinity, uuid: Buffer.alloc(0) });
+    const end = rows.end();
+    for (const cursor = start; !cursor.equals(end); cursor.next()) {
+      page.push(DeliveryMessages.copy(cursor.pointer[1]));
+      if (page.length === size) break;
+    }
+    return page;
+  }
+
+  /**
+   * Finds the last pending row in delivery order for one shard.
+   *
+   * @param shard Identifies the shard.
+   * @returns A detached row or undefined when none remains.
+   */
+  newestPending(shard: ShardIndex): InboxMessage | undefined {
+    const row = this.#buckets.get(DeliveryShards.key(shard))?.pending.back()?.[1];
+    return row === undefined ? undefined : DeliveryMessages.copy(row);
+  }
+
+  /**
+   * Lists shards with pending rows without visiting unrelated Inbox records.
+   *
+   * @returns Detached shard identities.
+   */
+  *pendingShards(): Iterable<ShardIndex> {
+    for (const bucket of this.#buckets.values())
+      if (bucket.pending.size() > 0) yield DeliveryShards.copy(bucket.shard);
+  }
+
+  /**
+   * Lists known retained or session shards in deterministic order.
+   *
+   * @returns Detached shard identities.
+   */
+  *knownShards(): Iterable<ShardIndex> {
+    const all = new Map<string, ShardIndex>();
+    for (const [key, bucket] of this.#buckets) all.set(key, bucket.shard);
+    for (const [key, record] of this.shards) all.set(key, record.shard);
+    yield* [...all.values()].sort((a, b) => DeliveryShards.compare(a, b)).map(DeliveryShards.copy);
   }
 
   /**
@@ -146,8 +253,7 @@ export class InMemoryDeliveryState {
    * @param worker Identifies the worker.
    * @param whenPicked Records the pickup time.
    */
-  setSession(shard: ShardIndex, worker: WorkerId, whenPicked: number): void {
-    this.#ensureShardCapacity(shard);
+  setSession(shard: ShardIndex, worker: WorkerId, whenPicked: Timestamp): void {
     this.shards.set(DeliveryShards.key(shard), {
       shard: DeliveryShards.copy(shard),
       worker: DeliveryWorkers.copy(worker),
@@ -165,82 +271,54 @@ export class InMemoryDeliveryState {
     const key = DeliveryShards.key(shard);
     const record = this.shards.get(key);
     if (record?.worker === undefined) return undefined;
-    if (this.#messageShards.has(key)) this.shards.set(key, { ...record, worker: undefined });
-    else this.shards.delete(key);
+    this.shards.set(key, {
+      shard: record.shard,
+      worker: undefined,
+      whenLastPicked: record.whenLastPicked,
+    });
     return record;
   }
 
-  #ensureCapacity(
-    candidates: readonly { readonly message: InboxMessage; readonly bytes: number }[],
-  ): void {
-    const final = new Map<string, { readonly message: InboxMessage; readonly bytes: number }>();
-    for (const candidate of candidates)
-      final.set(DeliveryMessages.key(candidate.message), candidate);
-    let count = this.messages.size;
-    let bytes = this.#retainedBytes;
-    const tracked = new Set<string>([...this.shards.keys(), ...this.#messageShards.keys()]);
-    for (const [key, candidate] of final) {
-      const prior = this.messages.get(key);
-      if (prior === undefined) count++;
-      else bytes -= this.#messageBytes.get(key) ?? 0;
-      bytes += candidate.bytes;
-      tracked.add(DeliveryShards.key(this.#requiredShard(candidate.message)));
-    }
-    if (
-      count > this.#limits.maxRetainedMessages ||
-      bytes > this.#limits.maxRetainedBytes ||
-      tracked.size > this.#limits.maxTrackedShards
-    ) {
-      throw new ConnectError("Delivery retained-state capacity is full.", Code.ResourceExhausted);
-    }
-  }
-
-  #replace(key: string, message: InboxMessage, bytes: number): void {
+  #replace(key: string, message: InboxMessage): boolean {
     const prior = this.messages.get(key);
     if (prior !== undefined) {
-      this.#retainedBytes -= this.#messageBytes.get(key) ?? 0;
-      this.#decrementMessageShard(prior);
-      this.#decrementDeliverableShard(prior);
+      this.#removeFromBucket(prior);
     }
-    this.messages.set(key, DeliveryMessages.copy(message));
-    this.#messageBytes.set(key, bytes);
-    this.#retainedBytes += bytes;
-    const shard = DeliveryShards.key(this.#requiredShard(message));
-    this.#messageShards.set(shard, (this.#messageShards.get(shard) ?? 0) + 1);
-    if (message.status === InboxMessageStatus.TO_DELIVER)
-      this.#deliverableShards.set(shard, (this.#deliverableShards.get(shard) ?? 0) + 1);
+    const detached = DeliveryMessages.copy(message);
+    this.messages.set(key, detached);
+    const shard = this.#requiredShard(detached);
+    const shardKey = DeliveryShards.key(shard);
+    let bucket = this.#buckets.get(shardKey);
+    if (bucket === undefined) {
+      bucket = {
+        shard: DeliveryShards.copy(shard),
+        ordered: new OrderedMap([], DeliveryRowOrder.compare),
+        pending: new OrderedMap([], DeliveryRowOrder.compare),
+      };
+      this.#buckets.set(shardKey, bucket);
+    }
+    const order = DeliveryRowOrder.key(detached);
+    bucket.ordered.setElement(order, detached);
+    if (detached.status === InboxMessageStatus.TO_DELIVER)
+      bucket.pending.setElement(order, detached);
+    return (
+      prior?.status === InboxMessageStatus.TO_DELIVER ||
+      detached.status === InboxMessageStatus.TO_DELIVER
+    );
   }
 
-  #decrementMessageShard(message: InboxMessage): void {
+  #removeFromBucket(message: InboxMessage): void {
     const key = DeliveryShards.key(this.#requiredShard(message));
-    const count = this.#messageShards.get(key);
-    if (count === undefined || count < 1)
-      throw new TypeError("Delivery message shard count is invalid.");
-    if (count === 1) this.#messageShards.delete(key);
-    else this.#messageShards.set(key, count - 1);
+    const bucket = this.#buckets.get(key);
+    if (bucket === undefined) throw new TypeError("Delivery message shard count is invalid.");
+    const order = DeliveryRowOrder.key(message);
+    bucket.ordered.eraseElementByKey(order);
+    if (message.status === InboxMessageStatus.TO_DELIVER) bucket.pending.eraseElementByKey(order);
   }
 
-  #decrementDeliverableShard(message: InboxMessage): void {
-    if (message.status !== InboxMessageStatus.TO_DELIVER) return;
-    const key = DeliveryShards.key(this.#requiredShard(message));
-    const count = this.#deliverableShards.get(key);
-    if (count === undefined || count < 1)
-      throw new TypeError("Delivery deliverable shard count is invalid.");
-    if (count === 1) this.#deliverableShards.delete(key);
-    else this.#deliverableShards.set(key, count - 1);
-  }
-
-  #ensureShardCapacity(shard: ShardIndex): void {
-    const key = DeliveryShards.key(shard);
-    if (this.shards.has(key) || this.#messageShards.has(key)) return;
-    const tracked = new Set<string>([...this.shards.keys(), ...this.#messageShards.keys()]);
-    if (tracked.size >= this.#limits.maxTrackedShards)
-      throw new ConnectError("Delivery tracked-shard capacity is full.", Code.ResourceExhausted);
-  }
-
-  #pruneReleasedShard(key: string): void {
-    if (!this.#messageShards.has(key) && this.shards.get(key)?.worker === undefined)
-      this.shards.delete(key);
+  #pruneBucket(key: string): void {
+    if (this.#buckets.get(key)?.ordered.size() !== 0) return;
+    this.#buckets.delete(key);
   }
 
   #requiredShard(message: InboxMessage): ShardIndex {
@@ -249,3 +327,39 @@ export class InMemoryDeliveryState {
     return message.id.index;
   }
 }
+
+/**
+ * Maintains the per-shard receive-time, version, and UTF-8 UUID order.
+ */
+const DeliveryRowOrder = Object.freeze({
+  /**
+   * Creates an exact tree key for one stored row.
+   *
+   * @param row Supplies the stored row.
+   * @returns Its stable ordering key.
+   */
+  key(row: InboxMessage): DeliveryOrderKey {
+    if (row.whenReceived === undefined || row.id === undefined)
+      throw new TypeError("Delivery message ordering fields are missing.");
+    return {
+      seconds: row.whenReceived.seconds,
+      nanos: row.whenReceived.nanos,
+      version: row.version,
+      uuid: Buffer.from(row.id.uuid),
+    };
+  },
+
+  /**
+   * Compares exact keys and exclusive timestamp probes.
+   *
+   * @param left Supplies the first key.
+   * @param right Supplies the second key.
+   * @returns A signed order comparison.
+   */
+  compare(left: DeliveryOrderKey, right: DeliveryOrderKey): number {
+    if (left.seconds !== right.seconds) return left.seconds < right.seconds ? -1 : 1;
+    if (left.nanos !== right.nanos) return left.nanos < right.nanos ? -1 : 1;
+    if (left.version !== right.version) return left.version < right.version ? -1 : 1;
+    return Buffer.compare(left.uuid, right.uuid);
+  },
+});

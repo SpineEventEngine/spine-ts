@@ -17,13 +17,19 @@ import type { StorageContext, StorageFactory } from "@spine-event-engine/storage
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 import { randomUUID } from "node:crypto";
 
-import { Delivery as CoreDelivery, type OnDeliveryMessage } from "./delivery.js";
+import {
+  Delivery as CoreDelivery,
+  type DeliveryAttempt,
+  type OnDeliveryMessage,
+} from "./delivery.js";
 import { DeliveryMonitor } from "./delivery-monitor.js";
-import { InboxTargets } from "./inbox.js";
+import { Inbox, InboxTargets } from "./inbox.js";
+import { InboxStorage } from "./inbox-storage.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "./delivery-ports.js";
 import type { DeliveryControlledRun } from "./delivery-run-control.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry, shardedWorkRegistryAccess } from "./sharded-work-registry.js";
+import { deliveryPortAccess } from "./delivery-port-access.js";
 
 const defaultContext: StorageContext = Object.freeze({
   name: "__System_Delivery__",
@@ -31,10 +37,12 @@ const defaultContext: StorageContext = Object.freeze({
 });
 const defaultPageSize = 100;
 const controlledDeliveryRunners = new WeakMap<
-  Delivery,
+  PublicDelivery,
   (options: DeliveryControlledRun) => Promise<DeliveryResult>
 >();
-const controlledDeliveryWakers = new WeakMap<Delivery, (shard: ShardIndex) => void>();
+const controlledDeliveryWakers = new WeakMap<PublicDelivery, (shard: ShardIndex) => void>();
+const activeCounts = new WeakMap<PublicDelivery, () => number>();
+const activeShards = new WeakMap<PublicDelivery, (shard: ShardIndex) => boolean>();
 
 /**
  * Provides package-local controls for builder-created deliveries.
@@ -49,7 +57,7 @@ export interface DeliveryControls {
    * @returns Its controlled runner, if present.
    */
   runner(
-    delivery: Delivery,
+    delivery: PublicDelivery,
   ): ((options: DeliveryControlledRun) => Promise<DeliveryResult>) | undefined;
 
   /**
@@ -58,14 +66,31 @@ export interface DeliveryControls {
    * @param delivery Retained Delivery instance.
    * @returns The active Delivery wake callback, if one is registered.
    */
-  waker(delivery: Delivery): ((shard: ShardIndex) => void) | undefined;
+  waker(delivery: PublicDelivery): ((shard: ShardIndex) => void) | undefined;
 
   /**
-   * Registers the environment's single retained core for supervised runs.
+   * Registers the environment's single retained core for managed runs.
    * @param core Actual retained Delivery runtime.
    * @returns The controlled facade for that same runtime.
    */
-  supervised(core: CoreDelivery): Delivery;
+  managed(core: CoreDelivery): ApplicationDelivery;
+
+  /**
+   * Returns the count of physical shard runs admitted through this delivery.
+   *
+   * @param delivery Selects the node-local delivery.
+   * @returns The count of active distinct shard runs.
+   */
+  activeRunCount(delivery: PublicDelivery): number;
+
+  /**
+   * Checks whether a shard already has a joinable local run.
+   *
+   * @param delivery Selects the node-local delivery.
+   * @param shard Selects the candidate shard.
+   * @returns Whether that shard has an active run.
+   */
+  isShardActive(delivery: PublicDelivery, shard: ShardIndex): boolean;
 }
 
 /**
@@ -78,15 +103,21 @@ export const deliveryControls: DeliveryControls = Object.freeze({
    * Finds controlled execution for a builder-created delivery.
    */
   runner(
-    delivery: Delivery,
+    delivery: PublicDelivery,
   ): ((options: DeliveryControlledRun) => Promise<DeliveryResult>) | undefined {
     return controlledDeliveryRunners.get(delivery);
   },
-  waker(delivery: Delivery): ((shard: ShardIndex) => void) | undefined {
+  waker(delivery: PublicDelivery): ((shard: ShardIndex) => void) | undefined {
     return controlledDeliveryWakers.get(delivery);
   },
-  supervised(core: CoreDelivery): Delivery {
-    return new BuiltDelivery(core);
+  managed(core: CoreDelivery): ApplicationDelivery {
+    return new BoundApplicationDelivery(core);
+  },
+  activeRunCount(delivery: PublicDelivery): number {
+    return activeCounts.get(delivery)?.() ?? 0;
+  },
+  isShardActive(delivery: PublicDelivery, shard: ShardIndex): boolean {
+    return activeShards.get(delivery)?.(shard) ?? false;
   },
 });
 
@@ -243,7 +274,7 @@ export interface Delivery {
   readonly worker: WorkerId;
 
   /**
-   * Maximum accepted work per internal delivery page, from 1 through 1000.
+   * Maximum accepted work per internal delivery page, selected by the caller.
    */
   readonly pageSize: number;
 
@@ -262,9 +293,41 @@ export interface Delivery {
 }
 
 /**
+ * Runs deliveries using the handlers registered in an Application.
+ */
+export interface ApplicationDelivery extends PublicDelivery {
+  /**
+   * Starts or joins delivery from one shard using registered application handlers.
+   *
+   * @param shard Selects the shard to try.
+   * @param options Cancels the run on caller request or shutdown.
+   * @returns Its completed, busy, no-work, or stopped result.
+   */
+  deliverMessagesFrom(
+    shard: ShardIndex,
+    options?: import("./delivery-ports.js").DeliveryOperationOptions,
+  ): Promise<DeliveryAttempt>;
+}
+
+/**
+ * Application-facing delivery controls without direct Inbox reception.
+ */
+export type PublicDelivery = Omit<Delivery, "inbox">;
+
+/**
  * Configures and snapshots one public {@link Delivery}.
  */
 export class DeliveryBuilder {
+  /**
+   * Creates shared application storage ports with a custom persisted-row observer.
+   *
+   * @param config Selects storage and the observer that initiates delivery.
+   * @returns A facility installable as `ServerEnvironmentSettings.delivery`.
+   */
+  static local(config: LocalDeliveryConfig): LocalDeliveryFacility {
+    return new LocalDeliveryFacility(config);
+  }
+
   #context: StorageContext | undefined;
 
   #storageFactory: StorageFactory | undefined;
@@ -358,7 +421,7 @@ export class DeliveryBuilder {
    * @returns This builder.
    */
   withPageSize(pageSize: number): this {
-    this.#pageSize = DeliveryValues.requireBound("Delivery page size", pageSize, 1_000);
+    this.#pageSize = DeliveryValues.positive("Delivery page size", pageSize);
     return this;
   }
 
@@ -405,7 +468,7 @@ export class DeliveryBuilder {
    *
    * @returns The configured delivery.
    */
-  build(): Delivery {
+  build(): PublicDelivery {
     const context = this.#context ?? defaultContext;
     const strategy = DeliveryValues.snapshotStrategy(
       this.#strategy ?? UniformAcrossAllShards.singleShard(),
@@ -440,9 +503,98 @@ export class DeliveryBuilder {
 }
 
 /**
+ * Selects application storage and observation for local delivery.
+ */
+export interface LocalDeliveryConfig {
+  /**
+   * Stores both application and delivery records.
+   */
+  readonly storageFactory: StorageFactory;
+
+  /**
+   * Receives full persisted Inbox rows after writes and normal releases.
+   */
+  readonly shardObserver: import("../server/server-environment.js").DeliveryShardObserver;
+}
+
+/**
+ * Supplies shared local Inbox and session ports to one server environment.
+ */
+export class LocalDeliveryFacility {
+  /**
+   * Marks these ports as using application storage.
+   */
+  readonly local = true as const;
+
+  /**
+   * Supplies shared Entity and delivery storage.
+   */
+  readonly storageFactory: StorageFactory;
+
+  /**
+   * Selects the custom persisted-row observer.
+   */
+  readonly notifications: import("../server/server-environment.js").DeliveryNotifications;
+
+  /**
+   * Stores and reads local Inbox rows.
+   */
+  readonly #inbox: Inbox;
+
+  /**
+   * Coordinates local shard sessions.
+   */
+  readonly #workRegistry: ShardedWorkRegistry;
+
+  /**
+   * Prepares local ports for one application environment.
+   *
+   * @param config Selects shared storage and a custom observer.
+   */
+  constructor(config: LocalDeliveryConfig) {
+    const input = config as Partial<LocalDeliveryConfig>;
+    if (input.storageFactory === undefined)
+      throw new TypeError("Local delivery requires a storage factory.");
+    if (typeof input.shardObserver?.onMessage !== "function")
+      throw new TypeError("Local delivery requires a shard observer.");
+    if ("maxConcurrentDeliveries" in config || "notifications" in config)
+      throw new TypeError("Delivery concurrency applies only to built-in remote notices.");
+    const context = defaultContext;
+    this.storageFactory = config.storageFactory;
+    this.notifications = { kind: "custom", shardObserver: config.shardObserver };
+    this.#inbox = new Inbox(new InboxStorage({ context, storageFactory: config.storageFactory }));
+    this.#workRegistry = new ShardedWorkRegistry({
+      context,
+      storageFactory: config.storageFactory,
+    });
+    Object.defineProperty(this, deliveryPortAccess, {
+      value: () => ({ inbox: this.#inbox, workRegistry: this.#workRegistry }),
+    });
+  }
+
+  /**
+   * Opens local ports without remote connection work.
+   *
+   * @returns Completion after local ports become available.
+   */
+  open(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /**
+   * Closes local delivery records after application drains finish.
+   *
+   * @returns Completion after local records close.
+   */
+  async close(): Promise<void> {
+    await Promise.all([this.#inbox.storage.close(), this.#workRegistry.close()]);
+  }
+}
+
+/**
  * Exposes one configured Delivery through the public facade.
  */
-class BuiltDelivery implements Delivery {
+class BuiltDelivery implements PublicDelivery {
   readonly context: StorageContext;
 
   readonly storageFactory: StorageFactory;
@@ -454,8 +606,6 @@ class BuiltDelivery implements Delivery {
   readonly worker: WorkerId;
 
   readonly pageSize: number;
-
-  readonly inbox: DeliveryInbox;
 
   readonly #core: CoreDelivery;
 
@@ -472,11 +622,12 @@ class BuiltDelivery implements Delivery {
     this.node = core.node;
     this.worker = core.worker;
     this.pageSize = core.pageSize;
-    this.inbox = core.inbox;
     controlledDeliveryRunners.set(this, (options) => core.runControlled(options));
     controlledDeliveryWakers.set(this, (shard) => {
       core.wake(shard);
     });
+    activeCounts.set(this, () => core.activeShardCount());
+    activeShards.set(this, (shard) => core.shardActive(shard));
     Object.freeze(this);
   }
 
@@ -488,6 +639,37 @@ class BuiltDelivery implements Delivery {
    */
   run(options: DeliveryRunOptions): Promise<DeliveryResult> {
     return this.#core.run(options);
+  }
+}
+
+/**
+ * Provides the shard entry point after the environment installs its handlers.
+ */
+class BoundApplicationDelivery extends BuiltDelivery implements ApplicationDelivery {
+  readonly #deliver: CoreDelivery["deliverMessagesFrom"];
+
+  /**
+   * Creates the application facade over the runtime with registered handlers.
+   *
+   * @param core Holds the application's installed dispatchers.
+   */
+  constructor(core: CoreDelivery) {
+    super(core);
+    this.#deliver = core.deliverMessagesFrom.bind(core);
+  }
+
+  /**
+   * Starts or joins a managed shard attempt using this delivery's handlers.
+   *
+   * @param shard Selects the shard to try.
+   * @param options Cancels the run on caller request or shutdown.
+   * @returns Its definitive managed outcome.
+   */
+  deliverMessagesFrom(
+    shard: ShardIndex,
+    options?: import("./delivery-ports.js").DeliveryOperationOptions,
+  ): Promise<DeliveryAttempt> {
+    return this.#deliver(shard, options);
   }
 }
 
@@ -555,15 +737,11 @@ const DeliveryValues = Object.freeze({
    *
    * @param name Name reported for invalid configuration.
    * @param value Supplied configuration value.
-   * @param max Maximum accepted value.
    * @returns The validated positive value.
    */
-  requireBound(name: string, value: number, max: number): number {
+  positive(name: string, value: number): number {
     if (!Number.isSafeInteger(value) || value <= 0) {
       throw new Error(`${name} must be a positive safe integer.`);
-    }
-    if (value > max) {
-      throw new Error(`${name} must be at most ${String(max)}.`);
     }
     return value;
   },

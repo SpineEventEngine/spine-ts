@@ -52,6 +52,32 @@ describe("repository state-history cache", () => {
     ]);
   });
 
+  it("continues Event groups at the omitted version without repeating cached Events", async () => {
+    const newest = Object.freeze({ id: "newest", version: 7n });
+    const older = Object.freeze({ id: "older", version: 6n });
+    const oldest = Object.freeze({ id: "oldest", version: 5n });
+    const calls: (bigint | undefined)[] = [];
+    const cache = RepositoryHistory.createCache(
+      (depth, startingFromVersion) => {
+        calls.push(startingFromVersion);
+        return Promise.resolve(
+          [newest, older, oldest]
+            .filter(
+              (entry) => startingFromVersion === undefined || entry.version <= startingFromVersion,
+            )
+            .slice(0, depth),
+        );
+      },
+      (entry) => entry.version,
+      { cacheCompleteVersionGroups: true },
+    );
+
+    await expect(cache.read(1)).resolves.toEqual([newest]);
+    await expect(cache.read(2)).resolves.toEqual([newest, older]);
+    await expect(cache.read(3)).resolves.toEqual([newest, older, oldest]);
+    expect(calls).toEqual([undefined, 6n, 5n]);
+  });
+
   it("continues exclusively from the oldest complete version", async () => {
     const calls: (bigint | undefined)[] = [];
     const cache = RepositoryHistory.createCache(
@@ -309,7 +335,7 @@ describe("repository state-history cache", () => {
 
     await expect(cache.read(2)).resolves.toEqual([record(5n), record(4n)]);
     await expect(cache.read(3)).resolves.toEqual([record(5n), record(4n), record(4n)]);
-    expect(calls).toEqual([undefined, 5n]);
+    expect(calls).toEqual([undefined, 4n]);
   });
 
   it("serializes queued cache extensions without a redundant provider read", async () => {

@@ -786,9 +786,8 @@ describe("Agent model Commands", () => {
       await serverEnvironmentAccess.whenDeliveryIdle(environment);
       expect(ModelCommandAgent.replies).toBe(0);
       await context.eventBus().post(eventFor(payload.call));
-      await vi.waitFor(() => {
-        expect(ModelCommandAgent.replies).toBe(1);
-      });
+      await serverEnvironmentAccess.whenDeliveryIdle(environment);
+      expect(ModelCommandAgent.replies).toBe(1);
       expect((await context.stand().read(SupportReplyAgentStateSchema, id))?.proposedReply).toBe(
         "Trusted reply",
       );

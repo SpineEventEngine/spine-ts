@@ -36,13 +36,14 @@ describe("MutationAdmission", () => {
     expect(values).toEqual(["first", "second"]);
   });
 
-  it("bounds pending admission at 100", async () => {
+  it("admits more than 100 queued mutations in FIFO order", async () => {
     const admission = new MutationAdmission();
-    const pending = Array.from({ length: 100 }, () => admission.run(undefined, () => undefined));
-    await expect(admission.run(undefined, () => undefined)).rejects.toMatchObject({
-      code: Code.ResourceExhausted,
-    });
+    const committed: number[] = [];
+    const pending = Array.from({ length: 150 }, (_, index) =>
+      admission.run(undefined, () => committed.push(index)),
+    );
     await Promise.all(pending);
+    expect(committed).toEqual(Array.from({ length: 150 }, (_, index) => index));
   });
 
   it("commits after admission even when the commit aborts its own caller signal", async () => {

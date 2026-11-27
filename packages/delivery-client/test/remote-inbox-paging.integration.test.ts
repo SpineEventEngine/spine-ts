@@ -69,9 +69,10 @@ it("continues more than one JVM timestamp page over the real InboxService", asyn
   const client = DeliveryClient.connectTo(server.baseUrl, { pageSize: 100 });
   clients.push(client);
   const inbox = new RemoteInbox(client);
+  await expect(client.shardSnapshot({ timeoutMs: 100_000_000 })).resolves.toEqual([]);
+  await expect(inbox.read(ShardIndex.single(), { limit: 0x8000_0000 })).resolves.toEqual([]);
   const rows = Array.from({ length: 201 }, (_, index) => projectionMessage(index));
-  for (let index = 0; index < rows.length; index += 100)
-    await client.writeMany(rows.slice(index, index + 100));
+  await client.writeMany(rows);
 
   const first = await client.readPage(ShardIndex.single(), { pageSize: 100 });
   expect(first).toHaveLength(100);
@@ -106,7 +107,7 @@ it("advances through full excluded-status pages using received timestamps", asyn
   ).toEqual([rows[4]?.id.value]);
 }, 10_000);
 
-it("reports an oversized page so the caller can request fewer rows", async () => {
+it("reads the complete page when its encoded size exceeds four MiB", async () => {
   const server = new DeliveryServer({ host: "127.0.0.1", port: 0 });
   servers.push(server);
   await server.start();
@@ -114,10 +115,24 @@ it("reports an oversized page so the caller can request fewer rows", async () =>
   clients.push(client);
   const largeName = "p".repeat(550_000);
   const rows = Array.from({ length: 9 }, (_, index) => projectionMessage(index + 3_000, largeName));
-  for (let index = 0; index < rows.length; index += 3)
-    await client.writeMany(rows.slice(index, index + 3));
-  await expect(client.readPage(ShardIndex.single(), { pageSize: 9 })).rejects.toMatchObject({
+  await client.writeMany(rows);
+  const smallResponseClient = DeliveryClient.connectTo(server.baseUrl, {
+    maxInboundMessageBytes: 1024,
+  });
+  clients.push(smallResponseClient);
+  await expect(
+    smallResponseClient.readPage(ShardIndex.single(), { pageSize: 9 }),
+  ).rejects.toMatchObject({
     code: Code.ResourceExhausted,
+  });
+  await expect(client.readPage(ShardIndex.single(), { pageSize: 9 })).resolves.toHaveLength(9);
+  const tinyRequest = DeliveryClient.connectTo(server.baseUrl, { maxOutboundMessageBytes: 1 });
+  clients.push(tinyRequest);
+  await expect(
+    tinyRequest.pickUp(ShardIndex.single(), { nodeId: "worker", value: "run" }),
+  ).rejects.toMatchObject({
+    name: "DeliveryOutcomeUnknownError",
+    cause: { code: Code.ResourceExhausted },
   });
   await expect(client.readPage(ShardIndex.single(), { pageSize: 3 })).resolves.toHaveLength(3);
 }, 15_000);

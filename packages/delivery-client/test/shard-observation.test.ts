@@ -16,7 +16,7 @@ import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { ShardIndex } from "@spine-event-engine/server";
 import {
-  LiquorPickUpOutcomeSchema,
+  DeliveryPickUpOutcomeSchema,
   ShardPickedUpSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
@@ -33,7 +33,6 @@ import {
   DeliveryOutcomeUnknownError,
   DeliveryProtocolError,
   DeliveryShardObservationError,
-  ShardObservationOverflowError,
   RemoteWorkRegistry,
 } from "../src/index.js";
 import { ShardObservationStream } from "../src/client/shard-observation.js";
@@ -60,29 +59,31 @@ describe("DeliveryClient shard observation", () => {
     const snapshot = await client.shardSnapshot();
 
     expect(snapshot).toMatchObject([{ status: "PICKED", messages: 2 }]);
-    expect(snapshot[0]?.lastPicked).toEqual(new Date(1_000));
+    expect(snapshot[0]?.lastPicked).toMatchObject({ seconds: 1n, nanos: 0 });
     expect(Object.isFrozen(snapshot)).toBe(true);
     expect(Object.isFrozen(snapshot[0])).toBe(true);
     expect(fake.unary).toHaveBeenCalledTimes(2);
   });
 
-  it("rejects an Admin snapshot above the requested public collection bound", async () => {
+  it("returns every shard from a large Admin snapshot", async () => {
     const fake = transport();
+    const ofTotal = 1_201;
     fake.reply(
       create(ShardInfoListSchema, {
-        shards: Array.from({ length: 1_001 }, () =>
+        shards: Array.from({ length: ofTotal }, (_, index) =>
           create(ShardInfoSchema, {
-            index: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+            index: create(ShardIndexSchema, { index, ofTotal }),
             status: ShardStatus.NOT_PICKED,
-            messages: 0,
+            messages: 1,
           }),
         ),
       }),
     );
 
-    await expect(
-      DeliveryClient.usingTransport(fake.transport).shardSnapshot(),
-    ).rejects.toBeInstanceOf(DeliveryProtocolError);
+    const snapshot = await DeliveryClient.usingTransport(fake.transport).shardSnapshot();
+    expect(snapshot.map(({ shard }) => shard.index)).toEqual(
+      Array.from({ length: ofTotal }, (_, index) => index),
+    );
   });
 
   it("yields only validated Admin updates after exactly one successful ACK", async () => {
@@ -157,7 +158,6 @@ describe("DeliveryClient shard observation", () => {
       const stream = new ShardObservationStream({
         signal: controller.signal,
         setupTimeoutMs: 5,
-        capacity: 1,
         reconnects: 0,
         reconnectBackoffMs: 0,
         open: async function* (signal) {
@@ -205,7 +205,6 @@ describe("DeliveryClient shard observation", () => {
       const stream = new ShardObservationStream({
         signal: controller.signal,
         setupTimeoutMs: 5,
-        capacity: 1,
         reconnects: 0,
         reconnectBackoffMs: 0,
         open: async function* (signal) {
@@ -259,7 +258,7 @@ describe("DeliveryClient shard observation", () => {
     );
   });
 
-  it("bounds a slow Admin observation consumer with a stable sanitized overflow error", async () => {
+  it("delivers every update to a slow Admin consumer", async () => {
     const fake = transport();
     fake.streamReply([
       create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
@@ -276,32 +275,26 @@ describe("DeliveryClient shard observation", () => {
         }),
       ),
     ]);
-    const stream = DeliveryClient.usingTransport(fake.transport, {
-      observationBufferSize: 1,
-    }).observeShardUpdates();
+    const stream = DeliveryClient.usingTransport(fake.transport).observeShardUpdates();
 
     await new Promise((resolve) => setTimeout(resolve, 0));
-    await expect(stream[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
-      ShardObservationOverflowError,
-    );
+    const iterator = stream[Symbol.asyncIterator]();
+    expect(await iterator.next()).toMatchObject({ done: false, value: { messages: 1 } });
+    expect(await iterator.next()).toMatchObject({ done: false, value: { messages: 2 } });
+    stream.cancel();
   });
 
-  it("bounds pending observation next waiters with the same stable overflow error", async () => {
+  it("releases all waiting readers on cancellation", async () => {
     const fake = transport();
     fake.streamReplyAndHold([
       create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
     ]);
-    const stream = DeliveryClient.usingTransport(fake.transport, {
-      observationBufferSize: 1,
-    }).observeShardUpdates();
+    const stream = DeliveryClient.usingTransport(fake.transport).observeShardUpdates();
     const iterator = stream[Symbol.asyncIterator]();
 
-    const first = iterator.next();
-    await vi.waitFor(() => {
-      expect(fake.streamStarted).toBe(1);
-    });
-    await expect(iterator.next()).rejects.toBeInstanceOf(ShardObservationOverflowError);
-    await expect(first).rejects.toBeInstanceOf(ShardObservationOverflowError);
+    const readers = Array.from({ length: 150 }, () => iterator.next());
+    stream.cancel();
+    expect((await Promise.all(readers)).every((result) => result.done)).toBe(true);
   });
 
   it("reconnects a transient Admin stream ending only through a fresh ACK", async () => {
@@ -466,7 +459,6 @@ describe("DeliveryClient shard observation", () => {
     const stream = new ShardObservationStream({
       signal: controller.signal,
       setupTimeoutMs: 1,
-      capacity: 1,
       reconnects: 0,
       reconnectBackoffMs: 0,
       open: async function* () {
@@ -586,7 +578,7 @@ describe("DeliveryClient shard observation", () => {
       await expect(client.shardSnapshot()).rejects.toBeInstanceOf(DeliveryProtocolError);
     }
     fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
+      create(DeliveryPickUpOutcomeSchema, {
         value: { case: "pickedUp", value: create(ShardPickedUpSchema) },
       }),
     );
@@ -594,7 +586,7 @@ describe("DeliveryClient shard observation", () => {
       DeliveryProtocolError,
     );
     fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
+      create(DeliveryPickUpOutcomeSchema, {
         value: {
           case: "pickedUp",
           value: create(ShardPickedUpSchema, {
@@ -649,11 +641,7 @@ describe("DeliveryClient shard observation", () => {
     fake.fail(new Error("release response lost"));
     await expect(registry.release(session)).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
     await expect(registry.release(session)).resolves.toBe(false);
-    registry.reconcile(
-      Object.freeze({ shard, status: "PICKED" as const, messages: 0, lastPicked: new Date(1_000) }),
-    );
-    await expect(registry.release(session)).resolves.toBe(false);
-    registry.reconcile(Object.freeze({ shard, status: "NOT_PICKED" as const, messages: 0 }));
+    expect("reconcile" in registry).toBe(false);
     await expect(registry.release(session)).resolves.toBe(false);
     expect(fake.unary).toHaveBeenCalledTimes(2);
   });
@@ -695,9 +683,9 @@ describe("DeliveryClient shard observation", () => {
         kind: "EXCLUSIVE",
         shard: ShardIndex.single(),
         worker: { nodeId: "node", value: "worker" },
-        whenPicked: new Date("invalid"),
+        whenPicked: new Date("invalid") as never,
       }),
-    ).rejects.toThrow("Delivery shard session is invalid.");
+    ).rejects.toThrow("Delivery client is closed.");
     expect(fake.unary).not.toHaveBeenCalled();
   });
 

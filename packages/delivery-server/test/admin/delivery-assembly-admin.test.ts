@@ -27,20 +27,19 @@ import {
   type ShardInfoList,
 } from "@spine-event-engine/proto/delivery-server";
 import {
-  InboxMessageSchema,
   InboxMessageStatus,
   ShardIndexSchema,
   WorkerIdSchema,
-  type ShardIndex,
 } from "@spine-event-engine/proto/delivery";
 
 import { DeliveryAssembly } from "../../src/server/assembly.js";
+import { domainMessage as message } from "../core/domain-message.js";
 
 const context = { signal: new AbortController().signal } as never;
 const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
 
 describe("delivery assembly Admin projection", () => {
-  it("tracks actual counts and prunes released message-free shards from snapshots", async () => {
+  it("tracks actual counts and retains the last pickup on released empty shards", async () => {
     const assembly = DeliveryAssembly.create();
     const first = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
     const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
@@ -64,12 +63,42 @@ describe("delivery assembly Admin projection", () => {
           status: ShardStatus.NOT_PICKED,
           messages: 1,
         },
+        {
+          index: second,
+          status: ShardStatus.NOT_PICKED,
+          messages: 0,
+        },
       ],
     });
-    expect(snapshot.shards).toHaveLength(1);
+    expect(snapshot.shards[1]?.lastPicked).toBeDefined();
+    const replay = assembly.admin
+      .subscribeToShardUpdates(create(EmptySchema), context)
+      [Symbol.asyncIterator]();
+    await replay.next();
+    await replay.next();
+    await expect(replay.next()).resolves.toMatchObject({
+      value: { value: { case: "update", value: { index: second, newMessagesCount: 0 } } },
+    });
+    await replay.return?.();
   });
 
-  it("discards a real mutation before ACK eligibility and publishes the later complete count", async () => {
+  it("retains an empty shard's last pickup after its final message is removed", async () => {
+    const assembly = DeliveryAssembly.create();
+    const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
+    const stored = message("last", shard);
+    await assembly.inbox.writeOne(create(WriteMessageSchema, { message: stored }), context);
+    await assembly.shards.pickShard(create(PickUpShardSchema, { shard, worker }), context);
+    await assembly.inbox.removeOne(create(RemoveMessageSchema, { message: stored }), context);
+    await assembly.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
+    await assembly.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
+    const snapshot = assembly.admin.getShardInfo(create(EmptySchema), context) as ShardInfoList;
+    expect(snapshot.shards).toMatchObject([
+      { index: shard, status: ShardStatus.NOT_PICKED, messages: 0 },
+    ]);
+    expect(snapshot.shards[0]?.lastPicked).toBeDefined();
+  });
+
+  it("replays the current shard after ACK and later publishes its changed stored count", async () => {
     const assembly = DeliveryAssembly.create();
     const only = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
     const iterator = assembly.admin
@@ -82,6 +111,9 @@ describe("delivery assembly Admin projection", () => {
     );
     await expect(iterator.next()).resolves.toMatchObject({
       value: { value: { case: "created", value: true } },
+    });
+    await expect(iterator.next()).resolves.toMatchObject({
+      value: { value: { case: "update", value: { index: only, newMessagesCount: 1 } } },
     });
     const later = iterator.next();
     await assembly.inbox.writeOne(
@@ -103,7 +135,7 @@ describe("delivery assembly Admin projection", () => {
     await iterator.return?.();
   });
 
-  it("removes retained delivered upserts from the pending Admin count", async () => {
+  it("counts retained delivered upserts in Admin", async () => {
     const assembly = DeliveryAssembly.create();
     const only = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
     const pending = message("retained", only);
@@ -118,10 +150,12 @@ describe("delivery assembly Admin projection", () => {
       }),
       context,
     );
-    expect(assembly.admin.getShardInfo(create(EmptySchema), context)).toMatchObject({ shards: [] });
+    expect(assembly.admin.getShardInfo(create(EmptySchema), context)).toMatchObject({
+      shards: [{ index: only, messages: 1 }],
+    });
   });
 
-  it("coalesces repeated writeMany identities to their final pending status", async () => {
+  it("counts the final stored identity once after repeated writeMany entries", async () => {
     const assembly = DeliveryAssembly.create();
     const only = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
     const pending = message("batch-retained", only);
@@ -139,18 +173,8 @@ describe("delivery assembly Admin projection", () => {
       }),
       context,
     );
-    expect(assembly.admin.getShardInfo(create(EmptySchema), context)).toMatchObject({ shards: [] });
+    expect(assembly.admin.getShardInfo(create(EmptySchema), context)).toMatchObject({
+      shards: [{ index: only, messages: 1 }],
+    });
   });
 });
-
-function message(uuid: string, shard: ShardIndex) {
-  return create(InboxMessageSchema, {
-    id: { uuid, index: shard },
-    signalId: { value: "signal" },
-    inboxId: { entityId: { id: { typeUrl: "example.Entity" } }, typeUrl: "example.State" },
-    payload: { case: "command", value: {} },
-    label: 1,
-    whenReceived: { seconds: 0n, nanos: 0 },
-    status: InboxMessageStatus.TO_DELIVER,
-  });
-}

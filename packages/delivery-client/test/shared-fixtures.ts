@@ -26,10 +26,10 @@ import {
 } from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import {
-  LiquorPickUpOutcomeSchema,
+  DeliveryPickUpOutcomeSchema,
   OptionalInboxMessageSchema,
-  ShardAlreadyPickedUpSchema,
   ShardPickedUpSchema,
+  ShardAlreadyPickedUpSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
   InboxIdSchema,
@@ -73,7 +73,7 @@ export function transport(): {
       const request = args[4] as { shard: unknown; worker: unknown };
       const shard = request.shard as { index?: number; ofTotal?: number };
       pickedWorkers.set(`${String(shard.index)}/${String(shard.ofTotal)}`, request.worker);
-      return create(LiquorPickUpOutcomeSchema, {
+      return create(DeliveryPickUpOutcomeSchema, {
         value: {
           case: "pickedUp",
           value: create(ShardPickedUpSchema, {
@@ -89,10 +89,11 @@ export function transport(): {
       const key = `${String(request.shard.index)}/${String(request.shard.ofTotal)}`;
       const worker = pickedWorkers.get(key);
       if (worker === undefined) throw new Error("No prior picked worker.");
-      return create(LiquorPickUpOutcomeSchema, {
+      return create(DeliveryPickUpOutcomeSchema, {
         value: {
           case: "alreadyPickedUp",
           value: create(ShardAlreadyPickedUpSchema, {
+            shard: request.shard as never,
             worker: worker as never,
             whenPicked: { seconds: 1n, nanos: 0 },
           }),
@@ -211,7 +212,7 @@ export function echoPickup(fake: ReturnType<typeof transport>): void {
   fake.unary.mockImplementationOnce(
     (_method: unknown, _signal: unknown, _timeoutMs: unknown, _header: unknown, input: unknown) => {
       const request = input as { shard: unknown; worker: unknown };
-      return create(LiquorPickUpOutcomeSchema, {
+      return create(DeliveryPickUpOutcomeSchema, {
         value: {
           case: "pickedUp",
           value: create(ShardPickedUpSchema, {

@@ -635,19 +635,20 @@ The following runtime pieces are not available in the verified local/example con
   entity IDs, or a starting time and has no durable operation identity,
   progress, Inbox catch-up lifecycle, restart, resumption, or cross-process
   historical/live coordination. It is not Projection catch-up;
-- production transport-backed/background worker topology and supervision,
-  production catch-up orchestration, durable production storage adapters, entity
-  storage/cache catch-up, and production tenant-index policy. Durable inbox
-  records and shard ownership are present; delivered rows are the deduplication
-  fact, with no per-message claim or separate dedup record;
+- production catch-up orchestration, Entity storage/cache catch-up, and
+  production tenant-index policy;
 - richer query filtering, retained subscription update replay, and
   cross-process subscription stream coordination;
 - full system-context runtime, command-log repositories, system event taxonomy,
   tracing/monitors/debug UI, deployment/authentication/tracing/health
   hardening, and broader production server verification; and
-- remote/multi-host transport topology, broker topology/process supervision,
-  retry monitors/workers, production delivery policy, and transport-backed
-  worker topology beyond the framework's local delivery loop.
+- deployment-specific broker topology and process supervision for external brokers.
+
+For remote shard delivery, each application node connects to the Delivery
+server's work stream. For example, a subscriber can start after a Command
+was stored, learn that shard 3 is free, and pick it up. The Delivery server
+can distribute shard storage across a fixed number of subprocesses.
+[Delivery server reference](../../packages/delivery-server/REFERENCE.md)
 
 ## Server Runtime
 
@@ -767,29 +768,26 @@ preserves byte arrays used by packed Protobuf `Any` payloads.
 Aggregate latest-state, optional state history, and traceability event-journal
 storage use the shared entity-storage provider seam. Aggregate loading uses the
 latest persisted state; it never reconstructs state by snapshot-plus-replay.
-The framework persists pending and delivered `InboxMessage` rows directly
-through `RecordStorage`. Shard ownership is the only concurrent-delivery
-exclusion; it creates neither a per-message claim nor a separate dedup record.
-Delivered rows are the deduplication fact. Handler effects and the delivered-row
-compare-and-set are not transactional, so a lost acknowledgement can redeliver
-after restart and downstream handling must be idempotent. `DeliveryMonitor`
-defines reception-failure policy: its default marks a failed reception delivered
-and continues independent targets; applications may choose an immediate repeat
-of failed processing. Managed repository infrastructure errors propagate while
-their Inbox rows remain `TO_DELIVER`. A custom reception action that completes
-normally also completes delivery and is followed by delivered acknowledgement.
-A successful handler with failed acknowledgement gets finite
-acknowledgement-only retries. The supervisor
-rescans pending shards every 10 seconds by default, separately from the
-60-second stale-session threshold and the configurable Delivery server processing
-timeout, which is disabled by default. These [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers)
-do not guarantee a delivery or takeover deadline. The ordinary Delivery
-supervisor adds no persisted attempts, quarantine, receipts, markers, or dead-letter storage.
-Callback snapshots copy `Date` values
-and `Any.value` bytes. The package exposes no raw worker callback API; replay
-stays behind validated endpoints. Local posting handoffs cover command rows,
-projection subscriber rows, and process-manager event rows. Ordinary Command
-handlers and projection subscribers wait for the exact received row to replay;
+The framework stores pending and delivered `InboxMessage` records. With remote
+storage, the application worker reads a shard page, calls the handlers and
+sets a retention deadline on each newly delivered message. It sends those
+changes in one `WriteMany` call. It then sends the duplicate and expired inbox
+messages from the page in `RemoveMany`.
+
+An Entity write and the subsequent inbox write are separate. If the connection
+fails between them, a later worker can receive the same Command. The worker
+reports a storage error when it cannot save the processed page.
+
+Each remote node listens for free shards with pending work. The Delivery
+server repeats a notice for an unclaimed shard after ten seconds by default.
+Its pickup and release operations also serve ordinary JVM clients.
+
+With direct local delivery, posting can wait for the exact Command or
+Projection input to reach its handler. When the Delivery server stores the
+message, the server's observation stream wakes workers. When the application
+stores the message, it can supply a custom observer. In both cases, posting
+can return after the inbox write. A worker on any application node can then
+pick up the shard and process its messages. For Agents,
 an original Agent input still `TO_DELIVER` may be redelivered after interruption
 and create a new model call. Saved model calls do not replay from pending
 attributes or history.
@@ -805,13 +803,12 @@ target ID before handler code.
 
 Inbox delivery reads bounded raw pages and removes pending duplicates by signal
 ID plus typed Inbox target. Duplicate evidence comes from delivered rows in the
-current page and a process-local cache of the 1,000 most recent deliveries. The
+current page and identities acknowledged on the current node within the five-second retention window. The
 drain finishes a forward scan before restarting; it starts another scan only
 when the completed scan delivered messages. Unexpired delivered rows are kept
 without attempting cleanup, and retained-row duplicate checks use the same
-applicable clock as cleanup. This does not introduce an unbounded duplicate set.
-The 30-second deduplication window controls how long delivered rows are retained;
-it is not replay retention. A different target or a newly created signal with a
+applicable clock as cleanup. A delivered row becomes eligible for removal five seconds
+after acknowledgement. A quiet shard can retain the row until a later drain. A different target or a newly created signal with a
 different ID is not suppressed because its payload happens to be equal.
 Bounded contexts create internal system-pairing metadata and a tenant index.
 Single-tenant indexes are constant and reject tenant recording. Multitenant

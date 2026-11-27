@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { DeliveryTimers } from "../client/delivery-timers.js";
 import { Time } from "@spine-event-engine/core/time";
 import { randomUUID } from "node:crypto";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
@@ -25,20 +26,22 @@ import type {
   ExclusiveDeliveryWorkSession,
   InboxMessage,
   InboxMessageId,
-  InboxMessageInput,
   InboxReadOptions,
-  InboxWriteResult,
 } from "@spine-event-engine/server";
+import {
+  InboxRetention,
+  deliveryPortAccess,
+  type InboxMessageInput,
+} from "@spine-event-engine/server/spi/delivery";
 import { ShardIndex } from "@spine-event-engine/server";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
+import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 
-import { conditionalPickUp, InboxRetention } from "@spine-event-engine/server/spi/delivery";
-import { DeliveryClient, deliveryClientAccess } from "../client/client.js";
+import { DeliveryClient } from "../client/client.js";
 import {
   DeliveryPagingError,
   DeliveryProtocolError,
   type DeliveryWorkerId,
-  type RemoteShardObservation,
   type RemoteShardSession,
 } from "../client/types.js";
 import { DeliveryMessageCodec, DeliveryRequestCodec, DeliveryShardCodec } from "../wire/codec.js";
@@ -47,7 +50,6 @@ interface RemoteInboxPage {
   readonly messages: readonly InboxMessage[];
   readonly complete: boolean;
   readonly last: InboxMessage | undefined;
-  readonly unsafeContinuation: boolean;
 }
 
 /**
@@ -55,6 +57,11 @@ interface RemoteInboxPage {
  */
 export class RemoteInbox implements DeliveryInbox {
   // prettier-ignore
+
+  readonly #pages = new WeakMap<DeliveryWorkSession, {
+    writes: InboxMessage[];
+    removals: InboxMessage[];
+  }>();
 
   /**
    * Remote inbox work requires an exclusive remote shard session.
@@ -67,7 +74,105 @@ export class RemoteInbox implements DeliveryInbox {
    * @param client Sends inbox calls to the delivery server.
    */
   constructor(private readonly client: DeliveryClient) {
+    Object.defineProperty(this, deliveryPortAccess, {
+      value: (
+        messages: readonly InboxMessage[],
+        session: DeliveryWorkSession,
+        options: DeliveryOperationOptions | undefined,
+        process: (isRecent?: (message: InboxMessage) => boolean) => Promise<boolean>,
+        onWritesStored: (deadlineNs: (message: InboxMessage) => bigint | undefined) => void,
+      ) => this.#applyPage(messages, session, options, process, onWritesStored),
+    });
     Object.freeze(this);
+  }
+
+  /**
+   * Runs one page and flushes changed rows before removals.
+   *
+   * @param messages Supplies the page read from InboxService.
+   * @param session Identifies the current worker session.
+   * @param options Carries cancellation for the batch RPCs.
+   * @param process Dispatches the page with full-precision retention checks.
+   * @param onWritesStored Reports durable completion writes and their exact deadlines before removals.
+   * @returns Whether processing continued through the complete page.
+   * @internal
+   */
+  async #applyPage(
+    messages: readonly InboxMessage[],
+    session: DeliveryWorkSession,
+    options: DeliveryOperationOptions | undefined,
+    process: (isRecent?: (message: InboxMessage) => boolean) => Promise<boolean>,
+    onWritesStored: (deadlineNs: (message: InboxMessage) => bigint | undefined) => void,
+  ): Promise<boolean> {
+    const now = Time.currentTime();
+    const nowNs = now.seconds * 1_000_000_000n + BigInt(now.nanos);
+    const page = { writes: [] as InboxMessage[], removals: this.#expired(messages, nowNs) };
+    this.#pages.set(session, page);
+    try {
+      if (!(await process((message) => (this.#deadlineNs(message) ?? 0n) > nowNs))) return false;
+      await this.#flushPage(page.writes, page.removals, options, onWritesStored);
+      return true;
+    } finally {
+      this.#pages.delete(session);
+    }
+  }
+
+  /**
+   * Finds delivered inbox messages whose stored deadline has passed.
+   *
+   * @param messages Supplies the inbox messages in the page.
+   * @param nowNs Supplies the page clock sample.
+   * @returns Inbox messages to remove after completion writes.
+   */
+  #expired(messages: readonly InboxMessage[], nowNs: bigint): InboxMessage[] {
+    return messages.filter((message) => {
+      if (message.status !== "DELIVERED") return false;
+      const deadline = this.#deadlineNs(message);
+      return deadline === undefined || nowNs > deadline;
+    });
+  }
+
+  /**
+   * Reads the exact stored retention deadline.
+   *
+   * @param message Supplies a decoded or completed inbox message.
+   * @returns Deadline nanoseconds when present.
+   */
+  #deadlineNs(message: InboxMessage): bigint | undefined {
+    const deadline = DeliveryMessageCodec.retentionDeadline(message);
+    return deadline === undefined
+      ? undefined
+      : deadline.seconds * 1_000_000_000n + BigInt(deadline.nanos);
+  }
+
+  /**
+   * Writes completions before removing expired and duplicate inbox messages.
+   *
+   * @param writes Supplies changed completion inbox messages.
+   * @param removals Supplies inbox messages selected for removal.
+   * @param options Carries cancellation for the batch RPCs.
+   * @param onWritesStored Reports durable writes and their exact deadlines.
+   */
+  async #flushPage(
+    writes: readonly InboxMessage[],
+    removals: readonly InboxMessage[],
+    options: DeliveryOperationOptions | undefined,
+    onWritesStored: (deadlineNs: (message: InboxMessage) => bigint | undefined) => void,
+  ): Promise<void> {
+    if (writes.length > 0) {
+      await this.client.writeMany(writes, options);
+      onWritesStored((message) => this.#deadlineNs(message));
+    }
+    if (removals.length > 0) await this.client.removeMany(removals, options);
+  }
+
+  /**
+   * Returns the current page for one session.
+   */
+  #page(session: DeliveryWorkSession | undefined) {
+    const page = session === undefined ? undefined : this.#pages.get(session);
+    if (page === undefined) throw new DeliveryProtocolError();
+    return page;
   }
 
   /**
@@ -80,10 +185,24 @@ export class RemoteInbox implements DeliveryInbox {
   async receive(
     input: InboxMessageInput,
     options?: DeliveryOperationOptions,
-  ): Promise<InboxWriteResult> {
+  ): Promise<InboxMessage> {
     const message = RemoteValues.receiveMessage(input);
     await this.client.writeOne(message, options);
-    return RemoteValues.freeze({ outcome: "WRITTEN" as const, message });
+    return RemoteValues.freeze(message);
+  }
+
+  /**
+   * Finds the last pending row in the server's complete shard delivery order.
+   *
+   * @param shard Selects the shard to inspect after normal release.
+   * @param options Bounds or cancels the remote read.
+   * @returns The newest pending row, when present.
+   */
+  newestPending(
+    shard: ShardIndex,
+    options?: DeliveryOperationOptions,
+  ): Promise<InboxMessage | undefined> {
+    return this.client.newestPending(shard, options);
   }
 
   /**
@@ -98,20 +217,19 @@ export class RemoteInbox implements DeliveryInbox {
     options: InboxReadOptions & DeliveryOperationOptions = {},
   ): Promise<readonly InboxMessage[]> {
     if (options.offset !== undefined && options.offset !== 0) throw new DeliveryPagingError();
-    const limit =
-      options.limit === undefined
-        ? this.client.pageSize
-        : DeliveryRequestCodec.pageSize(options.limit);
+    const limit = options.limit ?? this.client.pageSize;
+    if (!Number.isSafeInteger(limit) || limit < 1)
+      throw new TypeError("Delivery page size is invalid.");
     RemoteInbox.#validateRead(shardIndex, options.after);
     if (options.signal?.aborted) throw options.signal.reason;
-    const timeoutMs = DeliveryRequestCodec.timeout(options.timeoutMs ?? 30_000);
-    const deadline = Time.monotonicTime() + timeoutMs;
+    const timeoutMs = DeliveryRequestCodec.timeout(options.timeoutMs);
+    const deadline = timeoutMs === undefined ? Infinity : Time.monotonicTime() + timeoutMs;
     const controller = new AbortController();
     const abort = () => {
       controller.abort(options.signal?.reason);
     };
     options.signal?.addEventListener("abort", abort, { once: true });
-    const timer = setTimeout(() => {
+    const cancelTimer = DeliveryTimers.after(() => {
       controller.abort(new Error("Delivery Inbox read timed out."));
     }, timeoutMs);
     try {
@@ -122,7 +240,7 @@ export class RemoteInbox implements DeliveryInbox {
         deadline,
       );
     } finally {
-      clearTimeout(timer);
+      cancelTimer?.();
       options.signal?.removeEventListener("abort", abort);
     }
   }
@@ -173,32 +291,29 @@ export class RemoteInbox implements DeliveryInbox {
     limit: number,
     options: DeliveryOperationOptions & {
       readonly signal: AbortSignal;
-      readonly timeoutMs: number;
+      readonly timeoutMs?: number;
     },
   ): Promise<RemoteInboxPage> {
-    const pageSize = after === undefined ? limit : Math.min(1_000, limit + 1);
-    const page = await RemoteInbox.#awaitPage(
-      this.client.readPage(shardIndex, {
-        pageSize,
-        signal: options.signal,
-        timeoutMs: options.timeoutMs,
-        ...(after === undefined ? {} : { sinceWhen: RemoteValues.pageAnchor(after.whenReceived) }),
-      }),
-      options.signal,
-    );
-    const start = after === undefined ? 0 : RemoteValues.exactAfter(page, after);
-    const last = page.at(-1);
-    const prior = page.at(-2);
-    return {
-      messages: page.slice(start),
-      complete: page.length < pageSize,
-      last,
-      unsafeContinuation:
-        page.length === pageSize &&
-        prior !== undefined &&
-        last !== undefined &&
-        RemoteValues.sameTime(prior.whenReceived, last.whenReceived),
-    };
+    const maxPageSize = 0x7fff_ffff; // The wire page size is a signed int32.
+    let pageSize = Math.min(maxPageSize, after === undefined ? limit : limit + 1);
+    const sinceWhen = after === undefined ? undefined : RemoteValues.pageAnchor(after.whenReceived);
+    for (;;) {
+      const page = await RemoteInbox.#awaitPage(
+        this.client.readPage(shardIndex, {
+          pageSize,
+          signal: options.signal,
+          ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+          ...(sinceWhen === undefined ? {} : { sinceWhen }),
+        }),
+        options.signal,
+      );
+      const messages =
+        after === undefined ? page : page.filter((message) => RemoteValues.isAfter(message, after));
+      const complete = page.length < pageSize;
+      if (messages.length || complete) return { messages, complete, last: messages.at(-1) };
+      if (pageSize === maxPageSize) throw new DeliveryPagingError();
+      pageSize = Math.min(maxPageSize, pageSize * 2);
+    }
   }
 
   async #readCollected(
@@ -216,7 +331,7 @@ export class RemoteInbox implements DeliveryInbox {
       if (remaining <= 0) throw new Error("Delivery Inbox read timed out.");
       const page = await this.#readPage(shardIndex, after, limit, {
         ...options,
-        timeoutMs: remaining,
+        ...(Number.isFinite(remaining) ? { timeoutMs: remaining } : {}),
       });
       for (const message of page.messages) {
         if (options.statuses === undefined || options.statuses.includes(message.status))
@@ -225,7 +340,6 @@ export class RemoteInbox implements DeliveryInbox {
       }
       if (page.complete) return Object.freeze(result);
       if (page.last === undefined) throw new DeliveryPagingError();
-      if (page.unsafeContinuation) throw new DeliveryPagingError();
       after = {
         messageId: page.last.id.value,
         whenReceived: page.last.whenReceived,
@@ -250,127 +364,113 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Reads the current row and writes its completed form through the existing service.
+   * Records the completed message for the page's batch write.
    *
-   * @param message Supplies the expected pending message snapshot.
-   * @param options Bounds or cancels the remote read and delivered upsert.
-   * @returns The completed row written by this attempt, or a matching completed
-   * row already found with its stored deadline. Returns `undefined` when the row
-   * is absent or its content differs. A write with an unknown outcome raises its
-   * transport error.
+   * @param message Supplies the pending message from the current page.
+   * @param options Bounds or cancels the mutation.
+   * @param session Supplies the current local exclusive session.
+   * @returns The staged completion with its first deadline. Storage completes
+   * when the page's WriteMany call succeeds.
    */
-  async markDelivered(
+  markDelivered(
     message: InboxMessage,
     options?: DeliveryOperationOptions,
+    session?: DeliveryWorkSession,
   ): Promise<InboxMessage | undefined> {
-    const current = await this.client.findOne(message.id, options);
-    if (current?.status === "DELIVERED" && RemoteValues.sameCompletion(current, message))
-      return current;
-    if (current?.status !== "TO_DELIVER" || !RemoteValues.sameMessage(current, message))
-      return undefined;
-    const delivered = DeliveryMessageCodec.snapshot({
-      ...current,
-      status: "DELIVERED",
-      keepUntil: InboxRetention.deadline(Time.currentTimeMillis()),
+    const now = Time.currentTime();
+    const completed = {
+      ...message,
+      status: "DELIVERED" as const,
+      keepUntil: InboxRetention.deadline(DeliveryShardCodec.date(now).getTime()),
+    };
+    const seconds = now.seconds + BigInt(Math.floor(InboxRetention.durationMs / 1_000));
+    const nanos = now.nanos + (InboxRetention.durationMs % 1_000) * 1_000_000;
+    const deadline = create(TimestampSchema, {
+      seconds: seconds + BigInt(Math.floor(nanos / 1_000_000_000)),
+      nanos: nanos % 1_000_000_000,
     });
-    await this.client.writeOne(delivered, options);
-    return delivered;
+    DeliveryMessageCodec.retainWire(message, completed, deadline);
+    this.#page(session).writes.push(completed);
+    return Promise.resolve(Object.freeze(completed));
   }
 
   /**
-   * Removes an eligible delivered row by ID through the remote delivery server.
+   * Records a pending duplicate for removal after page completion writes.
    *
-   * @param message Supplies the delivered snapshot.
-   * @param options Bounds remote reads and removal.
-   * @returns Whether the removal request completed.
+   * @param message Supplies the pending message from the current page.
+   * @param options Bounds or cancels the mutation.
+   * @param session Supplies the current local exclusive session.
+   * @returns Whether removal was staged. Storage completes when the page's
+   * RemoveMany call succeeds.
    */
-  async removeDelivered(
+  removeDuplicate(
     message: InboxMessage,
     options?: DeliveryOperationOptions,
+    session?: DeliveryWorkSession,
   ): Promise<boolean> {
-    if (
-      message.status !== "DELIVERED" ||
-      (message.keepUntil !== undefined && message.keepUntil.getTime() > Time.currentTimeMillis())
-    )
-      return false;
-    await this.client.removeOne(message, options);
-    return true;
-  }
-
-  /**
-   * Removes one pending duplicate by ID through the remote delivery server.
-   *
-   * @param message Supplies the pending duplicate snapshot.
-   * @param options Bounds remote reads and removal.
-   * @returns Whether the removal request completed.
-   */
-  async removeDuplicate(
-    message: InboxMessage,
-    options?: DeliveryOperationOptions,
-  ): Promise<boolean> {
-    if (message.status !== "TO_DELIVER") return false;
-    await this.client.removeOne(message, options);
-    return true;
+    this.#page(session).removals.push(message);
+    return Promise.resolve(true);
   }
 }
 
 /**
- * Adapts remote exclusive shard sessions to the server work registry.
+ * Adapts remote shard sessions to the server work registry.
  */
-class RemoteSessionOwner {
-  // prettier-ignore
-
+export class RemoteWorkRegistry implements DeliveryWorkRegistry {
   /**
-   * Frozen remote pickup produces non-renewable exclusive sessions.
+   * The session kind returned by the remote shard service.
    */
+  readonly sessionKind = "EXCLUSIVE" as const;
+
   readonly #sessions = new WeakMap<ExclusiveDeliveryWorkSession, RemoteShardSession>();
 
-  readonly #sessionsByShard = new Map<string, Set<ExclusiveDeliveryWorkSession>>();
-
   /**
-   * Creates a registry backed by the supplied delivery client.
+   * Creates the registry over a delivery client.
    *
-   * @param client Sends shard operations to the delivery server.
+   * @param client Sends shard RPCs to the Delivery server.
    */
   constructor(private readonly client: DeliveryClient) {}
 
   /**
-   * Acquires a shard for the supplied complete worker identity.
+   * Creates a distinct worker identity for one concurrent run.
    *
-   * @param shardIndex Identifies the shard to acquire.
-   * @param worker Identifies the worker requesting work.
-   * @param options Bounds or cancels the remote mutation.
-   * @returns A local exclusive session, or `undefined` when unavailable.
+   * @param worker Supplies the configured application node.
+   * @returns A worker ID for one run.
+   */
+  workerForRun(worker: WorkerId): WorkerId {
+    const configuredNode = RemoteValues.worker(worker).nodeId;
+    return create(WorkerIdSchema, { nodeId: { value: configuredNode }, value: randomUUID() });
+  }
+
+  /**
+   * Acquires one shard for one worker.
+   *
+   * @param shardIndex Identifies the requested shard.
+   * @param worker Identifies the worker requesting it.
+   * @param options Bounds or cancels the remote call.
+   * @returns A session, or `undefined` while another worker holds the shard.
    */
   async pickUp(
     shardIndex: ShardIndex,
     worker: WorkerId,
     options?: DeliveryOperationOptions,
   ): Promise<ExclusiveDeliveryWorkSession | undefined> {
-    const operation = {
-      ...(options?.signal === undefined ? {} : { signal: options.signal }),
-      ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
-    };
-    const remote = await this.client.pickUp(shardIndex, RemoteValues.worker(worker), operation);
+    const remote = await this.client.pickUp(shardIndex, RemoteValues.worker(worker), options);
     if (remote === undefined) return undefined;
     const session = RemoteValues.freeze({
       kind: "EXCLUSIVE" as const,
       shard: DeliveryShardCodec.snapshot(shardIndex),
     });
     this.#sessions.set(session, remote);
-    const key = RemoteValues.shardKey(shardIndex);
-    const sessions = this.#sessionsByShard.get(key) ?? new Set<ExclusiveDeliveryWorkSession>();
-    sessions.add(session);
-    this.#sessionsByShard.set(key, sessions);
     return session;
   }
 
   /**
-   * Removes a previously acquired exclusive session.
+   * Removes the session when this registry recorded its pickup.
    *
-   * @param session Supplies the local session to release.
-   * @param options Bounds or cancels the remote mutation.
-   * @returns Whether this registry released a known session.
+   * @param session Identifies the locally recorded pickup.
+   * @param options Bounds or cancels the remote call.
+   * @returns Whether this registry released the session.
    */
   async release(
     session: DeliveryWorkSession,
@@ -379,194 +479,24 @@ class RemoteSessionOwner {
     if (session.kind !== "EXCLUSIVE") return false;
     const remote = this.#sessions.get(session);
     if (remote === undefined) return false;
-    const key = RemoteValues.shardKey(session.shard);
     this.#sessions.delete(session);
-    this.#removeSession(key, session);
     await this.client.release(remote, options);
     return true;
   }
 
   /**
-   * Validates that an exclusive remote session still owns its shard.
+   * Returns the local session while this registry has not released it. The
+   * server's current shard record is not read by this check.
    *
-   * An exact worker and pickup-time match retains the local session. A free
-   * shard accidentally acquired by the probe is released and invalidated, as
-   * is a session held by a different current owner. Unknown outcomes fail
-   * closed without storing quarantine or marker state.
-   *
-   * @param session Supplies the locally issued exclusive session.
-   * @param options Bounds or cancels the authoritative probe.
-   * @returns The retained session, or `undefined` when validation fails.
-   */
-  async validateOwnership(
-    session: DeliveryWorkSession,
-    options?: DeliveryOperationOptions,
-  ): Promise<ExclusiveDeliveryWorkSession | undefined> {
-    if (session.kind !== "EXCLUSIVE") return undefined;
-    const remote = this.#sessions.get(session);
-    if (remote === undefined) return undefined;
-    const probe = await deliveryClientAccess.probePickUp(
-      this.client,
-      session.shard,
-      remote.worker,
-      options ?? {},
-    );
-    if (probe.kind === "PICKED") {
-      await this.#cleanupAccidentalPickup(probe.session);
-      this.#invalidate(session);
-      return undefined;
-    }
-    if (
-      RemoteValues.sameWorker(probe.session.worker, remote.worker) &&
-      probe.session.whenPicked.getTime() === remote.whenPicked.getTime()
-    ) {
-      return session;
-    }
-    this.#invalidate(session);
-    return undefined;
-  }
-
-  /**
-   * Calls the client to release a probe session acquired accidentally.
-   *
-   * @param session Supplies the session to release.
-   * @returns Completion after the bounded release attempt.
-   */
-  async #cleanupAccidentalPickup(session: RemoteShardSession): Promise<void> {
-    try {
-      await this.client.release(session, { timeoutMs: 1_000 });
-    } catch {
-      // Validation remains failed closed when bounded cleanup is uncertain.
-    }
-  }
-
-  /**
-   * Removes a session from local validation state.
-   *
-   * @param session Supplies the session to invalidate.
-   */
-  #invalidate(session: ExclusiveDeliveryWorkSession): void {
-    this.#sessions.delete(session);
-    this.#removeSession(RemoteValues.shardKey(session.shard), session);
-  }
-
-  /**
-   * Applies a validated Admin observation to local remote-session state.
-   *
-   * A `PICKED` observation cannot prove ownership because the frozen wire
-   * omits a session identity. Only `NOT_PICKED` invalidates stale sessions.
-   *
-   * @param observation Supplies the detached remote shard observation.
-   */
-  reconcile(observation: RemoteShardObservation): void {
-    if (
-      !(observation.shard instanceof ShardIndex) ||
-      !Number.isSafeInteger(observation.messages) ||
-      observation.messages < 0 ||
-      (observation.lastPicked !== undefined &&
-        (!(observation.lastPicked instanceof Date) ||
-          Number.isNaN(observation.lastPicked.getTime())))
-    )
-      throw new DeliveryProtocolError();
-    if (observation.status !== "NOT_PICKED") return;
-    const key = RemoteValues.shardKey(observation.shard);
-    const sessions = this.#sessionsByShard.get(key);
-    if (sessions !== undefined) {
-      for (const session of sessions) {
-        this.#sessions.delete(session);
-      }
-      this.#sessionsByShard.delete(key);
-    }
-  }
-
-  /**
-   * Removes one session from the shard's local session set.
-   *
-   * @param key Identifies the shard session set.
-   * @param session Supplies the session to remove.
-   */
-  #removeSession(key: string, session: ExclusiveDeliveryWorkSession): void {
-    const sessions = this.#sessionsByShard.get(key);
-    if (sessions === undefined) return;
-    sessions.delete(session);
-    if (sessions.size === 0) this.#sessionsByShard.delete(key);
-  }
-}
-
-/**
- * Adapts one per-registry remote session owner to the server work-registry port.
- */
-export class RemoteWorkRegistry implements DeliveryWorkRegistry {
-  // prettier-ignore
-
-  /**
-   * Identifies the exclusive session model used by the remote registry.
-   */
-  readonly sessionKind = "EXCLUSIVE" as const;
-
-  readonly #owner: RemoteSessionOwner;
-
-  /**
-   * Creates a registry backed by the supplied delivery client.
-   *
-   * @param client Sends shard operations to the delivery server.
-   */
-  constructor(client: DeliveryClient) {
-    this.#owner = new RemoteSessionOwner(client);
-    conditionalPickUp.register(this, (shard, worker, options) =>
-      this.#owner.pickUp(shard, worker, options),
-    );
-    Object.freeze(this);
-  }
-
-  /**
-   * Acquires a remote shard for a complete worker identity.
-   *
-   * @param shardIndex Identifies the shard to acquire.
-   * @param worker Identifies the worker requesting the shard.
-   * @param options Bounds or cancels the remote operation.
-   * @returns The acquired exclusive session, or `undefined` when unavailable.
-   */
-  pickUp(
-    shardIndex: ShardIndex,
-    worker: WorkerId,
-    options?: DeliveryOperationOptions,
-  ): Promise<ExclusiveDeliveryWorkSession | undefined> {
-    return this.#owner.pickUp(shardIndex, worker, options);
-  }
-
-  /**
-   * Removes a remote shard session owned by this registry.
-   *
-   * @param session Identifies the session to release.
-   * @param options Bounds or cancels the remote operation.
-   * @returns Whether the registry recognized and released the session.
-   */
-  release(session: DeliveryWorkSession, options?: DeliveryOperationOptions): Promise<boolean> {
-    return this.#owner.release(session, options);
-  }
-
-  /**
-   * Validates current remote ownership before a guarded side effect.
-   *
-   * @param session Supplies the exclusive session to validate.
-   * @param options Bounds or cancels the authoritative probe.
-   * @returns The retained session, or `undefined` when validation fails.
+   * @param session Identifies the session to check.
+   * @returns The session while still recorded locally.
    */
   validateOwnership(
     session: DeliveryWorkSession,
-    options?: DeliveryOperationOptions,
   ): Promise<ExclusiveDeliveryWorkSession | undefined> {
-    return this.#owner.validateOwnership(session, options);
-  }
-
-  /**
-   * Applies an Admin shard observation to local ownership.
-   *
-   * @param observation Describes the current remote shard state.
-   */
-  reconcile(observation: RemoteShardObservation): void {
-    this.#owner.reconcile(observation);
+    return Promise.resolve(
+      session.kind === "EXCLUSIVE" && this.#sessions.has(session) ? session : undefined,
+    );
   }
 }
 
@@ -611,142 +541,31 @@ const RemoteValues = Object.freeze({
   },
 
   /**
-   * Creates the local key for a shard.
-   *
-   * @param value Supplies the shard index.
-   * @returns The shard index and count as a key.
-   */
-  shardKey(value: ShardIndex): string {
-    return `${String(value.index)}/${String(value.ofTotal)}`;
-  },
-
-  /**
    * Reads from the nanosecond before an exact continuation time.
    * @param value Last received timestamp.
    * @returns Exclusive JVM query bound that includes the cursor row.
    */
-  pageAnchor(value: Timestamp): Timestamp {
-    if (value.seconds === -62_135_596_800n && value.nanos === 0) throw new DeliveryPagingError();
+  pageAnchor(value: Timestamp): Timestamp | undefined {
+    if (value.seconds === -62_135_596_800n && value.nanos === 0) return undefined;
     return value.nanos === 0
       ? create(TimestampSchema, { seconds: value.seconds - 1n, nanos: 999_999_999 })
       : create(TimestampSchema, { seconds: value.seconds, nanos: value.nanos - 1 });
   },
 
   /**
-   * Compares two receive times at nanosecond precision.
-   * @param left The first receive time.
-   * @param right The second receive time.
-   * @returns Whether both instants have equal seconds and nanoseconds.
-   */
-  sameTime(left: Timestamp, right: Timestamp): boolean {
-    return left.seconds === right.seconds && left.nanos === right.nanos;
-  },
-
-  /**
-   * Compares shard indexes by index and shard count.
+   * Checks whether a message follows the previous page in the server's delivery order.
    *
-   * @param left Supplies the first shard.
-   * @param right Supplies the second shard.
-   * @returns Whether both values identify the same shard.
+   * @param message Candidate from the timestamp query.
+   * @param after Last position consumed by the worker.
+   * @returns True when this candidate has not yet been visited.
    */
-  sameShard(left: ShardIndex, right: ShardIndex): boolean {
-    return left.index === right.index && left.ofTotal === right.ofTotal;
-  },
-
-  /**
-   * Compares worker IDs by node and worker values.
-   *
-   * @param left Supplies the first worker ID.
-   * @param right Supplies the second worker ID.
-   * @returns Whether both values identify the same worker.
-   */
-  sameWorker(left: DeliveryWorkerId, right: DeliveryWorkerId): boolean {
-    return left.nodeId === right.nodeId && left.value === right.value;
-  },
-
-  /**
-   * Finds a continuation row returned by the JVM timestamp query.
-   * @param page Returned page.
-   * @param after Previous row identity.
-   * @returns Position after the previous row.
-   */
-  exactAfter(page: readonly InboxMessage[], after: NonNullable<InboxReadOptions["after"]>): number {
-    const exact = page.findIndex(
-      (message) =>
-        message.id.value === after.messageId &&
-        RemoteValues.sameTime(message.whenReceived, after.whenReceived) &&
-        message.version === after.version,
-    );
-    if (exact < 0) throw new DeliveryPagingError();
-    return exact + 1;
-  },
-
-  /**
-   * Compares all stored fields of two inbox messages.
-   *
-   * @param left Supplies the first message.
-   * @param right Supplies the second message.
-   * @returns Whether all compared fields match.
-   */
-  sameMessage(left: InboxMessage, right: InboxMessage): boolean {
-    return (
-      left.id.value === right.id.value &&
-      RemoteValues.sameShard(left.id.shard, right.id.shard) &&
-      RemoteValues.sameShard(left.shard, right.shard) &&
-      RemoteValues.sameAny(left.inboxId.targetId, right.inboxId.targetId) &&
-      left.inboxId.targetTypeUrl === right.inboxId.targetTypeUrl &&
-      left.signalId === right.signalId &&
-      RemoteValues.sameAny(left.signal, right.signal) &&
-      left.label === right.label &&
-      left.status === right.status &&
-      left.version === right.version &&
-      RemoteValues.sameTime(left.whenReceived, right.whenReceived) &&
-      RemoteValues.sameDate(left.keepUntil, right.keepUntil)
-    );
-  },
-
-  /**
-   * Compares stored completion with a pending snapshot, excluding transition fields.
-   *
-   * @param completed Supplies the persisted delivered row.
-   * @param pending Supplies the expected pending row.
-   * @returns Whether immutable delivery fields match.
-   */
-  sameCompletion(completed: InboxMessage, pending: InboxMessage): boolean {
-    const { keepUntil: completedDeadline, ...completedContent } = completed;
-    const { keepUntil: pendingDeadline, ...pendingContent } = pending;
-    void completedDeadline;
-    void pendingDeadline;
-    return RemoteValues.sameMessage(
-      { ...completedContent, status: "TO_DELIVER" },
-      { ...pendingContent, status: "TO_DELIVER" },
-    );
-  },
-
-  /**
-   * Compares optional dates by their millisecond values.
-   *
-   * @param left Supplies the first date.
-   * @param right Supplies the second date.
-   * @returns Whether both dates are absent or represent the same time.
-   */
-  sameDate(left: Date | undefined, right: Date | undefined): boolean {
-    return left === undefined ? right === undefined : left.getTime() === right?.getTime();
-  },
-
-  /**
-   * Compares optional Protobuf Any values by type URL and bytes.
-   *
-   * @param left Supplies the first Any value.
-   * @param right Supplies the second Any value.
-   * @returns Whether both values have the same type URL and bytes.
-   */
-  sameAny(left: InboxMessage["signal"], right: InboxMessage["signal"]): boolean {
-    return left === undefined || right === undefined
-      ? left === right
-      : left.typeUrl === right.typeUrl &&
-          left.value.length === right.value.length &&
-          left.value.every((value, index) => value === right.value[index]);
+  isAfter(message: InboxMessage, after: NonNullable<InboxReadOptions["after"]>): boolean {
+    const time = message.whenReceived;
+    if (time.seconds !== after.whenReceived.seconds)
+      return time.seconds > after.whenReceived.seconds;
+    if (time.nanos !== after.whenReceived.nanos) return time.nanos > after.whenReceived.nanos;
+    if (message.version !== after.version) return message.version > after.version;
+    return Buffer.compare(Buffer.from(message.id.value), Buffer.from(after.messageId)) > 0;
   },
 
   /**

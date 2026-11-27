@@ -21,17 +21,23 @@ import type { AiRegistry } from "@spine-event-engine/ai";
 import { CloseErrors, RetryableCloseGroup } from "./retryable-close.js";
 import { Delivery as CoreDelivery } from "../delivery/delivery.js";
 import { deliveryControls, deliveryStrategyAccess } from "../delivery/delivery-builder.js";
-import { DeliverySupervisor, deliverySupervisorAccess } from "../delivery/delivery-supervisor.js";
+import {
+  ApplicationWorkObserver,
+  type ApplicationWorkSource,
+} from "../delivery/application-work-observer.js";
 import type { InboxMessage } from "../delivery/inbox.js";
 import { deliveryTenant } from "../delivery/delivery-tenant.js";
-import type { Delivery as PublicDelivery, DeliveryStrategy } from "../delivery/delivery-builder.js";
+import type {
+  ApplicationDelivery as PublicDelivery,
+  DeliveryStrategy,
+} from "../delivery/delivery-builder.js";
 import { emitServerInfo, emitServerWarning } from "./server-log.js";
 import { managedDeliveryGate } from "./managed-delivery-gate.js";
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
 import type { EnvironmentDeliveryPorts } from "../context/local-inbox-handoff.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
-import type { DeliverySource } from "../delivery/delivery-supervisor.js";
 import { Environment, EnvironmentType } from "./environment.js";
+import { deliveryPortAccess } from "../delivery/delivery-port-access.js";
 
 /**
  * Common closeable facility owned by a server environment.
@@ -61,19 +67,90 @@ export interface ServerEnvironmentDelivery extends ServerEnvironmentCloseable {
   open(): unknown;
 
   /**
-   * Supplies the Inbox port used by shared environment Delivery.
+   * Returns framework ports through the internal delivery SPI.
+   *
+   * @returns Inbox and shard registry ports after the facility opens.
    */
-  readonly inbox: DeliveryInbox;
+  [deliveryPortAccess]?(): {
+    readonly inbox: DeliveryInbox;
+    readonly workRegistry: DeliveryWorkRegistry;
+    readonly pageSize?: number;
+  };
 
   /**
-   * Supplies the shard work-registry port used by shared environment Delivery.
+   * Application-managed Inbox provider port, when supplied directly.
    */
-  readonly workRegistry: DeliveryWorkRegistry;
+  readonly inbox?: DeliveryInbox;
 
   /**
-   * Supplies the remote Admin source used to recover and observe shard work.
+   * Application-managed shard registry port, when supplied directly.
    */
-  readonly source?: DeliverySource;
+  readonly workRegistry?: DeliveryWorkRegistry;
+
+  /**
+   * Supplies the built-in remote stream for available shard work.
+   */
+  readonly source?: ApplicationWorkSource;
+
+  /**
+   * Selects built-in work notices or the application's custom observer.
+   */
+  readonly notifications?: DeliveryNotifications;
+
+  /**
+   * Identifies the endpoint in work-stream diagnostics.
+   */
+  readonly endpoint?: string;
+
+  /**
+   * Marks application storage ports whose writes are observed locally.
+   */
+  readonly local?: true;
+
+  /**
+   * Supplies application storage when a local delivery facility selects it.
+   */
+  readonly storageFactory?: StorageFactory;
+}
+
+/**
+ * Selects one application-wide way to initiate remote shard delivery.
+ */
+export type DeliveryNotifications =
+  | {
+      /**
+       * Reads available shards from the Delivery server.
+       */
+      readonly kind: "delivery-server";
+
+      /**
+       * Bounds simultaneous distinct shard runs only when explicitly configured.
+       */
+      readonly maxConcurrentDeliveries?: number;
+    }
+  | {
+      /**
+       * Uses an application observer to initiate work.
+       */
+      readonly kind: "custom";
+
+      /**
+       * Receives complete persisted rows after a write or normal release.
+       */
+      readonly shardObserver: DeliveryShardObserver;
+    };
+
+/**
+ * Receives one complete persisted Inbox row after a custom observation.
+ */
+export interface DeliveryShardObserver {
+  /**
+   * Observes the original persisted row without controlling write success.
+   *
+   * @param message Supplies the full durable Inbox row.
+   * @returns Optional asynchronous application observation.
+   */
+  onMessage(message: InboxMessage): unknown;
 }
 
 /**
@@ -205,9 +282,9 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
 
   #publicDelivery: PublicDelivery | undefined;
 
-  #supervisor: DeliverySupervisor | undefined;
+  #workObserver: ApplicationWorkObserver | undefined;
 
-  #supervisorStart: Promise<void> | undefined;
+  #workObserverStart: Promise<void> | undefined;
 
   #close: Promise<void> | undefined;
 
@@ -247,7 +324,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     environmentInitializers.set(this, () => this.#setup());
     this.#deliveryCloseGroup = new RetryableCloseGroup(
       [
-        { close: () => this.#supervisor?.close() },
+        { close: () => this.#workObserver?.close() },
         { close: () => this.#delivery?.close() },
         this.#remoteDelivery,
       ],
@@ -301,7 +378,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       },
     });
     warnedVolatileRegistries.set(this, new WeakSet());
-    supervisorStarters.set(this, () => this.#startSupervisor());
+    workObserverStarters.set(this, () => this.#startWorkObserver());
     deliveryNotifiers.set(this, (shard) => {
       this.#notifyDelivery(shard);
     });
@@ -552,7 +629,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       context: { name: "__System_Delivery__", multitenant: false },
       storageFactory: this.storageFactory,
       node: this.nodeId,
-      ...(ports?.source === undefined ? { logger: ServerEnvironmentValues.loggerFor(this) } : {}),
+      logger: ServerEnvironmentValues.loggerFor(this),
       ...(this.#deliveryStrategy === undefined
         ? {}
         : { strategy: deliveryStrategyAccess.snapshot(this.#deliveryStrategy) }),
@@ -562,10 +639,20 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       (message) => this.#deliverMessage(message),
       (message) => this.#acceptsMessage(message),
     );
+    const notifications = ports?.notifications;
+    const observer = notifications?.kind === "custom" ? notifications.shardObserver : undefined;
+    delivery.setShardObserver(observer?.onMessage.bind(observer));
+    if (observer !== undefined)
+      environmentCustomObservers.set(this, (message) => {
+        delivery.observePersisted(message);
+      });
     this.#delivery = delivery;
     environmentDeliveryCores.set(this, delivery);
-    this.#publicDelivery = deliveryControls.supervised(delivery);
-    if (ports?.source !== undefined) this.#installSupervisor(this.#publicDelivery, ports.source);
+    this.#publicDelivery = deliveryControls.managed(delivery);
+    if (ports?.source !== undefined && observer === undefined) {
+      remoteObservedEnvironments.add(this);
+      this.#installWorkObserver(this.#publicDelivery, ports.source, ports.endpoint ?? "");
+    }
   }
 
   /**
@@ -580,56 +667,52 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   }
 
   /**
-   * Creates the Delivery supervisor and connects inbox, work registry, and shard delivery notifications.
+   * Opens one built-in remote work reader for the shared Delivery.
    */
-  #installSupervisor(delivery: PublicDelivery, source: DeliverySource): void {
-    const supervisor = new DeliverySupervisor({
+  #installWorkObserver(
+    delivery: PublicDelivery,
+    source: ApplicationWorkSource,
+    endpoint: string,
+  ): void {
+    const remote = ServerEnvironmentValues.openableDelivery(this.#remoteDelivery);
+    const max =
+      remote?.notifications?.kind === "delivery-server"
+        ? remote.notifications.maxConcurrentDeliveries
+        : undefined;
+    this.#workObserver = new ApplicationWorkObserver(
       source,
       delivery,
-      onMessage: (message) => this.#deliverMessage(message),
-    });
-    deliverySupervisorAccess.installAdmission(supervisor, (message) =>
-      this.#acceptsMessage(message),
+      endpoint,
+      ServerEnvironmentValues.loggerFor(this),
+      max,
     );
-    deliverySupervisorAccess.installLogger(supervisor, ServerEnvironmentValues.loggerFor(this));
-    this.#supervisor = supervisor;
-    remoteSupervisedEnvironments.add(this);
   }
 
   /**
-   * Starts the configured Delivery supervisor once and records fatal startup failures for environment cleanup.
+   * Starts built-in remote observation without waiting for its first work notice.
    */
-  #startSupervisor(): Promise<void> {
-    const supervisor = this.#supervisor;
-    return supervisor === undefined
+  #startWorkObserver(): Promise<void> {
+    const observer = this.#workObserver;
+    return observer === undefined
       ? Promise.resolve()
-      : managedDeliveryGate.start(() => (this.#supervisorStart ??= supervisor.start()));
+      : managedDeliveryGate.start(() => (this.#workObserverStart ??= observer.start()));
   }
 
   /**
-   * Notifies the supervisor that work for a shard may now be available.
+   * Notifies local Delivery that work for a shard may now be available.
    */
   #notifyDelivery(shard: import("../delivery/shard-index.js").ShardIndex): void {
-    if (this.#supervisor === undefined) {
+    if (this.#workObserver === undefined && !environmentCustomObservers.has(this)) {
       this.#delivery?.wake(shard);
-      return;
-    }
-    try {
-      this.#supervisor.notify(shard);
-    } catch {
-      emitServerWarning(ServerEnvironmentValues.loggerFor(this), "Delivery notification failed.", {
-        operation: "delivery.notify",
-        reasonCode: "failed",
-      });
     }
   }
 
   /**
-   * Waits until the environment’s supervised Delivery has no active work.
+   * Waits until the environment’s managed Delivery has no active work.
    */
   async #whenDeliveryIdle(): Promise<void> {
     const settled = await Promise.allSettled([
-      this.#supervisor?.whenIdle(),
+      this.#workObserver?.whenIdle(),
       this.#delivery?.whenIdle(),
     ]);
     const failures = settled.flatMap((result): unknown[] =>
@@ -763,11 +846,19 @@ interface ServerEnvironmentAccess {
   coreDelivery(environment: ServerEnvironment): CoreDelivery;
 
   /**
-   * Returns whether setup installed a remote Delivery supervisor.
+   * Returns whether setup installed a remote Delivery work stream.
    * @param environment Resolved environment after setup.
-   * @returns True only for a supervised remote source.
+   * @returns True only for a remote work stream.
    */
-  remoteSupervised(environment: ServerEnvironment): boolean;
+  remoteObserved(environment: ServerEnvironment): boolean;
+
+  /**
+   * Returns the configured callback for one complete persisted Inbox row.
+   *
+   * @param environment Resolved environment after setup.
+   * @returns The custom callback, when selected.
+   */
+  shardObserver(environment: ServerEnvironment): ((message: InboxMessage) => void) | undefined;
 
   /**
    * Waits for admitted environment Delivery work without closing the facility.
@@ -857,7 +948,7 @@ interface ServerEnvironmentAccess {
    *
    * @param environment Resolved environment.
    * @param context Ready context.
-   * @returns Completion after recipient registration and supervisor start.
+   * @returns Completion after recipient registration and work observer start.
    */
   completeContext(environment: ServerEnvironment, context: BoundedContext): Promise<void>;
 
@@ -938,9 +1029,13 @@ const startupControls = new WeakMap<
   }
 >();
 const environmentDeliveryCores = new WeakMap<ServerEnvironment, CoreDelivery>();
-const remoteSupervisedEnvironments = new WeakSet<ServerEnvironment>();
+const environmentCustomObservers = new WeakMap<
+  ServerEnvironment,
+  (message: InboxMessage) => void
+>();
+const remoteObservedEnvironments = new WeakSet<ServerEnvironment>();
 const environmentLoggers = new WeakMap<ServerEnvironment, ILogLayer>();
-const supervisorStarters = new WeakMap<ServerEnvironment, () => Promise<void>>();
+const workObserverStarters = new WeakMap<ServerEnvironment, () => Promise<void>>();
 const deliveryNotifiers = new WeakMap<
   ServerEnvironment,
   (shard: import("../delivery/shard-index.js").ShardIndex) => void
@@ -1134,14 +1229,18 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
   },
 
   /**
-   * Reports whether this environment uses a remote Delivery source supervised by the runtime.
+   * Reports whether this environment uses remote Delivery ports.
    */
-  remoteSupervised(environment: ServerEnvironment): boolean {
-    return remoteSupervisedEnvironments.has(environment);
+  remoteObserved(environment: ServerEnvironment): boolean {
+    return remoteObservedEnvironments.has(environment);
+  },
+
+  shardObserver(environment: ServerEnvironment): ((message: InboxMessage) => void) | undefined {
+    return environmentCustomObservers.get(environment);
   },
 
   /**
-   * Waits for supervised Delivery work to become idle.
+   * Waits for managed Delivery work to become idle.
    */
   whenDeliveryIdle(environment: ServerEnvironment): Promise<void> {
     return deliveryIdlers.get(environment)?.() ?? Promise.resolve();
@@ -1240,7 +1339,7 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     serverEnvironmentAccess.requireAvailable(environment);
     EnvironmentContextRegistrations.forEnvironment(environment).complete(context);
     const endpoints = boundedContextAccess.delivery(context).endpoints();
-    if (endpoints.length > 0) await supervisorStarters.get(environment)?.();
+    if (endpoints.length > 0) await workObserverStarters.get(environment)?.();
     serverEnvironmentAccess.requireAvailable(environment);
     for (const endpoint of endpoints) deliveryNotifiers.get(environment)?.(endpoint.shard);
   },
@@ -1316,12 +1415,65 @@ const ServerEnvironmentValues = Object.freeze({
     if (typeof candidate.open !== "function") return undefined;
     if (
       typeof candidate.close !== "function" ||
-      !("inbox" in candidate) ||
-      !("workRegistry" in candidate)
+      (typeof candidate[deliveryPortAccess] !== "function" &&
+        (!("inbox" in candidate) || !("workRegistry" in candidate)))
     ) {
       throw new TypeError("ServerEnvironmentDelivery requires inbox and workRegistry ports.");
     }
     return candidate as ServerEnvironmentDelivery;
+  },
+
+  /**
+   * Rejects an ambiguous delivery notice mode supplied by JavaScript callers.
+   *
+   * @param value Supplies the configured notification selector.
+   */
+  validateNotifications(value: unknown): void {
+    if (value === undefined) return;
+    if (typeof value !== "object" || value === null)
+      throw new TypeError("Delivery notification kind must be delivery-server or custom.");
+    const mode = value as Record<string, unknown>;
+    if (mode.kind === "delivery-server") {
+      if ("shardObserver" in mode)
+        throw new TypeError("shardObserver requires custom delivery notifications.");
+      const count = mode.maxConcurrentDeliveries;
+      if (count !== undefined && (!Number.isSafeInteger(count) || Number(count) <= 0))
+        throw new TypeError("maxConcurrentDeliveries must be a positive safe integer.");
+      return;
+    }
+    const observer = mode.shardObserver;
+    if (
+      mode.kind === "custom" &&
+      typeof observer === "object" &&
+      observer !== null &&
+      typeof (observer as { onMessage?: unknown }).onMessage === "function" &&
+      !("maxConcurrentDeliveries" in mode)
+    )
+      return;
+    throw new TypeError("Delivery notification kind must be delivery-server or custom.");
+  },
+
+  /**
+   * Rejects competing delivery and application storage configuration.
+   *
+   * @param settings Supplies the configured facilities.
+   * @param delivery Supplies configured delivery fields before facility opening.
+   */
+  validateDeliveryStorage(
+    settings: ServerEnvironmentSettings,
+    delivery: Partial<ServerEnvironmentDelivery> | undefined,
+  ): void {
+    if ("shardObserver" in settings)
+      throw new TypeError(
+        "Configure a custom observer through DeliveryBuilder.local or application-managed delivery storage.",
+      );
+    ServerEnvironmentValues.validateNotifications(delivery?.notifications);
+    if (
+      delivery?.local === true &&
+      settings.storageFactory !== undefined &&
+      delivery.storageFactory !== settings.storageFactory
+    )
+      throw new TypeError("Local Delivery and application must use the same storage factory.");
   },
 
   /**
@@ -1333,10 +1485,27 @@ const ServerEnvironmentValues = Object.freeze({
   ports(delivery: ServerEnvironmentCloseable | undefined): EnvironmentDeliveryPorts | undefined {
     const remote = ServerEnvironmentValues.openableDelivery(delivery);
     if (remote === undefined) return undefined;
+    const internal = remote[deliveryPortAccess]?.();
+    const inbox = internal?.inbox ?? remote.inbox;
+    const workRegistry = internal?.workRegistry ?? remote.workRegistry;
+    if (inbox === undefined || workRegistry === undefined)
+      throw new TypeError("ServerEnvironmentDelivery requires inbox and workRegistry ports.");
+    const source = remote.source;
+    const notifications = remote.notifications;
+    if (remote.local === true && source !== undefined)
+      throw new TypeError("Local Delivery cannot provide a remote work source.");
+    if (notifications?.kind === "delivery-server" && source === undefined)
+      throw new TypeError("Delivery-server notifications require a source.");
+    if (notifications?.kind === "custom" && source !== undefined)
+      throw new TypeError("A remote work source cannot use a custom observer.");
     return {
-      inbox: remote.inbox,
-      workRegistry: remote.workRegistry,
-      ...(remote.source === undefined ? {} : { source: remote.source }),
+      inbox,
+      workRegistry,
+      ...(internal?.pageSize === undefined ? {} : { pageSize: internal.pageSize }),
+      ...(source === undefined ? {} : { source }),
+      ...(notifications === undefined ? {} : { notifications }),
+      ...(remote.endpoint === undefined ? {} : { endpoint: remote.endpoint }),
+      ...(remote.local === undefined ? {} : { local: remote.local }),
     };
   },
 
@@ -1392,6 +1561,8 @@ const ServerEnvironmentValues = Object.freeze({
     type: EnvironmentType,
     settings: ServerEnvironmentSettings,
   ): RequiredFacilities {
+    const delivery = settings.delivery as Partial<ServerEnvironmentDelivery> | undefined;
+    ServerEnvironmentValues.validateDeliveryStorage(settings, delivery);
     const configuredCapacity = settings.subscriptionQueueCapacity;
     if (
       configuredCapacity !== undefined &&
@@ -1405,7 +1576,10 @@ const ServerEnvironmentValues = Object.freeze({
       throw new Error("Production ServerEnvironment requires typeRegistry.");
     return {
       subscriptionQueueCapacity: capacity,
-      storageFactory: settings.storageFactory ?? new InMemoryStorageFactory(),
+      storageFactory:
+        settings.storageFactory ??
+        (typeof delivery?.open === "function" ? delivery.storageFactory : undefined) ??
+        new InMemoryStorageFactory(),
       ai: settings.ai,
       integrationChannelFactory:
         settings.integrationChannelFactory ?? new InMemoryTransportFactory(),

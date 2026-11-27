@@ -1,59 +1,52 @@
-import { Time } from "@spine-event-engine/core/time";
-
-import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { AnyPacker } from "@spine-event-engine/core";
-import {
-  DeliveryClient,
-  RemoteInbox,
-  RemoteWorkRegistry,
-} from "@spine-event-engine/delivery-client";
-import { CommandSchema } from "@spine-event-engine/proto";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { randomUUID } from "node:crypto";
+import { DeliveryBuilder, DeliveryClient } from "@spine-event-engine/delivery-client";
+import { projectInboxInput } from "./project-inbox-input.ts";
 import process from "node:process";
 import {
-  DeliveryBuilder,
-  DeliverySupervisor,
+  Application,
+  EnvironmentType,
+  ServerEnvironment,
   ShardIndex,
   UniformAcrossAllShards,
 } from "@spine-event-engine/server";
+import { createManagedProjectContext } from "./managed-project-context.mjs";
 
 export function createMultiMachineApplication({ baseUrl, node }) {
   const client = DeliveryClient.connectTo(baseUrl, {
     observationReconnects: 2,
     observationReconnectBackoffMs: 50,
   });
-  const inbox = new RemoteInbox(client);
-  const registry = new RemoteWorkRegistry(client);
-  const storageFactory = new InMemoryStorageFactory();
-  const delivery = new DeliveryBuilder()
-    .withInbox(inbox)
-    .withWorkRegistry(registry)
-    .withStorageFactory(storageFactory)
-    .withStrategy(UniformAcrossAllShards.singleShard())
-    .withNode(node)
-    .build();
-  let supervisor;
+  let application;
+  let environment;
   let directSession;
   let stallOnce = false;
 
   const send = (frame) => process.send?.(frame);
-  const supervisorFor = () =>
-    new DeliverySupervisor({
-      source: client,
-      delivery,
-      recoveryMs: 100,
-      staleMs: 1_000,
-      watchInitialBackoffMs: 50,
-      watchMaxBackoffMs: 200,
-      onMessage: async (message) => {
-        send({ type: "dispatched", signalId: message.signalId, node });
-        if (message.signalId === "stall" && stallOnce) {
+  const start = async () => {
+    const delivery = DeliveryBuilder.remote({ endpoint: baseUrl });
+    const nextEnvironment = ServerEnvironment.newBuilder()
+      .under(EnvironmentType.Local, (setting) => {
+        setting.use({
+          delivery,
+          deliveryStrategy: UniformAcrossAllShards.singleShard(),
+        });
+      })
+      .build();
+    const context = createManagedProjectContext({
+      onCreateProject: async (command) => {
+        send({ type: "dispatched", signalId: command.id, node });
+        if (command.id === "stall" && stallOnce) {
           stallOnce = false;
           await new Promise(() => undefined);
         }
       },
     });
+    application = await Application.newBuilder()
+      .setServerEnvironment(nextEnvironment)
+      .add(context)
+      .build();
+    environment = nextEnvironment;
+  };
 
   return {
     async pickUp() {
@@ -67,33 +60,19 @@ export function createMultiMachineApplication({ baseUrl, node }) {
       return true;
     },
     async start() {
-      supervisor ??= supervisorFor();
-      await supervisor.start();
+      if (application === undefined) await start();
     },
     async replace() {
-      await supervisor?.close({ graceMs: 5_000 });
-      supervisor = supervisorFor();
-      await supervisor.start();
+      await environment?.delivery.deliverMessagesFrom(ShardIndex.single());
+      await application?.close();
+      application = undefined;
+      await start();
     },
     async write(signalId) {
-      await inbox.receive({
-        inboxId: {
-          targetId: AnyPacker.pack(
-            StringValueSchema,
-            create(StringValueSchema, { value: signalId }),
-          ),
-          targetTypeUrl: "type.spine.io/test.Target",
-        },
-        signalId,
-        signal: create(AnySchema, {
-          typeUrl: "type.spine.io/spine.core.Command",
-          value: toBinary(CommandSchema, create(CommandSchema)),
-        }),
-        label: "HANDLE_COMMAND",
-        status: "TO_DELIVER",
-        shard: ShardIndex.single(),
-        whenReceived: Time.currentTime(),
-        version: 1n,
+      const shard = ShardIndex.single();
+      await client.writeOne({
+        ...projectInboxInput(signalId, shard),
+        id: { value: randomUUID(), shard },
       });
     },
     armStall() {
@@ -103,9 +82,9 @@ export function createMultiMachineApplication({ baseUrl, node }) {
       stallOnce = false;
     },
     async close() {
-      await supervisor?.close({ graceMs: 5_000 });
+      await environment?.delivery.deliverMessagesFrom(ShardIndex.single());
+      await application?.close();
       client.close();
-      await storageFactory.close();
     },
   };
 }
@@ -125,11 +104,17 @@ if (process.env.DELIVERY_SERVER_URL !== undefined && process.send !== undefined)
       const result = await invoke(application, request);
       process.send?.({ type: "result", id: request.id, result });
       if (request.command === "close") process.disconnect();
-    } catch {
+    } catch (error) {
       process.send?.({
         type: "error",
         id: request.id,
-        message: "Fixture command failed.",
+        message: `${request.command}: ${
+          error instanceof AggregateError
+            ? `${error.message}: ${error.errors.map((cause) => (cause instanceof AggregateError ? `${cause.message}: ${cause.errors.map(String).join("; ")}` : String(cause))).join("; ")}`
+            : error instanceof Error
+              ? error.message
+              : "Fixture command failed."
+        }`,
       });
     }
   });

@@ -14,12 +14,12 @@
 
 import { describe, expect, it } from "vitest";
 
-import { DeliveryServer, InMemoryDelivery } from "../../src/index.js";
+import { DeliveryServer } from "../../src/index.js";
 import { DeliveryConfig } from "../../src/server/config.js";
 
 describe("DeliveryServer configuration", () => {
-  it("uses documented defaults and keeps configured zero", () => {
-    const server = new DeliveryServer({ port: 0, processingTimeoutSeconds: 0 });
+  it("uses the 60-second default", () => {
+    const server = new DeliveryServer({ port: 0 });
 
     expect(server.host).toBe("127.0.0.1");
     expect(server.port).toBe(0);
@@ -31,18 +31,28 @@ describe("DeliveryServer configuration", () => {
     expect(() => new DeliveryServer({ maxInboundMessageBytes: 0 })).toThrow(
       "Delivery server inbound message size is invalid.",
     );
-    expect(() => new DeliveryServer({ maxRetainedMessages: 0 })).toThrow(
-      "Delivery server retained message limit is invalid.",
+    expect(() => new DeliveryServer({ maxOutboundMessageBytes: 0 })).toThrow(
+      "Delivery server outbound message size is invalid.",
     );
-    expect(() => new DeliveryServer({ maxTrackedShards: 1_001 })).toThrow(
-      "Delivery server tracked shard limit is invalid.",
+    expect(() => new DeliveryServer({ maxOutboundMessageBytes: 0x1_0000_0000 })).toThrow(
+      "Delivery server outbound message size is invalid.",
     );
-    expect(() => InMemoryDelivery.create({ maxTrackedShards: 1_001 })).toThrow(
-      "Delivery server maxTrackedShards is invalid.",
-    );
-    expect(() => InMemoryDelivery.create({ maxRetainedMessages: 0 })).toThrow(
-      "Delivery server maxRetainedMessages is invalid.",
-    );
+  });
+
+  it("uses protobuf framing capacity by default and keeps direction-specific overrides", () => {
+    expect(DeliveryConfig.resolve()).toMatchObject({
+      maxInboundMessageBytes: 0xffff_ffff,
+      maxOutboundMessageBytes: 0xffff_ffff,
+    });
+    expect(
+      DeliveryConfig.resolve({ maxInboundMessageBytes: 1_024, maxOutboundMessageBytes: 2_048 }),
+    ).toMatchObject({ maxInboundMessageBytes: 1_024, maxOutboundMessageBytes: 2_048 });
+  });
+
+  it("accepts sessions longer than one Node timer interval", () => {
+    expect(
+      DeliveryConfig.resolve({ processingTimeoutSeconds: 3_000_000 }).processingTimeoutMs,
+    ).toBe(3_000_000_000);
   });
 
   it("parses bounded numeric environment values without coercion", () => {

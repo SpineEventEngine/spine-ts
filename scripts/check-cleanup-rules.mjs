@@ -532,25 +532,42 @@ function changedDestinationPaths(statuses) {
   return paths;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+/**
+ * Checks the cleanup rules and returns the command-line output and exit status.
+ *
+ * @param repoRoot Checkout to inspect.
+ * @param writeStructureDebt Whether to update structure debt partitions.
+ * @returns Exit status and the text written to standard output and error.
+ */
+export function runCleanupCheck(repoRoot, writeStructureDebt = false) {
   try {
-    const { repoRoot, writeStructureDebt } = parseArgs(process.argv.slice(2));
     if (writeStructureDebt) {
       writeStructureDebtPartitions(repoRoot);
-      console.log("TypeScript structure debt partitions written.");
-      process.exit(0);
+      return { status: 0, stdout: "TypeScript structure debt partitions written.\n", stderr: "" };
     }
     const failures = checkCleanupRules(repoRoot);
+    return failures.length > 0
+      ? { status: 1, stdout: "", stderr: formatFailures(failures) }
+      : { status: 0, stdout: "Cleanup enforcement checks passed.\n", stderr: "" };
+  } catch (error) {
+    return {
+      status: 1,
+      stdout: "",
+      stderr: `${safeDetail(error instanceof Error ? error.message : String(error))}\n`,
+    };
+  }
+}
 
-    if (failures.length > 0) {
-      printFailures(failures);
-      process.exit(1);
-    }
-
-    console.log("Cleanup enforcement checks passed.");
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    const { repoRoot, writeStructureDebt } = parseArgs(process.argv.slice(2));
+    const result = runCleanupCheck(repoRoot, writeStructureDebt);
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    if (result.status !== 0) process.exitCode = result.status;
   } catch (error) {
     console.error(safeDetail(error instanceof Error ? error.message : String(error)));
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
 
@@ -3392,18 +3409,20 @@ function groupExampleViolations(violations) {
   return failures;
 }
 
-function printFailures(failures) {
+function formatFailures(failures) {
+  const lines = [];
   for (const failure of failures) {
-    console.error(`Cleanup enforcement failed: ${safeDetail(failure.title)}`);
+    lines.push(`Cleanup enforcement failed: ${safeDetail(failure.title)}`);
 
     for (const detail of failure.details.slice(0, 40)) {
-      console.error(`  - ${safeDetail(detail)}`);
+      lines.push(`  - ${safeDetail(detail)}`);
     }
 
     if (failure.details.length > 40) {
-      console.error(`  - ... ${failure.details.length - 40} more`);
+      lines.push(`  - ... ${failure.details.length - 40} more`);
     }
   }
+  return `${lines.join("\n")}\n`;
 }
 
 function safeDetail(value) {

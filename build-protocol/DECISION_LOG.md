@@ -2,6 +2,39 @@
 
 Navigation: [README](README.md)
 
+## Aggregate dispatch and inbox cleanup
+
+Accepted on 27 November 2026 for the [shard delivery task](tasks/shard-delivery-correctness-and-performance/TASK.md).
+
+Only Aggregates offer the opt-in double-dispatch guard. Its configuration
+requires an explicit depth. Read the producing Aggregate's recent Events and
+reuse history on the live instance. Process Managers and Agents have no such
+guard. Their ordinary persistence is independent of duplicate detection.
+
+A worker marks the inbox ID from its page delivered. Exact-message comparison
+and a second read of that inbox ID are unnecessary. Expired delivery messages
+are deleted by shard, stored status and retention deadline in one database
+operation. This supersedes the inbox cleanup paragraph of D-0141.
+
+## D-0166. Work notifications and shard pickup
+
+Accepted on 25 November 2026.
+
+Application instances run the same handlers and delivery configuration. Each
+instance using server notifications opens its own work stream. For example, a
+new instance can hear about a Command already waiting in shard 4, even if it
+starts after the Command was written. Each instance decides whether to request
+pickup. The server grants a session to one worker for that shard.
+
+Admin reports stored inbox rows. An acknowledged Command can still be stored
+while its duplicate-detection window runs, so a count of one can mean zero
+Commands waiting. Application work notifications use the pending rows and
+current session. Their contract is defined by `ShardObservingService.ObserveAll`.
+
+The [shard delivery task](tasks/shard-delivery-correctness-and-performance/TASK.md)
+records the session, storage, notification and process-routing decisions and the
+acceptance criteria.
+
 ## D-0128: Query registered contexts without changing tenants
 
 Status: Accepted; implementation in progress, 28 September 2026.

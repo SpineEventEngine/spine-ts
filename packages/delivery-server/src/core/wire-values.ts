@@ -52,7 +52,19 @@ export const DeliveryMessages: Readonly<{
  * Provides canonical detached delivery shard values.
  */
 export const DeliveryShards: Readonly<{
+  /**
+   * Returns the stable key for a shard.
+   */
   key(shard: ShardIndex): string;
+
+  /**
+   * Compares shard totals first and positions second for Admin snapshots.
+   */
+  compare(left: ShardIndex | undefined, right: ShardIndex | undefined): number;
+
+  /**
+   * Returns a detached copy of a shard.
+   */
   copy(shard: ShardIndex): ShardIndex;
 }> = Object.freeze({
   // prettier-ignore
@@ -62,6 +74,17 @@ export const DeliveryShards: Readonly<{
    */
   key(shard: ShardIndex): string {
     return `${String(shard.index)}/${String(shard.ofTotal)}`;
+  },
+
+  /**
+   * Compares the full shard identity in the order used by Admin.
+   *
+   * @param left Supplies the first shard index.
+   * @param right Supplies the second shard index.
+   * @returns The difference in shard totals or positions.
+   */
+  compare(left: ShardIndex | undefined, right: ShardIndex | undefined): number {
+    return (left?.ofTotal ?? 0) - (right?.ofTotal ?? 0) || (left?.index ?? 0) - (right?.index ?? 0);
   },
 
   /**

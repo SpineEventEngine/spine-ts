@@ -54,9 +54,8 @@ delivery correctness.
 
 - Admin shard notifications are wake-up hints, not the durable source of work;
   Inbox storage and the remote lease remain authoritative.
-- The Admin snapshot is bounded by the delivery server's configured shard
-  count. Reconnect and overflow recovery may replace queued hints with a new
-  complete snapshot.
+- Reconnect and overflow recovery may replace queued hints with a new
+  complete Admin snapshot.
 - No ordering guarantee is added across different shards or nodes. One shard
   owner serializes the work selected under that lease.
 - This task does not add Stand persistence, EventBus observation, Gateway

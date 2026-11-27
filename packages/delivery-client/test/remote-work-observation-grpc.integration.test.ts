@@ -13,7 +13,12 @@
  */
 
 import { DeliveryServer } from "@spine-event-engine/delivery-server";
+import { Identifiers, TypeUrls } from "@spine-event-engine/core";
+import { ProjectStateSchema } from "@spine-event-engine/server-test-fixtures/entity/project_states_pb.js";
+import { ShardIndex, UniformAcrossAllShards } from "@spine-event-engine/server";
+import { projectInboxInput } from "../test-fixtures/project-inbox-input.js";
 import { DeliveryClient, RemoteDelivery } from "../src/index.js";
+import { RemoteInbox } from "../src/remote/adapters.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -60,57 +65,7 @@ afterEach(async () => {
   if (failures.length > 0) throw new AggregateError(failures, "Fixture cleanup failed.");
 });
 
-it("fences an expired blocked owner before its delayed commit can disturb a replacement", async () => {
-  const server = trackedServer();
-  await server.start();
-  const alpha = application(server.baseUrl, "alpha");
-  const beta = application(server.baseUrl, "beta");
-  const events: { readonly node: string; readonly signalId: string }[] = [];
-  for (const child of [alpha, beta])
-    child.on("message", (frame: unknown) => {
-      if (isDispatch(frame)) events.push(frame);
-    });
-  await Promise.all([ready(alpha), ready(beta)]);
-  await Promise.all([
-    command(alpha, { command: "block-first" }),
-    command(beta, { command: "block-first" }),
-  ]);
-  await command(alpha, { command: "write", signalId: "first" });
-  await eventually(() => {
-    expect(events.filter((event) => event.signalId === "first-started")).toHaveLength(1);
-  });
-  const owner = events.find((event) => event.signalId === "first-started")?.node;
-  const replacement = owner === "alpha" ? beta : alpha;
-  await command(replacement, { command: "release-first" });
-  const admin = DeliveryClient.connectTo(server.baseUrl);
-  clients.push(admin);
-  await eventuallyAsync(async () => {
-    await expect(admin.releaseExpired(1)).resolves.toHaveLength(1);
-  });
-  await command(replacement, { command: "write", signalId: "wake" });
-  await eventually(() => {
-    expect(
-      events.filter((event) => event.node !== owner && event.signalId === "committed-first"),
-    ).toHaveLength(1);
-  });
-  await Promise.all([
-    command(alpha, { command: "release-first" }),
-    command(beta, { command: "release-first" }),
-  ]);
-  await eventually(() => {
-    expect(
-      events.filter((event) => event.node === owner && event.signalId === "resumed-first"),
-    ).toHaveLength(1);
-    if (!events.some((event) => event.node === owner && event.signalId === "fenced"))
-      throw new Error(`Missing owner fence event: ${JSON.stringify(events)}`);
-  });
-  expect(
-    events.filter((event) => event.node === owner && event.signalId === "committed-first"),
-  ).toHaveLength(0);
-  expect(replacement.exitCode).toBeNull();
-}, 10_000);
-
-it("fans out one real Admin shard update through two remote ServerEnvironment assemblies", async () => {
+it("fans out one real work notice through two remote ServerEnvironment assemblies", async () => {
   const server = trackedServer();
   await server.start();
   const alpha = application(server.baseUrl, "alpha");
@@ -140,89 +95,154 @@ it("fans out one real Admin shard update through two remote ServerEnvironment as
   });
   expect(deliveries.filter((delivery) => delivery.signalId === "first")).toHaveLength(1);
   expect(deliveries.filter((delivery) => delivery.signalId === "during-drain")).toHaveLength(1);
+  const reader = DeliveryClient.connectTo(server.baseUrl);
+  clients.push(reader);
+  await eventuallyAsync(async () => {
+    expect(await reader.newestPending(ShardIndex.single())).toBeUndefined();
+    expect((await reader.shardSnapshot())[0]?.status).toBe("NOT_PICKED");
+  });
 });
 
-it("recovers work written immediately after a same-endpoint Admin restart through a complete snapshot", async () => {
+it.each([1, 2])(
+  "lets a third identical replica discover old free work with %i delivery processes before the reminder",
+  async (processCount) => {
+    const server = trackedServer(0, processCount);
+    await server.start();
+    const settings = { DELIVERY_SHARDS: "3", DELIVERY_MAX_CONCURRENT: "1" };
+    const east = application(server.baseUrl, "east", settings);
+    const west = application(server.baseUrl, "west", settings);
+    const events: { readonly node: string; readonly signalId: string }[] = [];
+    for (const child of [east, west])
+      child.on("message", (frame: unknown) => {
+        if (isDispatch(frame)) events.push(frame);
+      });
+    await Promise.all([ready(east), ready(west)]);
+    await Promise.all([
+      command(east, { command: "block-first" }),
+      command(west, { command: "block-first" }),
+    ]);
+    const eastId = routedId("first-east", 0, 3);
+    const westId = routedId("first-west", 1, 3);
+    const northId = routedId("waiting-north", 2, 3);
+    await command(east, { command: "write", signalId: eastId, shardIndex: 0 });
+    await eventually(() => {
+      expect(events.filter((event) => event.signalId === `${eastId}-started`)).toHaveLength(1);
+    });
+    await command(west, { command: "write", signalId: westId, shardIndex: 1 });
+    await eventually(() => {
+      expect(events.filter((event) => event.signalId === `${westId}-started`)).toHaveLength(1);
+    });
+    expect(events.find((event) => event.signalId === `${eastId}-started`)?.node).not.toBe(
+      events.find((event) => event.signalId === `${westId}-started`)?.node,
+    );
+
+    await command(east, { command: "write", signalId: northId, shardIndex: 2 });
+    expect(events.filter((event) => event.signalId === northId)).toHaveLength(0);
+    const north = application(server.baseUrl, "north", settings);
+    north.on("message", (frame: unknown) => {
+      if (isDispatch(frame)) events.push(frame);
+    });
+    const joinedAt = Date.now();
+    await ready(north);
+    await eventually(() => {
+      const matching = events.filter((event) => event.signalId === northId);
+      expect(matching).toHaveLength(1);
+      expect(matching[0]).toMatchObject({ node: "north", signalId: northId });
+    });
+    expect(Date.now() - joinedAt).toBeLessThan(10_000);
+
+    await Promise.all([
+      command(east, { command: "release-first" }),
+      command(west, { command: "release-first" }),
+    ]);
+    const reader = DeliveryClient.connectTo(server.baseUrl);
+    clients.push(reader);
+    await eventuallyAsync(async () => {
+      for (let index = 0; index < 3; index += 1) {
+        expect(await reader.newestPending(new ShardIndex(index, 3))).toBeUndefined();
+      }
+      expect((await reader.shardSnapshot()).every((shard) => shard.status === "NOT_PICKED")).toBe(
+        true,
+      );
+    });
+  },
+  15_000,
+);
+
+it("accepts a server reminder after a full-cap work notice was dropped", async () => {
+  const server = new DeliveryServer({ host: "127.0.0.1", port: 0, workReminderSeconds: 1 });
+  servers.push(server);
+  await server.start();
+  const child = application(server.baseUrl, "capped", {
+    DELIVERY_SHARDS: "2",
+    DELIVERY_MAX_CONCURRENT: "1",
+  });
+  const events: { readonly node: string; readonly signalId: string; readonly at: number }[] = [];
+  child.on("message", (frame: unknown) => {
+    if (isDispatch(frame)) events.push({ ...frame, at: Date.now() });
+  });
+  await ready(child);
+  await command(child, { command: "block-first" });
+  const first = routedId("first-held", 0, 2);
+  const second = routedId("reminder", 1, 2);
+  await command(child, { command: "write", signalId: first, shardIndex: 0 });
+  await eventually(() => {
+    expect(events.filter((event) => event.signalId === `${first}-started`)).toHaveLength(1);
+  });
+  await command(child, { command: "write", signalId: second, shardIndex: 1 });
+  await eventuallyAsync(async () => {
+    const evidence = await command(child, { command: "source-evidence" });
+    if (!isRecord(evidence) || typeof evidence.notices !== "number" || evidence.notices < 2)
+      throw new Error("Initial available-shard notice was not read.");
+  });
+  expect(events.filter((event) => event.signalId === second)).toHaveLength(0);
+  await command(child, { command: "release-first" });
+  await eventually(() => {
+    expect(events.filter((event) => event.signalId === second)).toHaveLength(1);
+  });
+  const reader = DeliveryClient.connectTo(server.baseUrl);
+  clients.push(reader);
+  await eventuallyAsync(async () => {
+    expect(await reader.newestPending(new ShardIndex(1, 2))).toBeUndefined();
+    expect((await reader.shardSnapshot()).every((shard) => shard.status === "NOT_PICKED")).toBe(
+      true,
+    );
+  });
+}, 10_000);
+
+it("resumes delivery on the same application node after the server restarts", async () => {
   const server = trackedServer();
   await server.start();
   const endpoint = server.baseUrl;
   const alpha = application(endpoint, "alpha");
-  const beta = application(endpoint, "beta");
-  const deliveries: { readonly node: string; readonly signalId: string }[] = [];
-  for (const child of [alpha, beta])
-    child.on("message", (frame: unknown) => {
-      if (isDispatch(frame)) deliveries.push(frame);
-    });
-  await Promise.all([ready(alpha), ready(beta)]);
+  const deliveries: string[] = [];
+  alpha.on("message", (frame: unknown) => {
+    if (isDispatch(frame)) deliveries.push(frame.signalId);
+  });
+  await ready(alpha);
+  await command(alpha, { command: "write", signalId: "before-restart" });
+  await eventually(() => {
+    expect(deliveries).toContain("before-restart");
+  });
 
   await server.close();
-  await eventuallyAsync(async () => {
-    await expect(command(alpha, { command: "write", signalId: "while-down" })).rejects.toThrow();
-  });
   const replacement = trackedServer(server.port);
   await replacement.start();
   expect(replacement.baseUrl).toBe(endpoint);
 
-  await command(alpha, { command: "write", signalId: "after-restart" });
+  const reader = DeliveryClient.connectTo(endpoint);
+  clients.push(reader);
+  await new RemoteInbox(reader).receive(projectInboxInput("after-restart", ShardIndex.single()));
   await eventually(() => {
-    expect(deliveries.filter((delivery) => delivery.signalId === "after-restart")).toHaveLength(1);
+    expect(deliveries.filter((id) => id === "after-restart")).toHaveLength(1);
+  });
+  await eventuallyAsync(async () => {
+    expect(await reader.newestPending(ShardIndex.single())).toBeUndefined();
+    expect((await reader.shardSnapshot())[0]?.status).toBe("NOT_PICKED");
   });
   expect(alpha.exitCode).toBeNull();
-  expect(beta.exitCode).toBeNull();
-}, 15_000);
-
-it("recovers an overflowed tiny-buffer RemoteDelivery source through its environment supervisor", async () => {
-  const server = trackedServer();
-  await server.start();
-  const alpha = application(server.baseUrl, "alpha", { DELIVERY_OBSERVATION_BUFFER: "1" });
-  const beta = application(server.baseUrl, "beta");
-  const dispatched: { readonly node: string; readonly signalId: string }[] = [];
-  for (const child of [alpha, beta])
-    child.on("message", (frame: unknown) => {
-      if (isDispatch(frame)) dispatched.push(frame);
-    });
-  await Promise.all([ready(alpha), ready(beta)]);
-  await Promise.all([
-    command(alpha, { command: "block-first" }),
-    command(beta, { command: "block-first" }),
-  ]);
-
-  await command(alpha, { command: "write", signalId: "first" });
-  await eventually(() => {
-    expect(dispatched.filter((event) => event.signalId === "first-started")).toHaveLength(1);
-  });
-  await command(alpha, { command: "hold-source" });
-
-  await Promise.all(
-    Array.from({ length: 12 }, (_, index) =>
-      command(index % 2 === 0 ? alpha : beta, {
-        command: "write",
-        signalId: `overflow-${String(index)}`,
-      }),
-    ),
-  );
-  await command(alpha, { command: "release-source" });
-  await eventuallyAsync(async () => {
-    const evidence = await command(alpha, { command: "source-evidence" });
-    if (
-      !isSourceEvidence(evidence) ||
-      evidence.failures < 1 ||
-      evidence.snapshots < 2 ||
-      evidence.watches < 2
-    )
-      throw new Error(`Tiny source did not recover: ${JSON.stringify(evidence)}`);
-  });
-
-  await Promise.all([
-    command(alpha, { command: "release-first" }),
-    command(beta, { command: "release-first" }),
-  ]);
-  await eventually(() => {
-    for (let index = 0; index < 12; index += 1)
-      expect(
-        dispatched.filter((event) => event.signalId === `overflow-${String(index)}`),
-      ).toHaveLength(1);
-  });
+  const subscriptions = await command(alpha, { command: "source-evidence" });
+  expect(isRecord(subscriptions) ? subscriptions.watches : undefined).toBeGreaterThanOrEqual(2);
 }, 15_000);
 
 it("forces a child that ignores graceful shutdown and settles its forced exit", async () => {
@@ -241,10 +261,19 @@ it("forces a child that ignores graceful shutdown and settles its forced exit", 
   expect(child.signalCode).toBe("SIGKILL");
 });
 
-function trackedServer(port = 0): DeliveryServer {
-  const server = new DeliveryServer({ host: "127.0.0.1", port });
+function trackedServer(port = 0, processCount = 1): DeliveryServer {
+  const server = new DeliveryServer({ host: "127.0.0.1", port, processCount });
   servers.push(server);
   return server;
+}
+
+function routedId(prefix: string, index: number, total: number): string {
+  const strategy = UniformAcrossAllShards.forNumber(total);
+  const type = TypeUrls.derive(ProjectStateSchema);
+  for (let suffix = 0; ; suffix += 1) {
+    const id = `${prefix}-${String(suffix)}`;
+    if (strategy.shardFor(Identifiers.pack("string", id), type).index === index) return id;
+  }
 }
 
 function application(
@@ -267,10 +296,9 @@ function ready(child: ChildProcess): Promise<void> {
 function command(
   child: ChildProcess,
   request:
-    | { readonly command: "write"; readonly signalId: string }
+    | { readonly command: "write"; readonly signalId: string; readonly shardIndex?: number }
     | {
-        readonly command:
-          "block-first" | "release-first" | "hold-source" | "release-source" | "source-evidence";
+        readonly command: "block-first" | "release-first" | "source-evidence";
       },
 ) {
   const id = crypto.randomUUID();
@@ -288,8 +316,9 @@ function receive(child: ChildProcess, type: string, id?: string): Promise<unknow
       finish(new Error("Fixture process exited before response."));
     };
     const onMessage = (frame: unknown) => {
-      if (!isRecord(frame) || frame.type !== type || (id !== undefined && frame.id !== id)) return;
-      finish(undefined, frame);
+      if (!isRecord(frame) || (id !== undefined && frame.id !== id)) return;
+      if (id !== undefined && frame.type === "error") finish(new Error("Fixture command failed."));
+      else if (frame.type === type) finish(undefined, frame);
     };
     const finish = (error?: Error, frame?: unknown) => {
       clearTimeout(timer);
@@ -362,17 +391,6 @@ function isDispatch(value: unknown): value is { readonly node: string; readonly 
     value.type === "dispatched" &&
     typeof value.node === "string" &&
     typeof value.signalId === "string"
-  );
-}
-
-function isSourceEvidence(
-  value: unknown,
-): value is { readonly snapshots: number; readonly watches: number; readonly failures: number } {
-  return (
-    isRecord(value) &&
-    typeof value.snapshots === "number" &&
-    typeof value.watches === "number" &&
-    typeof value.failures === "number"
   );
 }
 

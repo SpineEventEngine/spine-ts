@@ -94,7 +94,7 @@ describe("@spine-event-engine/proto", () => {
       expect(actual).toBe(source.localAdaptation?.sha256 ?? source.sha256);
       if (source.localAdaptation !== undefined) {
         expect(source.localAdaptation.kind).toMatch(
-          /^(target-filters-require|query-service-execute)$/u,
+          /^(target-filters-require|query-service-execute|delivery-observation)$/u,
         );
         expect(source.localAdaptation.sha256).not.toBe(source.sha256);
       }

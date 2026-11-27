@@ -17,7 +17,7 @@ For exact query limits, entity-storage behavior, and failure handling, see
 For an application using Agents, this provider keeps Entity state, complete
 attributes, and recorded interactions across restarts. Saved pending calls do
 not restart model execution; an original pending Inbox input may redeliver and
-create a new call. Deploy the supplied `index.yaml` for Agent history queries;
+create a new call. Deploy the supplied `index.yaml` for Agent history and Inbox queries;
 see the [coding-agent reference](REFERENCE.md) for provider requirements.
 
 ## 💡 Why use it?
@@ -25,8 +25,7 @@ see the [coding-agent reference](REFERENCE.md) for provider requirements.
 - ✅ Stores Spine records in Google Cloud Datastore or Firestore in Datastore mode.
 - ✅ Pushes supported filters and ordering to Datastore.
 - ✅ Preserves atomic compare-and-set writes through provider transactions.
-- ✅ Rejects queries that exceed a finite reconciliation budget instead of
-  returning incomplete results.
+- ✅ Reads provider cursor pages until legacy filters and ordering have a complete result.
 
 ## 🚀 First snapshot success
 
@@ -81,8 +80,9 @@ try {
 }
 ```
 
-The builder always uses a client supplied by the caller. Its fixed finite reconciliation
-bound is 1,000 records. Pass the factory to the server or create record storage
+The builder always uses a client supplied by the caller. Legacy record reads
+continue through provider cursor pages until the query result is complete.
+Pass the factory to the server or create record storage
 through the normal storage API. Generated model modules register descriptors
 on import, allowing the shared default stringifier to convert `Any` values.
 An explicitly supplied `StringifierRegistry` can use the application's
@@ -227,12 +227,11 @@ them automatically.
 
 ## 📏 Understand query limits
 
-The adapter has a fixed finite client-side reconciliation budget of `1000`.
-When a query needs more candidates than that budget,
-`DatastoreQueryLimitError` is thrown instead of returning a partial result.
-There is no unlimited scan setting or Datastore-specific cursor API.
-Provider filters and ordering are pushed down; public query offsets and mixed
-local/provider limits are reconciled locally within that finite bound.
+For an inbox page, the query orders messages by receive seconds, nanoseconds,
+inbox version and UUID. Datastore applies the continuation and page size.
+The newest-pending query asks Datastore for one matching message. A custom record provider can
+set a limit on the number of rows it examines. Normalized queries use the
+scan policy described in the package reference.
 
 Ordinary `write()` and `writeAll()` calls are independent provider writes. Use
 compare-and-set for an atomic conditional record update. An Entity commit
@@ -260,8 +259,10 @@ test substitutes for production index, quota, or consistency planning.
 
 Deploy every composite index used by the application, select quotas and retry
 policy for its workload, and keep Google credentials outside source control.
-This adapter does not provide an unlimited scan mode or a Datastore-specific
-cursor API.
+Pending inbox delivery works with Datastore. Expired delivered messages remain stored
+because Datastore cannot delete by shard, status and deadline in a single database
+operation. A general record query that requires local sorting can use memory
+proportional to its matching data.
 
 ## 🔗 Learn more
 

@@ -14,18 +14,21 @@
 
 import { Time } from "@spine-event-engine/core/time";
 import type { ServiceImpl } from "@connectrpc/connect";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import type { ShardIndex } from "@spine-event-engine/proto/delivery";
 import {
   AdminService,
   InboxService,
+  ShardObservingService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 
-import { AdminPublisher } from "../admin/admin-service.js";
+import { AdminPublisher, type AdminPublisherHandle } from "../admin/admin-service.js";
 import { InMemoryDeliveryState } from "../core/in-memory-delivery-state.js";
 import { InboxHandlers } from "../core/inbox-service.js";
 import { MutationAdmission } from "../core/mutation-admission.js";
-import { ShardHandlers } from "../core/shard-service.js";
-import { DEFAULT_DELIVERY_STATE_LIMITS } from "../core/limits.js";
+import { ShardSessionRuntime } from "../core/shard-service.js";
+import { ShardObserving, type ShardObservingHandle } from "../core/shard-observing-service.js";
 import type { DeliveryConfiguration } from "./config.js";
 
 /**
@@ -33,6 +36,11 @@ import type { DeliveryConfiguration } from "./config.js";
  */
 export interface DeliveryAssembly {
   // prettier-ignore
+
+  /**
+   * Provides the canonical retained state for local service handlers.
+   */
+  readonly state: InMemoryDeliveryState;
 
   /**
    * Provides Inbox handlers backed by the shared delivery state.
@@ -43,6 +51,16 @@ export interface DeliveryAssembly {
    * Provides Shard handlers backed by the shared delivery state.
    */
   readonly shards: ServiceImpl<typeof ShardService>;
+
+  /**
+   * Exposes session revision operations used by local service handlers.
+   */
+  readonly sessionRuntime: ShardSessionRuntime;
+
+  /**
+   * Streams advisory notifications for free pending shards.
+   */
+  readonly observing: ServiceImpl<typeof ShardObservingService>;
 
   /**
    * Provides Admin handlers backed by the shared delivery state.
@@ -58,6 +76,11 @@ export interface DeliveryAssembly {
    * Closes the shared Admin publisher.
    */
   closeAdmin(): void;
+
+  /**
+   * Clears work-observation streams and reminders.
+   */
+  closeObserving(): void;
 }
 
 /**
@@ -72,45 +95,120 @@ export const DeliveryAssembly: Readonly<{
    * @param configuration Configures the shared state and shard timeout.
    * @returns The assembled delivery handlers and shutdown boundaries.
    */
-  create: (
-    configuration?: Pick<
-      DeliveryConfiguration,
-      "processingTimeoutMs" | "maxRetainedMessages" | "maxRetainedBytes" | "maxTrackedShards"
-    >,
-  ) => DeliveryAssembly;
+  create: (configuration?: DeliveryAssemblyConfiguration) => DeliveryAssembly;
 }> = Object.freeze({
   create: (
-    configuration: Pick<
-      DeliveryConfiguration,
-      "processingTimeoutMs" | "maxRetainedMessages" | "maxRetainedBytes" | "maxTrackedShards"
-    > = {
-      processingTimeoutMs: 0,
-      ...DEFAULT_DELIVERY_STATE_LIMITS,
-    },
+    configuration: DeliveryAssemblyConfiguration = DEFAULT_ASSEMBLY_CONFIGURATION,
   ): DeliveryAssembly => {
-    const state = new InMemoryDeliveryState(configuration);
+    const state = new InMemoryDeliveryState();
     const admission = new MutationAdmission();
     const admin = AdminPublisher.create(state);
+    const observing = ShardObserving.create(state, configuration.reminderIntervalMs ?? 10_000);
+    const sessions = DeliverySessionAssembly.create(
+      state,
+      admission,
+      configuration,
+      (shard: ShardIndex) => {
+        admin.publish(shard);
+        observing.changed(shard);
+      },
+    );
+    return DeliveryAssemblyWiring.create(state, admission, admin, observing, sessions);
+  },
+});
+
+/**
+ * Connects the shared storage, session, observation, and close handlers.
+ */
+const DeliveryAssemblyWiring = Object.freeze({
+  /**
+   * Builds the complete in-process service assembly.
+   *
+   * @param state Stores retained rows and sessions.
+   * @param admission Serializes local mutations.
+   * @param admin Publishes stored shard changes.
+   * @param observing Publishes available work.
+   * @param sessions Serves shard session calls.
+   * @returns The complete in-process service assembly.
+   */
+  create(
+    state: InMemoryDeliveryState,
+    admission: MutationAdmission,
+    admin: AdminPublisherHandle,
+    observing: ShardObservingHandle,
+    sessions: ShardSessionRuntime,
+  ): DeliveryAssembly {
     return Object.freeze({
-      inbox: InboxHandlers.create(state, admission, (shard, delta) => {
-        admin.recordMessageTransition(shard, delta);
-      }),
-      shards: ShardHandlers.create(
+      state,
+      inbox: InboxHandlers.create(
         state,
         admission,
-        () => Time.currentTimeMillis(),
-        configuration.processingTimeoutMs,
-        (shard) => {
-          admin.publish(shard);
-        },
+        admin.publish.bind(admin),
+        observing.changed.bind(observing),
       ),
+      shards: sessions.service,
+      sessionRuntime: sessions,
       admin: admin.service,
-      closeAdmission: () => {
-        admission.close();
-      },
-      closeAdmin: () => {
-        admin.close();
-      },
+      observing: observing.service,
+      closeAdmission: admission.close.bind(admission),
+      closeAdmin: admin.close.bind(admin),
+      closeObserving: observing.close.bind(observing),
     });
   },
+});
+
+/**
+ * Constructs session and inbox work handlers over one admission queue.
+ */
+const DeliverySessionAssembly = Object.freeze({
+  /**
+   * Creates coupled session and inbox work handlers.
+   *
+   * @param state Stores canonical rows and sessions.
+   * @param admission Serializes mutations.
+   * @param configuration Supplies the session lifetime.
+   * @param onShardTransition Publishes session changes.
+   * @returns The shard session handler.
+   */
+  create(
+    state: InMemoryDeliveryState,
+    admission: MutationAdmission,
+    configuration: DeliveryAssemblyConfiguration,
+    onShardTransition: (shard: ShardIndex) => void,
+  ) {
+    const now = configuration.now ?? (() => Time.currentTime());
+    const sessions = new ShardSessionRuntime(
+      state,
+      admission,
+      now,
+      configuration.processingTimeoutMs ?? 0,
+      onShardTransition,
+    );
+    return sessions;
+  },
+});
+
+/**
+ * Supplies the runtime settings used by one delivery assembly.
+ */
+type DeliveryAssemblyConfiguration = Partial<
+  Pick<DeliveryConfiguration, "processingTimeoutMs" | "reminderIntervalMs">
+> & {
+  /**
+   * Samples the wall clock for session and acknowledgement timestamps.
+   */
+  readonly now?: () => Timestamp;
+
+  /**
+   * Measures lease duration independently of wall-clock changes.
+   */
+  readonly monotonicNow?: () => number;
+};
+
+/**
+ * Default settings for listener-free assembly tests and callers.
+ */
+const DEFAULT_ASSEMBLY_CONFIGURATION: DeliveryAssemblyConfiguration = Object.freeze({
+  processingTimeoutMs: 0,
+  reminderIntervalMs: 10_000,
 });

@@ -22,6 +22,7 @@ import {
   AdminService,
   Health,
   InboxService,
+  ShardObservingService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 import { HealthHandlers } from "../health/health-service.js";
@@ -29,6 +30,8 @@ import { DeliveryAssembly } from "./assembly.js";
 import { DeliveryConfig, type DeliveryConfiguration } from "./config.js";
 import { DeliveryShutdown } from "./shutdown.js";
 import { deliveryServerLog } from "./delivery-server-log.js";
+import { DeliveryChildPool } from "./delivery-child-pool.js";
+import { DeliveryParentProxy } from "./delivery-parent-proxy.js";
 
 /**
  * Construction-time configuration for {@link DeliveryServer}.
@@ -49,39 +52,39 @@ export interface DeliveryServerOptions {
   readonly port?: number;
 
   /**
+   * Fixed number of homogeneous child processes. Overrides `DELIVERY_PROCESS_COUNT`;
+   * the default is one in-process delivery runtime. Accepts positive safe integers.
+   */
+  readonly processCount?: number;
+
+  /**
    * Maximum inbound RPC message size in bytes. The explicit option overrides
-   * `MAX_INBOUND_MESSAGE_SIZE`; the default is 4 MiB (`4_194_304`). Accepts
-   * positive integers through `2_147_483_647`.
+   * `MAX_INBOUND_MESSAGE_SIZE`; the default is the protobuf framing maximum
+   * (`4_294_967_295`). Accepts positive integers through that maximum.
    */
   readonly maxInboundMessageBytes?: number;
 
   /**
+   * Maximum outbound RPC message size in bytes. The explicit option overrides
+   * `MAX_OUTBOUND_MESSAGE_SIZE`; the default is the protobuf framing maximum
+   * (`4_294_967_295`). Accepts positive integers through that maximum.
+   */
+  readonly maxOutboundMessageBytes?: number;
+
+  /**
    * Automatic stale-pickup timeout in seconds. The explicit option overrides
-   * `SHARD_PROCESSING_TIMEOUT`; the default is zero (disabled). Accepts
-   * non-negative integers through `2_147_483_647`.
+   * `SHARD_PROCESSING_TIMEOUT`; the default is 60. Accepts positive integers
+   * through `315_576_000_000`, the Protobuf Duration maximum.
    */
   readonly processingTimeoutSeconds?: number;
 
   /**
-   * Maximum retained Inbox records. The explicit option overrides
-   * `MAX_RETAINED_MESSAGES`; the default is `10_000`. Accepts integers from 1
-   * through `2_147_483_647`.
+   * Seconds between notices while a shard remains free with pending work.
+   * Overrides `WORK_REMINDER_SECONDS`; defaults to 10 seconds.
+   * Accepts whole seconds from 1 through
+   * `Math.floor(Number.MAX_SAFE_INTEGER / 1_000)`.
    */
-  readonly maxRetainedMessages?: number;
-
-  /**
-   * Maximum serialized bytes retained across Inbox records. The explicit option
-   * overrides `MAX_RETAINED_BYTES`; the default is 32 MiB (`33_554_432`).
-   * Accepts integers from 1 through `2_147_483_647`.
-   */
-  readonly maxRetainedBytes?: number;
-
-  /**
-   * Maximum distinct shards retained by messages or pickup sessions. The
-   * explicit option overrides `MAX_TRACKED_SHARDS`; the default is `1_000`.
-   * Accepts integers from 1 through `1_000`.
-   */
-  readonly maxTrackedShards?: number;
+  readonly workReminderSeconds?: number;
 
   /**
    * Application-owned logger reserved for component-local records. The component
@@ -115,6 +118,12 @@ export class DeliveryServer {
    * Structured diagnostic logger, when configured.
    */
   readonly #logger: ILogLayer | undefined;
+
+  readonly #processCount: number;
+
+  #pool: DeliveryChildPool | undefined;
+
+  #proxy: DeliveryParentProxy | undefined;
 
   /**
    * Active HTTP/2 listener.
@@ -164,6 +173,14 @@ export class DeliveryServer {
     this.host = this.#configuration.host;
     this.#port = this.#configuration.port;
     this.#logger = options.logger;
+    this.#processCount = DeliveryConfig.number(
+      options.processCount,
+      "DELIVERY_PROCESS_COUNT",
+      1,
+      1,
+      Number.MAX_SAFE_INTEGER,
+      "process count",
+    );
   }
 
   /**
@@ -218,9 +235,11 @@ export class DeliveryServer {
       },
       closeAdmission: () => {
         this.#assembly?.closeAdmission();
+        this.#proxy?.close();
       },
       closeAdmin: () => {
         this.#assembly?.closeAdmin();
+        this.#assembly?.closeObserving();
       },
       closeNetwork: async () => {
         try {
@@ -235,34 +254,18 @@ export class DeliveryServer {
           for (const session of this.#sessions) session.close();
           await closing;
         }
+        await this.#pool?.close();
       },
     });
     return this.#close;
   }
 
   async #startOnce(): Promise<this> {
-    const core = DeliveryAssembly.create(this.#configuration);
-    this.#assembly = core;
-    const server = http2.createServer(
-      connectNodeAdapter({
-        routes: (router) => {
-          router.service(InboxService, core.inbox);
-          router.service(ShardService, core.shards);
-          router.service(AdminService, core.admin);
-          router.service(
-            Health,
-            HealthHandlers.create(() => this.#serving),
-          );
-        },
-        readMaxBytes: this.#configuration.maxInboundMessageBytes,
-      }),
-    );
-    server.on("session", (session) => {
-      this.#sessions.add(session);
-      session.on("close", () => this.#sessions.delete(session));
-    });
-    this.#server = server;
+    let server: http2.Http2Server | undefined;
     try {
+      const core = await this.#services();
+      server = this.#createServer(core);
+      this.#server = server;
       const address = await this.#listen(server, this.host, this.#port);
       this.#port = address.port;
       this.#started = true;
@@ -270,9 +273,60 @@ export class DeliveryServer {
     } catch (error) {
       // spine-log-boundary: delivery_server.listener_start
       deliveryServerLog.error(this.#logger);
-      await this.#closeListener(server);
+      this.#proxy?.close();
+      if (server !== undefined) await this.#closeListener(server);
+      await this.#pool?.close();
       throw error;
     }
+  }
+
+  /**
+   * Builds the public listener after its service handlers are ready.
+   */
+  #createServer(
+    core: Pick<DeliveryAssembly, "inbox" | "shards" | "observing" | "admin">,
+  ): http2.Http2Server {
+    const server = http2.createServer(
+      connectNodeAdapter({
+        routes: (router) => {
+          const health = HealthHandlers.create(() => this.#serving);
+          router.service(InboxService, core.inbox);
+          router.service(ShardService, core.shards);
+          router.service(ShardObservingService, core.observing);
+          router.service(AdminService, core.admin);
+          router.service(Health, health);
+        },
+        readMaxBytes: this.#configuration.maxInboundMessageBytes,
+        writeMaxBytes: this.#configuration.maxOutboundMessageBytes,
+      }),
+    );
+    server.on("session", (session) => {
+      this.#sessions.add(session);
+      session.on("close", () => this.#sessions.delete(session));
+    });
+    return server;
+  }
+
+  /**
+   * Constructs single-process handlers or starts fixed private child slots.
+   */
+  async #services(): Promise<Pick<DeliveryAssembly, "inbox" | "shards" | "observing" | "admin">> {
+    if (this.#processCount === 1) {
+      const core = DeliveryAssembly.create(this.#configuration);
+      this.#assembly = core;
+      return core;
+    }
+    const pool = new DeliveryChildPool(this.#processCount, this.#configuration);
+    this.#pool = pool;
+    await pool.start();
+    const proxy = new DeliveryParentProxy(pool);
+    this.#proxy = proxy;
+    return {
+      inbox: proxy.inbox(),
+      shards: proxy.shards(),
+      observing: proxy.observing(),
+      admin: proxy.admin(),
+    };
   }
 
   /**

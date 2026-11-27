@@ -13,8 +13,16 @@
  */
 
 import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
-import { AnyPacker } from "@spine-event-engine/core";
+import { AnyPacker, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import {
+  InboxLabel,
+  InboxMessageIdSchema,
+  InboxMessageSchema,
+  InboxMessageStatus,
+  ShardIndexSchema,
+  type InboxMessage,
+} from "@spine-event-engine/proto/delivery";
 import {
   EventIdSchema,
   EventSchema,
@@ -26,6 +34,7 @@ import {
   TaskIdSchema,
   TaskListIdSchema,
 } from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskCreatedSchema } from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import {
   TaskSchema,
   type Task,
@@ -41,6 +50,7 @@ import {
   RecordSpec,
   type NormalizedQueryPlan,
 } from "@spine-event-engine/storage";
+import { eventHistorySpec } from "@spine-event-engine/storage/provider";
 import { describe, expect, it } from "vitest";
 
 import { MysqlRecordStorage, MysqlTableInitializer } from "../src/mysql/record-storage.js";
@@ -1728,6 +1738,50 @@ describe("MysqlRecordStorage", () => {
     expect(calls.at(-1)).toContain("ID > ?");
   });
 
+  it("asks MySQL for only the missing Events from one Aggregate's history", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const taskId = create(TaskIdSchema, { value: "task-7" });
+    const producer = AnyPacker.pack(TaskIdSchema, taskId);
+    const emitted = create(EventSchema, {
+      id: { value: "task-created-7" },
+      message: AnyPacker.pack(TaskCreatedSchema, create(TaskCreatedSchema, { id: taskId })),
+      context: { producerId: producer, version: { number: 7 } },
+    });
+    const { spec, group } = eventHistorySpec(TaskSchema);
+    const table = new MysqlTableResolver().resolve(EventSchema.typeName, group.name);
+    const connection = readyConnection(calls, {
+      columns: ["ID", "bytes", "entity_id", "created", "version"],
+      select: () => [{ bytes: toBinary(EventSchema, emitted) }],
+    });
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(new TypeRegistry([TaskIdSchema]));
+    const history = new MysqlRecordStorage(
+      { name: "Tasks", multitenant: false },
+      spec,
+      table,
+      lifecycle(connection),
+      () => undefined,
+      undefined,
+      undefined,
+      stringifiers,
+    );
+    try {
+      expect(await history.queryEntityEvents(producer, 3)).toEqual([emitted]);
+      await history.queryEntityEvents(producer, 2, 7n);
+      const reads = calls.filter(({ sql }) => sql.startsWith("SELECT bytes"));
+      expect(reads.map(({ sql }) => sql)).toEqual([
+        `SELECT bytes FROM \`${table.tableName}\` WHERE entity_id = ? ` +
+          "ORDER BY version DESC, created DESC LIMIT 3",
+        `SELECT bytes FROM \`${table.tableName}\` WHERE entity_id = ? AND version <= ? ` +
+          "ORDER BY version DESC, created DESC LIMIT 2",
+      ]);
+      expect(reads[0]?.values).toEqual([expect.stringContaining("task-7")]);
+      expect(reads[1]?.values).toEqual([reads[0]?.values?.[0], "7"]);
+    } finally {
+      history.close();
+    }
+  });
+
   it("binds a mixed-direction Event cursor in lexicographic order", async () => {
     const calls: { sql: string; values?: readonly unknown[] }[] = [];
     const received = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_500_000 });
@@ -1948,6 +2002,126 @@ describe("MysqlRecordStorage", () => {
       false,
     );
   });
+
+  it("acknowledges an inbox ID once and returns its first deadline on a lost-response retry", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const connection = readyConnection(calls);
+    const ordinary = connection.execute;
+    let current: "pending" | "delivered" | "absent" = "pending";
+    connection.execute = (sql, values) => {
+      if (sql.startsWith("UPDATE") && sql.includes("SET status")) {
+        calls.push(values === undefined ? { sql } : { sql, values });
+        if (current === "pending") {
+          current = "delivered";
+          return Promise.resolve([{ affectedRows: 1 }, []] as never);
+        }
+        return Promise.resolve([{ affectedRows: 0 }, []] as never);
+      }
+      if (sql.startsWith("SELECT status")) {
+        calls.push(values === undefined ? { sql } : { sql, values });
+        return Promise.resolve([
+          current === "absent"
+            ? []
+            : [
+                {
+                  status:
+                    current === "delivered"
+                      ? InboxMessageStatus.DELIVERED
+                      : InboxMessageStatus.TO_DELIVER,
+                  when_keep_until: current === "delivered" ? "100000000000" : null,
+                },
+              ],
+          [],
+        ] as never);
+      }
+      return ordinary(sql, values);
+    };
+    const storage = inboxStorage(connection);
+    const first = create(TimestampSchema, { seconds: 100n });
+    const later = create(TimestampSchema, { seconds: 200n });
+
+    await expect(storage.markInboxDelivered("ack", first)).resolves.toEqual(first);
+    expect(calls.filter(({ sql }) => sql.startsWith("SELECT status"))).toHaveLength(0);
+    await expect(storage.markInboxDelivered("ack", later)).resolves.toEqual(first);
+    current = "absent";
+    await expect(storage.markInboxDelivered("ack", later)).resolves.toBeUndefined();
+    current = "pending";
+    const retry = await storage.markInboxDelivered("ack", later);
+    expect(retry).toEqual(later);
+    expect(
+      calls.filter(({ sql }) => sql.startsWith("UPDATE") && sql.includes("SET status")),
+    ).toHaveLength(4);
+  });
+
+  it("deletes only pending inbox IDs and expires delivered messages by one shard predicate", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const connection = readyConnection(calls);
+    const ordinary = connection.execute;
+    let state: "pending" | "delivered" | "absent" = "pending";
+    connection.execute = (sql, values) => {
+      if (sql.startsWith("DELETE") && sql.includes("WHERE ID=? AND status=?")) {
+        calls.push(values === undefined ? { sql } : { sql, values });
+        const removed = state === "pending";
+        if (removed) state = "absent";
+        return Promise.resolve([{ affectedRows: removed ? 1 : 0 }, []] as never);
+      }
+      if (sql.startsWith("SELECT ID")) {
+        calls.push(values === undefined ? { sql } : { sql, values });
+        return Promise.resolve([state === "absent" ? [] : [{ ID: "ack" }], []] as never);
+      }
+      return ordinary(sql, values);
+    };
+    const storage = inboxStorage(connection);
+    await expect(storage.removePendingInbox("ack")).resolves.toBe(true);
+    await expect(storage.removePendingInbox("ack")).resolves.toBe(true);
+    state = "delivered";
+    await expect(storage.removePendingInbox("ack")).resolves.toBe(false);
+    await expect(
+      storage.removeExpiredInbox(
+        create(ShardIndexSchema, { index: 2, ofTotal: 4 }),
+        create(TimestampSchema, { seconds: 100n }),
+      ),
+    ).resolves.toBe(true);
+    const cleanup = calls.filter(
+      ({ sql }) => sql.startsWith("DELETE") && sql.includes("shard_index"),
+    );
+    expect(cleanup).toHaveLength(1);
+    expect(cleanup[0]?.sql).toContain("when_keep_until IS NULL OR when_keep_until<=?");
+    expect(cleanup[0]?.values?.slice(0, 3)).toEqual([2, 4, InboxMessageStatus.DELIVERED]);
+
+    storage.close();
+    const statementsBefore = calls.length;
+    const now = create(TimestampSchema, { seconds: 100n });
+    const shard = create(ShardIndexSchema, { index: 2, ofTotal: 4 });
+    await expect(storage.markInboxDelivered("ack", now)).rejects.toThrow(/closed/i);
+    await expect(storage.removePendingInbox("ack")).rejects.toThrow(/closed/i);
+    await expect(storage.removeExpiredInbox(shard, now)).rejects.toThrow(/closed/i);
+    expect(calls).toHaveLength(statementsBefore);
+  });
+
+  it("compares authoritative inbox status and deadline before a payload replacement", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const pending = inboxRecord("before", InboxMessageStatus.TO_DELIVER);
+    const completed = inboxRecord("before", InboxMessageStatus.DELIVERED, 100n);
+    const replacement = inboxRecord("after", InboxMessageStatus.DELIVERED, 100n);
+    const raw = toBinary(InboxMessageSchema, pending);
+    const connection = readyConnection(calls, {
+      select: () => [
+        { bytes: raw, status: InboxMessageStatus.DELIVERED, when_keep_until: "100000000000" },
+      ],
+    });
+    const storage = inboxStorage(connection);
+    await expect(storage.compareAndSet("ack", pending, undefined)).resolves.toBe(false);
+    expect(calls.some(({ sql }) => sql.startsWith("DELETE"))).toBe(false);
+    await expect(storage.compareAndSet("ack", completed, replacement)).resolves.toBe(true);
+    const update = calls.find(({ sql }) => sql.startsWith("UPDATE"));
+    expect(update?.sql).toContain("status<=>? AND when_keep_until<=>?");
+    expect(Array.from(update?.values?.[0] as Uint8Array)).toEqual([
+      ...toBinary(InboxMessageSchema, replacement),
+    ]);
+    expect(update?.values?.at(-2)).toBe(InboxMessageStatus.DELIVERED);
+    expect(update?.values?.at(-1)).toBe("100000000000");
+  });
 });
 
 function lifecycle(connection: unknown) {
@@ -1975,6 +2149,72 @@ function stringStorage(
       release: () => undefined,
     },
     () => undefined,
+  );
+}
+
+function inboxSpec(): RecordSpec<string, InboxMessage> {
+  return new RecordSpec({
+    recordType: InboxMessageSchema,
+    idKind: "string",
+    extractId: (record) => record.id?.uuid ?? "",
+    columns: [
+      new RecordColumn(
+        "shard_index",
+        ColumnTypes.scalar(ScalarType.INT32),
+        (record) => record.id?.index?.index ?? 0,
+      ),
+      new RecordColumn(
+        "shard_total",
+        ColumnTypes.scalar(ScalarType.INT32),
+        (record) => record.id?.index?.ofTotal ?? 1,
+      ),
+      new RecordColumn(
+        "status",
+        ColumnTypes.fromField(InboxMessageSchema.field.status),
+        (record) => record.status,
+      ),
+      new RecordColumn(
+        "when_keep_until",
+        ColumnTypes.fromField(InboxMessageSchema.field.keepUntil),
+        (record) => record.keepUntil,
+      ),
+    ],
+  });
+}
+
+function inboxRecord(payload: string, status: InboxMessageStatus, deadline?: bigint): InboxMessage {
+  return create(InboxMessageSchema, {
+    id: create(InboxMessageIdSchema, {
+      uuid: "ack",
+      index: create(ShardIndexSchema, { index: 2, ofTotal: 4 }),
+    }),
+    label: InboxLabel.REACT_UPON_EVENT,
+    payload: {
+      case: "event",
+      value: create(EventSchema, { id: create(EventIdSchema, { value: payload }) }),
+    },
+    status,
+    version: 1,
+    ...(deadline === undefined
+      ? {}
+      : { keepUntil: create(TimestampSchema, { seconds: deadline }) }),
+  });
+}
+
+function inboxStorage(
+  connection: ReturnType<typeof readyConnection>,
+): MysqlRecordStorage<string, InboxMessage> {
+  return new MysqlRecordStorage(
+    { name: "inbox", multitenant: false },
+    inboxSpec(),
+    new MysqlTableResolver().resolve(InboxMessageSchema.typeName, undefined),
+    lifecycle(connection),
+    () => undefined,
+    undefined,
+    undefined,
+    undefined,
+    false,
+    false,
   );
 }
 

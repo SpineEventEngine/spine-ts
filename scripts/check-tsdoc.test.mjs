@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { runTsdocCheck } from "./check-tsdoc.mjs";
 
 const scriptPath = new URL("./check-tsdoc.mjs", import.meta.url).pathname;
 
@@ -78,11 +79,15 @@ function trackForced(repoRoot, paths) {
 }
 
 function runChecker(repoRoot) {
-  return spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot], { encoding: "utf8" });
+  return runTsdocCheck(repoRoot);
 }
 
 function writeObservedDebt(repoRoot) {
-  return spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot, "--write-debt"], {
+  return runTsdocCheck(repoRoot, true);
+}
+
+function runCheckerCli(repoRoot, ...flags) {
+  return spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot, ...flags], {
     encoding: "utf8",
   });
 }
@@ -105,13 +110,18 @@ describe("check-tsdoc", () => {
     const result = runChecker(repoRoot);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("internal-chronology");
+    const cli = runCheckerCli(repoRoot);
+    expect({ status: cli.status, stdout: cli.stdout, stderr: cli.stderr }).toEqual(result);
   });
 
   it("accepts documented exported declarations and public members", () => {
-    const result = runChecker(createFixture());
+    const repoRoot = createFixture();
+    const result = runChecker(repoRoot);
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("TSDoc enforcement checks passed.");
+    const cli = runCheckerCli(repoRoot);
+    expect({ status: cli.status, stdout: cli.stdout, stderr: cli.stderr }).toEqual(result);
   });
 
   it("requires documentation for internal classes and methods in changed production files", () => {
@@ -861,7 +871,7 @@ describe("check-tsdoc", () => {
     writeSource(repoRoot, "scripts/layout.mjs", "/** One-line tooling block. */\n");
     track(repoRoot);
 
-    const written = writeObservedDebt(repoRoot);
+    const written = runCheckerCli(repoRoot, "--write-debt");
     expect(written.status, written.stderr).toBe(0);
     const result = runChecker(repoRoot);
     expect(result.status).toBe(1);

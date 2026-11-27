@@ -171,7 +171,7 @@ describe("live SQL Inbox delivery faults", () => {
 
   it.each([
     { failures: 2, expectedStatus: "DELIVERED" },
-    { failures: 9, expectedStatus: "TO_DELIVER" },
+    { failures: 3, expectedStatus: "TO_DELIVER" },
   ] as const)(
     "does not rerun successful processing when SQL acknowledgement rejects $failures attempts",
     async ({ failures, expectedStatus }) => {
@@ -196,9 +196,8 @@ describe("live SQL Inbox delivery faults", () => {
         expect(outcome.status).toBe("COMPLETED");
         expect(handlerEntries).toBe(1);
         expect(observedFailures).toBe(0);
-        // MySQL retries a deadlock-class CAS three times inside each of the
-        // Delivery worker's three acknowledgement attempts.
-        expect(await ackAttempts(sql, postgres)).toBe(!postgres && failures === 9 ? 9 : 3);
+        // Each worker attempt issues one conditional UPDATE on either SQL provider.
+        expect(await ackAttempts(sql, postgres)).toBe(3);
         const remaining = await inbox.readMessage(message.id);
         expect(remaining?.status).toBe(expectedStatus);
         if (expectedStatus === "DELIVERED") expect(remaining?.keepUntil).toBeInstanceOf(Date);

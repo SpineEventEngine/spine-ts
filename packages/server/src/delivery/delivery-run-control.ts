@@ -12,90 +12,15 @@
  * the License.
  */
 
-import {
-  deliveryControls,
-  type Delivery,
-  type DeliveryResult,
-  type DeliveryRunOptions,
-} from "./delivery-builder.js";
-import type { ShardIndex } from "./shard-index.js";
-import type { InboxMessage } from "./inbox.js";
+import type { DeliveryRunOptions } from "./delivery-builder.js";
 import type { DeliveryRun } from "./delivery.js";
+import type { InboxMessage } from "./inbox.js";
+import type { ShardIndex } from "./shard-index.js";
 
 /**
- * Controls admission for one finite delivery run.
- */
-export class DeliveryRunControl {
-  readonly #runControlled: (options: DeliveryControlledRun) => Promise<DeliveryResult>;
-
-  readonly #wake: (shard: ShardIndex) => void;
-
-  /**
-   * Creates controlled admission for a builder-created delivery.
-   *
-   * @param delivery The builder-created delivery to control.
-   */
-  constructor(delivery: Delivery) {
-    const runControlled = deliveryControls.runner(delivery);
-    if (runControlled === undefined) {
-      throw new TypeError("DeliverySupervisor requires a Delivery built by DeliveryBuilder.");
-    }
-    this.#runControlled = runControlled;
-    this.#wake = deliveryControls.waker(delivery) ?? (() => undefined);
-  }
-
-  /**
-   * Notifies another durable scan in the active shard run.
-   *
-   * @param shard Delivery shard identifier.
-   */
-  wake(shard: ShardIndex): void {
-    this.#wake(shard);
-  }
-
-  /**
-   * Executes one controlled delivery until it settles or its signal aborts.
-   *
-   * @param options The finite shard run and its cancellation signal.
-   * @returns The delivery result, or an abort error.
-   */
-  run(options: DeliveryControlledRun): Promise<DeliveryResult> {
-    if (options.signal.aborted) return Promise.reject(this.#abortError(options.signal));
-    const settled = this.#runControlled(options);
-    let aborted: Error | undefined;
-    const abort = () => {
-      aborted = this.#abortError(options.signal);
-    };
-    options.signal.addEventListener("abort", abort, { once: true });
-    // spine-log-boundary: server.delivery_control_settlement_observer
-    void settled.catch(() => undefined);
-    return settled
-      .then(
-        (result) => {
-          if (aborted !== undefined) throw aborted;
-          return result;
-        },
-        (error: unknown) => {
-          throw error;
-        },
-      )
-      .finally(() => {
-        options.signal.removeEventListener("abort", abort);
-        options.onRunSettled?.();
-      });
-  }
-
-  #abortError(signal: AbortSignal): Error {
-    return signal.reason instanceof Error ? signal.reason : new Error("Delivery run was aborted.");
-  }
-}
-
-/**
- * Describes one controlled finite delivery request.
+ * Describes one framework-controlled finite delivery request.
  */
 export interface DeliveryControlledRun extends DeliveryRunOptions {
-  // prettier-ignore
-
   /**
    * Identifies the shard to drain.
    */
@@ -107,34 +32,29 @@ export interface DeliveryControlledRun extends DeliveryRunOptions {
   readonly signal: AbortSignal;
 
   /**
-   * Determines whether the private controlled run owns a pending row before dispatch or acknowledgment.
+   * Checks whether the private run accepts a pending row.
    *
-   * @param message Contains the pending Inbox row.
-   * @returns `true` if this controlled run owns the row.
-   * @internal
+   * @param message Supplies the pending row.
+   * @returns Whether this run accepts the pending row.
    */
   readonly acceptMessage?: (message: InboxMessage) => boolean;
 
   /**
-   * Completes one admitted message after its processing and selected action.
+   * Observes one settled message attempt.
    *
-   * @param message The message whose processing settled.
-   * @internal
+   * @param message Supplies the attempted row.
    */
   readonly onMessageSettled?: (message: InboxMessage) => void;
 
   /**
-   * Completes private admission cleanup when the controlled run settles before dispatch.
-   *
-   * @internal
+   * Completes private admission cleanup when the run settles.
    */
   readonly onRunSettled?: () => void;
 
   /**
-   * Records the full finite drain result before reducing it to the public status.
+   * Observes the full finite result before reducing its public status.
    *
-   * @param result Contains failure counts used for supervisor feedback control.
-   * @internal
+   * @param result Supplies the physical drain result.
    */
   readonly onDrainResult?: (result: DeliveryRun) => void;
 }

@@ -70,7 +70,7 @@ describe("DeliveryServer listener", () => {
           shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
           pageSize: 0,
         }),
-      ).rejects.toMatchObject({ code: Code.InvalidArgument });
+      ).rejects.toMatchObject({ code: Code.Unknown });
       await expect(
         createClient(InboxService, transport).findManyInShard({
           shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
@@ -140,6 +140,50 @@ describe("DeliveryServer listener", () => {
       sessions.abort();
     }
   });
+
+  it.each([1, 2])("applies the outbound limit with %s process(es)", async (processCount) => {
+    const server = tracked(
+      new DeliveryServer({
+        port: 0,
+        processCount,
+        maxOutboundMessageBytes: 1_024,
+      }),
+    );
+    await server.start();
+    const sessions = new Http2SessionManager(server.baseUrl);
+    const inbox = createClient(
+      InboxService,
+      createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: sessions }),
+    );
+    const uuid = "x".repeat(2_048);
+    try {
+      await inbox.writeOne(inboxMessage(uuid));
+      await expect(inbox.findOne({ index: { index: 0, ofTotal: 1 }, uuid })).rejects.toMatchObject({
+        code: Code.ResourceExhausted,
+      });
+    } finally {
+      sessions.abort();
+    }
+  });
+
+  it.each([1, 2])("round trips a message above 4 MiB with %s process(es)", async (processCount) => {
+    const server = tracked(new DeliveryServer({ port: 0, processCount }));
+    await server.start();
+    const sessions = new Http2SessionManager(server.baseUrl);
+    const inbox = createClient(
+      InboxService,
+      createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: sessions }),
+    );
+    try {
+      await inbox.writeOne(inboxMessage("large", 4_194_305));
+      const found = await inbox.findOne({ index: { index: 0, ofTotal: 1 }, uuid: "large" });
+      expect(found.message?.payload.case).toBe("command");
+      if (found.message?.payload.case !== "command") throw new Error("Expected command payload.");
+      expect(found.message.payload.value.message?.value.byteLength).toBe(4_194_305);
+    } finally {
+      sessions.abort();
+    }
+  });
 });
 
 function tracked(server: DeliveryServer): DeliveryServer {
@@ -154,7 +198,7 @@ function connected(session: http2.ClientHttp2Session): Promise<void> {
   });
 }
 
-function inboxMessage(uuid: string) {
+function inboxMessage(uuid: string, payloadBytes = 1) {
   return {
     message: create(InboxMessageSchema, {
       id: { uuid, index: { index: 0, ofTotal: 1 } },
@@ -164,7 +208,7 @@ function inboxMessage(uuid: string) {
         case: "command",
         value: create(CommandSchema, {
           id: { uuid: "command" },
-          message: { typeUrl: "example.Command", value: new Uint8Array([1]) },
+          message: { typeUrl: "example.Command", value: new Uint8Array(payloadBytes) },
         }),
       },
       label: InboxLabel.HANDLE_COMMAND,

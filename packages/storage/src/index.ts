@@ -52,6 +52,8 @@ export { RecordQuery } from "./record/record-query.js";
 export { RecordSpec, type RecordSpecOptions } from "./record/record-spec.js";
 export type { RecordIndex } from "./record/record-index.js";
 export { RecordStorage } from "./record/record-storage.js";
+export { InboxRecordStorageCapabilities } from "./record/inbox-record-storage.js";
+export type { InboxRecordEntry, InboxRecordMutations } from "./record/inbox-record-storage.js";
 export { StorageGroup } from "./record/storage-group.js";
 export type { RecordEntry } from "./record/record-storage.js";
 export type { Storage, StorageContext, StorageMode } from "./storage/storage.js";

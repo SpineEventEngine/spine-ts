@@ -436,6 +436,10 @@ describe("InMemoryEntityHistory", () => {
       "old",
     ]);
     expect((await storage.events.backward("task", 5, 2n)).map((entry) => entry.id?.value)).toEqual([
+      "\u{10000}",
+      "\uE000",
+      "é",
+      "a",
       "old",
     ]);
 
@@ -520,9 +524,9 @@ describe("InMemoryEntityHistory", () => {
     }
 
     expect((await history.backward("task", 3, 5n)).map((entry) => entry.id?.value)).toEqual([
+      "event-5",
       "event-4",
       "event-3",
-      "event-2",
     ]);
     await history.truncate(create(TimestampSchema, { seconds: 5n }));
     expect((await history.backward("task", 5)).map((entry) => entry.id?.value)).toEqual([

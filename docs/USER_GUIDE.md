@@ -660,7 +660,7 @@ DraftSupportReply → SupportDraftAgent → CallModel
                               SupportReview query
 ```
 
-The Agent's `@Command` handler returns `this.modelCommands.create(draftSupportReply, { conversation, input: command })`. The definition comes from the example's `src/model.ts`; both the Agent and its Bounded Context registration import it. `.withAi(registry)` supplies a permitted provider deployment. The framework saves the returned Command with the Agent turn, then its registered asynchronous handler runs the model. A typed reply or rejection returns to the Agent, whose `@React` handler emits `SupportReplySuggested` or `SupportReplyFailed`. The review Projection stores the outcome for a person to inspect. Local Command posting waits for reception and scheduling. Delivery marks the Agent Inbox row `DELIVERED` only after its handler and save finish. To observe completion, wait for the domain outcome or read the resulting state; the provider reply may arrive later.
+The Agent's `@Command` handler returns `this.modelCommands.create(draftSupportReply, { conversation, input: command })`. The definition comes from the example's `src/model.ts`; both the Agent and its Bounded Context registration import it. `.withAi(registry)` supplies a permitted provider deployment. The framework saves the returned Command with the Agent turn, then its registered asynchronous handler runs the model. A typed reply or rejection returns to the Agent, whose `@React` handler emits `SupportReplySuggested` or `SupportReplyFailed`. The review Projection stores the outcome for a person to inspect. Local Command posting waits for reception and scheduling. Delivery marks the Agent inbox message `DELIVERED` only after its handler and save finish. To observe completion, wait for the domain outcome or read the resulting state; the provider reply may arrive later.
 
 A model can still be wrong about facts it cannot verify. Keep the review decision in application code. Configure the permitted provider and its credentials outside the Agent. For local tests, `AiTestBackend` supplies controlled replies without a paid model request. The example's [BlackBox test](../examples/support/test/support-blackbox.test.ts) checks the proposal, failure, review query, and recorded interaction history. See the [AI package guide](../packages/ai/README.md) for the task definition, [adapter guide](../packages/ai-vercel-ax/README.md) for deployment, and [Agent reference](../packages/server/REFERENCE.md#agent-execution) for exact runtime contracts.
 
@@ -687,40 +687,117 @@ Application; use the same mapping in processes sharing delivery
 storage. See [receiver-specific shard policies](../packages/server/REFERENCE.md#receiver-specific-shard-policies)
 for a complete example using the Orders Projections.
 
-All Bounded Contexts use the Delivery configured in `ServerEnvironment`. With
-local Delivery, posting waits for Inbox reception and scheduling. Delivery
-acknowledges an Agent input after its handler and save finish. A returned model Command can
-continue running afterward. With remote Delivery and its
-environment supervisor, posting returns after the remote Inbox accepts the signal
-and the notification is submitted. Processing may happen afterward on another
-application process. For example, a successful Command submission can precede the
-Projection update that your UI is waiting for; use a query or subscription to
-observe that update.
+All Bounded Contexts use the Delivery configured in `ServerEnvironment`.
+Application code posts a Command or Event to its bus. The repository selects
+each recipient, then the framework stores an `InboxMessage` for that recipient.
 
-A failed Inbox write rejects the posting call. A notification failure after a
-successful write is logged, and ordinary delivery can find the pending signal
-through its existing notifications and safety scan.
+With `DeliveryBuilder.remote({ endpoint })`, every application node opens
+the Delivery server's work stream. Suppose one node posts a Command for a
+recipient in shard 3 of 8. Each connected node can hear that shard 3 has work.
+The first node to take the shard reads the Command and runs its handler. If a
+second Command arrives while the worker holds shard 3, the server checks for
+pending work when the worker releases the shard. A newly connected node also
+discovers free shards with work that was saved before it started.
 
-Durable delivery stores pending and delivered Inbox rows. A shard lease prevents
-concurrent delivery, but a handler effect and the delivered transition are not
-one transaction. A lost acknowledgement can redeliver Aggregate, Process Manager, Agent, or
-Projection work after restart, so make downstream effects idempotent. If an
-original Agent input is still `TO_DELIVER`, redelivery can prepare a new model
-call with a new ID. A previously saved pending call is not replayed from history
-or attributes. The framework does not add a durable outgoing queue, scheduled
-retry policy, or exactly-once side effects.
-Local and remote delivery removes a pending duplicate when its signal ID and
-typed Inbox target match a delivered row in the current page or a recent local
-delivery remembered by the bounded cache. This process-local cache holds at most
-1,000 identities and disappears on restart. Suppression is temporary: after the
-relevant delivered rows and cache entries are gone, a later Inbox delivery may
-execute the same recipient again. Cleaning SQL Inbox rows alone may still leave
-a cache entry that suppresses Inbox delivery; cleanup does not guarantee
-repetition. Neither mechanism
-provides exactly-once execution or durable storage for the simple in-memory
-Delivery server. The same signal may still reach a different target, and a newly
-created signal with a different ID is not suppressed merely because its payload
-is equal.
+A node can process different shards concurrently. To limit automatic pickups on
+each node, set `notifications: { kind: "delivery-server", maxConcurrentDeliveries: 2 }`.
+
+**Application-managed storage and an external queue.** Suppose your nodes store
+inbox messages in a shared database and use a cloud queue to wake each other.
+The application supplies the queue publisher and consumer in this example.
+This queue acknowledges a successful callback and redelivers its item if the callback throws.
+After the framework saves an inbox message, the writing node publishes its
+shard number and total shard count. A consumer on any node can ask the
+framework to deliver that shard. All nodes install the same configuration. This example runs with
+`NODE_ENV=production` and supplies a type registry containing the generated Orders message schemas.
+
+<!-- docs-snippet-path: packages/delivery-client/src/remote/delivery-builder.ts -->
+
+```ts
+import type { TypeRegistryLookup } from "@spine-event-engine/core";
+import { DeliveryBuilder } from "@spine-event-engine/delivery-client";
+import {
+  Application,
+  EnvironmentType,
+  ServerEnvironment,
+  ShardIndex,
+} from "@spine-event-engine/server";
+import type { BoundedContextBuilder } from "@spine-event-engine/server";
+import type { StorageFactory } from "@spine-event-engine/storage";
+
+type QueueItem = { index: number; ofTotal: number };
+
+declare const storageFactory: StorageFactory;
+declare const typeRegistry: TypeRegistryLookup;
+declare const orders: BoundedContextBuilder;
+declare const queue: {
+  publish(item: QueueItem): Promise<void>;
+  consume(handler: (item: QueueItem) => Promise<void>): Promise<void>;
+};
+
+const delivery = DeliveryBuilder.local({
+  storageFactory,
+  shardObserver: {
+    onMessage(message) {
+      const { index, ofTotal } = message.shard;
+      return queue.publish({ index, ofTotal });
+    },
+  },
+});
+
+const environment = ServerEnvironment.newBuilder()
+  .under(EnvironmentType.Production, (settings) => {
+    settings.use({ delivery, storageFactory, typeRegistry });
+  })
+  .build();
+const application = await Application.newBuilder()
+  .setServerEnvironment(environment)
+  .add(orders)
+  .build();
+
+try {
+  await queue.consume(async ({ index, ofTotal }) => {
+    const result = await environment.delivery.deliverMessagesFrom(new ShardIndex(index, ofTotal));
+    if (result.status === "busy" || result.status === "stopped") {
+      throw new Error(`Retry shard ${index} of ${ofTotal}: ${result.status}`);
+    }
+  });
+} finally {
+  await application.close();
+}
+```
+
+If the inbox write fails, posting reports the storage error. If the write
+succeeds and publishing to the queue fails, the framework logs the callback
+error. The message is already in the inbox. The application decides how to send
+the missed notification. After a normal delivery pass releases a shard, the
+worker checks for messages that arrived late and passes the newest pending
+message to the observer.
+
+The consumer can receive an old queue item. A `busy` result means another worker
+holds the shard. A `stopped` result means this caller stopped waiting or the
+worker stopped its run. In these cases the example leaves the queue item
+available for another attempt. A `noWork` result means no pending messages
+were found. The callback can then finish and the queue can acknowledge its
+item. A storage error also follows the queue's redelivery policy.
+
+An Agent's handler and save finish before the worker acknowledges its inbox
+message. Suppose the worker exits between those steps. With the Delivery
+server's default settings the shard stays assigned to that worker. An
+operator can release inactive assignments with `ShardService.ReleaseSessions`.
+The server then reports the free shard, and another node can pick it up and
+invoke the Agent again. An original input that is still
+`TO_DELIVER` can cause a new model call with a fresh ID. A previously saved
+pending model call is not automatically sent again.
+
+Suppose two inbox messages carry the same Command to the same Project. A worker
+acknowledges the first. When it reaches the second, it can recognize the Command ID from
+a retained completion in the current page or from a completion it remembers
+locally for five seconds. It then removes the second message. If both pieces
+of evidence have expired, a later worker can invoke the handler again. A
+different Project is a different recipient, even if the Command ID is the same.
+An Event with the same UUID text is a separate signal and is delivered to
+that Project too.
 
 Continue with the [server reference](../packages/server/REFERENCE.md) for
 framework and server contracts.

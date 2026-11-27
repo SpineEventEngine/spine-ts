@@ -12,7 +12,7 @@ packages/delivery-client/test/remote-adapters-quarantine.test.ts` passed
   16 tests across 3 files.
 - Additional admission and shard RED/GREEN slices now pass through
   `pnpm vitest run packages/delivery-server/test` (7 tests): pre-admission
-  cancellation, FIFO, the 100 pending-operation bound, exclusive contention,
+  cancellation, FIFO, exclusive contention,
   release/reacquisition, and timeout equality semantics.
 - Final focused gate: `pnpm vitest run packages/delivery-server/test
 packages/delivery-client/test/in-memory-core-response-loss.test.ts

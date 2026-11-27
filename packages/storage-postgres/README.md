@@ -90,8 +90,8 @@ closed factory cannot create new handles or check a connection.
 
 The provider supports record CRUD, compare-and-set, immutable append, Entity
 state and event history, declared-column filtering, sorting, limits, offsets,
-and continuations through the common storage API. Eligible Inbox cleanup deletes
-the message ID directly through record storage. It uses
+and continuations through the common storage API. Inbox cleanup issues one DELETE for the shard, using the stored delivered
+status and retention deadline. It uses
 PostgreSQL `BYTEA`, parameterized `$1`-style values, and PostgreSQL's configured
 text collation. Collation ordering can differ from JavaScript ordering, so
 applications should choose and document their database collation deliberately.

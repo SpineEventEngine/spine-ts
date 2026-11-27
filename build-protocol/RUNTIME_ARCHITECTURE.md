@@ -231,100 +231,45 @@ and V8 coverage are reported independently.
 
 ## Delivery and Reliability
 
-The current TS runtime provides direct durable inbox rows, finite local drains,
-and transport-backed worker supervision:
+When a repository selects a recipient, the framework stores an `InboxMessage`
+with the recipient, original Command or Event, signal ID, shard and receive
+time. For example, two independent submissions of Command C42 to Project p7
+produce two different inbox IDs. Each write creates or replaces its inbox ID
+in one database call. Delivery can recognize repeated signals for the same
+recipient when it processes the shard.
 
-- standalone delivery writes can be recorded before the asynchronous worker
-  handoff point where durability is configured, and package-internal
-  framework replay can drain one shard through validated endpoints. Built
-  bounded
-  contexts integrate `CommandBus` intake for process-manager command assignees
-  and live `EventBus` intake for process-manager event reactions and projection
-  subscribers with durable local inbox handoff. Other inbox-routed event
-  endpoint kinds remain deferred;
-- durable inbox rows store the inbox target identity, signal identity, shard,
-  status, label, receive time, version, optional signal payload, and optional
-  dedup retention;
-- built bounded contexts now use this storage boundary for three narrow local
-  handoffs: process-manager command assignees with `HANDLE_COMMAND`, live
-  process-manager event reactions with `REACT_UPON_EVENT`, and live projection
-  event subscribers with `UPDATE_SUBSCRIBER`;
-- process-manager event rows store the original `Event` envelope as the signal
-  payload, use the original event ID as `signalId`, target the process-manager
-  state type URL plus routed process-manager ID, drain the local single shard
-  immediately, and replay only that inbox row target before process-manager
-  handler execution. Before handler code runs, replay validates the row label,
-  pending `TO_DELIVER` status, tenant, payload/schema, target type URL, and
-  routed target ID;
-- live projection subscriber rows store the original `Event` envelope as the
-  signal payload, use the original event ID as `signalId`, target the
-  projection state type URL plus routed projection ID, drain the local single
-  shard immediately, and replay only that inbox row target before running the
-  projection transaction and `Stand` update. Before handler code runs, replay
-  validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
-  target type URL, and routed target ID;
-- pending and delivered `InboxMessage` rows are stored directly; delivered rows
-  are the deduplication fact, with no per-message claim or separate dedup
-  record;
-- pending Inbox rows have no `keepUntil`. The first delivered transition sets
-  the deduplication deadline five seconds after acknowledgement. Local storage
-  writes status and deadline in one conditional update; remote delivery uses
-  the application's clock and the existing Inbox write operation. A delivered
-  row becomes cleanup-eligible when the deadline has elapsed. Cleanup runs one
-  bounded page under current shard
-  ownership, plus at most one continuation only after a full protected page
-  makes no removal. Each exact delete validates the fence in one
-  provider-atomic operation, and
-  preserves every pending, retryable, non-delivered, or still-protected row.
-  The environment delivery lifecycle owns cleanup and awaits it at shutdown;
-  Wave 12 adds no second retention configuration, timer, or scheduler;
-- shard pickup, renewal, and release persist lease-backed shard sessions through
-  storage compare-and-set rather than process-local locks. A complete `WorkerId`
-  can pick up or renew its own unexpired session; another worker is excluded
-  until expiry, and a stale owner cannot release a replacement session;
-- one direct drain run holds a shard through `ShardedWorkRegistry`, reads
-  `TO_DELIVER` rows in inbox order, and keeps the storage lease renewed while
-  the drain is active. Rows unavailable to the active worker are skipped before
-  endpoint invocation, including rows owned by another active worker and
-  worker-unsupported labels such as `CATCH_UP`. Validated endpoints and
-  returned ordinary failures receive independent message snapshots only for
-  `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; their `Date`
-  values and `Any.value` bytes are copied. `CATCH_UP` remains pending and never
-  reaches those endpoints. A successful callback marks the row delivered.
-  `DeliveryMonitor` contains reception failure: its default marks the failed
-  reception delivered and continues independent targets; a custom monitor may
-  choose one immediate repeat action. A durable acknowledgement failure leaves
-  the row pending, stops later same-target rows for that run, continues
-  independent targets, and releases ownership for a later run. Handler effects
-  and the delivered-row compare-and-set are not one transaction, so lost
-  acknowledgement can redeliver and downstream handling must be idempotent.
-  No attempt history, per-message claim, quarantine, receipt, marker, timer,
-  backoff, dead-letter storage, scheduler persistence, or delivery policy is
-  added. The run releases its shard in a `finally` path;
-- Package-internal loop code runs one bounded direct drain for one shard at a
-  time. It has no epoch snapshot, retained array, claim, `PAUSED` state,
-  doubled sweep, second drain, timer renewal, cursor, or public worker callback
-  API. Renewal occurs through fencing at pickup, before callback work, and
-  before acknowledgement; loss of that fence stops the shard before the next
-  protected operation. The loop is a lifecycle wrapper, not retry policy,
-  supervision, or transport topology; and
-- malformed, oversized, or key-mismatched inbox and shard-session records fail
-  closed as storage corruption. Deprecated legacy stored
-  `IMPORT_EVENT` rows are one such corruption path and abort read/drain with
-  `DeliveryStorageCorruptionError` before any `DeliveryRun` is returned.
+With a Delivery server, all application nodes subscribe to
+`ShardObservingService.ObserveAll`. Each notice contains a shard ID. A free
+shard with pending work is visible to a newly connected node, and an unclaimed
+shard is announced again after the configured interval. A worker picks up the
+shard before reading its messages. Suppose node east has already picked up
+shard 3. Writing another Command there produces no notice while east holds it.
+Release or expiry makes any pending work visible again. The Admin interface
+reports the total number of stored messages, including delivered messages
+awaiting cleanup.
 
-This slice stops short of scheduled or timed retries, attempt/exhaustion
-counters, raw delivery-error history, quarantine/dead-letter storage, and an
-exactly-once side-effect guarantee. `DeliveryMonitor` is the customizable
-per-reception policy seam, and `DeliverySupervisor` plus remote delivery ports
-provide the bounded transport-backed worker topology used by the distributed
-Message Board example. Event import and aggregate importers are
-removed from the active plan by upstream ADR 0001 D1. Aggregate `@React`
-handlers, when present, use ordinary generated-reactor transaction semantics
-rather than event-sourcing applier/import delivery. `IMPORT_EVENT` is no longer
-a supported public delivery label for new inbox writes; stored/wire legacy rows
-using it are recognized only as deprecated compatibility data and fail closed
-before delivery.
+With application-managed storage, a custom observer can notify another node.
+For example, it can send the shard ID to a cloud queue used by the application.
+The consumer invokes `environment.delivery.deliverMessagesFrom(shard)`. After
+a normal run releases the shard, the framework checks for a pending message
+that arrived too late for the run and passes it to the observer. An observer
+failure is logged. The original inbox write has already succeeded.
+
+A worker validates the recipient, label, tenant and envelope before dispatch.
+On remote storage it presents the session and exact message when acknowledging
+or removing it. Acknowledgement sets a five-second retention deadline using the
+Delivery server's clock. A repeated acknowledgement preserves that deadline.
+A later pass can remove the message after the deadline. An interrupted worker
+can leave a message pending after its handler has already committed, so a
+subsequent attempt can invoke the handler again.
+
+The optional repository guard for Aggregates and Process Managers examines
+recent Events emitted by the selected Entity. For example, if Project p7
+emitted an Event caused by C42, an attempt to dispatch C42 again can recognize
+the duplicate even after the inbox retention interval. A handler that emitted
+no Event leaves no such evidence. Agents keep their optional duplicate memory
+within the running process. See the
+[Entity guard reference](../packages/server/REFERENCE.md#duplicate-dispatch-at-an-entity).
 
 ## Environment Delivery Lifecycle Sequence
 

@@ -28,7 +28,6 @@ import {
   EnvironmentType,
   Server,
   ServerEnvironment,
-  ShardIndex,
   type EntityHandlersMetadata,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
@@ -252,7 +251,7 @@ async function contextBox(
       await application.close();
     },
   };
-  return { box, environment };
+  return { box };
 }
 
 type CompletionBox = Awaited<ReturnType<typeof contextBox>>["box"];
@@ -329,11 +328,7 @@ describe("Agent completion through BlackBox", () => {
       .respondWith(create(ProposedSupportReplySchema, { reply: "Alternate reply" }));
     const { ai: primaryRegistry } = registry(primary);
     const ai = primaryRegistry.register(alternate.registration);
-    const { box, environment } = await contextBox(
-      "CompletionPreference",
-      ai,
-      PreferenceCompletionAgent,
-    );
+    const { box } = await contextBox("CompletionPreference", ai, PreferenceCompletionAgent);
     try {
       expect((await post(box, "T-P", "Prefer alternate")).kind).toBe("ok");
       await box.eventually(
@@ -343,11 +338,6 @@ describe("Agent completion through BlackBox", () => {
       expect(alternate.requests()).toHaveLength(0);
       const deferred = await post(box, "T-P", "After preference");
       expect(deferred).toMatchObject({ kind: "ok" });
-      expect(
-        await environment.delivery.inbox.read(ShardIndex.single(), {
-          statuses: ["TO_DELIVER"],
-        }),
-      ).toHaveLength(2);
       expect(primary.requests()).toHaveLength(1);
       expect(alternate.requests()).toHaveLength(0);
       gate.release();

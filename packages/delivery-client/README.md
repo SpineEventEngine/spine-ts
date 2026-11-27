@@ -38,31 +38,39 @@ client.close();
 void shards;
 ```
 
-Read operations can use the configured bounded retry policy. Mutations never
-retry automatically: a lost mutation response means the remote outcome is
-unknown and must be reconciled before any later action.
-Inbox receipts and `sinceWhen` page anchors use Protobuf `Timestamp` values,
+Read operations can use the configured retry policy. A mutation can succeed
+on the server even if its reply is lost. For example, after a disconnected
+inbox write, read the message to see whether the server stored it.
+
+Inbox receive times and the `sinceWhen` query field use Protobuf `Timestamp` values,
 preserving seconds and nanoseconds. `readPage` calls the JVM
-`InboxService.FindManyInShard` RPC with an exclusive timestamp bound.
+`InboxService.FindManyInShard` RPC. An omitted or zero timestamp starts at
+the beginning. Other timestamps select messages received strictly later.
 
 <!-- docs-snippet-path: packages/delivery-client/src/client/client.ts -->
 
 ```ts
-import { DeliveryOutcomeUnknownError } from "@spine-event-engine/delivery-client";
+import { DeliveryClient, DeliveryOutcomeUnknownError } from "@spine-event-engine/delivery-client";
+import type { InboxMessage } from "@spine-event-engine/server";
+
+declare const client: DeliveryClient;
+declare const message: InboxMessage;
 
 try {
-  // await client.writeOne(message);
+  await client.writeOne(message);
 } catch (error) {
-  if (error instanceof DeliveryOutcomeUnknownError) {
-    // Read the fact named by error.reconciliation; do not repeat the mutation.
-  }
+  if (!(error instanceof DeliveryOutcomeUnknownError)) throw error;
+  const stored = await client.findOne(message.id);
+  if (stored === undefined) throw error;
+  console.log("The inbox contains the message", stored.id.value);
 }
 ```
 
-## 👀 Observe shards
+## Shards with pending work
 
-Use a snapshot to establish current facts and an observation stream for later
-hints. Cancel the stream when it is no longer needed.
+Open `observeAvailableShards()` to receive a shard index whenever the Delivery
+server has a free shard with pending work. A newly connected client also learns
+about work already waiting. An idle call can stay silent indefinitely.
 
 <!-- docs-snippet-path: packages/delivery-client/src/client/client.ts -->
 
@@ -70,86 +78,96 @@ hints. Cancel the stream when it is no longer needed.
 import { DeliveryClient } from "@spine-event-engine/delivery-client";
 
 declare const client: DeliveryClient;
-const updates = client.observeShardUpdates({ timeoutMs: 5_000 });
-for await (const update of updates) {
-  console.log(update.shard, update.status);
-  updates.cancel();
+declare const shutdown: AbortSignal;
+
+for await (const shard of client.observeAvailableShards({ signal: shutdown })) {
+  console.log("Work is waiting in shard", shard.index, "of", shard.ofTotal);
 }
 ```
 
+This low-level call opens one stream. Starting a fresh call after a disconnect
+discovers the free shards again. Several clients can receive the same index, so
+a worker must still request pickup before processing a message.
+
+## 👀 Shard state for Admin
+
+For a live Admin view, read updates as soon as the stream opens. It sends
+the known shards first and keeps sending changes. For a one-time report,
+use `shardSnapshot()` separately. The stream reads at the pace of its consumer.
+
+<!-- docs-snippet-path: packages/delivery-client/src/client/client.ts -->
+
+```ts
+import { DeliveryClient, type RemoteShardObservation } from "@spine-event-engine/delivery-client";
+
+declare const client: DeliveryClient;
+declare const shutdown: AbortSignal;
+declare function reportDashboardError(error: unknown): void;
+declare function showLive(rows: ReadonlyMap<string, RemoteShardObservation>, stale: boolean): void;
+
+async function showAdmin(): Promise<void> {
+  const live = new Map<string, RemoteShardObservation>();
+  showLive(live, true);
+  const updates = client.observeShardUpdates({ signal: shutdown, timeoutMs: 5_000 });
+  try {
+    for await (const update of updates) {
+      const key = `${update.shard.index}/${update.shard.ofTotal}`;
+      live.set(key, update);
+      showLive(live, false);
+    }
+  } catch (error) {
+    showLive(live, true);
+    throw error;
+  } finally {
+    updates.cancel();
+  }
+}
+
+await showAdmin().catch(reportDashboardError);
+```
+
+Call `showAdmin()` again after a failure to build a fresh live view. The client
+defaults to no hidden Admin reconnects, so a failed stream reaches the caller.
 Here `timeoutMs` bounds setup through the first acknowledgement only; it never
-ends an acknowledged observation stream.
+ends an acknowledged observation stream. Keep the snapshot and live view
+separate so a slower snapshot response cannot overwrite a newer live update.
 
-`RemoteInbox` and `RemoteWorkRegistry` adapt a client to a server
-`DeliveryBuilder`. The authoritative delivery state is the remote Inbox row and
-the current shard lease; the client keeps no local removal record. A delivered
-row is the deduplication fact, but a handler effect and its acknowledgement are
-not one transaction. If an acknowledgement is lost, delivery can happen again
-after restart, so make downstream effects idempotent.
-Remote delivery reads bounded raw pages. The shared server delivery policy
-removes a pending duplicate when its signal ID and typed Inbox target match a
-delivered row in that page or a recent delivery in the bounded process-local
-cache. A different target or a newly generated signal ID remains independently
-deliverable, even when its payload is equal.
+Use `DeliveryBuilder.remote({ endpoint })` to connect an application to the
+Delivery server. During startup each node opens `ShardObservingService.ObserveAll`.
+If shard 3 already contains a pending Command, a new node can take that shard
+and run the handler. If the inbox is empty, startup finishes with the stream
+open and silent. The server repeats a notice for free, unclaimed work after
+ten seconds by default. Further writes do not postpone the reminder.
 
-Remote reception writes a pending row without a completion deadline. The
-application sets a five-second deadline when it acknowledges delivery, using
-its clock and the existing Inbox write operation. A matching repeated
-acknowledgement returns the stored deadline.
+For a node that should process at most two shards concurrently:
 
-<!-- docs-snippet-path: packages/delivery-client/src/remote/adapters.ts -->
+<!-- docs-snippet-path: packages/delivery-client/src/remote/delivery-builder.ts -->
 
 ```ts
-import {
-  DeliveryClient,
-  RemoteInbox,
-  RemoteWorkRegistry,
-} from "@spine-event-engine/delivery-client";
-import { DeliveryBuilder } from "@spine-event-engine/server";
+import { DeliveryBuilder } from "@spine-event-engine/delivery-client";
 
-const client = DeliveryClient.connectTo("http://127.0.0.1:8484");
-const delivery = new DeliveryBuilder()
-  .withNode("orders-worker")
-  .withInbox(new RemoteInbox(client))
-  .withWorkRegistry(new RemoteWorkRegistry(client))
-  .build();
-client.close();
+const delivery = DeliveryBuilder.remote({
+  endpoint: "https://delivery.example.test",
+  notifications: { kind: "delivery-server", maxConcurrentDeliveries: 2 },
+});
 void delivery;
 ```
 
-For server assembly, pass one `RemoteDelivery` to the environment instead of
-manually wiring adapters. Each attached environment gets a bounded Admin
-snapshot and later shard-update hints; after a stream loss or bounded-buffer
-overflow it takes a fresh snapshot before resuming updates. Inbox rows and the
-exclusive shard session remain authoritative, so notifications are best-effort
-wake-ups. `open()` runs before the first attachment/listener admission. A
-failed bounded readiness check closes its fresh client and can be retried.
+With no `maxConcurrentDeliveries`, the node can process distinct shards in
+parallel. Two calls to `environment.delivery.deliverMessagesFrom(shard)` on
+that node for the same shard share one delivery attempt. An independent write
+of another Command to that shard always stores its inbox message.
 
-When identically configured application nodes share a Delivery server, every
-node observes and attempts each reported shard. The remote registry admits one
-owner for a shard at a time; updates are only hints recovered through a bounded
-snapshot, and the facility makes no ordering promise across different shards.
-The winning owner repeats finite Inbox drains until no deliverable rows remain,
-including rows that arrive while a drain is active, before it releases the
-shard. A pre-commit ownership probe fences known stale owners, but it is not a
-linearizable distributed transaction with Entity storage.
-
-<!-- docs-snippet-path: packages/delivery-client/src/remote/remote-delivery.ts -->
-
-```ts
-import { RemoteDelivery } from "@spine-event-engine/delivery-client";
-
-const delivery = RemoteDelivery.connectTo({ endpoint: "https://delivery.example.test" });
-void delivery;
-```
+When an application uses its own shared database for the inbox, it can use
+`DeliveryBuilder.local({ storageFactory, shardObserver })` to notify nodes
+through its own queue. For a complete publisher and consumer example, see
+[running and observation](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/USER_GUIDE.md#8-running-and-observation).
 
 ## ⚠️ Design for redelivery
 
-Read operations may use the configured bounded retry policy. Mutations do not
-retry automatically: if a response is lost, first read the named fact and
-decide what happened. The protocol is unauthenticated and offers no durable
-client state, exactly-once effects, or renewable fencing. It does not persist
-attempt history or quarantine records.
+If a connection fails after a handler saves its result but before the inbox message
+is acknowledged, another worker may invoke that handler again. Keep this case
+in mind when a handler calls an external service.
 
 ## 🔗 Learn more
 

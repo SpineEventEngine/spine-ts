@@ -28,15 +28,10 @@ import {
   WriteMessageSchema,
   type SubscriptionResponse,
 } from "@spine-event-engine/proto/delivery-server";
-import {
-  InboxMessageSchema,
-  InboxMessageStatus,
-  ShardIndexSchema,
-  WorkerIdSchema,
-  type ShardIndex,
-} from "@spine-event-engine/proto/delivery";
+import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 
 import { DeliveryServer } from "../../src/index.js";
+import { domainMessage as message } from "../core/domain-message.js";
 
 describe("DeliveryServer Admin", () => {
   it("serves an empty deterministic shard snapshot", async () => {
@@ -63,13 +58,14 @@ describe("DeliveryServer Admin", () => {
     const admin = createClient(AdminService, transport);
     const inbox = createClient(InboxService, transport);
     const shards = createClient(ShardService, transport);
-    const first = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
-    const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    const first = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    const second = create(ShardIndexSchema, { index: 0, ofTotal: 3 });
     const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
     try {
       await inbox.writeOne(create(WriteMessageSchema, { message: message("first", second) }));
       await inbox.writeOne(create(WriteMessageSchema, { message: message("second", first) }));
-      await shards.pickShard(create(PickUpShardSchema, { shard: second, worker }));
+      const pickup = await shards.pickShard(create(PickUpShardSchema, { shard: second, worker }));
+      if (pickup.value.case !== "pickedUp") throw new Error("Expected a session.");
       await expect(admin.getShardInfo(create(EmptySchema))).resolves.toMatchObject({
         shards: [
           { index: first, status: ShardStatus.NOT_PICKED, messages: 1 },
@@ -80,6 +76,12 @@ describe("DeliveryServer Admin", () => {
       const iterator = admin.subscribeToShardUpdates(create(EmptySchema))[Symbol.asyncIterator]();
       await expect(iterator.next()).resolves.toMatchObject({
         value: { value: { case: "created", value: true } },
+      });
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { value: { case: "update", value: { index: first, newMessagesCount: 1 } } },
+      });
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { value: { case: "update", value: { index: second, newMessagesCount: 1 } } },
       });
       const inserted = iterator.next();
       await inbox.writeOne(create(WriteMessageSchema, { message: message("third", second) }));
@@ -130,6 +132,8 @@ describe("DeliveryServer Admin", () => {
         .subscribeToShardUpdates(create(EmptySchema), { signal: abort.signal })
         [Symbol.asyncIterator]();
       await aborted.next();
+      await aborted.next();
+      await aborted.next();
       const waiting = aborted.next();
       abort.abort();
       await expect(waiting).rejects.toMatchObject({ code: Code.Canceled });
@@ -139,15 +143,3 @@ describe("DeliveryServer Admin", () => {
     }
   });
 });
-
-function message(uuid: string, shard: ShardIndex) {
-  return create(InboxMessageSchema, {
-    id: { uuid, index: shard },
-    signalId: { value: "signal" },
-    inboxId: { entityId: { id: { typeUrl: "example.Entity" } }, typeUrl: "example.State" },
-    payload: { case: "command", value: {} },
-    label: 1,
-    whenReceived: { seconds: 0n, nanos: 0 },
-    status: InboxMessageStatus.TO_DELIVER,
-  });
-}

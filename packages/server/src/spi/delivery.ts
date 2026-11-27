@@ -13,7 +13,18 @@
  */
 
 /**
- * Exports the delivery capability negotiated between the server and delivery adapters.
+ * Exports the retention calculation used by application inbox storage.
  */
-export { conditionalPickUp } from "../delivery/conditional-pickup.js";
 export { InboxRetention } from "../delivery/inbox-retention.js";
+
+/**
+ * Opens framework delivery facility ports through their internal symbol.
+ * @internal
+ */
+export { deliveryPortAccess } from "../delivery/delivery-port-access.js";
+
+/**
+ * Describes a framework-provided message before an Inbox assigns its identity.
+ * @internal
+ */
+export type { InboxMessageInput } from "../delivery/inbox.js";

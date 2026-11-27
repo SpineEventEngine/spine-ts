@@ -148,12 +148,12 @@ batches.
 
 Provider-legal ID predicates, declared-property comparisons, and ordering are
 pushed only when Datastore can execute the whole selected conjunction. Runtime
-descriptor/column validation happens before that decision. An omitted query
-budget uses the shared 10,000-record materialization bound, but Datastore's
-explicit value cannot exceed 10,000. Datastore's accepted/provider ceiling is
-1,000 rows. It may read one overflow-lookahead row
-(1,001 raw rows) to reject an oversized scan rather than materializing more
-rows. There is no public Datastore cursor API.
+descriptor/column validation happens before that decision. An omitted normalized-query
+budget uses the shared 10,000-record materialization bound, and Datastore's
+explicit normalized-query value cannot exceed 10,000. Legacy `RecordQuery`
+reads follow Datastore cursors until they have all rows needed for the result.
+An explicitly configured scan policy on a custom record storage handle can
+still reject a larger local reconciliation. There is no public Datastore cursor API.
 
 This is deliberately the overlap, not MySQL parity: nested or disjunctive
 predicates and provider-illegal inequality/order shapes reject before provider
@@ -188,6 +188,33 @@ longer than Datastore's 1,500-byte indexed-string limit reject before append;
 original scope strings remain unindexed in the payload. Reads use native pages
 of at most 128 rows and sum serialized entry bytes. A fetched chunk can be
 larger than the returned byte budget.
+
+The same `index.yaml` declares four Inbox composite indexes for shard equality,
+optional status equality, and ascending or descending order by receive
+seconds, nanoseconds, inbox version and inbox UUID. The descending indexes include an ascending key tie
+breaker to match the adapter's provider query. If the application maps Inbox
+records to another kind, deploy equivalent indexes for that kind.
+
+The inbox asks Datastore for the newest pending message when an application
+observer needs to hear about late work. The query filters by the full shard
+identity and status, sorts by the full receive time, and requests one result.
+
+When a worker reads a page, Datastore also returns its stored revision for each
+inbox message. To mark a pending message delivered, the adapter uses that
+revision to update the status and retention deadline in one database call.
+The signal payload stays in place. If the update already succeeded and its
+reply was lost, the adapter reads the stored status and deadline. The retry
+then returns the deadline from the first successful update.
+
+Removing a pending duplicate uses its current status too. If another worker
+has already marked that ID delivered, Datastore keeps the completed message
+and its original retention deadline. A conditional record write or delete
+compares the message as a reader sees it, including its stored delivery status.
+
+Datastore deletes by key. It cannot delete all expired delivered messages in a
+shard by their stored attributes in one operation. Automatic inbox cleanup
+therefore leaves those completions in Datastore. Pending messages can still
+be delivered.
 
 The factory has one tenant catalog. It reads native `__namespace__` metadata,
 converts only namespaces recognized by its `NamespaceConverter`. `keep()`

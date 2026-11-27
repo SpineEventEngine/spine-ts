@@ -12,13 +12,7 @@
  * the License.
  */
 
-import type {
-  InboxMessage,
-  InboxMessageId,
-  InboxMessageInput,
-  InboxReadOptions,
-  InboxWriteResult,
-} from "./inbox.js";
+import type { InboxMessage, InboxMessageId, InboxMessageInput, InboxReadOptions } from "./inbox.js";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 import type { ShardIndex } from "./shard-index.js";
 import type { ShardSession } from "./sharded-work-registry.js";
@@ -56,9 +50,9 @@ export interface DeliveryInbox {
    *
    * @param input Describes the message to make durable.
    * @param options Propagates cancellation and a delivery deadline.
-   * @returns The write or deduplication outcome.
+   * @returns The stored message.
    */
-  receive(input: InboxMessageInput, options?: DeliveryOperationOptions): Promise<InboxWriteResult>;
+  receive(input: InboxMessageInput, options?: DeliveryOperationOptions): Promise<InboxMessage>;
 
   /**
    * Reads one bounded continuation page for a shard.
@@ -85,40 +79,65 @@ export interface DeliveryInbox {
   ): Promise<InboxMessage | undefined>;
 
   /**
+   * Finds the newest pending row in full delivery order for one shard.
+   *
+   * @param shard Selects the shard to inspect after normal release.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @returns The last pending row, or `undefined` when none remains.
+   */
+  newestPending(
+    shard: ShardIndex,
+    options?: DeliveryOperationOptions,
+  ): Promise<InboxMessage | undefined>;
+
+  /**
    * Marks one exact pending Inbox row delivered with a five-second deadline.
    *
    * @param message Supplies the expected pending row snapshot.
    * @param options Propagates cancellation and a delivery deadline.
+   * @param session Supplies the current exclusive fence to remote adapters.
    * @returns The delivered row, or `undefined` when durable acknowledgement failed.
    */
   markDelivered(
     message: InboxMessage,
     options?: DeliveryOperationOptions,
+    session?: DeliveryWorkSession,
   ): Promise<InboxMessage | undefined>;
+
+  /**
+   * Deletes expired delivered messages for one shard in one storage operation.
+   *
+   * A provider that cannot express the predicate returns false without deleting
+   * messages. Pending delivery continues under the current session.
+   *
+   * @param shard Selects the shard to clean.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @param session Supplies the current exclusive fence to remote adapters.
+   * @returns Whether the provider applied the cleanup predicate.
+   */
+  removeExpiredDelivered?(
+    shard: ShardIndex,
+    options?: DeliveryOperationOptions,
+    session?: DeliveryWorkSession,
+  ): Promise<boolean>;
 
   /**
    * Removes one pending duplicate by storage ID after delivery selects it.
    *
    * @param message Supplies the pending duplicate snapshot.
    * @param options Propagates cancellation and a delivery deadline.
+   * @param session Supplies the current exclusive fence to remote adapters.
    * @returns Whether the adapter deleted the ID.
    */
-  removeDuplicate(message: InboxMessage, options?: DeliveryOperationOptions): Promise<boolean>;
-
-  /**
-   * Removes one eligible delivered message by storage ID.
-   *
-   * Custom structural ports may omit this optional retention capability.
-   *
-   * @param message Supplies the expected delivered row snapshot.
-   * @param options Propagates cancellation and a delivery deadline.
-   * @returns Whether the adapter completed its supported removal operation.
-   */
-  removeDelivered?(message: InboxMessage, options?: DeliveryOperationOptions): Promise<boolean>;
+  removeDuplicate(
+    message: InboxMessage,
+    options?: DeliveryOperationOptions,
+    session?: DeliveryWorkSession,
+  ): Promise<boolean>;
 }
 
 /**
- * Server-owned exclusive shard-work boundary.
+ * Coordinates exclusive or leased shard sessions for delivery drains.
  */
 export interface DeliveryWorkRegistry {
   // prettier-ignore
@@ -127,6 +146,14 @@ export interface DeliveryWorkRegistry {
    * Session fence kind this registry issues; ports supplied together must agree.
    */
   readonly sessionKind: DeliveryWorkSession["kind"];
+
+  /**
+   * Creates a distinct worker identity for one independent remote run.
+   *
+   * @param worker Supplies the configured node identity.
+   * @returns The worker identity used throughout this run.
+   */
+  workerForRun?(worker: WorkerId): WorkerId;
 
   /**
    * Acquires one shard work fence when it is available.
@@ -155,11 +182,11 @@ export interface DeliveryWorkRegistry {
   ): Promise<LeasedDeliveryWorkSession | undefined>;
 
   /**
-   * Validates ownership immediately before a guarded side effect.
+   * Checks the session immediately before a guarded side effect.
    *
    * Leased registries return the renewed session. Exclusive registries return
-   * the current session only while its authoritative remote fence still
-   * matches.
+   * the locally recorded session until release. The remote check does not read
+   * the server's shard record.
    *
    * @param session Supplies the session to validate.
    * @param options Propagates cancellation and a delivery deadline.
@@ -171,11 +198,12 @@ export interface DeliveryWorkRegistry {
   ): Promise<DeliveryWorkSession | undefined>;
 
   /**
-   * Removes a held work fence.
+   * Removes a work session through its registry.
    *
    * @param session Supplies the session to release.
    * @param options Propagates cancellation and a delivery deadline.
-   * @returns Whether the held fence was released.
+   * @returns Whether release completed for the locally recorded session. A
+   * remote release does not report whether the server still held that worker.
    */
   release(session: DeliveryWorkSession, options?: DeliveryOperationOptions): Promise<boolean>;
 }

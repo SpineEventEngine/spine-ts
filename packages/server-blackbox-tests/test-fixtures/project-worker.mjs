@@ -21,9 +21,8 @@ import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { create, equals, toBinary } from "@bufbuild/protobuf";
 import { AnyPacker, StringifierRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
-import { RemoteDelivery } from "@spine-event-engine/delivery-client";
+import { DeliveryClient, RemoteDelivery } from "@spine-event-engine/delivery-client";
 import {
-  Application,
   ActorContextSchema,
   CommandContextSchema,
   CommandIdSchema,
@@ -34,8 +33,8 @@ import {
 import { CommandService } from "@spine-event-engine/proto/client";
 import { InboxMessageSchema } from "@spine-event-engine/proto/delivery";
 import {
+  Application,
   EnvironmentType,
-  InboxStorage,
   Server,
   ServerEnvironment,
   ShardIndex,
@@ -60,6 +59,7 @@ import {
   StaffingStateSchema,
 } from "../dist/generated/spine/server/testing/project_workflow_pb.js";
 import { projectWorkflow, projectWorkflowIds } from "../dist/test-fixtures/project-workflow.js";
+import { serverEnvironmentAccess } from "../../server/test-fixtures/internal.mjs";
 import { fileLogger } from "./file-logger.mjs";
 
 let running;
@@ -67,7 +67,7 @@ let factory;
 let context;
 let application;
 let settings;
-let delivery;
+let environment;
 let commandClient;
 
 process.on("message", (request) => {
@@ -127,10 +127,11 @@ async function start(request) {
     deliveryStrategy: UniformAcrossAllShards.forNumber(settings.shards),
   };
   if (settings.deliveryEndpoint !== undefined) {
-    delivery = RemoteDelivery.connectTo({ endpoint: settings.deliveryEndpoint });
-    environmentSettings.delivery = delivery;
+    environmentSettings.delivery = RemoteDelivery.connectTo({
+      endpoint: settings.deliveryEndpoint,
+    });
   }
-  const environment = ServerEnvironment.newBuilder()
+  environment = ServerEnvironment.newBuilder()
     .under(EnvironmentType.Local, (setting) => setting.use(environmentSettings))
     .build();
   let firstCandidateGated = false;
@@ -275,13 +276,8 @@ async function inspect(request) {
 }
 
 async function inspectDelivery() {
-  if (factory === undefined || settings === undefined) throw new Error("Worker is not ready.");
-  const inbox =
-    delivery?.inbox ??
-    new InboxStorage({
-      context: { name: settings.contextName, multitenant: false },
-      storageFactory: factory,
-    });
+  if (environment === undefined || settings === undefined) throw new Error("Worker is not ready.");
+  const inbox = serverEnvironmentAccess.coreDelivery(environment).inbox;
   const shardIndices = Array.from(
     { length: settings.shards },
     (_, index) => new ShardIndex(index, settings.shards),
@@ -323,20 +319,25 @@ async function inspectDelivery() {
       }
     }),
   );
-  const observations =
-    delivery === undefined
-      ? undefined
-      : await delivery.source
-          .shardSnapshot()
-          .then((updates) =>
-            updates.map((update) => ({
-              shard: update.shard.key(),
-              status: update.status,
-              messages: update.messages,
-            })),
-          )
-          .catch((error) => ({ error: String(error) }));
+  const observations = await snapshotAdminForDiagnostics(settings.deliveryEndpoint);
   return { shards, observations };
+}
+
+async function snapshotAdminForDiagnostics(endpoint) {
+  if (endpoint === undefined) return undefined;
+  const reader = DeliveryClient.connectTo(endpoint);
+  try {
+    const updates = await reader.shardSnapshot();
+    return updates.map((update) => ({
+      shard: update.shard.key(),
+      status: update.status,
+      messages: update.messages,
+    }));
+  } catch (error) {
+    return { error: String(error) };
+  } finally {
+    reader.close();
+  }
 }
 
 async function close() {

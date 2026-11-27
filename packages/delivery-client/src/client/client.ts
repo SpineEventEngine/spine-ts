@@ -13,35 +13,32 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { DeliveryTimers } from "./delivery-timers.js";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient, type Transport } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 
 import type { InboxMessage, InboxMessageId } from "@spine-event-engine/server";
 import { ShardIndex } from "@spine-event-engine/server";
+import { Time } from "@spine-event-engine/core/time";
 import {
   InboxService,
   AdminService,
   ShardService,
-  PageOfMessagesSchema,
-  ReadMessagesSinceTimeSchema as ReadSinceTimeSchema,
-  OptionalInboxMessageSchema,
-  ShardInfoListSchema,
-  LiquorPickUpOutcomeSchema as PickUpOutcomeSchema,
-  ExpiredSessionsReleasedSchema,
   PickUpShardSchema,
+  type DeliveryPickUpOutcome,
+  ReleaseShardSchema,
+  ShardObservingService,
+  ReadMessagesSinceTimeSchema as ReadSinceTimeSchema,
   RemoveMessageSchema,
   RemoveMessagesSchema,
   ReleaseExpiredSessionsSchema,
-  ReleaseShardSchema,
   WriteMessageSchema,
   WriteMessagesSchema,
 } from "@spine-event-engine/proto/delivery-server";
-import { InboxMessageIdSchema, ShardIndexSchema } from "@spine-event-engine/proto/delivery";
+import { InboxMessageIdSchema, InboxMessageSchema } from "@spine-event-engine/proto/delivery";
 import {
   DeliveryOutcomeUnknownError,
-  MAX_DELIVERY_RPC_BYTES,
-  MAX_DELIVERY_TRACKED_SHARDS,
   type DeliveryClientOptions,
   type DeliveryFindOneOptions,
   type DeliveryMutationOptions,
@@ -60,10 +57,6 @@ export {
   DeliveryPagingError,
   DeliveryProtocolError,
   DeliveryShardObservationError,
-  ShardObservationOverflowError,
-  MAX_DELIVERY_BATCH_MESSAGES,
-  MAX_INBOX_PAYLOAD_BYTES,
-  MAX_DELIVERY_RPC_BYTES,
 } from "./types.js";
 export type {
   DeliveryClientOptions,
@@ -78,7 +71,7 @@ export type {
 } from "./types.js";
 
 /**
- * Provides a Node client for the frozen delivery-server gRPC API.
+ * Connects Node applications to the Delivery server's inbox, shard, and work observation services.
  */
 export class DeliveryClient {
   readonly #inbox: ReturnType<typeof createClient<typeof InboxService>>;
@@ -86,6 +79,8 @@ export class DeliveryClient {
   readonly #shards: ReturnType<typeof createClient<typeof ShardService>>;
 
   readonly #admin: ReturnType<typeof createClient<typeof AdminService>>;
+
+  readonly #observing: ReturnType<typeof createClient<typeof ShardObservingService>>;
 
   readonly #pageSize: number;
 
@@ -96,8 +91,6 @@ export class DeliveryClient {
   readonly #observationReconnects: number;
 
   readonly #observationReconnectBackoffMs: number;
-
-  readonly #observationBufferSize: number;
 
   readonly #activeReads = new Set<AbortController>();
 
@@ -123,19 +116,11 @@ export class DeliveryClient {
     this.#observationReconnectBackoffMs = DeliveryRequestCodec.backoff(
       options.observationReconnectBackoffMs ?? 0,
     );
-    this.#observationBufferSize = DeliveryRequestCodec.bounded(
-      options.observationBufferSize ?? 100,
-      1,
-      1_000,
-      "Delivery observation buffer size",
-    );
     this.#inbox = createClient(InboxService, transport);
     this.#shards = createClient(ShardService, transport);
     this.#admin = createClient(AdminService, transport);
+    this.#observing = createClient(ShardObservingService, transport);
     this.#onCloseOwnedTransport = onCloseOwnedTransport;
-    deliveryClientProbes.set(this, (shardIndex, workerId, options) =>
-      this.#probePickUp(shardIndex, workerId, options),
-    );
     deliveryClientObservations.set(this, (options) => this.#observeShardUpdates(options, 0));
   }
 
@@ -158,7 +143,8 @@ export class DeliveryClient {
   }
 
   /**
-   * Connects to a JVM delivery server with a client-owned HTTP/2 gRPC session.
+   * Opens an HTTP/2 gRPC connection to a Delivery server.
+   * Managed sessions and work notifications use services provided by the TS server.
    *
    * The URL and options are validated before opening the session. `close()` is
    * synchronous: it aborts active calls and the owned session immediately; it
@@ -176,8 +162,12 @@ export class DeliveryClient {
       createGrpcTransport({
         baseUrl,
         sessionManager: sessions,
-        readMaxBytes: MAX_DELIVERY_RPC_BYTES,
-        writeMaxBytes: MAX_DELIVERY_RPC_BYTES,
+        ...(normalized.maxInboundMessageBytes === undefined
+          ? {}
+          : { readMaxBytes: normalized.maxInboundMessageBytes }),
+        ...(normalized.maxOutboundMessageBytes === undefined
+          ? {}
+          : { writeMaxBytes: normalized.maxOutboundMessageBytes }),
       }),
       normalized,
       () => {
@@ -195,12 +185,11 @@ export class DeliveryClient {
     options: DeliveryFindOneOptions = {},
   ): Promise<readonly RemoteShardObservation[]> {
     const request = create(EmptySchema);
-    DeliveryRequestCodec.requestBytes(EmptySchema, request);
+
     const response = await this.#read(options, (signal, timeoutMs) =>
       this.#admin.getShardInfo(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
-    DeliveryRequestCodec.responseBytes(ShardInfoListSchema, response);
-    if (response.shards.length > MAX_DELIVERY_TRACKED_SHARDS) throw DeliveryRequestCodec.protocol();
+
     return Object.freeze(
       response.shards.map((value) => DeliveryShardCodec.decodeObservation(value)),
     );
@@ -215,12 +204,56 @@ export class DeliveryClient {
     return this.#observeShardUpdates(options, this.#observationReconnects);
   }
 
+  /**
+   * Streams advisory free-shard notices from one server connection.
+   *
+   * An idle stream stays open without a first response. Reopening this method
+   * starts a fresh server discovery scan. The caller controls reconnection.
+   *
+   * @param options Supplies cancellation for the stream lifetime.
+   * @returns Validated shard indexes that a worker may try to pick up.
+   */
+  async *observeAvailableShards(
+    options: Pick<DeliveryFindOneOptions, "signal"> = {},
+  ): AsyncIterable<ShardIndex> {
+    if (this.#closed) throw new Error("Delivery client is closed.");
+    if (options.signal?.aborted) throw options.signal.reason;
+    const controller = new AbortController();
+    let active = true;
+    const finish = () => {
+      if (!active) return;
+      active = false;
+      options.signal?.removeEventListener("abort", abort);
+      this.#activeReads.delete(controller);
+    };
+    const abort = () => {
+      controller.abort(options.signal?.reason);
+      finish();
+    };
+    options.signal?.addEventListener("abort", abort, { once: true });
+    controller.signal.addEventListener("abort", finish, { once: true });
+    this.#activeReads.add(controller);
+    try {
+      for await (const notice of this.#observing.observeAll(
+        create(EmptySchema),
+        DeliveryRequestCodec.callOptions(controller.signal),
+      )) {
+        if (notice.shard === undefined) throw DeliveryRequestCodec.protocol();
+        yield DeliveryShardCodec.decode(notice.shard);
+      }
+    } finally {
+      controller.abort();
+      finish();
+    }
+  }
+
   #observeShardUpdates(
     options: DeliveryFindOneOptions,
     reconnects: number,
   ): DeliveryShardObservationStream {
     if (this.#closed) throw new Error("Delivery client is closed.");
     if (options.signal?.aborted) throw options.signal.reason;
+    const setupTimeoutMs = DeliveryRequestCodec.timeout(options.timeoutMs);
     const controller = new AbortController();
     const callerAbort = () => {
       controller.abort(options.signal?.reason);
@@ -229,15 +262,10 @@ export class DeliveryClient {
     this.#activeReads.add(controller);
     return new ShardObservationStream({
       signal: controller.signal,
-      setupTimeoutMs: DeliveryRequestCodec.timeout(options.timeoutMs ?? 30_000),
-      capacity: this.#observationBufferSize,
+      setupTimeoutMs,
       reconnects,
       reconnectBackoffMs: this.#observationReconnectBackoffMs,
-      open: (signal) =>
-        this.#admin.subscribeToShardUpdates(
-          create(EmptySchema),
-          DeliveryRequestCodec.callOptions(signal),
-        ),
+      open: (signal) => this.#admin.subscribeToShardUpdates(create(EmptySchema), { signal }),
       acknowledge: (frame) => frame.value.case === "created" && frame.value.value,
       decodeUpdate: (frame) => {
         if (frame.value.case !== "update") throw DeliveryRequestCodec.protocol();
@@ -267,11 +295,11 @@ export class DeliveryClient {
       uuid: DeliveryMessageCodec.encodeId(id),
       index: DeliveryShardCodec.encode(id.shard),
     });
-    DeliveryRequestCodec.requestBytes(InboxMessageIdSchema, request);
+
     const response = await this.#read(options, (signal, timeoutMs) =>
-      this.#inbox.findOne(request, { timeoutMs, signal }),
+      this.#inbox.findOne(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
-    DeliveryRequestCodec.responseBytes(OptionalInboxMessageSchema, response);
+
     return response.message === undefined
       ? undefined
       : DeliveryMessageCodec.decode(response.message, id.shard);
@@ -300,11 +328,11 @@ export class DeliveryClient {
       pageSize: size,
       ...(sinceWhen === undefined ? {} : { sinceWhen }),
     });
-    DeliveryRequestCodec.requestBytes(ReadSinceTimeSchema, request);
+
     const response = await this.#read(options, (signal, timeoutMs) =>
-      this.#inbox.findManyInShard(request, { timeoutMs, signal }),
+      this.#inbox.findManyInShard(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
-    DeliveryRequestCodec.responseBytes(PageOfMessagesSchema, response);
+
     if (response.message.length > size) throw DeliveryRequestCodec.protocol();
     return Object.freeze(
       response.message.map((message) => DeliveryMessageCodec.decode(message, shardIndex)),
@@ -322,11 +350,14 @@ export class DeliveryClient {
     options: DeliveryFindOneOptions = {},
   ): Promise<InboxMessage | undefined> {
     const request = DeliveryShardCodec.encode(shardIndex);
-    DeliveryRequestCodec.requestBytes(ShardIndexSchema, request);
+
     const response = await this.#read(options, (signal, timeoutMs) =>
-      this.#inbox.newestMessageToDeliver(request, { timeoutMs, signal }),
+      this.#inbox.newestMessageToDeliver(
+        request,
+        DeliveryRequestCodec.callOptions(signal, timeoutMs),
+      ),
     );
-    DeliveryRequestCodec.responseBytes(OptionalInboxMessageSchema, response);
+
     return response.message === undefined
       ? undefined
       : DeliveryMessageCodec.decode(response.message, shardIndex);
@@ -341,7 +372,7 @@ export class DeliveryClient {
   async writeOne(message: InboxMessage, options: DeliveryMutationOptions = {}): Promise<void> {
     const wire = DeliveryMessageCodec.encode(message);
     const request = create(WriteMessageSchema, { message: wire });
-    DeliveryRequestCodec.requestBytes(WriteMessageSchema, request);
+
     await this.#mutation("WRITE_ONE", [message.id.value], options, (signal, timeoutMs) =>
       this.#inbox.writeOne(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
@@ -354,16 +385,16 @@ export class DeliveryClient {
    * @returns A promise that completes after the delivery server removes the message.
    */
   async removeOne(message: InboxMessage, options: DeliveryMutationOptions = {}): Promise<void> {
-    const wire = DeliveryMessageCodec.encode(message);
+    const wire = this.#removalMessage(message);
     const request = create(RemoveMessageSchema, { message: wire });
-    DeliveryRequestCodec.requestBytes(RemoveMessageSchema, request);
+
     await this.#mutation("REMOVE_ONE", [message.id.value], options, (signal, timeoutMs) =>
       this.#inbox.removeOne(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
   }
 
   /**
-   * Writes one bounded same-shard batch with exactly one delivery-server RPC attempt.
+   * Writes a batch in caller order with exactly one delivery-server RPC attempt.
    * @param messages Supplies the messages to write.
    * @param options Bounds or cancels the mutation.
    * @returns A promise that completes after the delivery server accepts the batch.
@@ -374,14 +405,14 @@ export class DeliveryClient {
   ): Promise<void> {
     const batch = DeliveryMessageCodec.encodeBatch(messages);
     const request = create(WriteMessagesSchema, { shard: batch.shard, message: batch.messages });
-    DeliveryRequestCodec.requestBytes(WriteMessagesSchema, request);
+
     await this.#mutation("WRITE_MANY", batch.ids, options, (signal, timeoutMs) =>
       this.#inbox.writeMany(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
   }
 
   /**
-   * Removes one bounded same-shard batch with exactly one delivery-server RPC attempt.
+   * Removes a batch by inbox identities with exactly one delivery-server RPC attempt.
    * @param messages Supplies the messages to remove.
    * @param options Bounds or cancels the mutation.
    * @returns A promise that completes after the delivery server removes the batch.
@@ -390,109 +421,92 @@ export class DeliveryClient {
     messages: readonly InboxMessage[],
     options: DeliveryMutationOptions = {},
   ): Promise<void> {
-    const batch = DeliveryMessageCodec.encodeBatch(messages);
-    const request = create(RemoveMessagesSchema, { shard: batch.shard, message: batch.messages });
-    DeliveryRequestCodec.requestBytes(RemoveMessagesSchema, request);
-    await this.#mutation("REMOVE_MANY", batch.ids, options, (signal, timeoutMs) =>
+    const ids = messages.map((message) => DeliveryMessageCodec.encodeId(message.id));
+    const wire = messages.map((message) => this.#removalMessage(message));
+    const request = create(RemoveMessagesSchema, { shard: wire[0]?.id?.index, message: wire });
+
+    await this.#mutation("REMOVE_MANY", ids, options, (signal, timeoutMs) =>
       this.#inbox.removeMany(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
   }
 
   /**
-   * Acquires a shard once.
-   * @param shardIndex Identifies the shard to acquire.
-   * @param workerId Identifies the worker requesting exclusive ownership.
+   * Encodes only the inbox identity required by RemoveOne and RemoveMany.
+   *
+   * @param message Supplies the inbox identity.
+   * @returns A wire row carrying that identity.
+   */
+  #removalMessage(message: InboxMessage) {
+    const uuid = DeliveryMessageCodec.encodeId(message.id);
+    const index = DeliveryShardCodec.encode(message.id.shard);
+    return create(InboxMessageSchema, { id: create(InboxMessageIdSchema, { uuid, index }) });
+  }
+
+  /**
+   * Acquires a shard for one worker, including a repeat pickup by the same worker.
+   *
+   * @param shardIndex Identifies the requested shard.
+   * @param workerId Identifies the worker processing the shard.
    * @param options Bounds or cancels the mutation.
-   * @returns A detached exclusive session, or `undefined` when held elsewhere.
+   * @returns The session, or `undefined` when another worker holds the shard.
    */
   async pickUp(
     shardIndex: ShardIndex,
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions = {},
   ): Promise<RemoteShardSession | undefined> {
-    const result = await this.#probePickUp(shardIndex, workerId, options);
-    return result.kind === "PICKED" ? result.session : undefined;
-  }
-
-  async #probePickUp(
-    shardIndex: ShardIndex,
-    workerId: DeliveryWorkerId,
-    options: DeliveryMutationOptions,
-  ): Promise<RemoteShardProbe> {
-    const requestedShard = DeliveryShardCodec.encode(shardIndex);
-    const requestedWorker = DeliveryShardCodec.encodeWorker(workerId);
-    const response = await this.#mutation(
+    const shard = DeliveryShardCodec.encode(shardIndex);
+    const worker = DeliveryShardCodec.encodeWorker(workerId);
+    const request = create(PickUpShardSchema, { shard, worker });
+    const response = await this.#mutation<DeliveryPickUpOutcome>(
       "PICK_UP_SHARD",
       [DeliveryShardCodec.snapshot(shardIndex)],
       options,
-      async (signal, timeoutMs) => {
-        const request = create(PickUpShardSchema, {
-          shard: requestedShard,
-          worker: requestedWorker,
-        });
-        DeliveryRequestCodec.requestBytes(PickUpShardSchema, request);
-        return {
-          kind: "PICKED" as const,
-          value: await this.#shards.pickShard(
-            request,
-            DeliveryRequestCodec.callOptions(signal, timeoutMs),
-          ),
-        };
-      },
+      (signal, timeoutMs) =>
+        this.#shards.pickShard(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
-    DeliveryRequestCodec.responseBytes(PickUpOutcomeSchema, response.value);
-    if (response.value.value.case === "alreadyPickedUp") {
-      const held = response.value.value.value;
-      DeliveryShardCodec.validatePicked(held, shardIndex);
-      if (held.worker === undefined || held.whenPicked === undefined)
+    switch (response.value.case) {
+      case "pickedUp":
+        return DeliveryShardCodec.decodePicked(response.value.value, shardIndex, workerId);
+      case "alreadyPickedUp":
+        if (
+          response.value.value.shard === undefined ||
+          response.value.value.worker === undefined ||
+          response.value.value.whenPicked === undefined
+        )
+          throw DeliveryRequestCodec.protocol();
+        DeliveryShardCodec.decode(response.value.value.shard);
+        DeliveryShardCodec.decodeWorker(response.value.value.worker);
+        DeliveryShardCodec.timestamp(response.value.value.whenPicked);
+        return undefined;
+      default:
         throw DeliveryRequestCodec.protocol();
-      return Object.freeze({
-        kind: "ALREADY_PICKED" as const,
-        session: Object.freeze({
-          kind: "EXCLUSIVE" as const,
-          shard: DeliveryShardCodec.snapshot(shardIndex),
-          worker: DeliveryShardCodec.decodeWorker(held.worker),
-          whenPicked: DeliveryShardCodec.date(held.whenPicked),
-        }),
-      });
     }
-    if (response.value.value.case !== "pickedUp") throw DeliveryRequestCodec.protocol();
-    const picked = DeliveryShardCodec.decodePicked(
-      response.value.value.value,
-      shardIndex,
-      workerId,
-    );
-    return Object.freeze({ kind: "PICKED" as const, session: picked });
   }
 
   /**
-   * Performs one exclusive shard-session release.
-   * @param value Supplies the session to release.
+   * Removes a shard session only if its recorded worker matches the session worker.
+   *
+   * @param value Supplies the shard and worker returned by pickup.
    * @param options Bounds or cancels the mutation.
-   * @returns A promise that completes after the delivery server releases the session.
+   * @returns Completion after the remote release call.
    */
   async release(value: RemoteShardSession, options: DeliveryMutationOptions = {}): Promise<void> {
-    const sessionShard = DeliveryShardCodec.encode(value.shard);
-    const sessionWorker = DeliveryShardCodec.encodeWorker(value.worker);
-    if (!(value.whenPicked instanceof Date) || Number.isNaN(value.whenPicked.getTime()))
-      throw new TypeError("Delivery shard session is invalid.");
+    const request = create(ReleaseShardSchema, {
+      shard: DeliveryShardCodec.encode(value.shard),
+      worker: DeliveryShardCodec.encodeWorker(value.worker),
+    });
     await this.#mutation(
       "RELEASE_SHARD",
       [DeliveryShardCodec.snapshot(value.shard)],
       options,
-      (signal, timeoutMs) => {
-        const request = create(ReleaseShardSchema, { shard: sessionShard, worker: sessionWorker });
-        DeliveryRequestCodec.requestBytes(ReleaseShardSchema, request);
-        return this.#shards.releaseSession(
-          request,
-          DeliveryRequestCodec.callOptions(signal, timeoutMs),
-        );
-      },
+      (signal, timeoutMs) =>
+        this.#shards.releaseSession(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
   }
 
   /**
-   * Performs releases for sessions inactive for a positive duration.
+   * Performs releases for sessions inactive for the requested duration.
    * @param inactivityMs Supplies the minimum inactivity in milliseconds.
    * @param options Bounds or cancels the mutation.
    * @returns Detached sessions released by the remote service.
@@ -508,7 +522,7 @@ export class DeliveryClient {
       options,
       (signal, timeoutMs) => {
         const request = create(ReleaseExpiredSessionsSchema, { inactivityPeriod });
-        DeliveryRequestCodec.requestBytes(ReleaseExpiredSessionsSchema, request);
+
         return this.#shards.releaseSessions(
           request,
           DeliveryRequestCodec.callOptions(signal, timeoutMs),
@@ -516,9 +530,6 @@ export class DeliveryClient {
       },
     );
     try {
-      DeliveryRequestCodec.responseBytes(ExpiredSessionsReleasedSchema, response);
-      if (response.shard.length > MAX_DELIVERY_TRACKED_SHARDS)
-        throw DeliveryRequestCodec.protocol();
       return Object.freeze(response.shard.map((value) => DeliveryShardCodec.decodeReleased(value)));
     } catch {
       throw new DeliveryOutcomeUnknownError("RELEASE_EXPIRED", "ALL_SHARDS");
@@ -546,32 +557,61 @@ export class DeliveryClient {
    */
   async #read<T>(
     options: DeliveryFindOneOptions,
-    operation: (signal: AbortSignal, timeoutMs: number) => Promise<T>,
+    operation: (signal: AbortSignal, timeoutMs: number | undefined) => Promise<T>,
   ): Promise<T> {
     if (this.#closed) throw new Error("Delivery client is closed.");
     if (options.signal?.aborted) throw options.signal.reason;
-    const timeoutMs = DeliveryRequestCodec.timeout(options.timeoutMs ?? 30_000);
+    const timeoutMs = DeliveryRequestCodec.timeout(options.timeoutMs);
     const controller = new AbortController();
     const abort = () => {
       controller.abort(options.signal?.reason);
     };
     options.signal?.addEventListener("abort", abort, { once: true });
     this.#activeReads.add(controller);
+    const cancelTimer = DeliveryTimers.after(() => {
+      controller.abort(new ConnectError("Delivery read timed out.", Code.DeadlineExceeded));
+    }, timeoutMs);
     try {
-      for (let attempt = 0; ; attempt++) {
-        try {
-          return await operation(controller.signal, timeoutMs);
-        } catch (error) {
-          if (controller.signal.aborted) throw error;
-          if (error instanceof ConnectError && error.code === Code.ResourceExhausted) throw error;
-          if (!DeliveryClient.#isRetryableReadError(error)) throw DeliveryRequestCodec.protocol();
-          if (attempt === this.#readRetries) throw error;
-          await DeliveryClient.#pause(this.#retryBackoffMs, controller.signal);
-        }
-      }
+      return await this.#retryRead(controller.signal, timeoutMs, operation);
     } finally {
+      cancelTimer?.();
       options.signal?.removeEventListener("abort", abort);
       this.#activeReads.delete(controller);
+    }
+  }
+
+  /**
+   * Retries a read within the caller's original deadline.
+   *
+   * @typeParam T The RPC response.
+   * @param signal Ends both a pending attempt and a retry delay.
+   * @param timeoutMs Supplies the caller's total read time, when specified.
+   * @param operation Reads once with the time left for this attempt.
+   * @returns The response from the successful attempt.
+   */
+  async #retryRead<T>(
+    signal: AbortSignal,
+    timeoutMs: number | undefined,
+    operation: (signal: AbortSignal, timeoutMs: number | undefined) => Promise<T>,
+  ): Promise<T> {
+    const deadline = timeoutMs === undefined ? Infinity : Time.monotonicTime() + timeoutMs;
+    let remaining = timeoutMs;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        signal.throwIfAborted();
+        return await operation(signal, remaining);
+      } catch (error) {
+        if (signal.aborted) throw error;
+        if (error instanceof ConnectError && error.code === Code.ResourceExhausted) throw error;
+        if (!DeliveryClient.#isRetryableReadError(error)) throw DeliveryRequestCodec.protocol();
+        if (attempt === this.#readRetries) throw error;
+        await DeliveryClient.#pause(this.#retryBackoffMs, signal);
+        if (Number.isFinite(deadline)) {
+          remaining = Math.ceil(deadline - Time.monotonicTime());
+          if (remaining <= 0)
+            throw new ConnectError("Delivery read timed out.", Code.DeadlineExceeded);
+        }
+      }
     }
   }
 
@@ -588,43 +628,80 @@ export class DeliveryClient {
     operation: DeliveryOutcomeUnknownError["operation"],
     reconciliation: readonly string[] | readonly ShardIndex[] | "ALL_SHARDS",
     options: DeliveryMutationOptions,
-    invoke: (signal: AbortSignal | undefined, timeoutMs: number) => Promise<T>,
+    invoke: (signal: AbortSignal | undefined, timeoutMs: number | undefined) => Promise<T>,
   ): Promise<T> {
     if (this.#closed) throw new Error("Delivery client is closed.");
     if (options.signal?.aborted) throw options.signal.reason;
-    const timeoutMs = DeliveryRequestCodec.timeout(options.timeoutMs ?? 30_000);
+    const timeoutMs = DeliveryRequestCodec.timeout(options.timeoutMs);
     const controller = new AbortController();
     const abort = () => {
       controller.abort(options.signal?.reason);
     };
     options.signal?.addEventListener("abort", abort, { once: true });
     this.#activeReads.add(controller);
+    const cancelTimer = DeliveryTimers.after(() => {
+      controller.abort(new ConnectError("Delivery mutation timed out.", Code.DeadlineExceeded));
+    }, timeoutMs);
     try {
       return await invoke(controller.signal, timeoutMs);
     } catch (error) {
-      if (error instanceof ConnectError && error.code === Code.InvalidArgument)
-        throw DeliveryRequestCodec.protocol();
-      throw new DeliveryOutcomeUnknownError(operation, reconciliation);
+      throw DeliveryClient.#mutationFailure(operation, reconciliation, error);
     } finally {
+      cancelTimer?.();
       options.signal?.removeEventListener("abort", abort);
       this.#activeReads.delete(controller);
     }
   }
 
-  static #pause(delay: number, signal: AbortSignal): Promise<void> {
-    if (delay === 0) return Promise.resolve();
+  /**
+   * Preserves an uncertain write outcome while exposing safe transport diagnostics.
+   *
+   * @param operation Names the mutation.
+   * @param reconciliation Identifies the row or shard the caller can inspect.
+   * @param error Supplies the transport failure.
+   * @returns The error to report to the caller.
+   */
+  static #mutationFailure(
+    operation: DeliveryOutcomeUnknownError["operation"],
+    reconciliation: readonly string[] | readonly ShardIndex[] | "ALL_SHARDS",
+    error: unknown,
+  ): Error {
+    if (error instanceof ConnectError) {
+      if (
+        [
+          Code.InvalidArgument,
+          Code.Unauthenticated,
+          Code.PermissionDenied,
+          Code.Unimplemented,
+          Code.FailedPrecondition,
+        ].includes(error.code)
+      )
+        return new ConnectError("Delivery server rejected the request.", error.code);
+      if (error.code === Code.ResourceExhausted)
+        return new DeliveryOutcomeUnknownError(operation, reconciliation, {
+          cause: new ConnectError("Delivery transport resource exhausted.", error.code),
+        });
+    }
+    return new DeliveryOutcomeUnknownError(operation, reconciliation);
+  }
+
+  static #pause(delay: number, signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted)
+      return Promise.reject(
+        signal.reason instanceof Error ? signal.reason : new Error("Delivery read aborted."),
+      );
     return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        signal.removeEventListener("abort", abort);
+      const cancelTimer = DeliveryTimers.after(() => {
+        signal?.removeEventListener("abort", abort);
         resolve();
       }, delay);
       const abort = () => {
-        clearTimeout(timer);
+        cancelTimer?.();
         reject(
-          signal.reason instanceof Error ? signal.reason : new Error("Delivery read aborted."),
+          signal?.reason instanceof Error ? signal.reason : new Error("Delivery read aborted."),
         );
       };
-      signal.addEventListener("abort", abort, { once: true });
+      signal?.addEventListener("abort", abort, { once: true });
     });
   }
 
@@ -634,49 +711,20 @@ export class DeliveryClient {
   }
 }
 
-type RemoteShardProbe =
-  | Readonly<{ readonly kind: "PICKED"; readonly session: RemoteShardSession }>
-  | Readonly<{ readonly kind: "ALREADY_PICKED"; readonly session: RemoteShardSession }>;
-
-const deliveryClientProbes = new WeakMap<
-  DeliveryClient,
-  (
-    shardIndex: ShardIndex,
-    workerId: DeliveryWorkerId,
-    options: DeliveryMutationOptions,
-  ) => Promise<RemoteShardProbe>
->();
-
 const deliveryClientObservations = new WeakMap<
   DeliveryClient,
   (options: DeliveryFindOneOptions) => DeliveryShardObservationStream
 >();
 
 /**
- * Provides package-internal frozen-wire ownership probes without extending the public client API.
+ * Provides package-internal Admin observations without extending the public client API.
  */
 export const deliveryClientAccess: Readonly<{
-  probePickUp: (
-    client: DeliveryClient,
-    shardIndex: ShardIndex,
-    workerId: DeliveryWorkerId,
-    options: DeliveryMutationOptions,
-  ) => Promise<RemoteShardProbe>;
   observeOnce: (
     client: DeliveryClient,
     options?: DeliveryFindOneOptions,
   ) => DeliveryShardObservationStream;
 }> = Object.freeze({
-  probePickUp(
-    client: DeliveryClient,
-    shardIndex: ShardIndex,
-    workerId: DeliveryWorkerId,
-    options: DeliveryMutationOptions,
-  ): Promise<RemoteShardProbe> {
-    const probe = deliveryClientProbes.get(client);
-    if (probe === undefined) throw new TypeError("Delivery client probe access is unavailable.");
-    return probe(shardIndex, workerId, options);
-  },
   observeOnce(
     client: DeliveryClient,
     options: DeliveryFindOneOptions = {},

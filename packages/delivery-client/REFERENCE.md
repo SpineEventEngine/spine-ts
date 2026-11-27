@@ -12,16 +12,19 @@ advanced form for a Connect transport supplied by the caller; closing that clien
 close the supplied transport. `close()` is synchronous and idempotent. It
 aborts active reads and observation streams and closes its session once.
 
-Options default to page size 100, no read retry, no retry backoff, no observation
-reconnect, no reconnect backoff, observation buffer 100, and operation timeout
-30000 ms. Page size is 1–1000; retry/reconnect counts are 0–5; backoffs are
-0–10000 ms; observation buffers are 1–1000; finite-operation and observation-setup timeouts are
-1–120000 ms.
+The client requests 100 inbox messages per page by default. For example, `pageSize: 2000`
+requests up to 2,000 messages per call. The wire field is a positive Protobuf
+`int32`. A batch can contain messages for several shards. The server uses the shard in each inbox ID.
+The encoded request must fit in one gRPC message.
 
-Worker `nodeId` and `value` must be non-blank and together at most 128 UTF-8
-bytes. Decoded payloads must be Command or Event envelopes. The client rejects
-payloads above 1 MiB, RPC request/response bodies above 4 MiB, batches above
-100, and pages above 1000.
+`connectTo()` accepts `maxInboundMessageBytes` for replies and
+`maxOutboundMessageBytes` for requests. Omit them to use the transport's
+own message-size range. With `usingTransport()`, configure the supplied
+transport directly. Worker and node IDs must contain text.
+
+A call runs until it completes, the caller cancels it, or the connection
+ends. To set a deadline, supply `timeoutMs` on the call. Read retries and
+Admin reconnects are opt-in. The caller selects the retry count and delay. A read deadline includes the wait before each retry. If a pickup exceeds a configured transport size, the client stops and reports the shard to check. A server may already have granted the pickup before the transport rejected its reply.
 
 ## Operations and unknown outcomes
 
@@ -33,89 +36,109 @@ mutation response raises `DeliveryOutcomeUnknownError`; inspect its
 the mutation.
 
 `readPage` calls the existing JVM `InboxService.FindManyInShard` RPC.
-`sinceWhen` is its exclusive timestamp lower bound. Invalid local offsets or
-unsafe page continuation raise `DeliveryPagingError`; malformed responses raise
-`DeliveryProtocolError`. Inbox read results expose `whenReceived` as a Protobuf
+Omit `sinceWhen` or pass the zero timestamp to start at the beginning. Any other
+timestamp selects messages received strictly later. When several messages share a receive time, the worker rereads that time and
+compares each message's inbox counter and UUID with the last one it visited.
+If a full reply contains only positions already visited, it requests more
+messages using the existing RPC. An unsupported offset, or a boundary that
+cannot be passed within the RPC's signed int32 page size, raises
+`DeliveryPagingError`. A malformed reply raises `DeliveryProtocolError`. Inbox read results expose `whenReceived` as a Protobuf
 `Timestamp` with seconds and nanoseconds. Single and batch writes and removals
 also preserve that timestamp.
 
 ## Observation and topology
 
-`observeShardUpdates()` requires one acknowledgement, has a bounded queue, and
-reconnects only within configured limits. A slow consumer can receive
-`ShardObservationOverflowError`; an unrecoverable stream ends with
-`DeliveryShardObservationError`. Its setup timeout never limits an acknowledged active stream. Observation is a hint: reconcile a known
-mutation with `shardSnapshot()` before a later action.
+`observeAvailableShards({ signal })` opens one call to
+`ShardObservingService.ObserveAll`. Each item identifies a free shard with
+pending work. The server may send that index again while the work is waiting.
+Idle streams have no first-response deadline. To stop reading, abort the signal
+or close the client. If the connection fails, the caller receives the gRPC
+error. Opening another call discovers current work again.
 
-The remote protocol has no renewable lease fence or separate per-pickup-time
-fence. Release is conditional on the supplied worker matching the current
-owner, so a stale worker cannot release a newer worker's session. A `PICKED`
-observation does not clear uncertainty; only `NOT_PICKED` invalidates a stale
-local session and permits a new pickup. Do not release a stale session.
+On the TS server, an Admin snapshot and Admin updates report how many inbox
+messages the server stores in each shard. This includes completed messages retained
+for duplicate detection. To see whether a worker can try to pick up work, use
+`observeAvailableShards()`.
 
-`RemoteInbox` and `RemoteWorkRegistry` satisfy the server delivery-builder
-ports. `RemoteInbox` rereads the exact pending remote row before acknowledgement
-and upserts that exact row as `DELIVERED`. An exact retained `DELIVERED` row is
-an idempotent acknowledgement after a lost response. Expired-row cleanup first
-checks the remote snapshot and then sends a separate removal request; it is
-best effort, not an atomic compare-and-delete guarantee. It creates no local attempt history,
-receipt, fingerprint, or quarantine record. Shard ownership excludes concurrent
-delivery and delivered rows are the deduplication fact. This
-package does not add authentication, authorization, durability, exactly-once
-effects, or a production topology.
+`observeShardUpdates()` opens the Admin stream and checks its acknowledgement.
+The client reads another update when its consumer accepts the current one.
+For example, a slow dashboard can read an initial replay of 500 shards.
+An explicit setup timeout ends at acknowledgement. A later disconnect follows
+the caller's reconnect settings.
 
-Each delivery read requests one bounded logical shard page. Status filtering
-advances through bounded raw pages by their last received timestamp within one
-total read deadline, including pages containing only excluded statuses. The
-caller's `AbortSignal` also covers that complete multi-page collection, including
-later pages. The read is live: inserts behind the timestamp position require a later fresh
-scan. The server
-delivery policy compares pending rows with
-delivered rows in the logical page and its bounded recent-delivery cache, then
-removes exact duplicates without treating them as delivered acknowledgements.
-Remote duplicate removal compares the current snapshot before sending the
-existing best-effort removal request.
+`pickUp(shard, worker)` sends JVM's `ShardService.PickShard`. Suppose
+two application nodes receive a notice for shard 3. The first worker to pick
+it up can read its inbox. If the other worker tries, the gRPC reply names
+the worker already processing it. The TS client returns `undefined` to that
+second caller. Between the notice and pickup the shard may have
+become empty. The first worker can then release it after reading an empty page.
 
-Local retention filtering uses the client's clock for both retained-row
-duplicate recognition and cleanup eligibility. It skips cleanup requests for
-rows whose retention deadline is still in the future. This does not synchronize
-client and server clocks or change the remote server's mutation checks.
+A repeat pickup by the same worker refreshes the recorded pickup time.
+`release(session)` sends the shard and worker to `ShardService.ReleaseSession`.
+If shard 3 has since passed to another worker, the server leaves that worker
+in place. The RPC returns an empty reply in either case.
 
-Remote reception writes a pending row without `keep_until`. After delivery, the
-application reads the row, sets `DELIVERED` and `keep_until` to its current time
-plus five seconds, and sends the existing Inbox write request. A repeated
-acknowledgement of a matching delivered row returns its stored deadline. The
-service write is an upsert, so the read and write do not form a conditional
-transition. A write with an unknown outcome keeps its existing error behavior.
+`releaseExpired(inactivityMs)` asks the server to release every session that
+has been idle for at least that long. Zero makes every current session eligible. If the releases succeed but the reply is lost
+or exceeds a transport message-size setting, the client throws
+`DeliveryOutcomeUnknownError`. For example, a second call can return an empty
+list because the first call already released the sessions. A shard snapshot
+shows which sessions are active now. It cannot reconstruct the earlier list.
+
+Pickup and release reports expose Protobuf `Timestamp` values in `whenPicked`
+and `whenReleased`. Admin observations expose the same precision in
+`lastPicked` when populated. A caller can convert a timestamp to a JavaScript
+`Date` for display. Keep the original seconds and nanoseconds for comparisons.
+
+## Application delivery and inbox storage
+
+Suppose a page from `FindManyInShard` contains three inbox messages for the
+same Aggregate. The first carries a new Command. The second carries another
+copy of that Command. The third is a completed delivery whose retention
+deadline has passed. The application worker processes the page as follows.
+
+1. It calls the Aggregate's handler for the first Command. After success, it
+   sets that inbox message's status to `DELIVERED` and calculates its
+   retention deadline using the application clock.
+2. It recognizes the second copy from the typed Command ID and recipient. It
+   sets that inbox message aside for deletion. It also sets aside the expired
+   completion. Neither message needs another handler call.
+3. The worker sends the changed inbox message to `InboxService.WriteMany`.
+   After that write succeeds, it sends the two inbox messages to `InboxService.RemoveMany`.
+   It skips a call when its batch is empty. The Delivery server applies the
+   writes and deletions it receives.
+
+If the write succeeds and the deletion fails, the first inbox message
+remains delivered. The worker reports the deletion error. The second copy
+can still be present when another worker reads the shard. The retained
+completion gives that worker evidence if it appears on the same page. A fresh
+node with a page size of one can read the completion on one page and the
+duplicate on the next. It can then invoke the handler again.
+
+If the application stops after the handler succeeds but before the inbox
+write reaches the server, the stored Command can still appear pending. A
+later worker can deliver it again. Pickup coordinates workers. It does not
+combine an Entity write and an inbox write into one database transaction.
 
 ## Remote delivery in an environment
 
-`RemoteDelivery.connectTo({ endpoint, clientOptions? })` creates one lazy
-`ServerEnvironmentDelivery`. Its `open()` creates one client plus one remote
-inbox and work registry, then completes the client's bounded `shardSnapshot()`
-readiness call before publishing those generic ports and its Admin source.
-Every attached environment supervisor takes bounded snapshots, consumes later
-updates as wake-up hints, and takes a fresh snapshot after a watch failure or
-bounded observation overflow before consuming updates again. Durable Inbox rows
-and exclusive shard pickup remain authoritative. Concurrent opens share an
-attempt. A failed attempt closes only its client, and a later open creates a
-fresh client.
+`DeliveryBuilder.remote({ endpoint, clientOptions?, notifications? })` creates an unopened `ServerEnvironmentDelivery`. `RemoteDelivery.connectTo()` provides the same remote facility. `open()` constructs the client, Inbox adapter, and work registry before publishing them. It does not ask Admin for a readiness snapshot; an idle work stream cannot delay application startup. Concurrent opens share an attempt. A closed facility cannot reopen.
 
-Every identically configured node observes and attempts every reported shard.
-The remote registry admits exactly one current owner per shard; notifications
-are best-effort hints and snapshot recovery is the convergent source after a
-stream break or bounded overflow. The winning owner repeats finite drains until
-no deliverable Inbox row remains, including rows arriving during an active
-drain, before release. There is no ordering guarantee across shards. The
-immediate pre-commit ownership probe fences a detected stale owner, but cannot
-make remote ownership and Entity storage one linearizable distributed
-transaction.
+Built-in notifications open `ShardObservingService.ObserveAll` after endpoints are ready. Every connected application node receives current free shards with pending messages when it connects or reconnects. A disconnected reader reopens with the established increasing reconnect delay, starting at 100 milliseconds and rising to 30 seconds; an unsupported method ends that reader with the original gRPC status. The server repeats an available shard after its configured reminder interval, 10 seconds by default, while it remains free and unclaimed. A write to a busy shard becomes visible to subscribers when a release frees the shard with work still pending. Admin snapshots and updates report state for administration; they do not trigger application work.
 
-Environment shutdown closes the client's HTTP/2 session. Concurrent/repeated
-close calls share work; a failed phase is the only phase retried. This adds no
-health route, provider selector, worker, or
-delivery-server mode.
+By default, distinct shards can run simultaneously on one node. An application can set `maxConcurrentDeliveries` when configuring remote notifications. For example, if the limit is two and the node already has two deliveries in progress, it skips the next notice. The server's later reminder can offer a still-free shard again. Calls for the same shard on one node share the active delivery attempt. If a second caller cancels its wait or reaches its deadline, that caller receives `stopped`. The first caller can still finish the delivery. Another node may compete for the shard, while the Delivery server grants one live session. The result of `deliverMessagesFrom(shard)` is `completed`, `busy`, `noWork`, or `stopped`; an unrecovered read, processing, release, or post-release lookup error rejects the call. A stream notice is advisory, and only the retained message and current session permit processing.
 
-Retained rows in the current page or recent-delivery cache suppress the same
-signal ID at the same typed Inbox target until `keep_until`. Remote pagination
+Remote storage always uses the server work stream. For an inbox in a shared
+application database, use `DeliveryBuilder.local({ storageFactory, shardObserver })`.
+The observer receives the stored `InboxMessage` after a write. After a normal
+delivery pass it also receives the newest pending message if any arrived late.
+For example, an observer may publish the shard identity to a cloud queue. Its
+consumer calls `environment.delivery.deliverMessagesFrom(shard)`. A callback
+failure is logged after the successful write, and the application decides how
+to recover its notification.
+
+Environment shutdown cancels the work reader, waits for admitted runs, and closes the client HTTP/2 session. A failure in a close phase remains retryable. A handler effect and Inbox acknowledgement remain separate operations; a lost acknowledgement may cause redelivery on a later pickup. An Entity write already in progress can still finish after another worker takes the shard.
+
+Retained messages in the current page or recent-delivery cache suppress the same
+Command or Event ID at the same typed Inbox target until `keep_until`. Remote pagination
 uses the JVM timestamp query and remains a bounded live scan.

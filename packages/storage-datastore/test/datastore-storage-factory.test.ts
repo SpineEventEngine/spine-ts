@@ -44,7 +44,7 @@ import {
   type SupportReplyAgentState,
 } from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 
-import { DatastoreQueryLimitError, DatastoreStorageFactory } from "../src/index.js";
+import { DatastoreStorageFactory } from "../src/index.js";
 
 describe("DatastoreStorageFactory", () => {
   it("opens a skipped native handle without metadata checks and preserves explicit checks", async () => {
@@ -755,12 +755,17 @@ describe("DatastoreStorageFactory", () => {
     ).toBe(true);
   });
 
-  it("uses the last record-only creator and supplies the fixed scan bound", () => {
-    const calls: number[] = [];
+  it("uses the last record-only creator without a default scan bound", () => {
+    const calls: (number | undefined)[] = [];
     const first = () => {
       throw new Error("first creator must be replaced");
     };
-    const second = (_context: unknown, _spec: unknown, _client: unknown, limit: number) => {
+    const second = (
+      _context: unknown,
+      _spec: unknown,
+      _client: unknown,
+      limit: number | undefined,
+    ) => {
       calls.push(limit);
       return { close: () => undefined, isOpen: () => true };
     };
@@ -779,7 +784,7 @@ describe("DatastoreStorageFactory", () => {
         extractId: (record) => record.value,
       }),
     );
-    expect(calls).toEqual([1_000]);
+    expect(calls).toEqual([undefined]);
   });
 
   it("writes one flat record with scope, bytes, and declared native columns", async () => {
@@ -814,7 +819,7 @@ describe("DatastoreStorageFactory", () => {
     expect(saved.data.value).toBe("one");
   });
 
-  it("uses a 1,001-row sentinel for finite reconciliation", async () => {
+  it("requests provider cursor pages for default reconciliation", async () => {
     const client = new QueryClient();
     const factory = DatastoreStorageFactory.newBuilder()
       .setClient(client as never)
@@ -829,9 +834,9 @@ describe("DatastoreStorageFactory", () => {
       }),
     );
 
-    await expect(storage.query()).rejects.toEqual(new DatastoreQueryLimitError(1_000));
+    await expect(storage.query()).resolves.toEqual([]);
     expect(client.query.filters).toEqual([]);
-    expect(client.query.limitValue).toBe(1_001);
+    expect(client.query.limitValue).toBe(128);
   });
 
   it("selects one coherent custom Entity handle", () => {
@@ -1019,7 +1024,7 @@ class QueryClient extends RecordingClient {
     return this.query;
   }
   runQuery(): Promise<[unknown[]]> {
-    return Promise.resolve([Array.from({ length: 1_001 }, () => ({}))]);
+    return Promise.resolve([[], { moreResults: "NO_MORE_RESULTS", endCursor: "" }] as never);
   }
 }
 

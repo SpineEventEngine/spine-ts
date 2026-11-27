@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, toBinary } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
 import {
   AnySchema,
   Int32ValueSchema,
@@ -50,10 +50,6 @@ import {
 
 import {
   DeliveryProtocolError,
-  MAX_DELIVERY_BATCH_MESSAGES,
-  MAX_DELIVERY_RPC_BYTES,
-  MAX_DELIVERY_WORKER_BYTES,
-  MAX_INBOX_PAYLOAD_BYTES,
   type DeliveryClientOptions,
   type DeliveryWorkerId,
   type ReleasedShardSession,
@@ -90,16 +86,6 @@ const DeliveryValues = Object.freeze({
    */
   hasText(value: string): boolean {
     return value.trim().length > 0;
-  },
-
-  /**
-   * Calculates the encoded UTF-8 byte length used by wire limits.
-   *
-   * @param value Supplies the text value.
-   * @returns The UTF-8 byte count.
-   */
-  utf8Bytes(value: string): number {
-    return new TextEncoder().encode(value).byteLength;
   },
 
   /**
@@ -170,14 +156,14 @@ const DeliveryTargetIds = Object.freeze({
 
 type DeliveryMessageCodecApi = Readonly<{
   /**
-   * Encodes one bounded, single-shard inbox batch.
+   * Encodes a batch in caller order, including mixed shards and repeated IDs.
    *
    * @param messages Supplies the messages to encode.
-   * @returns The encoded messages, their IDs, and their common shard.
+   * @returns The encoded messages, their IDs, and the first shard when present.
    */
   encodeBatch(messages: readonly InboxMessage[]): {
     readonly ids: readonly string[];
-    readonly shard: WireShardIndex;
+    readonly shard: WireShardIndex | undefined;
     readonly messages: WireInboxMessage[];
   };
 
@@ -188,6 +174,23 @@ type DeliveryMessageCodecApi = Readonly<{
    * @returns The validated wire message.
    */
   encode(message: InboxMessage): WireInboxMessage;
+
+  /**
+   * Copies the exact received wire envelope when changing a page row's status.
+   *
+   * @param source Supplies the row decoded from InboxService.
+   * @param changed Supplies the row with its new delivery status.
+   * @param deadline Supplies the full-precision retention deadline.
+   */
+  retainWire(source: InboxMessage, changed: InboxMessage, deadline: Timestamp): void;
+
+  /**
+   * Reads the full-precision deadline from the received wire row.
+   *
+   * @param message Supplies the decoded row.
+   * @returns The deadline, when one was stored.
+   */
+  retentionDeadline(message: InboxMessage): Timestamp | undefined;
 
   /**
    * Decodes an inbox message and confirms its expected shard.
@@ -225,7 +228,7 @@ type DeliveryMessageCodecApi = Readonly<{
   encodeId(id: InboxMessageId): string;
 
   /**
-   * Copies an inbox message for later exact-snapshot checks.
+   * Copies the caller's inbox message before an asynchronous write.
    *
    * @param value Supplies the message to copy.
    * @returns A detached immutable message.
@@ -301,33 +304,30 @@ type DeliveryMessageCodecApi = Readonly<{
 /**
  * Encodes and decodes inbox messages without exposing mutable wire values.
  */
+const deliveryWireSnapshots = new WeakMap<InboxMessage, WireInboxMessage>();
+
+const deliveryDeadlines = new WeakMap<InboxMessage, Timestamp>();
+
+/**
+ * Encodes and decodes Inbox messages with detached wire snapshots.
+ */
 const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
   // prettier-ignore
 
   /**
-   * Encodes one bounded, single-shard inbox batch.
+   * Encodes a batch in caller order, including mixed shards and repeated IDs.
    *
    * @param messages Supplies the messages to encode.
-   * @returns The encoded messages, their IDs, and their common shard.
+   * @returns The encoded messages, their IDs, and the first shard when present.
    */
   encodeBatch(messages: readonly InboxMessage[]): {
     readonly ids: readonly string[];
-    readonly shard: WireShardIndex;
+    readonly shard: WireShardIndex | undefined;
     readonly messages: WireInboxMessage[];
   } {
-    if (messages.length === 0 || messages.length > MAX_DELIVERY_BATCH_MESSAGES)
-      throw new TypeError("Delivery message batch is invalid.");
     const ids = messages.map((message) => DeliveryMessageCodec.encodeId(message.id));
-    if (new Set(ids).size !== ids.length)
-      throw new TypeError("Delivery message batch contains duplicate IDs.");
     const first = messages.at(0);
-    if (first === undefined) throw new TypeError("Delivery message batch is invalid.");
-    const shard = DeliveryShardCodec.encode(first.id.shard);
-    for (const message of messages) {
-      const messageShard = DeliveryShardCodec.encode(message.id.shard);
-      if (messageShard.index !== shard.index || messageShard.ofTotal !== shard.ofTotal)
-        throw new TypeError("Delivery message batch spans multiple shards.");
-    }
+    const shard = first === undefined ? undefined : DeliveryShardCodec.encode(first.id.shard);
     return {
       ids: Object.freeze(ids),
       shard,
@@ -351,9 +351,16 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
       throw new TypeError("Delivery inbox message shard is invalid.");
     const target = DeliveryMessageCodec.target(message.inboxId);
     const whenReceived = DeliveryRequestCodec.timestamp(message.whenReceived);
-    const keepUntil =
-      message.keepUntil === undefined ? undefined : DeliveryRequestCodec.expiry(message.keepUntil);
+    const keepUntil = DeliveryMessageCodec.retentionDeadline(message);
     DeliveryValues.validateSignalVersion(message);
+    const retained = deliveryWireSnapshots.get(message);
+    if (retained !== undefined) {
+      const wire = clone(InboxMessageSchema, retained);
+      wire.status = DeliveryMessageCodec.status(message.status);
+      if (keepUntil === undefined) delete wire.keepUntil;
+      else wire.keepUntil = keepUntil;
+      return wire;
+    }
     return create(InboxMessageSchema, {
       id: create(InboxMessageIdSchema, { uuid: id, index: shard }),
       signalId: create(InboxSignalIdSchema, { value: message.signalId }),
@@ -391,7 +398,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     } catch (error) {
       throw new DeliveryProtocolError(error);
     }
-    return DeliveryValues.freeze({
+    const decoded = DeliveryValues.freeze({
       id: DeliveryValues.freeze({ value: id.uuid, shard }),
       inboxId: DeliveryValues.freeze({ targetId, targetTypeUrl: inboxId.typeUrl }),
       signalId: signalId.value,
@@ -403,6 +410,26 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
       version: BigInt(message.version),
       ...(keepUntil === undefined ? {} : { keepUntil }),
     });
+    deliveryWireSnapshots.set(decoded, clone(InboxMessageSchema, message));
+    return decoded;
+  },
+
+  retainWire(source: InboxMessage, changed: InboxMessage, deadline: Timestamp): void {
+    const wire = deliveryWireSnapshots.get(source);
+    if (wire !== undefined) deliveryWireSnapshots.set(changed, wire);
+    deliveryDeadlines.set(changed, create(TimestampSchema, deadline));
+  },
+
+  retentionDeadline(message: InboxMessage): Timestamp | undefined {
+    if (message.keepUntil === undefined) return undefined;
+    const deadline =
+      deliveryDeadlines.get(message) ?? deliveryWireSnapshots.get(message)?.keepUntil;
+    if (
+      deadline !== undefined &&
+      DeliveryShardCodec.date(deadline).getTime() === message.keepUntil.getTime()
+    )
+      return create(TimestampSchema, deadline);
+    return create(TimestampSchema, DeliveryRequestCodec.expiry(message.keepUntil));
   },
 
   /**
@@ -454,7 +481,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
   },
 
   /**
-   * Copies an inbox message for later exact-snapshot checks.
+   * Copies the caller's inbox message before an asynchronous write.
    *
    * @param value Supplies the message to copy.
    * @returns A detached immutable message.
@@ -599,7 +626,6 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
       wire.case === "command"
         ? AnyPacker.pack(CommandSchema, wire.value)
         : AnyPacker.pack(EventSchema, wire.value);
-    if (packed.value.byteLength > MAX_INBOX_PAYLOAD_BYTES) throw DeliveryRequestCodec.protocol();
     return DeliveryValues.freeze(packed);
   },
 
@@ -702,21 +728,6 @@ type DeliveryShardCodecApi = Readonly<{
   ): RemoteShardSession;
 
   /**
-   * Validates an already-picked response.
-   *
-   * @param value Supplies the response fields.
-   * @param expectedShard Identifies the requested shard.
-   */
-  validatePicked(
-    value: {
-      shard?: { index: number; ofTotal: number } | undefined;
-      worker?: { nodeId?: { value: string } | undefined; value: string } | undefined;
-      whenPicked?: { seconds: bigint; nanos: number } | undefined;
-    },
-    expectedShard: ShardIndex,
-  ): void;
-
-  /**
    * Decodes an expired exclusive session.
    *
    * @param value Supplies the expired-session response.
@@ -731,6 +742,14 @@ type DeliveryShardCodecApi = Readonly<{
    * @returns The decoded date.
    */
   date(value: { seconds: bigint; nanos: number }): Date;
+
+  /**
+   * Copies a validated full-precision timestamp.
+   *
+   * @param value Supplies the wire timestamp.
+   * @returns A detached timestamp.
+   */
+  timestamp(value: { seconds: bigint; nanos: number }): Timestamp;
 
   /**
    * Decodes a shard status.
@@ -773,7 +792,7 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     if (value.index === undefined || !Number.isSafeInteger(value.messages) || value.messages < 0)
       throw DeliveryRequestCodec.protocol();
     const lastPicked =
-      value.lastPicked === undefined ? undefined : DeliveryShardCodec.date(value.lastPicked);
+      value.lastPicked === undefined ? undefined : DeliveryShardCodec.timestamp(value.lastPicked);
     return DeliveryValues.freeze({
       shard: DeliveryShardCodec.decode(value.index),
       status: DeliveryShardCodec.status(value.status),
@@ -798,7 +817,7 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     const lastPicked =
       value.whenLastPicked === undefined
         ? undefined
-        : DeliveryShardCodec.date(value.whenLastPicked);
+        : DeliveryShardCodec.timestamp(value.whenLastPicked);
     return DeliveryValues.freeze({
       shard: DeliveryShardCodec.decode(value.index),
       status: DeliveryShardCodec.status(value.newStatus),
@@ -839,9 +858,7 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
       typeof value.nodeId !== "string" ||
       !DeliveryValues.hasText(value.nodeId) ||
       typeof value.value !== "string" ||
-      !DeliveryValues.hasText(value.value) ||
-      DeliveryValues.utf8Bytes(value.nodeId) + DeliveryValues.utf8Bytes(value.value) >
-        MAX_DELIVERY_WORKER_BYTES
+      !DeliveryValues.hasText(value.value)
     )
       throw new TypeError("Delivery worker ID is invalid.");
     return create(WorkerIdSchema, { nodeId: { value: value.nodeId }, value: value.value });
@@ -875,33 +892,8 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
       kind: "EXCLUSIVE",
       shard,
       worker,
-      whenPicked: DeliveryShardCodec.date(value.whenPicked),
+      whenPicked: DeliveryShardCodec.timestamp(value.whenPicked),
     });
-  },
-
-  /**
-   * Validates an already-picked response.
-   *
-   * @param value Supplies the response fields.
-   * @param expectedShard Identifies the requested shard.
-   */
-  validatePicked(
-    value: {
-      shard?: { index: number; ofTotal: number } | undefined;
-      worker?: { nodeId?: { value: string } | undefined; value: string } | undefined;
-      whenPicked?: { seconds: bigint; nanos: number } | undefined;
-    },
-    expectedShard: ShardIndex,
-  ): void {
-    if (value.worker === undefined || value.whenPicked === undefined)
-      throw DeliveryRequestCodec.protocol();
-    if (value.shard !== undefined) {
-      const shard = DeliveryShardCodec.decode(value.shard);
-      if (shard.index !== expectedShard.index || shard.ofTotal !== expectedShard.ofTotal)
-        throw DeliveryRequestCodec.protocol();
-    }
-    DeliveryShardCodec.decodeWorker(value.worker);
-    DeliveryShardCodec.date(value.whenPicked);
   },
 
   /**
@@ -922,8 +914,8 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
       kind: "EXCLUSIVE",
       shard: DeliveryShardCodec.decode(value.shard),
       worker: DeliveryShardCodec.decodeWorker(value.worker),
-      whenPicked: DeliveryShardCodec.date(value.whenPicked),
-      whenReleased: DeliveryShardCodec.date(value.whenReleased),
+      whenPicked: DeliveryShardCodec.timestamp(value.whenPicked),
+      whenReleased: DeliveryShardCodec.timestamp(value.whenReleased),
     });
   },
 
@@ -941,6 +933,26 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     const result = new Date(millis);
     if (Number.isNaN(result.getTime())) throw DeliveryRequestCodec.protocol();
     return result;
+  },
+
+  /**
+   * Copies a validated full-precision timestamp.
+   *
+   * @param value Supplies the wire timestamp.
+   * @returns A detached timestamp.
+   */
+  timestamp(value: { seconds: bigint; nanos: number }): Timestamp {
+    if (
+      !Number.isInteger(value.nanos) ||
+      value.nanos < 0 ||
+      value.nanos >= 1_000_000_000 ||
+      value.seconds < -62_135_596_800n ||
+      value.seconds > 253_402_300_799n
+    )
+      throw DeliveryRequestCodec.protocol();
+    return DeliveryValues.freeze(
+      create(TimestampSchema, { seconds: value.seconds, nanos: value.nanos }),
+    );
   },
 
   /**
@@ -1043,17 +1055,6 @@ type DeliveryRequestCodecApi = Readonly<{
   pageSize(value: number): number;
 
   /**
-   * Validates an integer in an inclusive range.
-   *
-   * @param value Supplies the number to validate.
-   * @param minimum Defines the inclusive lower bound.
-   * @param maximum Defines the inclusive upper bound.
-   * @param name Names the value in validation errors.
-   * @returns The validated value.
-   */
-  bounded(value: number, minimum: number, maximum: number, name: string): number;
-
-  /**
    * Normalizes client options to bounded immutable values.
    *
    * @param options Supplies the optional client settings.
@@ -1067,25 +1068,6 @@ type DeliveryRequestCodecApi = Readonly<{
    * @param value Supplies the URL.
    */
   baseUrl(value: string): void;
-
-  /**
-   * Rejects an oversized RPC request.
-   *
-   * @param schema Supplies the message schema.
-   * @param value Supplies the message value.
-   */
-  requestBytes(schema: Parameters<typeof toBinary>[0], value: Parameters<typeof toBinary>[1]): void;
-
-  /**
-   * Rejects an oversized RPC response when it can be re-encoded.
-   *
-   * @param schema Supplies the message schema.
-   * @param value Supplies the message value.
-   */
-  responseBytes(
-    schema: Parameters<typeof toBinary>[0],
-    value: Parameters<typeof toBinary>[1],
-  ): void;
 
   /**
    * Validates read retry count.
@@ -1109,7 +1091,7 @@ type DeliveryRequestCodecApi = Readonly<{
    * @param value Supplies the timeout.
    * @returns The validated timeout.
    */
-  timeout(value: number): number;
+  timeout(value: number | undefined): number | undefined;
 }>;
 
 /**
@@ -1126,7 +1108,7 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
    */
   duration(value: number): { seconds: bigint; nanos: number } {
     const maximumMilliseconds = 315_576_000_000_000;
-    if (!Number.isSafeInteger(value) || value <= 0 || value > maximumMilliseconds)
+    if (!Number.isSafeInteger(value) || value < 0 || value > maximumMilliseconds)
       throw new TypeError("Delivery inactivity duration is invalid.");
     return { seconds: BigInt(Math.floor(value / 1000)), nanos: (value % 1000) * 1_000_000 };
   },
@@ -1184,7 +1166,10 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
     signal: AbortSignal | undefined,
     timeoutMs?: number,
   ): { readonly timeoutMs?: number; readonly signal?: AbortSignal } {
-    if (timeoutMs === undefined) return signal === undefined ? {} : { signal };
+    // Connect writes this header in milliseconds. gRPC allows eight digits.
+    // A longer deadline still cancels the call through the client signal.
+    if (timeoutMs === undefined || timeoutMs > 99_999_999)
+      return signal === undefined ? {} : { signal };
     return signal === undefined ? { timeoutMs } : { timeoutMs, signal };
   },
 
@@ -1195,20 +1180,7 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
    * @returns The validated page size.
    */
   pageSize(value: number): number {
-    return DeliveryValues.bounded(value, 1, 1_000, "Delivery page size");
-  },
-
-  /**
-   * Validates an integer in an inclusive range.
-   *
-   * @param value Supplies the number to validate.
-   * @param minimum Defines the inclusive lower bound.
-   * @param maximum Defines the inclusive upper bound.
-   * @param name Names the value in validation errors.
-   * @returns The validated value.
-   */
-  bounded(value: number, minimum: number, maximum: number, name: string): number {
-    return DeliveryValues.bounded(value, minimum, maximum, name);
+    return DeliveryValues.bounded(value, 1, 0x7fff_ffff, "Delivery page size");
   },
 
   /**
@@ -1226,12 +1198,26 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
       observationReconnectBackoffMs: DeliveryRequestCodec.backoff(
         options.observationReconnectBackoffMs ?? 0,
       ),
-      observationBufferSize: DeliveryValues.bounded(
-        options.observationBufferSize ?? 100,
-        1,
-        1_000,
-        "Delivery observation buffer size",
-      ),
+      ...(options.maxInboundMessageBytes === undefined
+        ? {}
+        : {
+            maxInboundMessageBytes: DeliveryValues.bounded(
+              options.maxInboundMessageBytes,
+              1,
+              0xffff_ffff,
+              "Inbound gRPC message bytes",
+            ),
+          }),
+      ...(options.maxOutboundMessageBytes === undefined
+        ? {}
+        : {
+            maxOutboundMessageBytes: DeliveryValues.bounded(
+              options.maxOutboundMessageBytes,
+              1,
+              0xffff_ffff,
+              "Outbound gRPC message bytes",
+            ),
+          }),
     });
   },
 
@@ -1253,46 +1239,13 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
   },
 
   /**
-   * Rejects an oversized RPC request.
-   *
-   * @param schema Supplies the message schema.
-   * @param value Supplies the message value.
-   */
-  requestBytes(
-    schema: Parameters<typeof toBinary>[0],
-    value: Parameters<typeof toBinary>[1],
-  ): void {
-    if (toBinary(schema, value).byteLength > MAX_DELIVERY_RPC_BYTES)
-      throw new TypeError("Delivery RPC request exceeds the 4 MiB limit.");
-  },
-
-  /**
-   * Rejects an oversized RPC response when it can be re-encoded.
-   *
-   * @param schema Supplies the message schema.
-   * @param value Supplies the message value.
-   */
-  responseBytes(
-    schema: Parameters<typeof toBinary>[0],
-    value: Parameters<typeof toBinary>[1],
-  ): void {
-    try {
-      if (toBinary(schema, value).byteLength > MAX_DELIVERY_RPC_BYTES)
-        throw DeliveryRequestCodec.protocol();
-    } catch (error) {
-      if (error instanceof DeliveryProtocolError) throw error;
-      return;
-    }
-  },
-
-  /**
    * Validates read retry count.
    *
    * @param value Supplies the retry count.
    * @returns The validated count.
    */
   retries(value: number): number {
-    return DeliveryValues.bounded(value, 0, 5, "Delivery read retries");
+    return DeliveryValues.bounded(value, 0, Number.MAX_SAFE_INTEGER, "Delivery read retries");
   },
 
   /**
@@ -1302,7 +1255,7 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
    * @returns The validated backoff.
    */
   backoff(value: number): number {
-    return DeliveryValues.finite(value, 0, 10_000, "Delivery retry backoff");
+    return DeliveryValues.finite(value, 0, Number.MAX_SAFE_INTEGER, "Delivery retry backoff");
   },
 
   /**
@@ -1311,8 +1264,9 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
    * @param value Supplies the timeout.
    * @returns The validated timeout.
    */
-  timeout(value: number): number {
-    return DeliveryValues.bounded(value, 1, 120_000, "Delivery request timeout");
+  timeout(value: number | undefined): number | undefined {
+    if (value === undefined) return undefined;
+    return DeliveryValues.bounded(value, 1, Number.MAX_SAFE_INTEGER, "Delivery request timeout");
   },
 });
 

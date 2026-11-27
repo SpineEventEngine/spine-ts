@@ -38,13 +38,43 @@ import { Delivery as CoreDelivery } from "../../src/delivery/delivery.js";
 import { InboxRecords } from "../../src/delivery/inbox-records.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { createMessage } from "./inbox-message-fixture.js";
+import { deliveryPortAccess } from "../../src/delivery/delivery-port-access.js";
+import type { ServerEnvironmentDelivery } from "../../src/server/server-environment.js";
 import { EnvironmentTests, EnvironmentType } from "../../src/server/environment.js";
 
 describe("DeliveryMonitor delivery", () => {
+  it("builds installable local ports with a full-row custom observer", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const shardObserver = { onMessage: vi.fn() };
+    const local = DeliveryBuilder.local({ storageFactory, shardObserver });
+    expect(local.storageFactory).toBe(storageFactory);
+    expect(local.local).toBe(true);
+    expect(local.notifications).toEqual({ kind: "custom", shardObserver });
+    const ports = (local as ServerEnvironmentDelivery)[deliveryPortAccess]?.();
+    if (ports === undefined) throw new Error("Local delivery ports were not registered.");
+    expect(ports.inbox.sessionKind).toBe(ports.workRegistry.sessionKind);
+    expect("inbox" in local).toBe(false);
+    await local.open();
+    await local.close();
+    expect(() => DeliveryBuilder.local({ storageFactory, shardObserver: {} } as never)).toThrow(
+      "shard observer",
+    );
+    expect(() =>
+      DeliveryBuilder.local({
+        storageFactory,
+        shardObserver,
+        maxConcurrentDeliveries: 2,
+      } as never),
+    ).toThrow("built-in");
+  });
+
   it("builds Delivery from explicit storage without a process environment", () => {
     EnvironmentTests.use(EnvironmentType.Production);
     try {
-      expect(build().build().node).toBeTruthy();
+      const delivery = build().build();
+      expect("inbox" in delivery).toBe(false);
+      expect(delivery).not.toHaveProperty("deliverMessagesFrom");
+      expect(delivery.node).toBeTruthy();
       expect(() => new DeliveryBuilder().build()).toThrow(/storage factory/i);
     } finally {
       EnvironmentTests.reset();
@@ -90,6 +120,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
+        newestPending: async () => undefined,
         markDelivered: async (value) => {
           acknowledgements += 1;
           return value;
@@ -182,7 +213,7 @@ describe("DeliveryMonitor delivery", () => {
     );
     const originalInbox = new InboxStorage({ context: original, storageFactory });
 
-    await expect(originalInbox.readMessage(written.message.id)).resolves.toMatchObject({
+    await expect(originalInbox.readMessage(written.id)).resolves.toMatchObject({
       signalId: "tenant-signal",
     });
     const current = await delivery.shards.pickUp(
@@ -205,6 +236,18 @@ describe("DeliveryMonitor delivery", () => {
         .withNode("node-a")
         .withWorker(create(WorkerIdSchema, { nodeId: { value: "node-b" }, value: "x" })),
     ).toThrow("must match");
+  });
+
+  it("rejects conflicting node and worker identities in direct Delivery construction", () => {
+    expect(
+      () =>
+        new CoreDelivery({
+          context: { name: "WorkerNodeMismatch", multitenant: false },
+          storageFactory: new InMemoryStorageFactory(),
+          node: "node-a",
+          worker: create(WorkerIdSchema, { nodeId: { value: "node-b" }, value: "run" }),
+        }),
+    ).toThrow("Delivery worker node must match");
   });
 
   it.each([
@@ -243,12 +286,12 @@ describe("DeliveryMonitor delivery", () => {
     expect(shards[0]?.[0]).toEqual(first.shardFor(Identifiers.pack("string", "42"), targetType));
   });
 
-  it.each([
-    [0, "Delivery page size must be a positive safe integer."],
-    [1_001, "Delivery page size must be at most 1000."],
-  ])("rejects page size %i outside the finite delivery bound", (pageSize, message) => {
-    expect(() => build().withPageSize(pageSize)).toThrow(message);
-  });
+  it.each([[0, "Delivery page size must be a positive safe integer."]])(
+    "rejects page size %i outside the finite delivery bound",
+    (pageSize, message) => {
+      expect(() => build().withPageSize(pageSize)).toThrow(message);
+    },
+  );
 
   it("rejects a strategy that returns a shard from a different configured total", () => {
     const delivery = build()
@@ -312,6 +355,7 @@ describe("DeliveryMonitor delivery", () => {
       },
       read: async () => [],
       readMessage: async () => undefined,
+      newestPending: async () => undefined,
       markDelivered: async () => undefined,
       removeDuplicate: async () => true,
     };
@@ -359,6 +403,7 @@ describe("DeliveryMonitor delivery", () => {
           },
           read: async () => (reads++ === 0 ? [message("pending", "target", shard)] : []),
           readMessage: async () => undefined,
+          newestPending: async () => undefined,
           markDelivered: async (value) => value,
           removeDuplicate: async () => true,
         })
@@ -382,6 +427,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
+        newestPending: async () => undefined,
         markDelivered: async (value) => (acknowledgements++ === 0 ? undefined : value),
         removeDuplicate: async () => true,
       })
@@ -405,6 +451,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => [pending],
         readMessage: async () => undefined,
+        newestPending: async () => undefined,
         markDelivered: async (value) => value,
         removeDuplicate: async () => true,
       },
@@ -481,6 +528,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
+        newestPending: async () => undefined,
         markDelivered: async (value) => value,
         removeDuplicate: async () => true,
       },
@@ -515,6 +563,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? messages : []),
         readMessage: async () => undefined,
+        newestPending: async () => undefined,
         markDelivered: async (value) => {
           if (value.signalId === "first") throw new Error("acknowledgement failed");
           return value;
@@ -546,6 +595,7 @@ describe("DeliveryMonitor delivery", () => {
           return [pending];
         },
         readMessage: async () => undefined,
+        newestPending: async () => undefined,
         markDelivered: async () => {
           throw new Error("mark failed");
         },
@@ -570,6 +620,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => [message("pending", "target", shard)],
         readMessage: async () => undefined,
+        newestPending: async () => undefined,
         markDelivered: async () => {
           throw new Error("must not acknowledge");
         },
@@ -596,6 +647,7 @@ describe("DeliveryMonitor delivery", () => {
           },
           read: async () => [],
           readMessage: async () => undefined,
+          newestPending: async () => undefined,
           markDelivered: async () => undefined,
           removeDuplicate: async () => true,
         })

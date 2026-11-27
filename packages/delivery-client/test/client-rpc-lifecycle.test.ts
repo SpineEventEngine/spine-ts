@@ -20,6 +20,7 @@ import {
   OptionalInboxMessageSchema,
   PageOfMessagesSchema,
   ReadMessagesSinceTimeSchema,
+  ExpiredSessionsReleasedSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
   InboxMessageIdSchema,
@@ -31,11 +32,20 @@ import {
   DeliveryClient,
   DeliveryOutcomeUnknownError,
   DeliveryProtocolError,
-  MAX_DELIVERY_BATCH_MESSAGES,
 } from "../src/index.js";
 import { domainMessage, message, transport } from "./shared-fixtures.js";
 
 describe("DeliveryClient RPC and lifecycle", () => {
+  it("sends a zero inactivity period for explicit release of active sessions", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    fake.reply(create(ExpiredSessionsReleasedSchema));
+    await expect(client.releaseExpired(0)).resolves.toEqual([]);
+    expect(fake.unary.mock.lastCall?.[4]).toMatchObject({
+      inactivityPeriod: { seconds: 0n, nanos: 0 },
+    });
+  });
+
   it("validates and retains a caller-owned bounded page size", () => {
     const fake = transport();
 
@@ -51,7 +61,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(typeof descriptor?.get).toBe("function");
     expect(typeof descriptor?.set).toBe("undefined");
     expect(() => DeliveryClient.usingTransport(fake.transport, { pageSize: 0 })).toThrow();
-    expect(() => DeliveryClient.usingTransport(fake.transport, { pageSize: 1_001 })).toThrow();
+    expect(DeliveryClient.usingTransport(fake.transport, { pageSize: 1_001 }).pageSize).toBe(1_001);
     expect(fake.unary).not.toHaveBeenCalled();
     expect("usingRpc" in DeliveryClient).toBe(false);
   });
@@ -69,7 +79,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(fake.unary).toHaveBeenLastCalledWith(
       expect.objectContaining({ name: "FindOne" }),
       expect.anything(),
-      30_000,
+      undefined,
       undefined,
       expect.anything(),
     );
@@ -132,7 +142,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(fake.unary).toHaveBeenLastCalledWith(
       expect.objectContaining({ name: "FindManyInShard" }),
       expect.anything(),
-      30_000,
+      undefined,
       undefined,
       create(ReadMessagesSinceTimeSchema, {
         shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
@@ -213,7 +223,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
     }
   });
 
-  it("bounds payloads and retries only transport reads exactly as configured", async () => {
+  it("reads a large payload and retries only transport reads as configured", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport, {
       readRetries: 2,
@@ -228,14 +238,86 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(fake.unary).toHaveBeenCalledTimes(3);
 
     fake.reply(create(OptionalInboxMessageSchema, { message: message("command", "a", 1_048_577) }));
-    await expect(client.findOne({ value: "a", shard: ShardIndex.single() })).rejects.toMatchObject({
-      name: "DeliveryProtocolError",
-    });
+    const large = await client.findOne({ value: "a", shard: ShardIndex.single() });
+    expect(large?.id.value).toBe("a");
     expect(fake.unary).toHaveBeenCalledTimes(4);
-    expect(() => DeliveryClient.usingTransport(fake.transport, { readRetries: 6 })).toThrow();
+    expect(() => DeliveryClient.usingTransport(fake.transport, { readRetries: 6 })).not.toThrow();
     expect(() =>
       DeliveryClient.usingTransport(fake.transport, { retryBackoffMs: 10_001 }),
-    ).toThrow();
+    ).not.toThrow();
+  });
+
+  it("waits through multiple timer intervals when a caller requests a long retry delay", async () => {
+    vi.useFakeTimers();
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport, {
+      readRetries: 1,
+      retryBackoffMs: 0x8000_0005,
+    });
+    try {
+      fake.fail(new ConnectError("temporarily unavailable", Code.Unavailable));
+      fake.reply(create(OptionalInboxMessageSchema));
+      const read = client.findOne(
+        { value: "a", shard: ShardIndex.single() },
+        { timeoutMs: 0x8000_0010 },
+      );
+      await vi.advanceTimersByTimeAsync(0x7fff_ffff);
+      expect(fake.unary).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(6);
+      await expect(read).resolves.toBeUndefined();
+      expect(fake.unary).toHaveBeenCalledTimes(2);
+    } finally {
+      client.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("applies the read deadline while waiting to retry", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport, {
+      readRetries: 1,
+      retryBackoffMs: 500,
+    });
+    fake.fail(new Error("transport down"));
+    fake.reply(create(OptionalInboxMessageSchema));
+    await expect(
+      client.findOne({ value: "a", shard: ShardIndex.single() }, { timeoutMs: 5 }),
+    ).rejects.toMatchObject({ code: Code.DeadlineExceeded });
+    expect(fake.unary).toHaveBeenCalledTimes(1);
+    client.close();
+  });
+
+  it("returns the last transport failure after all configured safe-read attempts", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport, {
+      readRetries: 1,
+      retryBackoffMs: 0,
+    });
+    const failure = new ConnectError("still unavailable", Code.Unavailable);
+    fake.fail(new ConnectError("first unavailable", Code.Unavailable));
+    fake.fail(failure);
+    await expect(
+      client.findOne({ value: "retry-exhausted", shard: ShardIndex.single() }),
+    ).rejects.toBe(failure);
+    expect(fake.unary).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry a read failure after caller cancellation reaches the transport", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport, { readRetries: 3 });
+    const caller = new AbortController();
+    const failure = new ConnectError("request cancelled in transit", Code.Canceled);
+    fake.unary.mockImplementationOnce(() => {
+      caller.abort(new Error("caller stopped"));
+      throw failure;
+    });
+    await expect(
+      client.findOne(
+        { value: "cancelled-read", shard: ShardIndex.single() },
+        { signal: caller.signal },
+      ),
+    ).rejects.toBe(failure);
+    expect(fake.unary).toHaveBeenCalledOnce();
   });
 
   it("does not retry local validation or protocol decoding", async () => {
@@ -314,7 +396,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(fake.unary).toHaveBeenLastCalledWith(
       expect.objectContaining({ name: "NewestMessageToDeliver" }),
       expect.anything(),
-      30_000,
+      undefined,
       undefined,
       create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
     );
@@ -329,7 +411,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(fake.unary).toHaveBeenLastCalledWith(
       expect.objectContaining({ name: "WriteOne" }),
       expect.any(AbortSignal),
-      30_000,
+      undefined,
       undefined,
       expect.anything(),
     );
@@ -432,7 +514,14 @@ describe("DeliveryClient RPC and lifecycle", () => {
     const client = DeliveryClient.usingTransport(fake.transport);
     fake.fail(new ConnectError("invalid request: secret-payload", Code.InvalidArgument));
 
-    await expect(client.writeOne(domainMessage())).rejects.toBeInstanceOf(DeliveryProtocolError);
+    let rejection: unknown;
+    try {
+      await client.writeOne(domainMessage());
+    } catch (error) {
+      rejection = error;
+    }
+    expect(rejection).toMatchObject({ code: Code.InvalidArgument });
+    expect(String(rejection)).not.toContain("secret-payload");
     expect(fake.unary).toHaveBeenCalledTimes(1);
   });
 
@@ -464,7 +553,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(write.slice(0, 4)).toEqual([
       expect.objectContaining({ name: "WriteMany" }),
       expect.any(AbortSignal),
-      30_000,
+      undefined,
       undefined,
     ]);
 
@@ -481,7 +570,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(fake.unary).toHaveBeenCalledTimes(2);
   });
 
-  it("rejects invalid batches before RPC", async () => {
+  it("accepts empty, repeated, and mixed-shard batches and rejects invalid identities", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
     const one = domainMessage("one");
@@ -493,25 +582,21 @@ describe("DeliveryClient RPC and lifecycle", () => {
     const aborted = new AbortController();
     aborted.abort(new Error("caller stopped"));
 
-    for (const invalid of [
-      [],
-      [one, domainMessage("one")],
-      [one, anotherShard],
-      [{ ...one, signalId: "" }],
-      Array.from({ length: MAX_DELIVERY_BATCH_MESSAGES + 1 }, (_, index) =>
-        domainMessage(`id-${String(index)}`),
-      ),
-    ]) {
-      await expect(client.writeMany(invalid)).rejects.toThrow();
-      await expect(client.removeMany(invalid)).rejects.toThrow();
+    for (const valid of [[], [one, domainMessage("one")], [one, anotherShard]]) {
+      fake.reply(create(EmptySchema));
+      await expect(client.writeMany(valid)).resolves.toBeUndefined();
+      fake.reply(create(EmptySchema));
+      await expect(client.removeMany(valid)).resolves.toBeUndefined();
     }
+    await expect(client.writeMany([{ ...one, signalId: "" }])).rejects.toThrow();
+    await expect(client.removeMany([{ ...one, id: { ...one.id, value: "" } }])).rejects.toThrow();
     await expect(client.writeMany([one], { timeoutMs: 0 })).rejects.toThrow();
     await expect(client.removeMany([one], { signal: aborted.signal })).rejects.toThrow(
       "caller stopped",
     );
     client.close();
     await expect(client.writeMany([one])).rejects.toThrow("Delivery client is closed.");
-    expect(fake.unary).not.toHaveBeenCalled();
+    expect(fake.unary).toHaveBeenCalledTimes(6);
   });
 
   it("reports each ambiguous batch outcome without payload leakage or retry", async () => {
@@ -570,7 +655,14 @@ describe("DeliveryClient RPC and lifecycle", () => {
     const client = DeliveryClient.usingTransport(fake.transport);
     fake.fail(new ConnectError("invalid batch: secret-payload", Code.InvalidArgument));
 
-    await expect(client.writeMany([domainMessage()])).rejects.toBeInstanceOf(DeliveryProtocolError);
+    let rejection: unknown;
+    try {
+      await client.writeMany([domainMessage()]);
+    } catch (error) {
+      rejection = error;
+    }
+    expect(rejection).toMatchObject({ code: Code.InvalidArgument });
+    expect(String(rejection)).not.toContain("secret-payload");
     expect(fake.unary).toHaveBeenCalledTimes(1);
   });
 
@@ -612,7 +704,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(fake.unary).toHaveBeenLastCalledWith(
       expect.objectContaining({ name: "FindManyInShard" }),
       expect.anything(),
-      30_000,
+      undefined,
       undefined,
       create(ReadMessagesSinceTimeSchema, {
         shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),

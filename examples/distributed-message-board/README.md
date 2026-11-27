@@ -58,11 +58,10 @@ Stop the topology with `Ctrl-C`, or from the repository root run
 ## Limits
 
 Shared Delivery is recommended for this multi-process topology. Database-only
-Delivery has local notifications, so missed work can wait for recovery. The
+Each application node listens to the Delivery server for free shards with pending work. The
 simple Delivery server used here is in-memory and is not highly available.
 Restarting it can lose accepted pending Commands while separately stored
-Datastore business state survives. See the separate [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers);
-the default 10-second scan is not a delivery or takeover deadline.
+Datastore business state survives. See [session lifetime and work reminders](../../packages/delivery-server/REFERENCE.md#session-lifetime-and-work-reminders). The default 10-second reminder repeats a notice for work that remains free and pending; it does not promise delivery or takeover within 10 seconds.
 
 The Gateway keeps browser subscription bindings in process memory and does not
 record every update sent to a browser. If the browser disconnects and

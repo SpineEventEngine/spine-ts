@@ -1,4 +1,50 @@
 indexes:
+  - kind: spine.server.delivery.InboxMessage
+    properties:
+      - name: shard_index
+      - name: shard_total
+      - name: when_received_seconds
+      - name: when_received_nanos
+      - name: version
+      - name: message_id
+  - kind: spine.server.delivery.InboxMessage
+    properties:
+      - name: shard_index
+      - name: shard_total
+      - name: status
+      - name: when_received_seconds
+      - name: when_received_nanos
+      - name: version
+      - name: message_id
+  - kind: spine.server.delivery.InboxMessage
+    properties:
+      - name: shard_index
+      - name: shard_total
+      - name: when_received_seconds
+        direction: desc
+      - name: when_received_nanos
+        direction: desc
+      - name: version
+        direction: desc
+      - name: message_id
+        direction: desc
+      - name: __key__
+        direction: asc
+  - kind: spine.server.delivery.InboxMessage
+    properties:
+      - name: shard_index
+      - name: shard_total
+      - name: status
+      - name: when_received_seconds
+        direction: desc
+      - name: when_received_nanos
+        direction: desc
+      - name: version
+        direction: desc
+      - name: message_id
+        direction: desc
+      - name: __key__
+        direction: asc
   - kind: spine_agent_history
     properties:
       - name: scope_digest

@@ -22,6 +22,7 @@ import {
 } from "@spine-event-engine/proto/delivery";
 
 import { InMemoryDeliveryState } from "../../src/core/in-memory-delivery-state.js";
+import { domainMessage } from "./domain-message.js";
 
 describe("InMemoryDeliveryState", () => {
   it("retains last-pick data while clearing a released worker", () => {
@@ -29,28 +30,48 @@ describe("InMemoryDeliveryState", () => {
     const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
     const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
     state.putAll([
-      { message: create(InboxMessageSchema, { id: { uuid: "message", index: shard } }), bytes: 1 },
+      {
+        message: create(InboxMessageSchema, {
+          id: { uuid: "message", index: shard },
+          whenReceived: { seconds: 0n, nanos: 0 },
+        }),
+      },
     ]);
-    state.setSession(shard, worker, 42);
+    state.setSession(shard, worker, {
+      $typeName: "google.protobuf.Timestamp",
+      seconds: 0n,
+      nanos: 42,
+    });
     state.release(shard);
     const record = state.shards.get("0/1");
     expect(record?.worker).toBeUndefined();
-    expect(record?.whenLastPicked).toBe(42);
+    expect(record?.whenLastPicked).toMatchObject({ seconds: 0n, nanos: 42 });
   });
 
-  it("prunes a released shard after its last retained message is removed", () => {
-    const state = new InMemoryDeliveryState({ maxTrackedShards: 1 });
+  it("retains a released shard after its last retained message is removed", () => {
+    const state = new InMemoryDeliveryState();
     const first = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
     const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
     const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
-    const message = create(InboxMessageSchema, { id: { uuid: "message", index: first } });
-    state.putAll([{ message, bytes: 1 }]);
-    state.setSession(first, worker, 42);
+    const message = domainMessage("message", first);
+    state.putAll([{ message }]);
+    state.setSession(first, worker, {
+      $typeName: "google.protobuf.Timestamp",
+      seconds: 0n,
+      nanos: 42,
+    });
     state.release(first);
     state.delete(message);
-    expect(state.shards.has("0/2")).toBe(false);
+    expect(state.shards.get("0/2")).toMatchObject({
+      worker: undefined,
+      whenLastPicked: { seconds: 0n, nanos: 42 },
+    });
     expect(() => {
-      state.setSession(second, worker, 43);
+      state.setSession(second, worker, {
+        $typeName: "google.protobuf.Timestamp",
+        seconds: 0n,
+        nanos: 43,
+      });
     }).not.toThrow();
   });
 
@@ -63,7 +84,6 @@ describe("InMemoryDeliveryState", () => {
       state.putAll([
         {
           message: create(InboxMessageSchema, { id: { uuid: "missing-shard" } }),
-          bytes: 1,
         },
       ]),
     ).toThrow("Delivery message identity is missing.");
@@ -71,20 +91,20 @@ describe("InMemoryDeliveryState", () => {
 
   it("fails closed when callers corrupt the exposed retained-message map", () => {
     const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
-    const message = create(InboxMessageSchema, { id: { uuid: "message", index: shard } });
+    const message = domainMessage("message", shard);
     const seeded = new InMemoryDeliveryState();
-    seeded.putAll([{ message, bytes: 1 }]);
+    seeded.putAll([{ message }]);
     const key = seeded.messages.keys().next().value;
     if (key === undefined) throw new Error("Expected a retained message key.");
 
     const replacement = new InMemoryDeliveryState();
     replacement.messages.set(key, message);
-    expect(() => replacement.putAll([{ message, bytes: 2 }])).toThrow(
+    expect(() => replacement.putAll([{ message }])).toThrow(
       "Delivery message shard count is invalid.",
     );
 
     const deletion = new InMemoryDeliveryState();
-    deletion.putAll([{ message, bytes: 1 }]);
+    deletion.putAll([{ message }]);
     expect(deletion.delete(message)).toBe(true);
     deletion.messages.set(key, message);
     expect(() => deletion.delete(message)).toThrow("Delivery message shard count is invalid.");

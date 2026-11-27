@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { deliveryPortAccess } from "./delivery-port-access.js";
 import { Time } from "@spine-event-engine/core/time";
 import { clone, create } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
@@ -29,18 +30,24 @@ import {
   FailedReception,
   type DeliveryStatistics,
 } from "./delivery-monitor.js";
-import type { DeliveryInbox, DeliveryWorkRegistry, DeliveryWorkSession } from "./delivery-ports.js";
-import { Inbox, InboxTargets, type InboxMessage } from "./inbox.js";
+import type {
+  DeliveryInbox,
+  DeliveryOperationOptions,
+  DeliveryWorkRegistry,
+  DeliveryWorkSession,
+} from "./delivery-ports.js";
+import { Inbox, InboxTargets, type InboxMessage, type InboxMessageInput } from "./inbox.js";
 import { InboxStorage, InboxStorageClock } from "./inbox-storage.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
 import { deliveryTenantKey } from "./delivery-tenant.js";
 import { withDeliveryCommitFence } from "../repository/commit-fence.js";
+import { deliveryRunScopes } from "./delivery-run-scope.js";
 import { receptionObservation, type ReceptionObservation } from "./reception-observation.js";
+import { DuplicateDispatch } from "./duplicate-dispatch.js";
 import type { DeliveryResult, DeliveryRunOptions, DeliveryStrategy } from "./delivery-builder.js";
 import { emitServerError } from "../server/server-log.js";
 
-const deliveryFailureLimit = 100;
 const controlledMessageSettlers = new WeakMap<
   DeliveryDrainOptions,
   (message: InboxMessage) => void
@@ -54,10 +61,14 @@ export type DeliveryEndpointMessage = InboxMessage;
 /**
  * Dispatches one persisted Inbox message to an endpoint.
  *
- * @param message The message to dispatch.
+ * @param message Supplies the persisted row selected for dispatch.
+ * @param signal Optionally cancels this attempt.
  * @returns A promise that settles when endpoint dispatch completes.
  */
-export type OnDeliveryMessage = (message: DeliveryEndpointMessage) => void | Promise<void>;
+export type OnDeliveryMessage = (
+  message: DeliveryEndpointMessage,
+  signal?: AbortSignal,
+) => void | Promise<void>;
 
 interface DirectDrainInput {
   readonly onMessage: OnDeliveryMessage;
@@ -122,6 +133,21 @@ export type DeliveryMessageOutcome =
        * Whether this row was accepted by a live Agent.
        */
       readonly agent: boolean;
+
+      /**
+       * Terminal duplicate validation outcome when the Entity guard matched.
+       */
+      readonly duplicate?: {
+        /**
+         * Selects the Command or Event validation enum family.
+         */
+        readonly kind: DuplicateDispatch["kind"];
+
+        /**
+         * Gives the generated duplicate validation code in that family.
+         */
+        readonly code: DuplicateDispatch["code"];
+      };
     }
   | {
       /**
@@ -161,7 +187,7 @@ export interface DeliveryRun {
   /**
    * Identifies the terminal delivery outcome.
    */
-  readonly status: "DRAINED" | "SKIPPED" | "FAILED" | "STOPPED";
+  readonly status: "DRAINED" | "SKIPPED" | "NO_WORK" | "FAILED" | "STOPPED";
 
   /**
    * Counts messages considered for dispatch.
@@ -184,9 +210,29 @@ export interface DeliveryRun {
   readonly failed: number;
 
   /**
+   * Reports a confirmed session release after the run.
+   */
+  readonly released?: true;
+
+  /**
+   * Preserves an unrecovered storage or session error for managed callers.
+   */
+  readonly terminalFailure?: Error;
+
+  /**
    * Lists ephemeral delivery failures.
    */
   readonly failures: readonly DeliveryFailure[];
+}
+
+/**
+ * Reports the definitive outcome of one managed shard attempt.
+ */
+export interface DeliveryAttempt {
+  /**
+   * Distinguishes completed work, a competing worker, no pending row, and a normal stop.
+   */
+  readonly status: "completed" | "busy" | "noWork" | "stopped";
 }
 
 /**
@@ -285,6 +331,14 @@ export class Delivery {
 
   readonly #activeRuns = new Set<ActiveDeliveryRun>();
 
+  readonly #closeLookups = new AbortController();
+
+  readonly #managedInFlight = new Set<Promise<DeliveryAttempt>>();
+
+  readonly #managedAttempts = new Map<string, Promise<DeliveryAttempt>>();
+
+  #shardObserver: ((message: InboxMessage) => unknown) | undefined;
+
   readonly #directDrains = new Map<string, DeliveryDrain>();
 
   readonly #pendingDirectWake = new Set<string>();
@@ -317,6 +371,253 @@ export class Delivery {
   }
 
   /**
+   * Sets the application callback for a newly observed persisted row.
+   *
+   * @param observer Receives an original Inbox row after persistence or release.
+   */
+  setShardObserver(observer: ((message: InboxMessage) => unknown) | undefined): void {
+    this.#shardObserver = observer;
+  }
+
+  /**
+   * Returns the count of physical shard runs already admitted on this node.
+   *
+   * @internal
+   * @returns The number of distinct active shard runs.
+   */
+  activeShardCount(): number {
+    return this.#activeDirect.size;
+  }
+
+  /**
+   * Checks whether one shard already has a local physical run.
+   *
+   * @internal
+   * @param shard Selects the shard to check.
+   * @returns Whether a caller can join its current run.
+   */
+  shardActive(shard: ShardIndex): boolean {
+    return this.#activeDirect.has(shard.key());
+  }
+
+  /**
+   * Notifies the selected custom callback after an Inbox write commits.
+   *
+   * @param message Supplies the complete persisted row.
+   */
+  observePersisted(message: InboxMessage): void {
+    if (this.#closing || this.#shardObserver === undefined) return;
+    this.#observeCustom(this.#shardObserver, message);
+  }
+
+  /**
+   * Exposes a public Inbox that reports newly persisted rows to a custom observer.
+   *
+   * @internal
+   * @returns The direct Inbox or its observing public facade.
+   */
+  publicInbox(): DeliveryInbox {
+    if (this.#shardObserver === undefined) return this.inbox;
+    const inbox = this.inbox;
+    return new Proxy(inbox, {
+      get: (target, property) => {
+        if (property === "receive")
+          return async (input: InboxMessageInput, options?: DeliveryOperationOptions) => {
+            const result = await inbox.receive(input, options);
+            this.observePersisted(result);
+            return result;
+          };
+        const value: unknown = Reflect.get(target, property, target);
+        if (typeof value === "function") {
+          const bound: unknown = value.bind(target);
+          return bound;
+        }
+        return value;
+      },
+    });
+  }
+
+  /**
+   * Starts or joins one managed shard attempt using the installed handlers.
+   *
+   * @param shard Selects the shard to try.
+   * @param options Propagates cancellation or an operation deadline.
+   * @returns The actual completed, busy, empty, or stopped outcome.
+   */
+  deliverMessagesFrom(
+    shard: ShardIndex,
+    options: import("./delivery-ports.js").DeliveryOperationOptions = {},
+  ): Promise<DeliveryAttempt> {
+    if (this.#dispatcher === undefined)
+      return Promise.reject(new Error("Delivery handlers are not installed."));
+    if (
+      options.timeoutMs !== undefined &&
+      (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 0)
+    )
+      return Promise.reject(new RangeError("Delivery operation budget is invalid."));
+    if (this.#closing || this.#startupDraining)
+      return Promise.resolve(Object.freeze({ status: "stopped" as const }));
+    if (options.timeoutMs === 0)
+      return Promise.resolve(Object.freeze({ status: "stopped" as const }));
+    const key = shard.key();
+    const active = this.#managedAttempts.get(key);
+    if (active !== undefined) return this.#joinManagedAttempt(active, options);
+    const joiningPhysicalRun = this.#activeDirect.has(key);
+    const admittedOptions = joiningPhysicalRun ? {} : options;
+    const budget = this.#managedBudget(admittedOptions);
+    const attempt = this.#executeManaged(shard, admittedOptions, budget.operation);
+    this.#managedAttempts.set(key, attempt);
+    this.#managedInFlight.add(attempt);
+    void attempt
+      .finally(() => {
+        budget.cancel();
+        this.#managedInFlight.delete(attempt);
+        if (this.#managedAttempts.get(key) === attempt) this.#managedAttempts.delete(key);
+      })
+      .catch(() => undefined);
+    return joiningPhysicalRun ? this.#joinManagedAttempt(attempt, options) : attempt;
+  }
+
+  /**
+   * Bounds one caller's wait for an existing physical attempt without cancelling it.
+   *
+   * @param attempt Shared shard completion.
+   * @param options Join caller's cancellation signal or positive timeout.
+   * @returns The shared outcome, or stopped when this caller stops waiting.
+   */
+  #joinManagedAttempt(
+    attempt: Promise<DeliveryAttempt>,
+    options: DeliveryOperationOptions,
+  ): Promise<DeliveryAttempt> {
+    if (options.signal === undefined && options.timeoutMs === undefined) return attempt;
+    const stopped = Object.freeze({ status: "stopped" as const });
+    const budget = this.#managedBudget(options);
+    const signal = budget.operation.signal;
+    if (signal === undefined || signal.aborted) {
+      budget.cancel();
+      return Promise.resolve(stopped);
+    }
+    const cancelled = Promise.withResolvers<DeliveryAttempt>();
+    const stop = () => {
+      cancelled.resolve(stopped);
+    };
+    signal.addEventListener("abort", stop, { once: true });
+    return Promise.race([attempt, cancelled.promise]).finally(() => {
+      signal.removeEventListener("abort", stop);
+      budget.cancel();
+    });
+  }
+
+  /**
+   * Completes one managed attempt and checks for late custom-observed work.
+   *
+   * @param shard Selects the admitted shard.
+   * @param options Cancels the admitted run on shutdown or caller cancellation.
+   * @param operation Carries the complete managed operation budget.
+   * @returns Its terminal public outcome.
+   */
+  async #executeManaged(
+    shard: ShardIndex,
+    options: import("./delivery-ports.js").DeliveryOperationOptions,
+    operation: DeliveryOperationOptions,
+  ): Promise<DeliveryAttempt> {
+    const run = await this.#startShared(shard, {
+      ...this.#directOptions(options.signal),
+      managed: true,
+      operation: this.#registryOperation(operation),
+    });
+    this.#managedAttempts.delete(shard.key());
+    if (run.terminalFailure !== undefined) throw run.terminalFailure;
+    if (
+      run.released &&
+      (run.status === "DRAINED" || run.status === "STOPPED") &&
+      !this.#closing &&
+      !operation.signal?.aborted
+    )
+      await this.#observeAfterRelease(shard, operation);
+    return this.#managedOutcome(run);
+  }
+
+  /**
+   * Maps one completed shard run to its public managed outcome.
+   *
+   * @param run Supplies the completed run and any failure.
+   * @returns Its public outcome or the original failure.
+   */
+  #managedOutcome(run: DeliveryRun): DeliveryAttempt {
+    switch (run.status) {
+      case "DRAINED":
+        return Object.freeze({ status: "completed" });
+      case "SKIPPED":
+        return Object.freeze({ status: "busy" });
+      case "NO_WORK":
+        return Object.freeze({ status: "noWork" });
+      case "STOPPED":
+        return Object.freeze({ status: "stopped" });
+      default: {
+        const failure = run.failures[0]?.error;
+        throw failure instanceof Error
+          ? failure
+          : new Error("Delivery attempt failed.", { cause: failure });
+      }
+    }
+  }
+
+  /**
+   * Passes the newest late pending row to the configured custom observer.
+   *
+   * @param shard Selects the normally released shard.
+   * @param options Pass the original cancellation and read budget to the inbox.
+   */
+  async #observeAfterRelease(
+    shard: ShardIndex,
+    options: import("./delivery-ports.js").DeliveryOperationOptions,
+  ): Promise<void> {
+    const observer = this.#shardObserver;
+    if (observer === undefined) return;
+    const shutdown = this.#closeLookups.signal;
+    const signal = options.signal ? AbortSignal.any([options.signal, shutdown]) : shutdown;
+    let pending: InboxMessage | undefined;
+    try {
+      pending = await this.inbox.newestPending(shard, { ...options, signal });
+    } catch (error) {
+      if (shutdown.aborted) return;
+      throw error;
+    }
+    if (shutdown.aborted) return;
+    signal.throwIfAborted();
+    if (pending !== undefined) this.observePersisted(pending);
+  }
+
+  /**
+   * Reports one custom callback failure without changing durable Inbox state.
+   *
+   * @param observer Receives the persisted row.
+   * @param message Supplies the original row.
+   */
+  #observeCustom(observer: (message: InboxMessage) => unknown, message: InboxMessage): void {
+    try {
+      Promise.resolve(observer(message)).catch((error: unknown) => {
+        this.#logObserverFailure(error);
+      });
+    } catch (error) {
+      this.#logObserverFailure(error);
+    }
+  }
+
+  /**
+   * Logs a failed custom observation once for its invocation.
+   *
+   * @param error Supplies the callback failure.
+   */
+  #logObserverFailure(error: unknown): void {
+    if (this.#logger === undefined) return;
+    emitServerError(this.#logger, "Delivery observer failed.", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
+  }
+
+  /**
    * Waits for every retained direct shard run to release its session.
    *
    * @internal
@@ -324,13 +625,17 @@ export class Delivery {
    */
   async whenIdle(): Promise<void> {
     const failures: unknown[] = [];
-    while (this.#activeRuns.size > 0) {
+    while (this.#activeRuns.size > 0 || this.#managedInFlight.size > 0) {
       const active = [...this.#activeRuns];
-      const settled = await Promise.allSettled(active.map(({ completed }) => completed));
+      const settled = await Promise.allSettled([
+        ...active.map(({ completed }) => completed),
+        ...this.#managedInFlight,
+      ]);
       settled.forEach((outcome, index) => {
         const failure = active[index]?.releaseFailure;
         if (failure !== undefined) failures.push(failure);
-        if (outcome.status === "rejected") failures.push(outcome.reason);
+        if (outcome.status === "rejected" && !failures.includes(outcome.reason))
+          failures.push(outcome.reason);
       });
     }
     if (failures.length === 1) throw failures[0];
@@ -347,24 +652,25 @@ export class Delivery {
     if (this.#closeAttempt !== undefined) return this.#closeAttempt;
     this.beginClose();
     const active = this.#closingRuns ?? [];
-    this.#closeAttempt = Promise.allSettled(active.map(({ completed }) => completed)).then(
-      async (settled) => {
-        const failures: unknown[] = [];
-        settled.forEach((result, index) => {
-          const releaseFailure = active[index]?.releaseFailure;
-          if (releaseFailure !== undefined) failures.push(releaseFailure);
-          if (result.status === "rejected") failures.push(result.reason);
-        });
-        const storage = await Promise.allSettled([
-          this.inbox instanceof Inbox ? this.inbox.storage.close() : Promise.resolve(),
-          this.shards instanceof ShardedWorkRegistry ? this.shards.close() : Promise.resolve(),
-        ]);
-        for (const result of storage)
-          if (result.status === "rejected") failures.push(result.reason);
-        if (failures.length === 1) throw failures[0];
-        if (failures.length) throw new AggregateError(failures, "Delivery close failed.");
-      },
-    );
+    this.#closeAttempt = Promise.allSettled([
+      ...active.map(({ completed }) => completed),
+      ...this.#managedInFlight,
+    ]).then(async (settled) => {
+      const failures: unknown[] = [];
+      settled.forEach((result, index) => {
+        const releaseFailure = active[index]?.releaseFailure;
+        if (releaseFailure !== undefined) failures.push(releaseFailure);
+        if (result.status === "rejected" && !failures.includes(result.reason))
+          failures.push(result.reason);
+      });
+      const storage = await Promise.allSettled([
+        this.inbox instanceof Inbox ? this.inbox.storage.close() : Promise.resolve(),
+        this.shards instanceof ShardedWorkRegistry ? this.shards.close() : Promise.resolve(),
+      ]);
+      for (const result of storage) if (result.status === "rejected") failures.push(result.reason);
+      if (failures.length === 1) throw failures[0];
+      if (failures.length) throw new AggregateError(failures, "Delivery close failed.");
+    });
     return this.#closeAttempt;
   }
 
@@ -376,6 +682,7 @@ export class Delivery {
   beginClose(): void {
     if (this.#closing) return;
     this.#closing = true;
+    this.#closeLookups.abort();
     this.#closingRuns ??= [...this.#activeRuns];
     for (const active of this.#closingRuns) active.drain?.stop();
   }
@@ -685,14 +992,14 @@ export class Delivery {
   /**
    * Dispatches each selected direct row through its registered endpoint.
    */
-  #directOptions(): DeliveryDrainOptions {
+  #directOptions(signal?: AbortSignal): DeliveryDrainOptions {
     const request = (message: InboxMessage) =>
       this.#directPending.get(Delivery.#messageKey(message));
     return {
       onMessage: (message) => {
         const selected = request(message);
         return selected === undefined
-          ? this.#dispatcher?.(message)
+          ? this.#dispatcher?.(message, signal)
           : selected.input.onMessage(message);
       },
       acceptMessage: (message) => {
@@ -777,7 +1084,11 @@ export class Delivery {
     const active: ActiveDeliveryRun = { completed: completion.promise, shared };
     this.#activeRuns.add(active);
     if (this.#startupDraining) this.#closingRuns?.push(active);
-    void this.#drainAdmitted(shard, options, active).then(completion.resolve, completion.reject);
+    void this.#drainAdmitted(shard, options, active).then((run) => {
+      if (options.managed && active.releaseFailure !== undefined)
+        completion.reject(active.releaseFailure);
+      else completion.resolve(run);
+    }, completion.reject);
     void active.completed.finally(() => this.#activeRuns.delete(active)).catch(() => undefined);
     return active.completed;
   }
@@ -795,14 +1106,20 @@ export class Delivery {
     active: ActiveDeliveryRun,
   ): Promise<DeliveryRun> {
     if (this.#shouldStop(options)) return result("STOPPED");
-    let session;
+    let session: DeliveryWorkSession | undefined;
     try {
-      session = await this.shards.pickUp(shard, this.worker, options.operation);
+      const worker = this.shards.workerForRun?.(this.worker) ?? this.worker;
+      const operation = this.#registryOperation(options.operation);
+      if (
+        options.managed &&
+        this.shards.sessionKind !== "EXCLUSIVE" &&
+        (await this.inbox.newestPending(shard, options.operation)) === undefined
+      )
+        return result("NO_WORK");
+      session = await this.shards.pickUp(shard, worker, operation);
     } catch (error) {
-      await safely(async () =>
-        (await this.#monitor.onShardPickUpFailure(new FailedPickUp(shard, error))).execute(),
-      );
-      return result("FAILED");
+      if (this.#shouldStop(options)) return result("STOPPED");
+      return this.#pickupFailed(shard, error, options.managed === true);
     }
     if (session === undefined) {
       await safely(async () =>
@@ -812,6 +1129,86 @@ export class Delivery {
     }
     if (this.#shouldStop(options)) return this.#releaseStoppedSession(session, active);
     return this.#runSession(shard, options, session, active);
+  }
+
+  /**
+   * Combines caller cancellation with delivery shutdown for registry work.
+   *
+   * @param operation Supplies caller cancellation and deadline settings.
+   * @returns Settings observing both cancellation signals.
+   */
+  #registryOperation(operation?: DeliveryOperationOptions): DeliveryOperationOptions {
+    const shutdown = this.#closeLookups.signal;
+    return {
+      ...operation,
+      signal:
+        operation?.signal === undefined ? shutdown : AbortSignal.any([operation.signal, shutdown]),
+    };
+  }
+
+  /**
+   * Links a caller budget to one managed attempt without changing handler completion.
+   *
+   * @param options Supplies the caller's operation settings.
+   * @returns The bounded port settings and timer cleanup.
+   */
+  #managedBudget(options: DeliveryOperationOptions): {
+    operation: DeliveryOperationOptions;
+    cancel: () => void;
+  } {
+    if (options.timeoutMs === undefined) return { operation: options, cancel: () => undefined };
+    const controller = new AbortController();
+    const signal =
+      options.signal === undefined
+        ? controller.signal
+        : AbortSignal.any([options.signal, controller.signal]);
+    return {
+      operation: { ...options, signal },
+      cancel: this.#scheduleBudget(options.timeoutMs, () => {
+        controller.abort();
+      }),
+    };
+  }
+
+  /**
+   * Schedules a caller budget across Node timer slots without shortening a long duration.
+   *
+   * @param milliseconds Supplies the full operation budget.
+   * @param onExpire Cancels work after the budget.
+   * @returns A function that clears the active timer slot.
+   */
+  #scheduleBudget(milliseconds: number, onExpire: () => void): () => void {
+    let remaining = milliseconds;
+    let timer: ReturnType<typeof setTimeout>;
+    const arm = () => {
+      const slot = Math.min(remaining, 0x7fff_ffff);
+      remaining -= slot;
+      timer = setTimeout(remaining > 0 ? arm : onExpire, slot);
+      timer.unref();
+    };
+    arm();
+    return () => {
+      clearTimeout(timer);
+    };
+  }
+
+  /**
+   * Reports an acquisition failure to the configured monitor.
+   *
+   * @param shard Identifies the refused shard.
+   * @param error Supplies the original acquisition error.
+   * @param managed Propagates the error to a managed caller.
+   * @returns A failed direct result, or rejection for managed delivery.
+   */
+  async #pickupFailed(shard: ShardIndex, error: unknown, managed: boolean): Promise<DeliveryRun> {
+    const report = async () =>
+      (await this.#monitor.onShardPickUpFailure(new FailedPickUp(shard, error))).execute();
+    if (managed) {
+      await report();
+      throw error;
+    }
+    await safely(report);
+    return result("FAILED");
   }
 
   /**
@@ -826,7 +1223,12 @@ export class Delivery {
     active: ActiveDeliveryRun,
   ): Promise<DeliveryRun> {
     try {
-      const released = await this.shards.release(session);
+      const released = await this.shards.release(
+        session,
+        this.shards instanceof ShardedWorkRegistry
+          ? { signal: this.#closeLookups.signal }
+          : undefined,
+      );
       if (!released) active.releaseFailure = new Error("Shard release was not confirmed.");
       return result(released ? "STOPPED" : "FAILED");
     } catch (error) {
@@ -860,6 +1262,7 @@ export class Delivery {
       session,
       shards: this.shards,
       shard,
+      registryShutdown: this.#closeLookups.signal,
     });
     active.drain = drain;
     if (active.shared) {
@@ -893,6 +1296,14 @@ class DeliveryDrain {
 
   readonly #removedInPage = new Set<InboxMessage>();
 
+  readonly #settledInPage: InboxMessage[] = [];
+
+  readonly #deliveredInPage: { original: InboxMessage; completed: InboxMessage }[] = [];
+
+  readonly #duplicatesInPage: InboxMessage[] = [];
+
+  readonly #reportedInPage: InboxMessage[] = [];
+
   readonly #messageOutcomes = new WeakMap<InboxMessage, DeliveryMessageOutcome>();
 
   #wakeGeneration = 0;
@@ -905,7 +1316,9 @@ class DeliveryDrain {
 
   #ownershipLost = false;
 
-  #failureLimitReached = false;
+  #confirmedLost = false;
+
+  #terminalFailure: Error | undefined;
 
   #stopped = false;
 
@@ -974,6 +1387,15 @@ class DeliveryDrain {
    * @returns The terminal delivery outcome and counts.
    */
   async run(): Promise<DeliveryRun> {
+    return deliveryRunScopes.run(() => this.#runScoped());
+  }
+
+  /**
+   * Processes pages under one stable drain identity.
+   *
+   * @returns The terminal delivery outcome and counts.
+   */
+  async #runScoped(): Promise<DeliveryRun> {
     let run: DeliveryRun;
     try {
       run = (await this.#canStart()) ? await this.#readPages() : this.#complete("STOPPED");
@@ -984,7 +1406,12 @@ class DeliveryDrain {
       throw error;
     }
     this.#reading = false;
-    return (await this.#release()) ? run : this.#complete("FAILED");
+    const released = await this.#release();
+    return Object.freeze({
+      ...(released ? run : this.#complete("FAILED")),
+      ...(released && !this.#confirmedLost ? { released: true as const } : {}),
+      ...(this.#terminalFailure !== undefined ? { terminalFailure: this.#terminalFailure } : {}),
+    });
   }
 
   /**
@@ -993,10 +1420,19 @@ class DeliveryDrain {
    * @returns Whether the session was released.
    */
   async #release(): Promise<boolean> {
+    if (this.#confirmedLost) {
+      await safely(() => this.#completeMonitoring());
+      return true;
+    }
     let released = false;
     try {
       released = await this.#sessionOperation(() =>
-        this.input.shards.release(this.#current, this.input.options.operation),
+        this.input.shards.release(
+          this.#current,
+          this.input.shards instanceof ShardedWorkRegistry
+            ? { signal: this.input.registryShutdown }
+            : undefined,
+        ),
       );
     } catch (error) {
       this.#releaseFailure =
@@ -1025,17 +1461,20 @@ class DeliveryDrain {
    * @returns The terminal delivery outcome.
    */
   async #readPages(): Promise<DeliveryRun> {
+    await this.#cleanupExpired();
     let after: import("./inbox.js").InboxReadContinuation | undefined;
     let deliveredInScan = false;
+    let sawPending = false;
     let scanGeneration = this.#wakeGeneration;
     for (;;) {
       if (this.#stopped || this.#ownershipLost || this.input.options.operation?.signal?.aborted)
         return this.#complete("STOPPED");
       const messages = await this.#readPage(after);
+      sawPending ||= messages.some((message) => message.status === "TO_DELIVER");
       this.#removedInPage.clear();
       if (messages.length === 0) {
         if (this.#emptyPageDrained(deliveredInScan, scanGeneration))
-          return this.#complete("DRAINED");
+          return this.#complete(this.#drainedStatus(sawPending));
         after = undefined;
         deliveredInScan = false;
         scanGeneration = this.#wakeGeneration;
@@ -1043,11 +1482,10 @@ class DeliveryDrain {
       }
       const deliveredBefore = this.#statistics.delivered;
       if (!(await this.#processPage(messages))) return this.#complete("STOPPED");
-      if (!(await this.#cleanupPage(messages))) return this.#complete("STOPPED");
       deliveredInScan ||= this.#statistics.delivered !== deliveredBefore;
       if (messages.length < this.input.pageSize) {
         if (this.#shortPageDrained(deliveredInScan, scanGeneration))
-          return this.#complete("DRAINED");
+          return this.#complete(this.#drainedStatus(sawPending));
         after = undefined;
         deliveredInScan = false;
         scanGeneration = this.#wakeGeneration;
@@ -1056,6 +1494,20 @@ class DeliveryDrain {
       const survivor = messages.findLast((message) => !this.#removedInPage.has(message));
       if (survivor !== undefined) after = this.#continuation([survivor]);
     }
+  }
+
+  /**
+   * Returns no work after a remote managed scan found no pending row.
+   *
+   * @param sawPending Whether a page contained pending work.
+   * @returns The completed scan status.
+   */
+  #drainedStatus(sawPending: boolean): "DRAINED" | "NO_WORK" {
+    return this.input.options.managed &&
+      this.input.shards.sessionKind === "EXCLUSIVE" &&
+      !sawPending
+      ? "NO_WORK"
+      : "DRAINED";
   }
 
   /**
@@ -1113,12 +1565,185 @@ class DeliveryDrain {
    * @returns Whether page processing may continue.
    */
   async #processPage(messages: readonly InboxMessage[]): Promise<boolean> {
-    const page = this.#deduplication.page(messages, this.#retentionTime());
-    for (const message of messages) {
-      if (!(await this.#processMessage(message, page))) return false;
-      if (this.#failureLimitReached) return false;
+    this.#resetPageResults();
+    const now = this.#retentionTime();
+    const process = async (
+      isRecent: (message: InboxMessage) => boolean = (message) =>
+        message.keepUntil !== undefined && message.keepUntil.getTime() > now.getTime(),
+    ) => {
+      const page = this.#deduplication.page(messages, isRecent);
+      for (const message of messages) {
+        if (!(await this.#processMessage(message, page))) return false;
+      }
+      return true;
+    };
+    try {
+      const continued = await this.#runPage(messages, process);
+      if (!continued) {
+        this.#failUnflushed(new Error("Delivery page stopped before storage completed."));
+        return false;
+      }
+      this.#commitPageWrites();
+      this.#commitPageRemovals();
+      return true;
+    } catch (error) {
+      this.#failUnflushed(error);
+      throw error;
     }
-    return true;
+  }
+
+  /**
+   * Clears observations from the preceding page.
+   */
+  #resetPageResults(): void {
+    this.#settledInPage.length = 0;
+    this.#deliveredInPage.length = 0;
+    this.#duplicatesInPage.length = 0;
+    this.#reportedInPage.length = 0;
+  }
+
+  /**
+   * Processes a local page or the remote batch operation.
+   *
+   * @param messages Supplies the inbox page.
+   * @param process Dispatches its messages.
+   * @returns Whether processing continued through the page.
+   */
+  #runPage(
+    messages: readonly InboxMessage[],
+    process: (isRecent?: (message: InboxMessage) => boolean) => Promise<boolean>,
+  ): Promise<boolean> {
+    const remote = this.input.inbox as DeliveryInbox & {
+      [deliveryPortAccess]?: (
+        messages: readonly InboxMessage[],
+        session: DeliveryWorkSession,
+        options: DeliveryOperationOptions | undefined,
+        process: (isRecent?: (message: InboxMessage) => boolean) => Promise<boolean>,
+        onWritesStored: (deadlineNs: (message: InboxMessage) => bigint | undefined) => void,
+      ) => Promise<boolean>;
+    };
+    if (remote[deliveryPortAccess] === undefined) return process();
+    return remote[deliveryPortAccess](
+      messages,
+      this.#current,
+      this.input.options.operation,
+      process,
+      (deadlineNs) => {
+        this.#commitPageWrites(deadlineNs);
+      },
+    );
+  }
+
+  /**
+   * Completes stored removals and remaining outcomes after the batch succeeds.
+   */
+  #commitPageRemovals(): void {
+    for (const message of this.#duplicatesInPage) {
+      try {
+        this.input.options.onDuplicateRemoved?.(message);
+      } catch {
+        /* Storage already succeeded. */
+      }
+    }
+    this.#notifyPageOutcomes(this.#reportedInPage);
+    this.#settlePageMessages(this.#settledInPage);
+    this.#settledInPage.length = 0;
+  }
+
+  /**
+   * Commits durable completion writes to delivery observers before removals.
+   *
+   * @param deadlineNs Reads exact stored deadlines for remote completions.
+   */
+  #commitPageWrites(deadlineNs?: (message: InboxMessage) => bigint | undefined): void {
+    const written = new Set(this.#deliveredInPage.map(({ original }) => original));
+    for (const { completed } of this.#deliveredInPage) {
+      this.#deduplication.recordDelivered(completed, deadlineNs?.(completed));
+      this.#statistics.delivered += 1;
+      try {
+        this.input.options.onDelivered?.(completed);
+      } catch {
+        /* Storage already succeeded. */
+      }
+    }
+    this.#notifyPageOutcomes(this.#reportedInPage.filter((message) => written.has(message)));
+    this.#settlePageMessages(this.#settledInPage.filter((message) => written.has(message)));
+    this.#reportedInPage.splice(
+      0,
+      this.#reportedInPage.length,
+      ...this.#reportedInPage.filter((message) => !written.has(message)),
+    );
+    this.#settledInPage.splice(
+      0,
+      this.#settledInPage.length,
+      ...this.#settledInPage.filter((message) => !written.has(message)),
+    );
+    this.#deliveredInPage.length = 0;
+  }
+
+  /**
+   * Notifies observers after the corresponding storage operation succeeds.
+   *
+   * @param messages Supplies the inbox messages whose outcomes are durable.
+   */
+  #notifyPageOutcomes(messages: readonly InboxMessage[]): void {
+    for (const message of messages) {
+      const outcome = this.#messageOutcomes.get(message);
+      if (outcome !== undefined) {
+        try {
+          this.input.options.onMessageOutcome?.(message, outcome);
+        } catch {
+          /* Storage already succeeded. */
+        }
+      }
+    }
+  }
+
+  /**
+   * Completes controlled callers after their corresponding storage operation succeeds.
+   *
+   * @param messages Supplies the inbox messages whose storage operation is complete.
+   */
+  #settlePageMessages(messages: readonly InboxMessage[]): void {
+    for (const message of messages) {
+      try {
+        controlledMessageSettlers.get(this.input.options)?.(message);
+      } catch {
+        /* Storage already succeeded. */
+      }
+    }
+  }
+
+  /**
+   * Checks whether this Inbox applies one remote mutation batch per page.
+   *
+   * @returns Whether the internal page operation is present.
+   */
+  #usesRemotePage(): boolean {
+    return deliveryPortAccess in this.input.inbox;
+  }
+
+  /**
+   * Records unflushed page results as failures to controlled callers.
+   *
+   * @param error Supplies the page failure.
+   */
+  #failUnflushed(error: unknown): void {
+    for (const message of this.#settledInPage) {
+      if (this.#messageOutcomes.get(message)?.kind === "acknowledged") {
+        this.#messageOutcomes.delete(message);
+        this.#recordFailure(message, error);
+      }
+      controlledMessageSettlers.get(this.input.options)?.(message);
+    }
+    for (const message of this.#reportedInPage) {
+      const outcome = this.#messageOutcomes.get(message);
+      if (outcome !== undefined) this.input.options.onMessageOutcome?.(message, outcome);
+    }
+    this.#settledInPage.length = 0;
+    this.#deliveredInPage.length = 0;
+    this.#duplicatesInPage.length = 0;
+    this.#reportedInPage.length = 0;
   }
 
   /**
@@ -1143,7 +1768,8 @@ class DeliveryDrain {
       }
       return await this.#deliver(message, target);
     } finally {
-      controlledMessageSettlers.get(this.input.options)?.(message);
+      if (!this.#usesRemotePage()) controlledMessageSettlers.get(this.input.options)?.(message);
+      else this.#settledInPage.push(message);
     }
   }
 
@@ -1196,13 +1822,20 @@ class DeliveryDrain {
    */
   async #removeDuplicate(message: InboxMessage, target: string): Promise<boolean> {
     try {
-      if (!(await this.input.inbox.removeDuplicate(message, this.input.options.operation)))
+      if (
+        !(await this.input.inbox.removeDuplicate(
+          message,
+          this.input.options.operation,
+          this.#current,
+        ))
+      )
         throw new Error("Inbox duplicate was not removed.");
       this.#removedInPage.add(message);
       this.#messageOutcomes.set(message, { kind: "acknowledged", agent: false });
-      this.input.options.onDuplicateRemoved?.(message);
+      if (!this.#usesRemotePage()) this.input.options.onDuplicateRemoved?.(message);
+      else this.#duplicatesInPage.push(message);
     } catch (error) {
-      this.#recordFailure(message, error);
+      this.#recordStorageFailure(message, error);
       this.#blockedTargets.add(target);
     }
     return true;
@@ -1228,7 +1861,9 @@ class DeliveryDrain {
    */
   #reportOutcome(message: InboxMessage): void {
     const outcome = this.#messageOutcomes.get(message);
-    if (outcome !== undefined) this.input.options.onMessageOutcome?.(message, outcome);
+    if (outcome === undefined) return;
+    if (this.#usesRemotePage()) this.#reportedInPage.push(message);
+    else this.input.options.onMessageOutcome?.(message, outcome);
   }
 
   /**
@@ -1245,6 +1880,9 @@ class DeliveryDrain {
     acknowledgement: DeliveryAcknowledgement,
   ): Promise<void> {
     const observation = receptionObservation.create();
+    let duplicate:
+      | { readonly kind: DuplicateDispatch["kind"]; readonly code: DuplicateDispatch["code"] }
+      | undefined;
     try {
       const admitted = await this.#dispatch(message, observation);
       if (admitted === dispatchNotAdmitted) {
@@ -1253,10 +1891,17 @@ class DeliveryDrain {
       }
       this.#statistics.accepted += 1;
     } catch (error) {
-      await this.#handleReceptionFailure(message, target, acknowledgement, observation, error);
-      if (this.#ownershipLost || this.input.options.operation?.signal?.aborted) return;
+      if (error instanceof DuplicateDispatch) {
+        duplicate = { kind: error.kind, code: error.code };
+        this.#statistics.accepted += 1;
+      } else {
+        await this.#handleReceptionFailure(message, target, acknowledgement, observation, error);
+        if (this.#ownershipLost || this.input.options.operation?.signal?.aborted) return;
+      }
     }
     await this.#completeAttempt(message, target, acknowledgement);
+    if (duplicate !== undefined && acknowledgement.completed)
+      this.#messageOutcomes.set(message, { kind: "acknowledged", agent: false, duplicate });
   }
 
   /**
@@ -1311,12 +1956,12 @@ class DeliveryDrain {
       this.input.options.operation?.signal?.aborted
     )
       return;
-    if (!(await this.#validate())) return;
     try {
       await this.#acknowledgeWithRetry(message, acknowledgement);
     } catch (error) {
+      if (this.#ownershipLost) return;
       acknowledgement.exhausted = true;
-      this.#recordFailure(message, error);
+      this.#recordStorageFailure(message, error);
       this.#blockedTargets.add(target);
     }
   }
@@ -1409,53 +2054,42 @@ class DeliveryDrain {
    * @returns Completion after durable acknowledgement.
    */
   async #markDelivered(message: InboxMessage): Promise<void> {
-    const completed = await this.input.inbox.markDelivered(message, this.input.options.operation);
+    const completed = await this.input.inbox.markDelivered(
+      message,
+      this.input.options.operation,
+      this.#current,
+    );
     if (completed === undefined) throw new Error("Inbox message was not marked delivered.");
-    this.#deduplication.recordDelivered(completed);
-    this.#statistics.delivered += 1;
+    if (!this.#usesRemotePage()) {
+      this.#deduplication.recordDelivered(completed);
+      this.#statistics.delivered += 1;
+    }
     this.#messageOutcomes.set(message, { kind: "acknowledged", agent: false });
-    try {
-      this.input.options.onDelivered?.(completed);
-    } catch {
-      // A post-ack observer cannot undo durable delivery or repeat processing.
-    }
-  }
-
-  /**
-   * Removes expired delivered messages from one page when supported.
-   *
-   * @param messages Supplies the inbox page to clean up.
-   * @returns Whether cleanup completed while the session remained valid.
-   */
-  async #cleanupPage(messages: readonly InboxMessage[]): Promise<boolean> {
-    if (this.input.inbox.removeDelivered === undefined) return true;
-    if (!(await this.#validate())) return false;
-    const now = this.#retentionTime().getTime();
-    for (const message of messages) {
-      if (
-        message.status === "DELIVERED" &&
-        (message.keepUntil === undefined || message.keepUntil.getTime() <= now)
-      ) {
-        const removed = await this.#removeDelivered(message);
-        if (removed === undefined) return false;
-        if (removed) this.#removedInPage.add(message);
+    if (this.#usesRemotePage()) this.#deliveredInPage.push({ original: message, completed });
+    else
+      try {
+        this.input.options.onDelivered?.(completed);
+      } catch {
+        // A post-ack observer cannot undo durable delivery or repeat processing.
       }
-    }
-    return true;
   }
 
   /**
-   * Removes one expired delivered message when supported.
+   * Applies one shard-wide expired-delivery predicate before page reads.
    *
-   * @param message Supplies the delivered message to remove.
-   * @returns Whether the row was removed, or undefined if the session was lost.
+   * Providers without a single-operation predicate leave retained completions
+   * for later maintenance while pending delivery continues.
+   *
+   * @returns Completion after the cleanup attempt.
    */
-  async #removeDelivered(message: InboxMessage): Promise<boolean | undefined> {
-    if (this.input.inbox.removeDelivered === undefined) return false;
-    if (this.input.options.operation?.signal?.aborted || !(await this.#validate()))
-      return undefined;
-    const removed = await this.input.inbox.removeDelivered(message, this.input.options.operation);
-    return removed;
+  async #cleanupExpired(): Promise<void> {
+    if (this.input.inbox.removeExpiredDelivered === undefined) return;
+    if (!(await this.#validate())) return;
+    await this.input.inbox.removeExpiredDelivered(
+      this.input.shard,
+      this.input.options.operation,
+      this.#current,
+    );
   }
 
   /**
@@ -1489,12 +2123,26 @@ class DeliveryDrain {
   async #validate(): Promise<boolean> {
     return this.#sessionOperation(async () => {
       if (this.#stopped || this.#ownershipLost) return false;
-      const current = await safelyValue(
-        () => this.input.shards.validateOwnership(this.#current, this.input.options.operation),
-        undefined,
-      );
-      if (current === undefined) {
+      let current: DeliveryWorkSession | undefined;
+      try {
+        current = await this.input.shards.validateOwnership(this.#current, {
+          ...this.input.options.operation,
+          signal:
+            this.input.options.operation?.signal === undefined
+              ? this.input.registryShutdown
+              : AbortSignal.any([this.input.options.operation.signal, this.input.registryShutdown]),
+        });
+      } catch (error) {
+        this.#terminalFailure ??=
+          error instanceof Error ? error : new Error("Shard validation failed.", { cause: error });
         this.#ownershipLost = true;
+        this.stop();
+        return false;
+      }
+      if (current === undefined) {
+        this.#terminalFailure ??= new Error("The delivery session expired or was replaced.");
+        this.#ownershipLost = true;
+        this.#confirmedLost = true;
         this.stop();
       } else this.#current = current;
       return current !== undefined;
@@ -1502,7 +2150,21 @@ class DeliveryDrain {
   }
 
   /**
-   * Records an ephemeral delivery failure up to the configured limit.
+   * Marks the run with the error from an unsuccessful inbox update.
+   *
+   * @param message Identifies the row that could not be changed.
+   * @param error Supplies the storage failure for the caller.
+   */
+  #recordStorageFailure(message: InboxMessage, error: unknown): void {
+    this.#terminalFailure ??=
+      error instanceof Error
+        ? error
+        : new Error("Delivery storage operation failed.", { cause: error });
+    this.#recordFailure(message, error);
+  }
+
+  /**
+   * Records the failed row and its error for this run.
    *
    * @param message Supplies the failed inbox message.
    * @param error Supplies the observed failure.
@@ -1511,9 +2173,7 @@ class DeliveryDrain {
     this.#statistics.failed += 1;
     if (this.#messageOutcomes.get(message)?.kind !== "acknowledged")
       this.#messageOutcomes.set(message, { kind: "failed", error });
-    if (this.#failures.length < deliveryFailureLimit)
-      this.#failures.push(Object.freeze({ message: snapshot(message), error }));
-    this.#failureLimitReached = this.#failures.length === deliveryFailureLimit;
+    this.#failures.push(Object.freeze({ message: snapshot(message), error }));
   }
 
   /**
@@ -1552,6 +2212,7 @@ interface DeliveryDrainInputState {
   readonly pageSize: number;
   readonly session: DeliveryWorkSession;
   readonly shard: ShardIndex;
+  readonly registryShutdown: AbortSignal;
   readonly shards: DeliveryWorkRegistry;
 }
 
@@ -1661,6 +2322,11 @@ export interface DeliveryDrainOptions {
    * Propagates cancellation through the drain.
    */
   readonly operation?: import("./delivery-ports.js").DeliveryOperationOptions;
+
+  /**
+   * Uses work-aware pickup and propagates infrastructure failures to the caller.
+   */
+  readonly managed?: boolean;
 }
 function workerId(node: string): WorkerId {
   return create(WorkerIdSchema, { nodeId: { value: node }, value: randomUUID() });
@@ -1679,8 +2345,7 @@ function result(
   value = counts(),
   failures: readonly DeliveryFailure[] = [],
 ): DeliveryRun {
-  const run = Object.freeze({ status, ...value, failures: Object.freeze([...failures]) });
-  return run;
+  return Object.freeze({ status, ...value, failures: Object.freeze(failures) });
 }
 function snapshot(message: InboxMessage): InboxMessage {
   return Object.freeze({
@@ -1712,21 +2377,6 @@ async function safelyBoolean(action: () => boolean | Promise<boolean>): Promise<
   }
 }
 
-/**
- * Returns an action result or a fallback when the action fails.
- *
- * @typeParam T Action result type.
- * @param action Supplies the action to run.
- * @param fallback Supplies the result to use after failure.
- * @returns The action result or fallback value.
- */
-async function safelyValue<T>(action: () => T | Promise<T>, fallback: T): Promise<T> {
-  try {
-    return await action();
-  } catch {
-    return fallback;
-  }
-}
 function isEndpointMessage(message: InboxMessage): boolean {
   return (
     message.label === "HANDLE_COMMAND" ||
@@ -1748,7 +2398,16 @@ class DeliveryDeduplication {
    */
   constructor(inbox: DeliveryInbox) {
     const current = recentDeliveries.get(inbox);
-    this.#recent = current ?? new RecentDeliveries();
+    this.#recent =
+      current ??
+      new RecentDeliveries(
+        inbox instanceof Inbox
+          ? () => BigInt(InboxStorageClock.read(inbox.storage).getTime()) * 1_000_000n
+          : () => {
+              const now = Time.currentTime();
+              return now.seconds * 1_000_000_000n + BigInt(now.nanos);
+            },
+      );
     if (current === undefined) recentDeliveries.set(inbox, this.#recent);
   }
 
@@ -1756,20 +2415,24 @@ class DeliveryDeduplication {
    * Creates duplicate checks for one page and retention time.
    *
    * @param messages Supplies the messages in the page.
-   * @param now Supplies the time used to check message retention.
+   * @param isRecent Checks a retained deadline against the current time.
    * @returns Duplicate checks for the page.
    */
-  page(messages: readonly InboxMessage[], now: Date): DeliveryPageDeduplication {
-    return new DeliveryPageDeduplication(messages, this.#recent, now);
+  page(
+    messages: readonly InboxMessage[],
+    isRecent: (message: InboxMessage) => boolean,
+  ): DeliveryPageDeduplication {
+    return new DeliveryPageDeduplication(messages, this.#recent, isRecent);
   }
 
   /**
    * Records a message as recently delivered.
    *
    * @param message Supplies the delivered message.
+   * @param deadlineNs Supplies an exact remote wire deadline when available.
    */
-  recordDelivered(message: InboxMessage): void {
-    this.#recent.add(message);
+  recordDelivered(message: InboxMessage, deadlineNs?: bigint): void {
+    this.#recent.add(message, deadlineNs);
   }
 }
 
@@ -1784,21 +2447,16 @@ class DeliveryPageDeduplication {
    *
    * @param messages Supplies the inbox page.
    * @param recent Provides recently delivered message identities.
-   * @param now Supplies the time used to check message retention.
+   * @param isRecent Checks a retained deadline against the current time.
    */
   constructor(
     messages: readonly InboxMessage[],
     private readonly recent: RecentDeliveries,
-    now: Date,
+    isRecent: (message: InboxMessage) => boolean,
   ) {
     this.#identities = new Set(
       messages
-        .filter(
-          (message) =>
-            message.status === "DELIVERED" &&
-            message.keepUntil !== undefined &&
-            message.keepUntil.getTime() > now.getTime(),
-        )
+        .filter((message) => message.status === "DELIVERED" && isRecent(message))
         .map((message) => RecentDeliveries.key(message)),
     );
   }
@@ -1818,10 +2476,17 @@ class DeliveryPageDeduplication {
 }
 
 /**
- * Stores a bounded set of recently delivered message identities.
+ * Keeps recently acknowledged identities for the inbox retention interval.
  */
 class RecentDeliveries {
-  readonly #identities = new Map<string, undefined>();
+  readonly #identities = new Map<string, bigint>();
+
+  /**
+   * Creates a cache using the Inbox storage clock for its expiry checks.
+   *
+   * @param now Reads the relevant storage clock in nanoseconds.
+   */
+  constructor(private readonly now: () => bigint) {}
 
   /**
    * Checks whether an identity is in the recent-delivery set.
@@ -1830,21 +2495,38 @@ class RecentDeliveries {
    * @returns Whether that identity is present.
    */
   has(identity: string): boolean {
-    return this.#identities.has(identity);
+    const deadline = this.#identities.get(identity);
+    if (deadline === undefined) return false;
+    if (deadline > this.now()) return true;
+    this.#identities.delete(identity);
+    return false;
   }
 
   /**
-   * Adds a message identity and removes the oldest entry when over capacity.
+   * Adds a delivered identity with its local expiration time.
    *
    * @param message Supplies the delivered message.
+   * @param deadlineNs Supplies an exact remote wire deadline when available.
    */
-  add(message: InboxMessage): void {
+  add(message: InboxMessage, deadlineNs?: bigint): void {
+    if (message.keepUntil === undefined) return;
     const identity = RecentDeliveries.key(message);
+    const now = this.now();
+    this.#prune(now);
     this.#identities.delete(identity);
-    this.#identities.set(identity, undefined);
-    if (this.#identities.size > 1_000) {
-      const oldest = this.#identities.keys().next().value;
-      if (oldest !== undefined) this.#identities.delete(oldest);
+    const deadline = deadlineNs ?? BigInt(message.keepUntil.getTime()) * 1_000_000n;
+    if (deadline > now) this.#identities.set(identity, deadline);
+  }
+
+  /**
+   * Removes expired leading identities in amortized insertion order.
+   *
+   * @param now Current wall-clock time in nanoseconds.
+   */
+  #prune(now: bigint): void {
+    for (const [identity, deadline] of this.#identities) {
+      if (deadline > now) break;
+      this.#identities.delete(identity);
     }
   }
 
@@ -1857,6 +2539,7 @@ class RecentDeliveries {
   static key(message: InboxMessage): string {
     return JSON.stringify([
       deliveryTenantKey(message),
+      message.label === "HANDLE_COMMAND" ? "command" : "event",
       message.signalId,
       message.inboxId.targetTypeUrl,
       InboxTargets.key(message.inboxId.targetId),

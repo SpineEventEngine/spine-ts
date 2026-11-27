@@ -12,7 +12,18 @@
  * the License.
  */
 
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import {
+  clearField,
+  equals,
+  fromBinary,
+  toBinary,
+  isMessage,
+  type Message,
+} from "@bufbuild/protobuf";
+import { timestampFromDate, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { InboxMessageSchema, InboxMessageStatus } from "@spine-event-engine/proto/delivery";
+import type { google } from "@google-cloud/datastore/build/protos/protos.js";
+import type { DatastoreInboxMutations } from "./inbox-mutations.js";
 import { and, Datastore, or, PropertyFilter } from "@google-cloud/datastore";
 import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
@@ -23,6 +34,7 @@ import {
   type NormalizedQueryPlan,
   type NormalizedQueryPredicate,
   type RecordEntry,
+  type InboxRecordEntry,
   type RecordQuery,
   type RecordSpec,
   type RecordIndex,
@@ -161,12 +173,17 @@ class FlatEntityCodec<I, R extends Message> {
   readonly #columnMapping: DatastoreColumnMapping;
 
   /**
+   * Indicates that status and retention are mutable inbox properties.
+   */
+  readonly inbox: boolean;
+
+  /**
    * Initializes the Datastore kind, tenant namespace, ID codec, and column mapping.
    *
    * @param context Storage tenant context.
    * @param recordSpec Generated record and column contract.
    * @param client Datastore client supplying the default namespace.
-   * @param maxClientSideScan Maximum local materialization budget.
+   * @param maxClientSideScan Optional local materialization budget.
    * @param group Optional storage group used in the physical kind.
    * @param kind Optional explicit physical kind.
    * @param namespaceConverter Converts tenant IDs to Datastore namespaces.
@@ -177,13 +194,16 @@ class FlatEntityCodec<I, R extends Message> {
     context: StorageContext,
     private readonly recordSpec: RecordSpec<I, R>,
     client: Datastore,
-    private readonly maxClientSideScan: number,
+    private readonly maxClientSideScan: number | undefined,
     private readonly group: StorageGroup | undefined,
     kind: string | undefined,
     namespaceConverter: NamespaceConverter,
     stringifiers: StringifierRegistry,
     namespace?: string,
   ) {
+    this.inbox =
+      recordSpec.recordType.typeName === InboxMessageSchema.typeName &&
+      recordSpec.columns.some((column) => column.name === "when_keep_until");
     DatastoreRecordIndexes.validate(recordSpec.indexes);
     this.#kind =
       kind ?? RecordKinds.of(recordSpec.sourceType.typeName, recordSpec.recordType.typeName, group);
@@ -266,15 +286,50 @@ class FlatEntityCodec<I, R extends Message> {
   }
 
   /**
-   * Reads declared column values from a decoded entity record.
+   * Decodes a query result once and reads its declared columns from that record.
    *
-   * @param entity Raw Datastore entity.
-   * @returns Declared column values by name.
+   * @param entity Datastore entity returned by the query.
+   * @param client Client that supplies the key for this entity.
+   * @returns The record, its identifier, and its column values.
    */
-  columns(entity: Record<string | symbol, unknown>): ReadonlyMap<string, unknown> {
-    return new Map(
-      this.recordSpec.columns.map((column) => [column.name, column.valueIn(this.decode(entity))]),
-    );
+  queryEntry(entity: Record<string | symbol, unknown>, client: Datastore): QueriedEntry<I, R> {
+    const record = this.decode(entity);
+    return {
+      id: this.id(entity, client),
+      record,
+      columns: new Map(
+        this.recordSpec.columns.map((column) => [column.name, column.valueIn(record)]),
+      ),
+    };
+  }
+
+  /**
+   * Decodes the message and storage revision returned in a single inbox page result.
+   *
+   * @param item Native entity and storage metadata.
+   * @returns A detached entry with the revision of a pending inbox message.
+   */
+  inboxEntry(item: google.datastore.v1.IEntityResult): InboxRecordEntry<I, R> {
+    const properties = item.entity?.properties;
+    const key = item.entity?.key?.path?.at(-1)?.name;
+    const bytes = properties?.bytes?.blobValue;
+    if (!key || bytes == null) throw new Error("Datastore inbox message is incomplete.");
+    const status: InboxMessageStatus = Number(properties?.status?.integerValue);
+    const until = properties?.when_keep_until?.timestampValue;
+    const record = this.decode({
+      bytes: typeof bytes === "string" ? Buffer.from(bytes, "base64") : bytes,
+      status,
+      when_keep_until: until
+        ? new Date(Number(until.seconds) * 1000 + Math.floor((until.nanos ?? 0) / 1_000_000))
+        : undefined,
+    });
+    return {
+      id: this.#idColumn.read(key),
+      record,
+      ...(status === InboxMessageStatus.TO_DELIVER && item.version != null
+        ? { mutationToken: String(item.version) }
+        : {}),
+    };
   }
 
   /**
@@ -316,12 +371,14 @@ class FlatEntityCodec<I, R extends Message> {
   }
 
   /**
-   * Returns a row limit with one sentinel beyond the local scan budget.
+   * Returns a row limit with one sentinel when a local scan budget is configured.
    *
-   * @returns Provider row limit used to detect budget overflow.
+   * @returns The overflow-detection limit, or infinity without a scan budget.
    */
   queryLimit(): number {
-    return this.maxClientSideScan + 1;
+    return this.maxClientSideScan === undefined
+      ? Number.POSITIVE_INFINITY
+      : this.maxClientSideScan + 1;
   }
 
   /**
@@ -397,9 +454,16 @@ class FlatEntityCodec<I, R extends Message> {
 
     try {
       const bytes = Buffer.isBuffer(payload) ? Uint8Array.from(payload) : payload;
-      return fromBinary(this.recordSpec.recordType, bytes, {
+      const record = fromBinary(this.recordSpec.recordType, bytes, {
         readUnknownFields: this.recordSpec.recordType.typeName === AgentHistoryEntrySchema.typeName,
       });
+      if (this.inbox && isMessage(record, InboxMessageSchema)) {
+        record.status = Number(entity.status);
+        if (entity.when_keep_until instanceof Date)
+          record.keepUntil = timestampFromDate(entity.when_keep_until);
+        else clearField(record, InboxMessageSchema.field.keepUntil);
+      }
+      return record;
     } catch {
       throw new Error("Datastore entity cannot be decoded.");
     }
@@ -419,11 +483,11 @@ function datastoreKeyName(key: unknown): unknown {
 function keysetFilter(
   order: readonly { readonly property: string; readonly direction: "asc" | "desc" }[],
   cursor: DatastorePageCursor,
-  keySymbol: unknown,
+  keyDirection: "asc" | "desc" = order.at(-1)?.direction ?? "asc",
 ) {
-  if (cursor.values.length !== order.length)
+  if (cursor.values.length !== order.length || cursor.key === undefined)
     throw new Error("Datastore provider page continuation is malformed.");
-  const fields = [...order, { property: "__key__", direction: order.at(-1)?.direction ?? "asc" }];
+  const fields = [...order, { property: "__key__", direction: keyDirection }];
   const values = [...cursor.values, cursor.key];
   const alternatives = fields.map((field, index) => {
     const equal = fields
@@ -433,8 +497,6 @@ function keysetFilter(
     const current = new PropertyFilter(field.property, operator, values[index]);
     return equal.length === 0 ? current : and([...equal, current]);
   });
-  if (cursor.key === undefined || keySymbol === undefined)
-    throw new Error("Datastore provider page continuation is malformed.");
   return or(alternatives);
 }
 
@@ -470,23 +532,25 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
    * @param context Storage tenancy and naming context.
    * @param recordSpec Schema, identifier, and column materialization contract.
    * @param client Injected Datastore client owned by the factory.
-   * @param maxClientSideScan Maximum candidate records to materialize locally.
+   * @param maxClientSideScan Optional maximum candidate records to materialize locally.
    * @param group The optional generated storage group.
    * @param kind The optional physical Datastore kind override.
    * @param namespaceConverter Converts complete tenants to native namespaces.
    * @param stringifiers Converts message-valued IDs and declared columns.
    * @param namespace Preselected native tenant namespace.
+   * @param inboxMutations Native inbox channel shared by the factory.
    */
   constructor(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
     readonly client: Datastore,
-    maxClientSideScan: number,
+    maxClientSideScan: number | undefined,
     group?: StorageGroup,
     kind?: string,
     namespaceConverter: NamespaceConverter = new DefaultNamespaceConverter(),
     stringifiers: StringifierRegistry = defaultStringifierRegistry,
     namespace?: string,
+    private readonly inboxMutations?: DatastoreInboxMutations | undefined,
   ) {
     super(context, recordSpec);
     this.#codec = new FlatEntityCodec(
@@ -583,6 +647,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
    * @internal
    */
   matchesTransactionEntity(entity: Record<string | symbol, unknown>, expected: R): boolean {
+    if (this.#codec.inbox)
+      return equals(this.recordSpec.recordType, this.#codec.decode(entity), expected);
     const expectedData = this.transactionEntity(expected).data[payloadProperty];
     return RecordValues.payloadEqual(entity[payloadProperty], expectedData);
   }
@@ -602,27 +668,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       throw new Error(
         "Datastore provider page limit must be a positive integer no greater than 128.",
       );
-    const query = this.#codec.createQuery(this.client);
-    for (const filter of request.filters ?? []) {
-      query.filter(
-        new PropertyFilter(
-          filter.property,
-          filter.operator,
-          this.#codec.columnValue(filter.property, filter.value),
-        ),
-      );
-    }
+    const query = this.providerQuery(request);
     const order = request.order ?? [];
-    for (const item of order) query.order(item.property, { descending: item.direction === "desc" });
-    if (!order.some((item) => item.property === "__key__"))
-      query.order("__key__", {
-        descending: order.at(-1)?.direction === "desc",
-      });
-    if (request.cursor !== undefined) {
-      const continuation = keysetFilter(order, request.cursor, this.client.KEY);
-      query.filter(continuation);
-    }
-    query.limit(request.limit);
     const response = await this.provider(() => this.client.runQuery(query, wrappedReadOptions));
     const entities = DatastoreResults.entities(response);
     const info = DatastoreResults.queryInfo(response);
@@ -642,6 +689,37 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       cursor: info.more ? next : undefined,
       hasMore: info.more,
     };
+  }
+
+  /**
+   * Builds the ordered query for a provider history page.
+   *
+   * @param request The ordered filters, page size and any continuation.
+   * @returns A native Datastore query ready to execute.
+   */
+  private providerQuery(request: DatastorePageQuery): ReturnType<Datastore["createQuery"]> {
+    const query = this.#codec.createQuery(this.client);
+    for (const filter of request.filters ?? []) {
+      query.filter(
+        new PropertyFilter(
+          filter.property,
+          filter.operator,
+          this.#codec.columnValue(filter.property, filter.value),
+        ),
+      );
+    }
+    const order = request.order ?? [];
+    for (const item of order) query.order(item.property, { descending: item.direction === "desc" });
+    if (!order.some((item) => item.property === "__key__"))
+      query.order("__key__", {
+        descending: order.at(-1)?.direction === "desc",
+      });
+    if (request.cursor !== undefined) {
+      const continuation = keysetFilter(order, request.cursor);
+      query.filter(continuation);
+    }
+    query.limit(request.limit);
+    return query;
   }
 
   /**
@@ -681,6 +759,69 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   }
 
   /**
+   * Reads an exact shard page with the native revision for each pending message.
+   *
+   * @param request Framework inbox filters, chronological ordering and continuation.
+   * @returns The requested inbox entries and their private update metadata.
+   */
+  async queryInboxEntries(request: RecordQuery<I>): Promise<readonly InboxRecordEntry<I, R>[]> {
+    const inbox = this.requireInbox();
+    if (request.filters?.some((filter) => Array.isArray(filter.value) && !filter.value.length))
+      return [];
+    const query = this.#codec.createQuery(this.client);
+    DatastoreQueryPushdown.translate(
+      query,
+      request,
+      (id) => this.transactionKey(id),
+      (name) => this.#codec.columnProperty(name),
+      (name, value) => this.#codec.columnValue(name, value),
+      true,
+    );
+    if (request.limit === undefined) throw new TypeError("An inbox page needs a page size.");
+    query.limit(request.limit);
+    if (request.offset !== undefined) query.offset(request.offset);
+    const messages = await this.provider(() => inbox.page(query));
+    return messages.map((item) => this.#codec.inboxEntry(item));
+  }
+
+  /**
+   * Marks the current inbox ID delivered without writing the signal payload.
+   *
+   * @param id Complete inbox ID.
+   * @param deadline Deadline supplied by the application storage clock.
+   * @param token Native revision returned by the page.
+   * @returns First stored deadline or undefined if the message cannot be acknowledged.
+   */
+  markInboxDelivered(id: I, deadline: Timestamp, token?: unknown): Promise<Timestamp | undefined> {
+    const inbox = this.requireInbox();
+    const key = this.transactionKey(id);
+    return this.provider(() => inbox.markDelivered(key, deadline, token));
+  }
+
+  /**
+   * Removes a duplicate if its current stored status is still pending.
+   *
+   * @param id Complete inbox ID.
+   * @param token Pending revision from the ordinary page, when available.
+   * @returns True when the message was removed or was already absent.
+   */
+  removePendingInbox(id: I, token?: unknown): Promise<boolean> {
+    const inbox = this.requireInbox();
+    return this.provider(() => inbox.removePending(this.transactionKey(id), token));
+  }
+
+  /**
+   * Returns the native operations for an open framework inbox handle.
+   *
+   * @returns The factory's native inbox adapter.
+   */
+  private requireInbox(): DatastoreInboxMutations {
+    if (!this.isOpen() || !this.#codec.inbox || !this.inboxMutations)
+      throw new Error("Datastore inbox operations require an open inbox handle.");
+    return this.inboxMutations;
+  }
+
+  /**
    * Returns records matching a query.
    *
    * @param _query The record query.
@@ -689,9 +830,10 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   protected async queryRecordEntries(
     _query: RecordQuery<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
-    const query = this.#codec.createQuery(this.client);
     const exactPage = DatastoreRecordQuery.isKeysetPage(_query, this.recordSpec.indexes);
     const providerLimit = this.queryPageLimit(_query);
+    if (!Number.isFinite(providerLimit)) return this.exhaustiveLegacyEntries(_query);
+    const query = this.#codec.createQuery(this.client);
     DatastoreQueryPushdown.translate(
       query,
       _query,
@@ -711,21 +853,57 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     ) {
       throw new DatastoreQueryLimitError(providerLimit - 1);
     }
-    const entries = entities.map((entity) => ({
-      id: this.#codec.id(entity, this.client),
-      record: this.#codec.decode(entity),
-      columns: this.#codec.columns(entity),
-    }));
-
-    if (exactPage) return entries.map(({ id, record }) => ({ id, record }));
+    if (exactPage)
+      return entities.map((entity) => ({
+        id: this.#codec.id(entity, this.client),
+        record: this.#codec.decode(entity),
+      }));
+    const entries = entities.map((entity) => this.#codec.queryEntry(entity, this.client));
     return LocalQueryResults.apply(entries, _query);
+  }
+
+  /**
+   * Reads provider cursor pages until local filters and ordering have every candidate.
+   *
+   * @param request The legacy query to evaluate.
+   * @returns Exact filtered and ordered entries.
+   */
+  private async exhaustiveLegacyEntries(
+    request: RecordQuery<I>,
+  ): Promise<readonly RecordEntry<I, R>[]> {
+    const entries: QueriedEntry<I, R>[] = [];
+    let cursor: Buffer | string | undefined;
+    const seen = new Set<string>();
+    for (;;) {
+      const query = this.#codec.createQuery(this.client);
+      DatastoreQueryPushdown.translate(
+        query,
+        request,
+        (id) => this.#codec.key(this.client, id),
+        (column) => this.#codec.columnProperty(column),
+        (column, value) => this.#codec.columnValue(column, value),
+        false,
+      );
+      query.limit(128);
+      if (cursor !== undefined) query.start(cursor);
+      const response = await this.provider(() => this.client.runQuery(query, wrappedReadOptions));
+      for (const entity of DatastoreResults.entities(response))
+        entries.push(this.#codec.queryEntry(entity, this.client));
+      const info = DatastoreResults.queryInfo(response);
+      if (!info.more) return LocalQueryResults.apply(entries, request);
+      const next = info.cursor;
+      const key = typeof next === "string" ? next : next.toString("base64");
+      if (seen.has(key)) throw new Error("Datastore query continuation did not advance.");
+      seen.add(key);
+      cursor = next;
+    }
   }
 
   /**
    * Returns the safe native row limit for one record query.
    *
    * @param query Requested record query.
-   * @returns Exact page size or configured candidate limit.
+   * @returns Exact page size, configured candidate limit, or infinity for cursor paging.
    */
   private queryPageLimit(query: RecordQuery<I>): number {
     return DatastoreRecordQuery.limit(query, this.#codec.queryLimit(), this.recordSpec.indexes);
@@ -941,14 +1119,10 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     try {
       await transaction.run();
       const entity = DatastoreResults.first(await transaction.get(key, wrappedReadOptions));
-      const expectedPayload =
-        expected === undefined
-          ? undefined
-          : this.#codec.encode(expected.record, expected.columns)[payloadProperty];
       if (
         entity === undefined
           ? expected !== undefined
-          : !RecordValues.payloadEqual(entity[payloadProperty], expectedPayload)
+          : expected === undefined || !this.matchesTransactionEntity(entity, expected.record)
       ) {
         await transaction.rollback();
         return false;
@@ -1145,8 +1319,21 @@ class DatastoreQueryPushdownHelper {
         });
       }
       if (!(recordQuery.sort ?? []).some((order) => order.field === "id")) query.order("__key__");
-      if (recordQuery.after !== undefined && exactPage)
-        query.filter(new PropertyFilter("__key__", ">", keyFor(recordQuery.after.id)));
+      if (recordQuery.after !== undefined && exactPage) {
+        const fields = (recordQuery.sort ?? []).map((item) => ({
+          property: item.field === "id" ? "__key__" : columnProperty(item.field),
+          direction: item.direction ?? "asc",
+        }));
+        const values = recordQuery.after.values.map((item) =>
+          item.field === "id" ? keyFor(item.value as I) : columnValue(item.field, item.value),
+        );
+        const cursor = { values, key: keyFor(recordQuery.after.id) };
+        if (fields.length === 1 && fields[0]?.property === "__key__") {
+          query.filter(new PropertyFilter("__key__", ">", cursor.key));
+        } else {
+          query.filter(keysetFilter(fields, cursor, "asc"));
+        }
+      }
     }
 
   /**

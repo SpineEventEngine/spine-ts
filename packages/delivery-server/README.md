@@ -2,11 +2,11 @@
 
 This package provides the in-memory Delivery server. Use it to develop and test
 the local delivery path, or as the deliberately ephemeral delivery component in
-the supported examples. Its Inbox rows, leases, and delivered facts disappear
+the supported examples. Its Inbox messages, leases, and delivered facts disappear
 when the process stops.
 
-The [reference](REFERENCE.md) records finite limits, shutdown order, and the
-complete protocol contract, including API detail for coding agents.
+The [reference](REFERENCE.md) covers gRPC message sizes, shutdown, and the
+contract for each service, including API details for coding agents.
 
 This is an experimental snapshot package. Use Node 24 or newer; an embedded
 server also needs an application-managed Connect listener.
@@ -19,7 +19,6 @@ pnpm add @spine-event-engine/delivery-server@snapshot
 
 - ✅ Coordinates inbox work and shard ownership between trusted Node processes.
 - ✅ Starts as a standalone command or embeds in another Node server.
-- ✅ Bounds retained messages, retained bytes, and tracked shards.
 - ✅ Provides administration and gRPC health endpoints for local operations.
 
 ## 🚀 Run a local server
@@ -43,22 +42,30 @@ The `spine-delivery-server` executable runs the same server. It reads
 configuration once at startup from explicit options, then environment variables,
 then defaults.
 
-| Setting           | Environment variable       | Default     |
-| ----------------- | -------------------------- | ----------- |
-| Listener host     | `HOST`                     | `127.0.0.1` |
-| Listener port     | `PORT`                     | `8484`      |
-| Inbound size      | `MAX_INBOUND_MESSAGE_SIZE` | 4 MiB       |
-| Pickup timeout    | `SHARD_PROCESSING_TIMEOUT` | disabled    |
-| Retained messages | `MAX_RETAINED_MESSAGES`    | 10,000      |
-| Retained bytes    | `MAX_RETAINED_BYTES`       | 32 MiB      |
-| Tracked shards    | `MAX_TRACKED_SHARDS`       | 1,000       |
+| Setting          | Environment variable        | Default              |
+| ---------------- | --------------------------- | -------------------- |
+| Listener host    | `HOST`                      | `127.0.0.1`          |
+| Listener port    | `PORT`                      | `8484`               |
+| Inbound size     | `MAX_INBOUND_MESSAGE_SIZE`  | gRPC framing maximum |
+| Outbound size    | `MAX_OUTBOUND_MESSAGE_SIZE` | gRPC framing maximum |
+| Stale pickup age | `SHARD_PROCESSING_TIMEOUT`  | Disabled             |
+| Work reminder    | `WORK_REMINDER_SECONDS`     | 10 seconds           |
+| Child processes  | `DELIVERY_PROCESS_COUNT`    | 1                    |
+
+Set `processCount: 2` when constructing `DeliveryServer`, or set
+`DELIVERY_PROCESS_COUNT=2` for the executable. The public listener stays in the
+parent process. It routes shard number `s` to child `s % 2`, while each child
+keeps the full shard identity. For example, the parent forwards a write for
+shard 3 to subprocess 1. Subprocess 1 writes to its inbox and returns the
+result. Each subprocess stores its messages in memory.
+If a subprocess exits, the parent starts a replacement in the same slot.
+The exited process loses its in-memory messages and sessions.
 
 ## 🧩 Embed the handlers
 
 Use `InMemoryDelivery.create()` when an application provides the Connect router and
-listener itself. `DeliveryCore.inbox`, `.inboxRead`, and `.shards` are the public
-Connect handler implementations; register all three before creating the transport. The
-application still manages the network listener and its lifecycle.
+listener itself. Register the inbox, shard, and work observation
+handlers on the router as shown below. The application manages the network listener and its lifecycle.
 
 An embedded consumer must declare and install direct dependencies on
 `@spine-event-engine/delivery-server`, `@connectrpc/connect`, and
@@ -71,30 +78,60 @@ delivery server's transitive dependencies.
 ```ts
 import { createRouterTransport } from "@connectrpc/connect";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
-import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
+import {
+  InboxService,
+  ShardObservingService,
+  ShardService,
+} from "@spine-event-engine/proto/delivery-server";
 
 const delivery = InMemoryDelivery.create({
   processingTimeoutMs: 30_000,
-  maxRetainedMessages: 10_000,
-  maxRetainedBytes: 32 * 1024 * 1024,
-  maxTrackedShards: 1_000,
 });
 const transport = createRouterTransport((router) => {
   router.service(InboxService, delivery.inbox);
   router.service(ShardService, delivery.shards);
+  router.service(ShardObservingService, delivery.observing);
 });
 void transport;
+
+// During application shutdown, close active work streams and cancel the core's timers.
+delivery.close();
 ```
 
-The example explicitly enables a 30-second processing timeout. The default is
-zero, which disables timeout-based takeover during shard pickup. The application
-supervisor can still release stale sessions. Its recovery scan and
-stale-session threshold are separate [recovery timers](REFERENCE.md#recovery-timers).
+In the example, another worker can pick up a shard when more than 30 seconds
+have passed since the recorded pickup. By default, age alone does not allow
+a takeover. Releasing a shard with pending messages makes it available to
+work-stream subscribers. The reminder interval controls when the server
+repeats that notice.
 
-The standalone listener exposes Inbox, Shard, Admin, and gRPC health services.
+The standalone listener exposes Inbox, Shard, Shard Observing, Admin, and gRPC health services.
+
 It binds only to the loopback address by default. An explicit non-loopback host
 is a caller-selected trusted-network deployment and should not be exposed
 directly to the public Internet.
+
+## Work notifications
+
+An application instance can open `ShardObservingService.ObserveAll` on the same
+gRPC endpoint as the inbox. Each response identifies a free shard containing at
+least one message with status `TO_DELIVER`. Every subscribed instance can receive
+the same shard index. The application requests pickup before reading the messages
+and running a handler.
+
+Suppose shard 4 of 16 already contains a Command when a second application
+instance connects. The server reports shard 4 on that new connection immediately.
+When all shards are empty or being processed, the call stays open and silent.
+
+If neither instance takes shard 4, the server sends the index again after the
+configured reminder interval, ten seconds by default. Set `workReminderSeconds`
+when constructing the server or set `WORK_REMINDER_SECONDS` for the executable.
+
+Suppose the first subscriber connects at noon and receives a notice for a Command
+written at 11:59:51. The first reminder is due at 12:00:10. A second Command
+written to that shard at 12:00:03 leaves that reminder due at 12:00:10.
+Pickup stops the reminders. If the worker releases shard 4 with a Command
+still waiting, the server reports it again.
+A reconnect starts with the shards available at that time.
 
 ## ⚠️ In-memory means temporary
 
@@ -106,7 +143,7 @@ processes but does not make this in-memory server durable.
 
 The server has no durable mode, TLS,
 authentication, authorization, configuration reload, health watch stream, or
-administration UI. A pending row is not an attempt-history or quarantine
+administration UI. A pending message is not an attempt-history or quarantine
 record. Its default loopback listener is for development; a wider listener
 belongs only on an application-managed trusted network.
 

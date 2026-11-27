@@ -122,9 +122,24 @@ export const inboxRecordSpec: RecordSpec<WireInboxMessageId, WireInboxMessage> =
       (record) => record.status,
     ),
     new RecordColumn(
+      "when_keep_until",
+      ColumnTypes.fromField(InboxMessageSchema.field.keepUntil),
+      (record) => record.keepUntil,
+    ),
+    new RecordColumn(
       "when_received",
       ColumnTypes.fromField(InboxMessageSchema.field.whenReceived),
       (record) => record.whenReceived,
+    ),
+    new RecordColumn(
+      "when_received_seconds",
+      ColumnTypes.scalar(ScalarType.INT64),
+      (record) => record.whenReceived?.seconds ?? 0n,
+    ),
+    new RecordColumn(
+      "when_received_nanos",
+      ColumnTypes.scalar(ScalarType.INT32),
+      (record) => record.whenReceived?.nanos ?? 0,
     ),
     new RecordColumn(
       "version",

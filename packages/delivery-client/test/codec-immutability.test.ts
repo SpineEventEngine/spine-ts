@@ -42,12 +42,8 @@ import {
   ShardIndexSchema,
 } from "@spine-event-engine/proto/delivery";
 import { describe, expect, it } from "vitest";
-import {
-  DeliveryClient,
-  DeliveryPagingError,
-  DeliveryProtocolError,
-  RemoteInbox,
-} from "../src/index.js";
+import { DeliveryClient, DeliveryPagingError, DeliveryProtocolError } from "../src/index.js";
+import { RemoteInbox } from "../src/remote/adapters.js";
 import {
   DeliveryMessageCodec,
   DeliveryRequestCodec,
@@ -73,20 +69,32 @@ describe("delivery codec and immutable snapshots", () => {
     );
   });
 
+  it("retains exact completion nanos on an unchanged write and honors a changed Date", () => {
+    const wire = DeliveryMessageCodec.encode(domainMessage("retained-nanos"));
+    wire.status = InboxMessageStatus.DELIVERED;
+    wire.keepUntil = create(TimestampSchema, { seconds: 12n, nanos: 345_678_901 });
+    const row = DeliveryMessageCodec.decode(wire, ShardIndex.single());
+    expect(DeliveryMessageCodec.encode(row).keepUntil).toEqual(wire.keepUntil);
+    row.keepUntil?.setTime(13_000);
+    expect(DeliveryMessageCodec.encode(row).keepUntil).toEqual(
+      create(TimestampSchema, { seconds: 13n, nanos: 0 }),
+    );
+  });
+
   it("opens a remote inbox without retained removal state", () => {
     const client = DeliveryClient.usingTransport(transport().transport);
 
     expect(new RemoteInbox(client)).toBeInstanceOf(RemoteInbox);
   });
 
-  it("writes, pages, and directly removes only an exact pending remote row", async () => {
+  it("writes, pages, and directly removes a row through the low-level storage API", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport, { pageSize: 2 });
     const inbox = new RemoteInbox(client);
     const source = domainMessage();
 
     fake.reply(create(EmptySchema));
-    await expect(inbox.receive(source)).resolves.toMatchObject({ outcome: "WRITTEN" });
+    await expect(inbox.receive(source)).resolves.toMatchObject({ signalId: source.signalId });
     fake.reply(create(PageOfMessagesSchema, { message: [DeliveryMessageCodec.encode(source)] }));
     await expect(inbox.read(ShardIndex.single())).resolves.toHaveLength(1);
     await expect(inbox.read(ShardIndex.single(), { offset: 1 })).rejects.toBeInstanceOf(
@@ -100,36 +108,9 @@ describe("delivery codec and immutable snapshots", () => {
     fake.reply(create(OptionalInboxMessageSchema, { message: currentWire }));
     const current = await client.findOne({ value: "work", shard: ShardIndex.single() });
     if (current === undefined) throw new Error("Expected remote message.");
-    fake.reply(create(OptionalInboxMessageSchema, { message: currentWire }));
     fake.reply(create(EmptySchema));
-    await expect(inbox.markDelivered(current)).resolves.toMatchObject({ status: "DELIVERED" });
-  });
-
-  it("cleans only expired delivered rows and pending duplicates by exact remote ID", async () => {
-    const fake = transport();
-    const inbox = new RemoteInbox(DeliveryClient.usingTransport(fake.transport));
-    const pending = domainMessage("pending-duplicate");
-    const delivered = { ...pending, status: "DELIVERED" as const };
-
-    await expect(inbox.removeDelivered(pending)).resolves.toBe(false);
-    await expect(
-      inbox.removeDelivered({ ...delivered, keepUntil: new Date(8_640_000_000_000) }),
-    ).resolves.toBe(false);
-    expect(fake.unary).not.toHaveBeenCalled();
-
-    fake.reply(create(EmptySchema));
-    await expect(inbox.removeDelivered({ ...delivered, keepUntil: new Date(0) })).resolves.toBe(
-      true,
-    );
-    await expect(inbox.removeDuplicate(delivered)).resolves.toBe(false);
-    fake.reply(create(EmptySchema));
-    await expect(inbox.removeDuplicate(pending)).resolves.toBe(true);
-    expect(fake.unary).toHaveBeenCalledTimes(2);
-    expect(
-      fake.unary.mock.calls.map(
-        (call) => (call[4] as { message?: { id?: { uuid?: string } } }).message?.id?.uuid,
-      ),
-    ).toEqual([pending.id.value, pending.id.value]);
+    await expect(client.removeOne(current)).resolves.toBeUndefined();
+    expect(fake.unary.mock.calls.at(-1)?.[0]).toMatchObject({ name: "RemoveOne" });
   });
 
   it("validates an empty-filter read cursor and caller cancellation before remote I/O", async () => {
@@ -284,49 +265,12 @@ describe("delivery codec and immutable snapshots", () => {
     expect(() => DeliveryRequestCodec.expiry(new Date(Number.NaN))).toThrow(TypeError);
   });
 
-  it("keeps remote pickup validation on protocol errors", () => {
-    const worker = { nodeId: { value: "node" }, value: "worker" };
-    const whenPicked = { seconds: 1n, nanos: 0 };
-    expect(() => {
-      DeliveryShardCodec.validatePicked({ whenPicked }, ShardIndex.single());
-    }).toThrow(DeliveryProtocolError);
-    expect(() => {
-      DeliveryShardCodec.validatePicked({ worker }, ShardIndex.single());
-    }).toThrow(DeliveryProtocolError);
-    expect(() => {
-      DeliveryShardCodec.validatePicked(
-        { worker, whenPicked, shard: { index: 1, ofTotal: 2 } },
-        ShardIndex.single(),
-      );
-    }).toThrow(DeliveryProtocolError);
-  });
-
   it("bounds call options", () => {
     const signal = new AbortController().signal;
     expect(DeliveryRequestCodec.callOptions(undefined)).toEqual({});
     expect(DeliveryRequestCodec.callOptions(signal)).toEqual({ signal });
     expect(DeliveryRequestCodec.callOptions(undefined, 200)).toEqual({ timeoutMs: 200 });
     expect(DeliveryRequestCodec.callOptions(signal, 200)).toEqual({ timeoutMs: 200, signal });
-  });
-
-  it("accepts a response at the 4 MiB limit and rejects a larger response", () => {
-    const within = create(StringValueSchema, { value: "a".repeat(4 * 1024 * 1024 - 5) });
-    const oversized = create(StringValueSchema, { value: "a".repeat(4 * 1024 * 1024 - 4) });
-    expect(toBinary(StringValueSchema, within)).toHaveLength(4 * 1024 * 1024);
-    expect(toBinary(StringValueSchema, oversized)).toHaveLength(4 * 1024 * 1024 + 1);
-    expect(() => {
-      DeliveryRequestCodec.responseBytes(StringValueSchema, within);
-    }).not.toThrow();
-    expect(() => {
-      DeliveryRequestCodec.responseBytes(StringValueSchema, oversized);
-    }).toThrow(DeliveryProtocolError);
-  });
-
-  it("rejects a request that exceeds the delivery RPC byte limit", () => {
-    const oversized = create(StringValueSchema, { value: "a".repeat(4 * 1024 * 1024) });
-    expect(() => {
-      DeliveryRequestCodec.requestBytes(StringValueSchema, oversized);
-    }).toThrow("4 MiB");
   });
 
   it("isolates decoded receive timestamps and payload bytes from later caller mutation", () => {
