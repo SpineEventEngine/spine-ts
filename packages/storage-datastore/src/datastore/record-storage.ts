@@ -427,11 +427,11 @@ function datastoreKeyName(key: unknown): unknown {
 function keysetFilter(
   order: readonly { readonly property: string; readonly direction: "asc" | "desc" }[],
   cursor: DatastorePageCursor,
-  keySymbol: unknown,
+  keyDirection: "asc" | "desc" = order.at(-1)?.direction ?? "asc",
 ) {
-  if (cursor.values.length !== order.length)
+  if (cursor.values.length !== order.length || cursor.key === undefined)
     throw new Error("Datastore provider page continuation is malformed.");
-  const fields = [...order, { property: "__key__", direction: order.at(-1)?.direction ?? "asc" }];
+  const fields = [...order, { property: "__key__", direction: keyDirection }];
   const values = [...cursor.values, cursor.key];
   const alternatives = fields.map((field, index) => {
     const equal = fields
@@ -441,8 +441,6 @@ function keysetFilter(
     const current = new PropertyFilter(field.property, operator, values[index]);
     return equal.length === 0 ? current : and([...equal, current]);
   });
-  if (cursor.key === undefined || keySymbol === undefined)
-    throw new Error("Datastore provider page continuation is malformed.");
   return or(alternatives);
 }
 
@@ -627,7 +625,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
         descending: order.at(-1)?.direction === "desc",
       });
     if (request.cursor !== undefined) {
-      const continuation = keysetFilter(order, request.cursor, this.client.KEY);
+      const continuation = keysetFilter(order, request.cursor);
       query.filter(continuation);
     }
     query.limit(request.limit);
@@ -1190,8 +1188,21 @@ class DatastoreQueryPushdownHelper {
         });
       }
       if (!(recordQuery.sort ?? []).some((order) => order.field === "id")) query.order("__key__");
-      if (recordQuery.after !== undefined && exactPage)
-        query.filter(new PropertyFilter("__key__", ">", keyFor(recordQuery.after.id)));
+      if (recordQuery.after !== undefined && exactPage) {
+        const fields = (recordQuery.sort ?? []).map((item) => ({
+          property: item.field === "id" ? "__key__" : columnProperty(item.field),
+          direction: item.direction ?? "asc",
+        }));
+        const values = recordQuery.after.values.map((item) =>
+          item.field === "id" ? keyFor(item.value as I) : columnValue(item.field, item.value),
+        );
+        const cursor = { values, key: keyFor(recordQuery.after.id) };
+        if (fields.length === 1 && fields[0]?.property === "__key__") {
+          query.filter(new PropertyFilter("__key__", ">", cursor.key));
+        } else {
+          query.filter(keysetFilter(fields, cursor, "asc"));
+        }
+      }
     }
 
   /**
@@ -1431,6 +1442,29 @@ class DatastoreRecordQueryMethods {
     const order = query.sort;
     const continuation = query.after;
     const continuationValue = continuation?.values[0];
+    const inboxOrder = [
+      "when_received_seconds",
+      "when_received_nanos",
+      "version",
+      "message_id",
+    ];
+    const isInboxPage =
+      query.limit !== undefined &&
+      query.ids === undefined &&
+      query.offset === undefined &&
+      query.filters?.length !== undefined &&
+      (query.filters.length === 2 || query.filters.length === 3) &&
+      query.filters[0]?.column === "shard_index" &&
+      query.filters[1]?.column === "shard_total" &&
+      (query.filters.length === 2 || query.filters[2]?.column === "status") &&
+      query.filters.every((filter) => !Array.isArray(filter.value)) &&
+      order?.length === inboxOrder.length &&
+      order.every((item, index) => item.field === inboxOrder[index]) &&
+      order.every((item) => (item.direction ?? "asc") === (order[0]?.direction ?? "asc")) &&
+      (continuation === undefined ||
+        (continuation.values.length === inboxOrder.length &&
+          continuation.values.every((item, index) => item.field === inboxOrder[index])));
+    if (isInboxPage) return true;
     return (
       query.limit !== undefined &&
       query.ids === undefined &&

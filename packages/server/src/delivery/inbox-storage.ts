@@ -110,7 +110,12 @@ export class InboxStorage {
             ? []
             : [{ column: "status", value: options.statuses.map(Values.status) }]),
         ],
-        sort: [{ field: "when_received" }, { field: "version" }, { field: "message_id" }],
+        sort: [
+          { field: "when_received_seconds" },
+          { field: "when_received_nanos" },
+          { field: "version" },
+          { field: "message_id" },
+        ],
         limit,
         ...(offset === undefined ? {} : { offset }),
         ...(after === undefined ? {} : { after }),
@@ -138,7 +143,8 @@ export class InboxStorage {
           { column: "status", value: Values.status("TO_DELIVER") },
         ],
         sort: [
-          { field: "when_received", direction: "desc" },
+          { field: "when_received_seconds", direction: "desc" },
+          { field: "when_received_nanos", direction: "desc" },
           { field: "version", direction: "desc" },
           { field: "message_id", direction: "desc" },
         ],
@@ -502,7 +508,8 @@ const Values = Object.freeze({
       throw new InboxMessageError("Inbox read continuation is invalid.");
     return {
       values: [
-        { field: "when_received", value: Values.receiveTime(value.whenReceived) },
+        { field: "when_received_seconds", value: value.whenReceived.seconds },
+        { field: "when_received_nanos", value: value.whenReceived.nanos },
         { field: "version", value: Number(value.version) },
         { field: "message_id", value: value.messageId },
       ],

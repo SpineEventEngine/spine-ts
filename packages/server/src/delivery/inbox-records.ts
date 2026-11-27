@@ -127,6 +127,16 @@ export const inboxRecordSpec: RecordSpec<WireInboxMessageId, WireInboxMessage> =
       (record) => record.whenReceived,
     ),
     new RecordColumn(
+      "when_received_seconds",
+      ColumnTypes.scalar(ScalarType.INT64),
+      (record) => record.whenReceived?.seconds ?? 0n,
+    ),
+    new RecordColumn(
+      "when_received_nanos",
+      ColumnTypes.scalar(ScalarType.INT32),
+      (record) => record.whenReceived?.nanos ?? 0,
+    ),
+    new RecordColumn(
       "version",
       ColumnTypes.fromField(InboxMessageSchema.field.version),
       (record) => record.version,

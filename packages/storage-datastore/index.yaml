@@ -3,7 +3,8 @@ indexes:
     properties:
       - name: shard_index
       - name: shard_total
-      - name: when_received
+      - name: when_received_seconds
+      - name: when_received_nanos
       - name: version
       - name: message_id
   - kind: spine.server.delivery.InboxMessage
@@ -11,14 +12,17 @@ indexes:
       - name: shard_index
       - name: shard_total
       - name: status
-      - name: when_received
+      - name: when_received_seconds
+      - name: when_received_nanos
       - name: version
       - name: message_id
   - kind: spine.server.delivery.InboxMessage
     properties:
       - name: shard_index
       - name: shard_total
-      - name: when_received
+      - name: when_received_seconds
+        direction: desc
+      - name: when_received_nanos
         direction: desc
       - name: version
         direction: desc
@@ -31,7 +35,9 @@ indexes:
       - name: shard_index
       - name: shard_total
       - name: status
-      - name: when_received
+      - name: when_received_seconds
+        direction: desc
+      - name: when_received_nanos
         direction: desc
       - name: version
         direction: desc
