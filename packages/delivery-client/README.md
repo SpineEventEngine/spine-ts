@@ -42,7 +42,7 @@ Read operations can use the configured retry policy. If a managed pickup reply
 is lost, `pickUpForDelivery()` retries with the same worker and run ID within
 the original deadline. For a lost inbox write reply, read the affected message to
 learn whether the write succeeded before deciding what to do next.
-Inbox receipts and `sinceWhen` page anchors use Protobuf `Timestamp` values,
+Inbox receive times and the `sinceWhen` query field use Protobuf `Timestamp` values,
 preserving seconds and nanoseconds. `readPage` calls the JVM
 `InboxService.FindManyInShard` RPC with an exclusive timestamp bound.
 

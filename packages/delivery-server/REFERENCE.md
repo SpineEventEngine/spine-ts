@@ -99,10 +99,14 @@ time. Canceling a queued write before it starts prevents that write from
 changing the inbox. Once it starts, it can finish even if the caller
 disconnects before receiving the reply.
 
-The JVM `InboxService.FindManyInShard` page RPC uses an exclusive timestamp
-bound. Reads are live and do not promise a snapshot across pages. Distinct
-received timestamps permit continued paging; a full page ending in tied times
-is reported as unsafe continuation.
+Each call to `InboxService.FindManyInShard` reads the current inbox. Its
+`sinceWhen` field selects messages received strictly after the supplied time.
+Suppose a worker reads two messages per page and three messages have the same
+receive time. Using that time as the next lower bound would skip the third
+message. The TS worker includes that instant again, asks for a larger page
+when needed, and skips the messages it already visited using their inbox
+counters and UUIDs. It uses the same RPC for both reads.
+
 A session expires when elapsed time reaches its lifetime. Explicit inactivity
 release also includes sessions exactly at the requested age. For example, a
 request specifying 500 microseconds leaves a 499-microsecond session active.
