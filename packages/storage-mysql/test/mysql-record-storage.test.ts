@@ -1770,8 +1770,10 @@ describe("MysqlRecordStorage", () => {
       await history.queryEntityEvents(producer, 2, 7n);
       const reads = calls.filter(({ sql }) => sql.startsWith("SELECT bytes"));
       expect(reads.map(({ sql }) => sql)).toEqual([
-        `SELECT bytes FROM \`${table.tableName}\` WHERE entity_id = ? ORDER BY version DESC, created DESC LIMIT 3`,
-        `SELECT bytes FROM \`${table.tableName}\` WHERE entity_id = ? AND version <= ? ORDER BY version DESC, created DESC LIMIT 2`,
+        `SELECT bytes FROM \`${table.tableName}\` WHERE entity_id = ? ` +
+          "ORDER BY version DESC, created DESC LIMIT 3",
+        `SELECT bytes FROM \`${table.tableName}\` WHERE entity_id = ? AND version <= ? ` +
+          "ORDER BY version DESC, created DESC LIMIT 2",
       ]);
       expect(reads[0]?.values).toEqual([expect.stringContaining("task-7")]);
       expect(reads[1]?.values).toEqual([reads[0]?.values?.[0], "7"]);
