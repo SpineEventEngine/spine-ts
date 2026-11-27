@@ -2,6 +2,20 @@
 
 Navigation: [README](README.md)
 
+## Aggregate dispatch and inbox cleanup
+
+Accepted on 27 November 2026 for the [shard delivery task](tasks/shard-delivery-correctness-and-performance/TASK.md).
+
+Only Aggregates offer the opt-in double-dispatch guard. Its configuration
+requires an explicit depth. Read the producing Aggregate's recent Events and
+reuse history on the live instance. Process Managers and Agents have no such
+guard. Their ordinary persistence is independent of duplicate detection.
+
+A worker marks the inbox ID from its page delivered. Exact-message comparison
+and a second read of that inbox ID are unnecessary. Expired delivery messages
+are deleted by shard, stored status and retention deadline in one database
+operation. This supersedes the inbox cleanup paragraph of D-0141.
+
 ## D-0166. Work notifications and shard pickup
 
 Accepted on 25 November 2026.
